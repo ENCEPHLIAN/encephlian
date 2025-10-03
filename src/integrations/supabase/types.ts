@@ -112,6 +112,65 @@ export type Database = {
         }
         Relationships: []
       }
+      commissions: {
+        Row: {
+          amount_inr: number
+          commission_rate: number
+          created_at: string | null
+          id: string
+          neurologist_id: string
+          report_id: string
+          sla: string
+        }
+        Insert: {
+          amount_inr: number
+          commission_rate: number
+          created_at?: string | null
+          id?: string
+          neurologist_id: string
+          report_id: string
+          sla: string
+        }
+        Update: {
+          amount_inr?: number
+          commission_rate?: number
+          created_at?: string | null
+          id?: string
+          neurologist_id?: string
+          report_id?: string
+          sla?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commissions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      earnings_wallets: {
+        Row: {
+          balance_inr: number
+          total_earned_inr: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          balance_inr?: number
+          total_earned_inr?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          balance_inr?: number
+          total_earned_inr?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount_inr: number
@@ -373,17 +432,17 @@ export type Database = {
       }
       wallets: {
         Row: {
-          credits: number
+          tokens: number
           updated_at: string | null
           user_id: string
         }
         Insert: {
-          credits?: number
+          tokens?: number
           updated_at?: string | null
           user_id: string
         }
         Update: {
-          credits?: number
+          tokens?: number
           updated_at?: string | null
           user_id?: string
         }
@@ -434,7 +493,7 @@ export type Database = {
         Returns: Json
       }
       credit_wallet: {
-        Args: { p_credits: number; p_user_id: string }
+        Args: { p_tokens: number; p_user_id: string }
         Returns: undefined
       }
     }

@@ -45,7 +45,7 @@ export default function Billing() {
               <TableRow>
                 <TableHead>Date</TableHead>
                 <TableHead>Clinic</TableHead>
-                <TableHead>Credits</TableHead>
+                <TableHead>Tokens</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -55,8 +55,8 @@ export default function Billing() {
                 <TableRow key={payment.id}>
                   <TableCell>{dayjs(payment.created_at).format("MMM D, YYYY")}</TableCell>
                   <TableCell>-</TableCell>
-                  <TableCell>{payment.credits_purchased}</TableCell>
-                  <TableCell>₹{payment.amount_inr.toString()}</TableCell>
+                  <TableCell>{payment.credits_purchased} tokens</TableCell>
+                  <TableCell>₹{payment.amount_inr.toLocaleString()}</TableCell>
                   <TableCell>
                     <Badge
                       variant={

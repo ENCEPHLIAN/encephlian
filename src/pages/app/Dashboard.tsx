@@ -15,15 +15,15 @@ export default function Dashboard() {
 
       const { data: wallet } = await supabase
         .from("wallets")
-        .select("credits")
+        .select("tokens")
         .single();
 
-      const totalCredits = wallet?.credits || 0;
+      const totalTokens = wallet?.tokens || 0;
       const uploaded = studies?.filter(s => s.state === "uploaded").length || 0;
       const inReview = studies?.filter(s => s.state === "in_review").length || 0;
       const signed = studies?.filter(s => s.state === "signed").length || 0;
 
-      return { totalCredits, uploaded, inReview, signed };
+      return { totalTokens, uploaded, inReview, signed };
     }
   });
 
@@ -36,7 +36,7 @@ export default function Dashboard() {
   }
 
   const kpis = [
-    { title: "Total Credits", value: stats?.totalCredits || 0, icon: Clock, color: "text-blue-500" },
+    { title: "Available Tokens", value: stats?.totalTokens || 0, icon: Clock, color: "text-blue-500" },
     { title: "In Queue", value: stats?.uploaded || 0, icon: FileText, color: "text-yellow-500" },
     { title: "In Review", value: stats?.inReview || 0, icon: AlertCircle, color: "text-orange-500" },
     { title: "Signed", value: stats?.signed || 0, icon: CheckCircle, color: "text-green-500" },
