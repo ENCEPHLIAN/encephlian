@@ -46,9 +46,8 @@ export default function Wallet() {
 
   const purchaseMutation = useMutation({
     mutationFn: async (tokens: number) => {
-      const amount = tokens * 200;
       const { data, error } = await supabase.functions.invoke("create_order", {
-        body: { amount_inr: amount, credits_purchased: tokens },
+        body: { tokens },
       });
 
       if (error) throw error;
@@ -57,16 +56,16 @@ export default function Wallet() {
     onSuccess: (data) => {
       // Open Razorpay checkout
       const options = {
-        key: "rzp_test_RP2pqx9x2tKFVK",
-        amount: data.amount,
-        currency: "INR",
+        key: data.keyId,
+        amount: data.amount * 100,
+        currency: data.currency,
         name: "Encephalian",
-        description: `Purchase ${data.credits_purchased} Tokens`,
-        order_id: data.order_id,
+        description: `Purchase ${loadingPackage} Tokens`,
+        order_id: data.orderId,
         handler: async function (response: any) {
           toast({
             title: "Payment Successful",
-            description: `${data.credits_purchased} tokens added to your wallet!`,
+            description: `${loadingPackage} tokens added to your wallet!`,
           });
           queryClient.invalidateQueries({ queryKey: ["wallet"] });
           setLoadingPackage(null);

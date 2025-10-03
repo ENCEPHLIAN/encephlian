@@ -27,25 +27,16 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { credits } = await req.json();
+    const { tokens } = await req.json();
     
-    if (!credits || credits < 1) {
-      throw new Error('Invalid credits amount');
+    if (!tokens || tokens < 10) {
+      throw new Error('Invalid tokens amount - minimum 10 tokens required');
     }
 
-    // Calculate amount based on pricing tiers
-    let amountInr: number;
-    if (credits === 10) {
-      amountInr = 500;
-    } else if (credits === 50) {
-      amountInr = 2000;
-    } else if (credits === 100) {
-      amountInr = 3500;
-    } else {
-      throw new Error('Invalid credit package');
-    }
+    // Calculate amount: 200 INR per token
+    const amountInr = tokens * 200;
 
-    console.log(`Creating order for ${credits} credits, amount: ₹${amountInr}`);
+    console.log(`Creating order for ${tokens} tokens, amount: ₹${amountInr}`);
 
     // Create Razorpay order
     const auth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
@@ -61,7 +52,7 @@ serve(async (req) => {
         receipt: `receipt_${Date.now()}`,
         notes: {
           user_id: user.id,
-          credits: credits.toString(),
+          tokens: tokens.toString(),
         },
       }),
     });
@@ -82,7 +73,7 @@ serve(async (req) => {
         user_id: user.id,
         order_id: order.id,
         amount_inr: amountInr,
-        credits_purchased: credits,
+        credits_purchased: tokens,
         status: 'created',
         provider: 'razorpay',
       });
