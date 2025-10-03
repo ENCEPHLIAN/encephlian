@@ -399,10 +399,44 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      my_memberships: {
+        Row: {
+          clinic_id: string | null
+          clinic_role: string | null
+        }
+        Insert: {
+          clinic_id?: string | null
+          clinic_role?: string | null
+        }
+        Update: {
+          clinic_id?: string | null
+          clinic_role?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      consume_credit_and_sign: {
+        Args: {
+          p_content: Json
+          p_cost: number
+          p_study_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      credit_wallet: {
+        Args: { p_credits: number; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
