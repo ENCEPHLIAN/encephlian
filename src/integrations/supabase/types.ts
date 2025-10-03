@@ -14,40 +14,37 @@ export type Database = {
   }
   public: {
     Tables: {
-      audit_log: {
+      ai_drafts: {
         Row: {
-          action: string
-          changes: Json | null
-          created_at: string
-          entity_id: string
-          entity_type: string
+          created_at: string | null
+          draft: Json
           id: string
-          user_id: string | null
+          model: string | null
+          study_id: string | null
+          version: string | null
         }
         Insert: {
-          action: string
-          changes?: Json | null
-          created_at?: string
-          entity_id: string
-          entity_type: string
+          created_at?: string | null
+          draft: Json
           id?: string
-          user_id?: string | null
+          model?: string | null
+          study_id?: string | null
+          version?: string | null
         }
         Update: {
-          action?: string
-          changes?: Json | null
-          created_at?: string
-          entity_id?: string
-          entity_type?: string
+          created_at?: string | null
+          draft?: Json
           id?: string
-          user_id?: string | null
+          model?: string | null
+          study_id?: string | null
+          version?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "audit_log_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "ai_drafts_study_id_fkey"
+            columns: ["study_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "studies"
             referencedColumns: ["id"]
           },
         ]
@@ -55,23 +52,17 @@ export type Database = {
       clinic_memberships: {
         Row: {
           clinic_id: string
-          created_at: string
-          id: string
-          is_primary: boolean
+          role: string
           user_id: string
         }
         Insert: {
           clinic_id: string
-          created_at?: string
-          id?: string
-          is_primary?: boolean
+          role?: string
           user_id: string
         }
         Update: {
           clinic_id?: string
-          created_at?: string
-          id?: string
-          is_primary?: boolean
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -93,123 +84,72 @@ export type Database = {
       }
       clinics: {
         Row: {
-          address: string | null
           city: string | null
-          contact_email: string | null
-          contact_phone: string | null
-          created_at: string
+          country: string | null
+          created_at: string | null
           id: string
-          is_active: boolean
           name: string
-          pincode: string | null
           state: string | null
-          updated_at: string
+          tz: string | null
         }
         Insert: {
-          address?: string | null
           city?: string | null
-          contact_email?: string | null
-          contact_phone?: string | null
-          created_at?: string
+          country?: string | null
+          created_at?: string | null
           id?: string
-          is_active?: boolean
           name: string
-          pincode?: string | null
           state?: string | null
-          updated_at?: string
+          tz?: string | null
         }
         Update: {
-          address?: string | null
           city?: string | null
-          contact_email?: string | null
-          contact_phone?: string | null
-          created_at?: string
+          country?: string | null
+          created_at?: string | null
           id?: string
-          is_active?: boolean
           name?: string
-          pincode?: string | null
           state?: string | null
-          updated_at?: string
+          tz?: string | null
         }
         Relationships: []
       }
-      credits_wallets: {
-        Row: {
-          balance: number
-          clinic_id: string
-          created_at: string
-          id: string
-          updated_at: string
-        }
-        Insert: {
-          balance?: number
-          clinic_id: string
-          created_at?: string
-          id?: string
-          updated_at?: string
-        }
-        Update: {
-          balance?: number
-          clinic_id?: string
-          created_at?: string
-          id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "credits_wallets_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: true
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       payments: {
         Row: {
-          amount: number
-          clinic_id: string
-          completed_at: string | null
-          created_at: string
-          credits: number
+          amount_inr: number
+          created_at: string | null
+          credits_purchased: number
           id: string
-          razorpay_order_id: string | null
-          razorpay_payment_id: string | null
-          status: Database["public"]["Enums"]["payment_status"]
+          order_id: string | null
+          payment_id: string | null
+          provider: string | null
+          signature_valid: boolean | null
+          status: string
           user_id: string
         }
         Insert: {
-          amount: number
-          clinic_id: string
-          completed_at?: string | null
-          created_at?: string
-          credits: number
+          amount_inr: number
+          created_at?: string | null
+          credits_purchased: number
           id?: string
-          razorpay_order_id?: string | null
-          razorpay_payment_id?: string | null
-          status?: Database["public"]["Enums"]["payment_status"]
+          order_id?: string | null
+          payment_id?: string | null
+          provider?: string | null
+          signature_valid?: boolean | null
+          status?: string
           user_id: string
         }
         Update: {
-          amount?: number
-          clinic_id?: string
-          completed_at?: string | null
-          created_at?: string
-          credits?: number
+          amount_inr?: number
+          created_at?: string | null
+          credits_purchased?: number
           id?: string
-          razorpay_order_id?: string | null
-          razorpay_payment_id?: string | null
-          status?: Database["public"]["Enums"]["payment_status"]
+          order_id?: string | null
+          payment_id?: string | null
+          provider?: string | null
+          signature_valid?: boolean | null
+          status?: string
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "payments_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "payments_user_id_fkey"
             columns: ["user_id"]
@@ -221,69 +161,67 @@ export type Database = {
       }
       profiles: {
         Row: {
-          created_at: string
+          created_at: string | null
           email: string
           full_name: string | null
           id: string
-          phone: string | null
-          updated_at: string
+          role: string
         }
         Insert: {
-          created_at?: string
+          created_at?: string | null
           email: string
           full_name?: string | null
           id: string
-          phone?: string | null
-          updated_at?: string
+          role?: string
         }
         Update: {
-          created_at?: string
+          created_at?: string | null
           email?: string
           full_name?: string | null
           id?: string
-          phone?: string | null
-          updated_at?: string
+          role?: string
         }
         Relationships: []
       }
       reports: {
         Row: {
-          ai_draft: Json | null
-          background_activity: string | null
-          clinical_correlation: string | null
-          created_at: string
-          epileptiform_discharges: string | null
+          content: Json
+          created_at: string | null
           id: string
-          impression: string | null
-          other_abnormalities: string | null
-          study_id: string
-          updated_at: string
+          interpreter: string | null
+          pdf_path: string | null
+          signed_at: string | null
+          status: string | null
+          study_id: string | null
         }
         Insert: {
-          ai_draft?: Json | null
-          background_activity?: string | null
-          clinical_correlation?: string | null
-          created_at?: string
-          epileptiform_discharges?: string | null
+          content: Json
+          created_at?: string | null
           id?: string
-          impression?: string | null
-          other_abnormalities?: string | null
-          study_id: string
-          updated_at?: string
+          interpreter?: string | null
+          pdf_path?: string | null
+          signed_at?: string | null
+          status?: string | null
+          study_id?: string | null
         }
         Update: {
-          ai_draft?: Json | null
-          background_activity?: string | null
-          clinical_correlation?: string | null
-          created_at?: string
-          epileptiform_discharges?: string | null
+          content?: Json
+          created_at?: string | null
           id?: string
-          impression?: string | null
-          other_abnormalities?: string | null
-          study_id?: string
-          updated_at?: string
+          interpreter?: string | null
+          pdf_path?: string | null
+          signed_at?: string | null
+          status?: string | null
+          study_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "reports_interpreter_fkey"
+            columns: ["interpreter"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reports_study_id_fkey"
             columns: ["study_id"]
@@ -293,54 +231,90 @@ export type Database = {
           },
         ]
       }
+      review_events: {
+        Row: {
+          actor: string | null
+          created_at: string | null
+          event: string | null
+          id: string
+          payload: Json | null
+          study_id: string | null
+        }
+        Insert: {
+          actor?: string | null
+          created_at?: string | null
+          event?: string | null
+          id?: string
+          payload?: Json | null
+          study_id?: string | null
+        }
+        Update: {
+          actor?: string | null
+          created_at?: string | null
+          event?: string | null
+          id?: string
+          payload?: Json | null
+          study_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_events_actor_fkey"
+            columns: ["actor"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "review_events_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       studies: {
         Row: {
           clinic_id: string
-          created_at: string
-          created_by: string
+          created_at: string | null
+          duration_min: number | null
           id: string
           indication: string | null
-          patient_age: number | null
-          patient_gender: string | null
-          patient_id: string
-          patient_name: string
-          signed_at: string | null
-          signed_by: string | null
-          sla_type: Database["public"]["Enums"]["sla_type"]
-          state: Database["public"]["Enums"]["study_state"]
-          updated_at: string
+          meta: Json | null
+          montage: string | null
+          owner: string
+          reference: string | null
+          sla: string
+          srate_hz: number | null
+          state: string | null
         }
         Insert: {
           clinic_id: string
-          created_at?: string
-          created_by: string
+          created_at?: string | null
+          duration_min?: number | null
           id?: string
           indication?: string | null
-          patient_age?: number | null
-          patient_gender?: string | null
-          patient_id: string
-          patient_name: string
-          signed_at?: string | null
-          signed_by?: string | null
-          sla_type?: Database["public"]["Enums"]["sla_type"]
-          state?: Database["public"]["Enums"]["study_state"]
-          updated_at?: string
+          meta?: Json | null
+          montage?: string | null
+          owner: string
+          reference?: string | null
+          sla?: string
+          srate_hz?: number | null
+          state?: string | null
         }
         Update: {
           clinic_id?: string
-          created_at?: string
-          created_by?: string
+          created_at?: string | null
+          duration_min?: number | null
           id?: string
           indication?: string | null
-          patient_age?: number | null
-          patient_gender?: string | null
-          patient_id?: string
-          patient_name?: string
-          signed_at?: string | null
-          signed_by?: string | null
-          sla_type?: Database["public"]["Enums"]["sla_type"]
-          state?: Database["public"]["Enums"]["study_state"]
-          updated_at?: string
+          meta?: Json | null
+          montage?: string | null
+          owner?: string
+          reference?: string | null
+          sla?: string
+          srate_hz?: number | null
+          state?: string | null
         }
         Relationships: [
           {
@@ -351,15 +325,8 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "studies_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "studies_signed_by_fkey"
-            columns: ["signed_by"]
+            foreignKeyName: "studies_owner_fkey"
+            columns: ["owner"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -368,34 +335,31 @@ export type Database = {
       }
       study_files: {
         Row: {
-          content_type: string | null
-          created_at: string
-          file_size: number | null
-          filename: string
+          checksum: string | null
+          created_at: string | null
           id: string
-          storage_path: string
+          kind: string
+          path: string
+          size_bytes: number | null
           study_id: string
-          uploaded_by: string
         }
         Insert: {
-          content_type?: string | null
-          created_at?: string
-          file_size?: number | null
-          filename: string
+          checksum?: string | null
+          created_at?: string | null
           id?: string
-          storage_path: string
+          kind: string
+          path: string
+          size_bytes?: number | null
           study_id: string
-          uploaded_by: string
         }
         Update: {
-          content_type?: string | null
-          created_at?: string
-          file_size?: number | null
-          filename?: string
+          checksum?: string | null
+          created_at?: string | null
           id?: string
-          storage_path?: string
+          kind?: string
+          path?: string
+          size_bytes?: number | null
           study_id?: string
-          uploaded_by?: string
         }
         Relationships: [
           {
@@ -405,39 +369,29 @@ export type Database = {
             referencedRelation: "studies"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "study_files_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
         ]
       }
-      user_roles: {
+      wallets: {
         Row: {
-          created_at: string
-          id: string
-          role: Database["public"]["Enums"]["app_role"]
+          credits: number
+          updated_at: string | null
           user_id: string
         }
         Insert: {
-          created_at?: string
-          id?: string
-          role: Database["public"]["Enums"]["app_role"]
+          credits?: number
+          updated_at?: string | null
           user_id: string
         }
         Update: {
-          created_at?: string
-          id?: string
-          role?: Database["public"]["Enums"]["app_role"]
+          credits?: number
+          updated_at?: string | null
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "user_roles_user_id_fkey"
+            foreignKeyName: "wallets_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -448,29 +402,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
-      user_belongs_to_clinic: {
-        Args: { _clinic_id: string; _user_id: string }
-        Returns: boolean
-      }
+      [_ in never]: never
     }
     Enums: {
-      app_role: "admin" | "neurologist" | "clinic_admin"
-      payment_status: "pending" | "completed" | "failed" | "refunded"
-      sla_type: "TAT" | "STAT"
-      study_state:
-        | "uploaded"
-        | "preprocessing"
-        | "ai_draft"
-        | "in_review"
-        | "signed"
-        | "failed"
+      [_ in never]: never
     }
     CompositeTypes: {
       [_ in never]: never
@@ -597,18 +532,6 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {
-      app_role: ["admin", "neurologist", "clinic_admin"],
-      payment_status: ["pending", "completed", "failed", "refunded"],
-      sla_type: ["TAT", "STAT"],
-      study_state: [
-        "uploaded",
-        "preprocessing",
-        "ai_draft",
-        "in_review",
-        "signed",
-        "failed",
-      ],
-    },
+    Enums: {},
   },
 } as const
