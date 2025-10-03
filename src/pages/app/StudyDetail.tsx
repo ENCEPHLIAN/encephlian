@@ -36,17 +36,23 @@ export default function StudyDetail() {
     return <div>Study not found</div>;
   }
 
+  const meta = study.meta as any;
+  const patientName = meta?.patient_name || "N/A";
+  const patientId = meta?.patient_id || "N/A";
+  const patientAge = meta?.patient_age;
+  const patientGender = meta?.patient_gender;
+
   return (
     <div className="space-y-8 max-w-4xl">
       <div>
         <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold">{study.patient_name}</h1>
+          <h1 className="text-3xl font-bold">{patientName}</h1>
           <Badge className="bg-blue-500">{study.state.replace("_", " ")}</Badge>
-          <Badge variant={study.sla_type === "STAT" ? "destructive" : "secondary"}>
-            {study.sla_type}
+          <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
+            {study.sla}
           </Badge>
         </div>
-        <p className="text-muted-foreground">Patient ID: {study.patient_id}</p>
+        <p className="text-muted-foreground">Patient ID: {patientId}</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -57,22 +63,22 @@ export default function StudyDetail() {
           <CardContent className="space-y-2">
             <div>
               <span className="text-sm text-muted-foreground">Name:</span>
-              <p className="font-medium">{study.patient_name}</p>
+              <p className="font-medium">{patientName}</p>
             </div>
             <div>
               <span className="text-sm text-muted-foreground">ID:</span>
-              <p className="font-medium">{study.patient_id}</p>
+              <p className="font-medium">{patientId}</p>
             </div>
-            {study.patient_age && (
+            {patientAge && (
               <div>
                 <span className="text-sm text-muted-foreground">Age:</span>
-                <p className="font-medium">{study.patient_age}</p>
+                <p className="font-medium">{patientAge}</p>
               </div>
             )}
-            {study.patient_gender && (
+            {patientGender && (
               <div>
                 <span className="text-sm text-muted-foreground">Gender:</span>
-                <p className="font-medium">{study.patient_gender}</p>
+                <p className="font-medium">{patientGender}</p>
               </div>
             )}
           </CardContent>
@@ -111,9 +117,9 @@ export default function StudyDetail() {
               {study.study_files.map((file: any) => (
                 <div key={file.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <div>
-                    <p className="font-medium">{file.filename}</p>
+                    <p className="font-medium">{file.path}</p>
                     <p className="text-sm text-muted-foreground">
-                      {(file.file_size / 1024 / 1024).toFixed(2)} MB
+                      {file.kind} • {file.size_bytes ? (file.size_bytes / 1024 / 1024).toFixed(2) + ' MB' : 'Size unknown'}
                     </p>
                   </div>
                 </div>
@@ -133,18 +139,19 @@ export default function StudyDetail() {
           <CardContent className="space-y-4">
             {(() => {
               const report = study.reports as any;
+              const content = report.content as any;
               return (
                 <div className="space-y-4">
-                  {report.background_activity && (
+                  {content?.background_activity && (
                     <div>
                       <h3 className="font-medium mb-2">Background Activity</h3>
-                      <p className="text-sm">{report.background_activity}</p>
+                      <p className="text-sm">{content.background_activity}</p>
                     </div>
                   )}
-                  {report.impression && (
+                  {content?.impression && (
                     <div>
                       <h3 className="font-medium mb-2">Impression</h3>
-                      <p className="text-sm">{report.impression}</p>
+                      <p className="text-sm">{content.impression}</p>
                     </div>
                   )}
                 </div>

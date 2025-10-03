@@ -77,13 +77,6 @@ export default function Profile() {
             <Input value={profile?.full_name || ""} disabled />
           </div>
 
-          {profile?.phone && (
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input value={profile.phone} disabled />
-            </div>
-          )}
-
           <div className="space-y-2">
             <Label>Member Since</Label>
             <Input value={dayjs(profile?.created_at).format("MMMM D, YYYY")} disabled />

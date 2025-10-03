@@ -18,7 +18,7 @@ export default function Upload() {
   const [patientAge, setPatientAge] = useState("");
   const [patientGender, setPatientGender] = useState("");
   const [indication, setIndication] = useState("");
-  const [slaType, setSlaType] = useState<"TAT" | "STAT">("TAT");
+  const [sla, setSla] = useState<"TAT" | "STAT">("TAT");
   const [clinicId, setClinicId] = useState("");
   
   const navigate = useNavigate();
@@ -30,8 +30,7 @@ export default function Upload() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clinics")
-        .select("*")
-        .eq("is_active", true);
+        .select("*");
       
       if (error) throw error;
       return data;
@@ -45,19 +44,21 @@ export default function Upload() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Create study record
+      // Create study record with patient data in meta
       const { data: study, error: studyError } = await supabase
         .from("studies")
         .insert({
           clinic_id: clinicId,
-          created_by: user.id,
-          patient_id: patientId,
-          patient_name: patientName,
-          patient_age: patientAge ? parseInt(patientAge) : null,
-          patient_gender: patientGender || null,
+          owner: user.id,
           indication,
-          sla_type: slaType,
-          state: "uploaded"
+          sla,
+          state: "uploaded",
+          meta: {
+            patient_id: patientId,
+            patient_name: patientName,
+            patient_age: patientAge ? parseInt(patientAge) : null,
+            patient_gender: patientGender || null,
+          }
         })
         .select()
         .single();
@@ -67,7 +68,7 @@ export default function Upload() {
       // Upload file to storage
       const filePath = `${clinicId}/${study.id}/${file.name}`;
       const { error: uploadError } = await supabase.storage
-        .from("eeg-files")
+        .from("eeg-raw")
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
@@ -77,11 +78,9 @@ export default function Upload() {
         .from("study_files")
         .insert({
           study_id: study.id,
-          filename: file.name,
-          storage_path: filePath,
-          file_size: file.size,
-          content_type: file.type,
-          uploaded_by: user.id
+          path: filePath,
+          kind: "raw",
+          size_bytes: file.size,
         });
 
       if (fileError) throw fileError;
@@ -160,7 +159,7 @@ export default function Upload() {
 
               <div className="space-y-2">
                 <Label htmlFor="sla">SLA Type *</Label>
-                <Select value={slaType} onValueChange={(val: "TAT" | "STAT") => setSlaType(val)}>
+                <Select value={sla} onValueChange={(val: "TAT" | "STAT") => setSla(val)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

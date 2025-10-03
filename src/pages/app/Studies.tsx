@@ -42,10 +42,15 @@ export default function Studies() {
     }
   });
 
-  const filteredStudies = studies?.filter((study) =>
-    study.patient_name.toLowerCase().includes(search.toLowerCase()) ||
-    study.patient_id.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredStudies = studies?.filter((study) => {
+    const meta = study.meta as any;
+    const patientName = meta?.patient_name || "";
+    const patientId = meta?.patient_id || "";
+    return (
+      patientName.toLowerCase().includes(search.toLowerCase()) ||
+      patientId.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   if (isLoading) {
     return (
@@ -108,35 +113,38 @@ export default function Studies() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredStudies?.map((study) => (
-                <TableRow key={study.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{study.patient_name}</div>
-                      <div className="text-sm text-muted-foreground">{study.patient_id}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{study.clinics?.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={study.sla_type === "STAT" ? "destructive" : "secondary"}>
-                      {study.sla_type}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={stateColors[study.state as keyof typeof stateColors]}>
-                      {study.state.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
-                  <TableCell>
-                    <Button asChild variant="ghost" size="sm">
-                      <Link to={`/app/studies/${study.id}`}>
-                        <FileText className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredStudies?.map((study) => {
+                const meta = study.meta as any;
+                return (
+                  <TableRow key={study.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{meta?.patient_name || "N/A"}</div>
+                        <div className="text-sm text-muted-foreground">{meta?.patient_id || "N/A"}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{study.clinics?.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
+                        {study.sla}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={stateColors[study.state as keyof typeof stateColors]}>
+                        {study.state.replace("_", " ")}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
+                    <TableCell>
+                      <Button asChild variant="ghost" size="sm">
+                        <Link to={`/app/studies/${study.id}`}>
+                          <FileText className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
           {filteredStudies?.length === 0 && (

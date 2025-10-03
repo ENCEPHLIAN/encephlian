@@ -12,7 +12,7 @@ export default function Billing() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payments")
-        .select("*, clinics(name)")
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -54,9 +54,9 @@ export default function Billing() {
               {payments?.map((payment) => (
                 <TableRow key={payment.id}>
                   <TableCell>{dayjs(payment.created_at).format("MMM D, YYYY")}</TableCell>
-                  <TableCell>{payment.clinics?.name}</TableCell>
-                  <TableCell>{payment.credits}</TableCell>
-                  <TableCell>₹{payment.amount.toString()}</TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell>{payment.credits_purchased}</TableCell>
+                  <TableCell>₹{payment.amount_inr.toString()}</TableCell>
                   <TableCell>
                     <Badge
                       variant={

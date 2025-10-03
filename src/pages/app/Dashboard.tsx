@@ -13,11 +13,12 @@ export default function Dashboard() {
         .from("studies")
         .select("state, created_at");
 
-      const { data: wallets } = await supabase
-        .from("credits_wallets")
-        .select("balance");
+      const { data: wallet } = await supabase
+        .from("wallets")
+        .select("credits")
+        .single();
 
-      const totalCredits = wallets?.reduce((sum, w) => sum + w.balance, 0) || 0;
+      const totalCredits = wallet?.credits || 0;
       const uploaded = studies?.filter(s => s.state === "uploaded").length || 0;
       const inReview = studies?.filter(s => s.state === "in_review").length || 0;
       const signed = studies?.filter(s => s.state === "signed").length || 0;

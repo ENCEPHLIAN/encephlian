@@ -5,19 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Plus, Wallet as WalletIcon } from "lucide-react";
 
 export default function Wallet() {
-  const { data: wallets, isLoading } = useQuery({
-    queryKey: ["wallets"],
+  const { data: wallet, isLoading } = useQuery({
+    queryKey: ["wallet"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("credits_wallets")
-        .select("*, clinics(name)");
+        .from("wallets")
+        .select("*")
+        .single();
 
       if (error) throw error;
       return data;
     }
   });
 
-  const totalCredits = wallets?.reduce((sum, w) => sum + w.balance, 0) || 0;
+  const totalCredits = wallet?.credits || 0;
 
   if (isLoading) {
     return (
@@ -67,18 +68,17 @@ export default function Wallet() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Credits by Clinic</CardTitle>
+          <CardTitle>Wallet Info</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {wallets?.map((wallet) => (
-              <div key={wallet.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div>
-                  <p className="font-medium">{wallet.clinics?.name}</p>
-                </div>
-                <div className="text-2xl font-bold">{wallet.balance}</div>
+            <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+              <div>
+                <p className="font-medium">Your Credits</p>
+                <p className="text-sm text-muted-foreground">Available balance</p>
               </div>
-            ))}
+              <div className="text-2xl font-bold">{totalCredits}</div>
+            </div>
           </div>
         </CardContent>
       </Card>
