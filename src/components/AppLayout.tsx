@@ -10,10 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, Upload, FileText, Wallet, Receipt, User, LogOut } from "lucide-react";
+import { LayoutDashboard, Upload, FileText, Wallet, Receipt, User, LogOut, Coins, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
@@ -36,6 +37,22 @@ export default function AppLayout() {
     });
   }, []);
 
+  const { data: wallet } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: async () => {
+      const { data } = await supabase.from("wallets").select("tokens").single();
+      return data;
+    }
+  });
+
+  const { data: earnings } = useQuery({
+    queryKey: ["earnings-balance"],
+    queryFn: async () => {
+      const { data } = await supabase.from("earnings_wallets").select("balance_inr").single();
+      return data;
+    }
+  });
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({
@@ -47,11 +64,33 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-card border-r">
+      <div className="fixed inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-card via-card to-card/50 border-r border-border backdrop-blur-xl">
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b">
-            <h1 className="text-2xl font-bold text-primary">Encephlian</h1>
+          <div className="p-6 border-b border-border">
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+              Encephalian
+            </h1>
             <p className="text-sm text-muted-foreground">Neurologist Portal</p>
+          </div>
+          
+          {/* Wallet Preview */}
+          <div className="p-4 m-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3 glow-cyan">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Coins className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Tokens</span>
+              </div>
+              <span className="text-lg font-bold text-primary">{wallet?.tokens || 0}</span>
+            </div>
+            {earnings && (
+              <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+                <div className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4 text-green-500" />
+                  <span className="text-sm font-medium">Earnings</span>
+                </div>
+                <span className="text-lg font-bold text-green-500">₹{earnings.balance_inr || 0}</span>
+              </div>
+            )}
           </div>
           
           <nav className="flex-1 p-4 space-y-2">
@@ -62,10 +101,13 @@ export default function AppLayout() {
                 <Link key={item.name} to={item.href}>
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
-                    className={cn("w-full justify-start", isActive && "bg-secondary")}
+                    className={cn(
+                      "w-full justify-start transition-all duration-200",
+                      isActive && "bg-primary/10 text-primary border border-primary/20 glow-cyan"
+                    )}
                   >
-                    <Icon className="mr-2 h-4 w-4" />
-                    {item.name}
+                    <Icon className="mr-3 h-5 w-5" />
+                    <span className="font-medium">{item.name}</span>
                   </Button>
                 </Link>
               );
@@ -105,8 +147,8 @@ export default function AppLayout() {
       </div>
 
       {/* Main content */}
-      <div className="pl-64">
-        <main className="p-8">
+      <div className="pl-72">
+        <main className="p-8 min-h-screen">
           <Outlet />
         </main>
       </div>
