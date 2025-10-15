@@ -49,6 +49,51 @@ export type Database = {
           },
         ]
       }
+      bank_accounts: {
+        Row: {
+          account_holder_name: string
+          account_number_encrypted: string
+          bank_name: string | null
+          created_at: string | null
+          id: string
+          ifsc: string
+          is_primary: boolean | null
+          is_verified: boolean | null
+          last_used_at: string | null
+          penny_drop_reference: string | null
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          account_holder_name: string
+          account_number_encrypted: string
+          bank_name?: string | null
+          created_at?: string | null
+          id?: string
+          ifsc: string
+          is_primary?: boolean | null
+          is_verified?: boolean | null
+          last_used_at?: string | null
+          penny_drop_reference?: string | null
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          account_holder_name?: string
+          account_number_encrypted?: string
+          bank_name?: string | null
+          created_at?: string | null
+          id?: string
+          ifsc?: string
+          is_primary?: boolean | null
+          is_verified?: boolean | null
+          last_used_at?: string | null
+          penny_drop_reference?: string | null
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       clinic_memberships: {
         Row: {
           clinic_id: string
@@ -153,18 +198,21 @@ export type Database = {
       earnings_wallets: {
         Row: {
           balance_inr: number
+          locked_amount_inr: number
           total_earned_inr: number
           updated_at: string | null
           user_id: string
         }
         Insert: {
           balance_inr?: number
+          locked_amount_inr?: number
           total_earned_inr?: number
           updated_at?: string | null
           user_id: string
         }
         Update: {
           balance_inr?: number
+          locked_amount_inr?: number
           total_earned_inr?: number
           updated_at?: string | null
           user_id?: string
@@ -430,6 +478,45 @@ export type Database = {
           },
         ]
       }
+      tds_records: {
+        Row: {
+          created_at: string | null
+          financial_year: string
+          form_16a_url: string | null
+          form_26q_filed: boolean | null
+          id: string
+          quarter: string
+          total_earnings_inr: number
+          total_tds_deducted_inr: number
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          financial_year: string
+          form_16a_url?: string | null
+          form_26q_filed?: boolean | null
+          id?: string
+          quarter: string
+          total_earnings_inr?: number
+          total_tds_deducted_inr?: number
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          financial_year?: string
+          form_16a_url?: string | null
+          form_26q_filed?: boolean | null
+          id?: string
+          quarter?: string
+          total_earnings_inr?: number
+          total_tds_deducted_inr?: number
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           tokens: number
@@ -455,6 +542,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      withdrawal_requests: {
+        Row: {
+          admin_notes: string | null
+          amount_inr: number
+          bank_account_holder: string
+          bank_account_number: string
+          bank_ifsc: string
+          bank_name: string | null
+          created_at: string | null
+          failed_reason: string | null
+          form_16a_issued: boolean | null
+          gross_amount_inr: number
+          id: string
+          net_amount_inr: number
+          platform_fee_inr: number
+          processed_at: string | null
+          razorpay_payout_id: string | null
+          status: string
+          tds_amount_inr: number
+          tds_deducted: boolean | null
+          tds_quarter: string | null
+          tier: string
+          user_id: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          amount_inr: number
+          bank_account_holder: string
+          bank_account_number: string
+          bank_ifsc: string
+          bank_name?: string | null
+          created_at?: string | null
+          failed_reason?: string | null
+          form_16a_issued?: boolean | null
+          gross_amount_inr: number
+          id?: string
+          net_amount_inr: number
+          platform_fee_inr?: number
+          processed_at?: string | null
+          razorpay_payout_id?: string | null
+          status?: string
+          tds_amount_inr?: number
+          tds_deducted?: boolean | null
+          tds_quarter?: string | null
+          tier: string
+          user_id: string
+        }
+        Update: {
+          admin_notes?: string | null
+          amount_inr?: number
+          bank_account_holder?: string
+          bank_account_number?: string
+          bank_ifsc?: string
+          bank_name?: string | null
+          created_at?: string | null
+          failed_reason?: string | null
+          form_16a_issued?: boolean | null
+          gross_amount_inr?: number
+          id?: string
+          net_amount_inr?: number
+          platform_fee_inr?: number
+          processed_at?: string | null
+          razorpay_payout_id?: string | null
+          status?: string
+          tds_amount_inr?: number
+          tds_deducted?: boolean | null
+          tds_quarter?: string | null
+          tier?: string
+          user_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
@@ -483,6 +642,10 @@ export type Database = {
       }
     }
     Functions: {
+      calculate_withdrawal_breakdown: {
+        Args: { p_requested_amount: number; p_user_id: string }
+        Returns: Json
+      }
       consume_credit_and_sign: {
         Args: {
           p_content: Json
@@ -495,6 +658,26 @@ export type Database = {
       credit_wallet: {
         Args: { p_tokens: number; p_user_id: string }
         Returns: undefined
+      }
+      get_current_fy: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_current_quarter: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      lock_withdrawal_amount: {
+        Args: { p_amount: number; p_user_id: string }
+        Returns: boolean
+      }
+      process_completed_withdrawal: {
+        Args: { p_withdrawal_id: string }
+        Returns: Json
+      }
+      unlock_failed_withdrawal: {
+        Args: { p_withdrawal_id: string }
+        Returns: Json
       }
     }
     Enums: {

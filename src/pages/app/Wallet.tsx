@@ -3,9 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, Coins, TrendingUp, ArrowRight, Wallet as WalletIcon, AlertCircle, DollarSign, CheckCircle } from "lucide-react";
+import { Loader2, Coins, TrendingUp, ArrowRight, Wallet as WalletIcon, AlertCircle, DollarSign, CheckCircle, Plus, ArrowDownToLine, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BankAccountForm } from "@/components/BankAccountForm";
+import { WithdrawalForm } from "@/components/WithdrawalForm";
 import { cn } from "@/lib/utils";
 
 const TOKEN_PACKAGES = [
@@ -18,6 +24,9 @@ export default function Wallet() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [loadingPackage, setLoadingPackage] = useState<number | null>(null);
+  const [showBankDialog, setShowBankDialog] = useState(false);
+  const [showWithdrawDialog, setShowWithdrawDialog] = useState(false);
+  const [activeTab, setActiveTab] = useState("withdraw");
 
   const { data: wallet, isLoading } = useQuery({
     queryKey: ["wallet"],
@@ -43,6 +52,41 @@ export default function Wallet() {
       if (error) return null;
       return data;
     }
+  });
+
+  const { data: withdrawals, isLoading: withdrawalsLoading } = useQuery({
+    queryKey: ["withdrawals"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase
+        .from("withdrawal_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: tdsRecords } = useQuery({
+    queryKey: ["tds"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data, error } = await supabase
+        .from("tds_records")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
   });
 
   const purchaseMutation = useMutation({
@@ -127,8 +171,21 @@ export default function Wallet() {
   };
 
   const totalTokens = wallet?.tokens || 0;
+  const availableBalance = (earnings?.balance_inr || 0) - (earnings?.locked_amount_inr || 0);
+  const ytdTds = tdsRecords?.reduce((sum: number, record: any) => sum + (record.total_tds_deducted_inr || 0), 0) || 0;
 
-  if (isLoading) {
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, any> = {
+      pending: "outline",
+      processing: "secondary",
+      completed: "default",
+      failed: "destructive",
+      cancelled: "outline",
+    };
+    return <Badge variant={variants[status] || "outline"}>{status}</Badge>;
+  };
+
+  if (isLoading || withdrawalsLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -191,11 +248,22 @@ export default function Wallet() {
               <div className="space-y-3 md:space-y-4">
                 <div>
                   <p className="text-xs md:text-sm text-muted-foreground">Available Balance</p>
-                  <div className="text-3xl md:text-4xl lg:text-5xl font-bold text-green-500">₹{earnings.balance_inr || 0}</div>
+                  <div className="text-3xl md:text-4xl lg:text-5xl font-bold text-green-500">₹{availableBalance.toLocaleString("en-IN")}</div>
+                  {earnings.locked_amount_inr > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      (₹{earnings.locked_amount_inr.toLocaleString("en-IN")} locked)
+                    </p>
+                  )}
                 </div>
-                <div className="pt-3 md:pt-4 border-t border-green-500/20">
-                  <p className="text-xs md:text-sm text-muted-foreground">Total Earned</p>
-                  <div className="text-2xl md:text-3xl font-bold text-green-500/80">₹{earnings.total_earned_inr || 0}</div>
+                <div className="pt-3 md:pt-4 border-t border-green-500/20 grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs md:text-sm text-muted-foreground">Total Earned</p>
+                    <div className="text-xl md:text-2xl font-bold text-green-500/80">₹{earnings.total_earned_inr?.toLocaleString("en-IN") || 0}</div>
+                  </div>
+                  <div>
+                    <p className="text-xs md:text-sm text-muted-foreground">YTD TDS</p>
+                    <div className="text-xl md:text-2xl font-bold text-green-500/80">₹{ytdTds.toLocaleString("en-IN")}</div>
+                  </div>
                 </div>
                 <div className="pt-3 md:pt-4 border-t border-green-500/20 space-y-2 text-xs md:text-sm">
                   <div className="flex items-center gap-2">
@@ -207,14 +275,74 @@ export default function Wallet() {
                     <span>STAT: 5% commission</span>
                   </div>
                 </div>
-                <Button variant="outline" className="w-full mt-3 md:mt-4 border-green-500/30 hover:bg-green-500/10 transition-all duration-150 h-10 md:h-11">
-                  Withdraw to Bank
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    className="flex-1" 
+                    onClick={() => setShowWithdrawDialog(true)}
+                    disabled={availableBalance < 100}
+                  >
+                    <ArrowDownToLine className="mr-2 h-4 w-4" />
+                    Withdraw
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowBankDialog(true)}>
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {availableBalance < 100 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    Minimum withdrawal: ₹100
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Withdrawal History */}
+      {withdrawals && withdrawals.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Withdrawal History
+            </CardTitle>
+            <CardDescription>Recent withdrawal requests and their status</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>TDS</TableHead>
+                  <TableHead>Fee</TableHead>
+                  <TableHead>Net</TableHead>
+                  <TableHead>Tier</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {withdrawals.map((withdrawal: any) => (
+                  <TableRow key={withdrawal.id}>
+                    <TableCell className="text-sm">
+                      {new Date(withdrawal.created_at).toLocaleDateString("en-IN")}
+                    </TableCell>
+                    <TableCell>₹{withdrawal.gross_amount_inr.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-destructive">-₹{withdrawal.tds_amount_inr}</TableCell>
+                    <TableCell className="text-muted-foreground">-₹{withdrawal.platform_fee_inr}</TableCell>
+                    <TableCell className="font-semibold">₹{withdrawal.net_amount_inr.toLocaleString("en-IN")}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{withdrawal.tier}</Badge>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(withdrawal.status)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-border">
         <CardHeader className="p-4 md:p-6">
@@ -282,6 +410,63 @@ export default function Wallet() {
           ))}
         </CardContent>
       </Card>
+
+      {/* Bank Account Dialog */}
+      <Dialog open={showBankDialog} onOpenChange={setShowBankDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Bank Account</DialogTitle>
+            <DialogDescription>
+              Add your bank account details for withdrawals
+            </DialogDescription>
+          </DialogHeader>
+          <BankAccountForm
+            onSuccess={() => {
+              setShowBankDialog(false);
+              queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
+            }}
+            onCancel={() => setShowBankDialog(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Withdrawal Dialog */}
+      <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Withdraw to Bank</DialogTitle>
+            <DialogDescription>
+              Withdraw your earnings to your bank account. 20% EBITDA + TDS applies.
+            </DialogDescription>
+          </DialogHeader>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="withdraw">Withdraw</TabsTrigger>
+              <TabsTrigger value="bank">Bank Accounts</TabsTrigger>
+            </TabsList>
+            <TabsContent value="withdraw">
+              <WithdrawalForm
+                availableBalance={availableBalance}
+                onSuccess={() => {
+                  setShowWithdrawDialog(false);
+                  queryClient.invalidateQueries({ queryKey: ["earnings"] });
+                  queryClient.invalidateQueries({ queryKey: ["withdrawals"] });
+                }}
+                onCancel={() => setShowWithdrawDialog(false)}
+              />
+            </TabsContent>
+            <TabsContent value="bank">
+              <BankAccountForm
+                onSuccess={() => {
+                  setActiveTab("withdraw");
+                  queryClient.invalidateQueries({ queryKey: ["bankAccounts"] });
+                }}
+                onCancel={() => setShowWithdrawDialog(false)}
+              />
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -8,3 +8,9 @@ verify_jwt = true
 
 [functions.razorpay_webhook]
 verify_jwt = false
+
+[functions.initiate_withdrawal]
+verify_jwt = true
+
+[functions.razorpay_payout_webhook]
+verify_jwt = false
