@@ -64,31 +64,31 @@ export default function AppLayout() {
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-72 bg-gradient-to-b from-card via-card to-card/50 border-r border-border backdrop-blur-xl">
+      <div className="fixed inset-y-0 left-0 z-50 w-72 bg-sidebar border-r border-sidebar-border">
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-border">
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+          <div className="p-6 border-b border-sidebar-border">
+            <h1 className="text-2xl font-extrabold text-sidebar-foreground">
               Encephalian
             </h1>
-            <p className="text-sm text-muted-foreground">Neurologist Portal</p>
+            <p className="text-sm text-sidebar-foreground/60">Neurologist Portal</p>
           </div>
           
           {/* Wallet Preview */}
-          <div className="p-4 m-4 bg-primary/5 border border-primary/20 rounded-xl space-y-3 glow-cyan">
+          <div className="p-4 m-4 bg-sidebar-accent border border-sidebar-border rounded-lg space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Coins className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">Tokens</span>
+                <Coins className="h-4 w-4 text-sidebar-foreground/60" />
+                <span className="text-sm font-semibold text-sidebar-foreground">Tokens</span>
               </div>
-              <span className="text-lg font-bold text-primary">{wallet?.tokens || 0}</span>
+              <span className="text-lg font-extrabold text-sidebar-foreground">{wallet?.tokens || 0}</span>
             </div>
             {earnings && (
-              <div className="flex items-center justify-between pt-2 border-t border-primary/10">
+              <div className="flex items-center justify-between pt-2 border-t border-sidebar-border">
                 <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-green-500" />
-                  <span className="text-sm font-medium">Earnings</span>
+                  <DollarSign className="h-4 w-4 text-sidebar-foreground/60" />
+                  <span className="text-sm font-semibold text-sidebar-foreground">Earnings</span>
                 </div>
-                <span className="text-lg font-bold text-green-500">₹{earnings.balance_inr || 0}</span>
+                <span className="text-lg font-extrabold text-sidebar-foreground">₹{earnings.balance_inr || 0}</span>
               </div>
             )}
           </div>
@@ -102,8 +102,8 @@ export default function AppLayout() {
                   <Button
                     variant={isActive ? "secondary" : "ghost"}
                     className={cn(
-                      "w-full justify-start transition-all duration-200",
-                      isActive && "bg-primary/10 text-primary border border-primary/20 glow-cyan"
+                      "w-full justify-start transition-all duration-200 font-semibold",
+                      isActive && "bg-sidebar-accent text-sidebar-accent-foreground"
                     )}
                   >
                     <Icon className="mr-3 h-5 w-5" />

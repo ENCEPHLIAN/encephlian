@@ -55,7 +55,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8">
       <div className="animate-fade-in">
-        <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">
+        <h1 className="text-4xl font-extrabold text-foreground">
           Dashboard
         </h1>
         <p className="text-muted-foreground text-lg mt-2">Welcome back! Here's your triage care overview.</p>
@@ -67,17 +67,17 @@ export default function Dashboard() {
           return (
             <Card 
               key={kpi.title} 
-              className="border-border hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-1 animate-fade-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
+              className="border-border hover:border-muted-foreground/20 transition-all duration-200 hover:shadow-md animate-fade-in"
+              style={{ animationDelay: `${index * 0.05}s` }}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground">{kpi.title}</CardTitle>
-                <div className={cn("p-2 rounded-lg", kpi.bgColor)}>
-                  <Icon className={cn("h-5 w-5", kpi.color)} />
+                <CardTitle className="text-sm font-semibold text-muted-foreground">{kpi.title}</CardTitle>
+                <div className={cn("p-2 rounded-md", kpi.bgColor)}>
+                  <Icon className={cn("h-4 w-4", kpi.color)} />
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-bold">{kpi.value}</div>
+                <div className="text-3xl font-extrabold">{kpi.value}</div>
               </CardContent>
             </Card>
           );
@@ -86,13 +86,13 @@ export default function Dashboard() {
 
       <Card className="border-border animate-fade-in">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
+          <CardTitle className="flex items-center gap-2 font-extrabold">
+            <FileText className="h-5 w-5 text-muted-foreground" />
             Recent Activity
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground font-medium">
             Your recent studies and activity will appear here. Upload a study to get started with triage care processing.
           </p>
         </CardContent>
