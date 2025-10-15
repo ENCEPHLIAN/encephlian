@@ -65,7 +65,11 @@ export default function Wallet() {
         order_id: data.orderId,
         handler: async function (response: any) {
           try {
-            // Verify payment on backend
+            toast({
+              title: "Verifying Payment...",
+              description: "Please wait while we confirm your payment",
+            });
+
             const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify_payment", {
               body: {
                 razorpay_order_id: response.razorpay_order_id,
@@ -78,18 +82,22 @@ export default function Wallet() {
             if (verifyError) throw verifyError;
 
             toast({
-              title: "Payment Successful",
-              description: `${loadingPackage} tokens added to your wallet!`,
+              title: "Payment Successful! 🎉",
+              description: `${verifyData.tokens_credited} tokens added! New balance: ${verifyData.new_balance} tokens`,
             });
-            queryClient.invalidateQueries({ queryKey: ["wallet"] });
-            setLoadingPackage(null);
-          } catch (error) {
+            
+            await queryClient.invalidateQueries({ queryKey: ["wallet"] });
+          } catch (error: any) {
             console.error('Payment verification failed:', error);
             toast({
               title: "Payment Verification Failed",
-              description: "Please contact support if amount was deducted",
+              description: error?.message || "Please contact support if amount was deducted",
               variant: "destructive"
             });
+            
+            // Refresh wallet anyway in case webhook processed it
+            await queryClient.invalidateQueries({ queryKey: ["wallet"] });
+          } finally {
             setLoadingPackage(null);
           }
         },
