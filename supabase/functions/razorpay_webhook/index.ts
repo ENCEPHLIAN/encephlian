@@ -22,7 +22,10 @@ serve(async (req) => {
     const signature = req.headers.get('x-razorpay-signature');
     const body = await req.text();
 
-    // Verify webhook signature
+    console.log('Received webhook signature:', signature?.substring(0, 10) + '...');
+    console.log('Body length:', body.length);
+
+    // Verify webhook signature using HMAC SHA256
     const encoder = new TextEncoder();
     const keyData = encoder.encode(razorpayKeySecret);
     const key = await crypto.subtle.importKey(
@@ -37,10 +40,16 @@ serve(async (req) => {
       .map(b => b.toString(16).padStart(2, '0'))
       .join('');
 
+    console.log('Expected signature:', expectedSignature.substring(0, 10) + '...');
+
     if (signature !== expectedSignature) {
-      console.error('Invalid signature');
+      console.error('Signature mismatch!');
+      console.error('Received:', signature?.substring(0, 20));
+      console.error('Expected:', expectedSignature.substring(0, 20));
       throw new Error('Invalid signature');
     }
+
+    console.log('Signature verified successfully ✅');
 
     const event = JSON.parse(body);
     console.log('Webhook event:', event.event, 'for payment:', event.payload?.payment?.entity?.id);
