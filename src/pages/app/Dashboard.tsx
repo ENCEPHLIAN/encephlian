@@ -53,31 +53,31 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="space-y-12 max-w-[1400px]">
-      <div className="animate-fade-in space-y-3">
-        <h1 className="text-5xl font-semibold tracking-tight text-foreground">
+    <div className="space-y-6 md:space-y-8 lg:space-y-12 max-w-full lg:max-w-[1600px]">
+      <div className="animate-fade-in space-y-2 md:space-y-3">
+        <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground">
           Dashboard
         </h1>
-        <p className="text-muted-foreground text-lg">Welcome back! Here's your triage care overview.</p>
+        <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Welcome back! Here's your triage care overview.</p>
       </div>
 
-      <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {kpis.map((kpi, index) => {
           const Icon = kpi.icon;
           return (
             <Card 
               key={kpi.title} 
-              className="border-border/50 hover:border-border transition-all duration-300 hover:shadow-2xl hover:shadow-black/20 animate-fade-in bg-card/50 backdrop-blur-sm"
+              className="border-border/50 hover:border-border transition-all duration-150 hover:shadow-xl hover:-translate-y-1 animate-fade-in bg-card/50 backdrop-blur-sm"
               style={{ animationDelay: `${index * 0.05}s` }}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-6 pt-8 px-8">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{kpi.title}</CardTitle>
-                <div className={cn("p-3 rounded-xl", kpi.bgColor)}>
-                  <Icon className={cn("h-5 w-5", kpi.color)} />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 md:pb-6 pt-6 md:pt-8 px-6 md:px-8">
+                <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">{kpi.title}</CardTitle>
+                <div className={cn("p-2 md:p-3 rounded-xl", kpi.bgColor)}>
+                  <Icon className={cn("h-4 w-4 md:h-5 md:w-5", kpi.color)} />
                 </div>
               </CardHeader>
-              <CardContent className="px-8 pb-8">
-                <div className="text-4xl font-semibold tracking-tight">{kpi.value}</div>
+              <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
+                <div className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">{kpi.value}</div>
               </CardContent>
             </Card>
           );
@@ -85,14 +85,14 @@ export default function Dashboard() {
       </div>
 
       <Card className="border-border/50 animate-fade-in bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pt-8 px-8 pb-6">
-          <CardTitle className="flex items-center gap-3 text-xl font-semibold tracking-tight">
-            <FileText className="h-6 w-6 text-muted-foreground" />
+        <CardHeader className="pt-6 md:pt-8 px-6 md:px-8 pb-4 md:pb-6">
+          <CardTitle className="flex items-center gap-2 md:gap-3 text-lg md:text-xl font-semibold tracking-tight">
+            <FileText className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground" />
             Recent Activity
           </CardTitle>
         </CardHeader>
-        <CardContent className="px-8 pb-8">
-          <p className="text-muted-foreground text-base leading-relaxed">
+        <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
+          <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
             Your recent studies and activity will appear here. Upload a study to get started with triage care processing.
           </p>
         </CardContent>
