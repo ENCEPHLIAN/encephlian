@@ -47,6 +47,18 @@ export default function AppLayout() {
     });
   }, []);
 
+  // Fetch clinic branding context
+  const { data: clinicContext } = useQuery({
+    queryKey: ["clinic-context"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("user_clinic_context")
+        .select("*")
+        .single();
+      return data;
+    }
+  });
+
   const { data: wallet } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {
@@ -75,13 +87,16 @@ export default function AppLayout() {
     <>
       <div className="py-6 px-4 md:py-8 md:px-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <img src={logo} alt="Logo" className="h-8 w-8 md:h-10 md:w-10 object-contain" />
+          <img 
+            src={clinicContext?.logo_url || logo} 
+            alt="Logo" 
+            className="h-8 w-8 md:h-10 md:w-10 object-contain" 
+          />
           {!isMobile && (
             <div>
               <h1 className="text-xl md:text-2xl font-bold logo-text text-sidebar-foreground">
-                ENCEPHLIAN
+                {clinicContext?.brand_name || "ENCEPHLIAN"}
               </h1>
-              <p className="text-xs md:text-sm text-sidebar-foreground/60 mt-0.5">Neurologist Portal</p>
             </div>
           )}
         </div>
@@ -154,6 +169,13 @@ export default function AppLayout() {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer p-0">
+                <div className="flex items-center justify-between w-full px-2 py-1.5">
+                  <span className="text-sm">Theme</span>
+                  <ThemeToggle />
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign Out
@@ -196,23 +218,27 @@ export default function AppLayout() {
       {isMobile && (
         <header className="fixed top-0 left-0 right-0 z-50 h-16 bg-sidebar border-b border-sidebar-border flex items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <img src={logo} alt="Logo" className="h-8 w-8 object-contain" />
+            <img 
+              src={clinicContext?.logo_url || logo} 
+              alt="Logo" 
+              className="h-8 w-8 object-contain" 
+            />
+            <span className="logo-text text-sm tracking-wider">
+              {clinicContext?.brand_name || "ENCEPHLIAN"}
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9">
-                  <Menu className="h-5 w-5" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" className="w-72 p-0 bg-sidebar">
-                <div className="flex flex-col h-full">
-                  <SidebarContent />
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
+          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <Menu className="h-5 w-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-72 p-0 bg-sidebar">
+              <div className="flex flex-col h-full">
+                <SidebarContent />
+              </div>
+            </SheetContent>
+          </Sheet>
         </header>
       )}
 
@@ -221,9 +247,6 @@ export default function AppLayout() {
         <div className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border">
           <div className="flex flex-col h-full">
             <SidebarContent />
-          </div>
-          <div className="absolute top-6 right-4">
-            <ThemeToggle />
           </div>
         </div>
       )}
