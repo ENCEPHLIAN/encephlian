@@ -1,39 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, FileText, CheckCircle, Clock, AlertCircle, TrendingUp, Coins, DollarSign } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Users, History, FileText, Calendar } from "lucide-react";
 import dayjs from "dayjs";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 export default function Dashboard() {
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["dashboard-stats"],
+  const { data: studies, isLoading } = useQuery({
+    queryKey: ["dashboard-studies"],
     queryFn: async () => {
-      const { data: studies } = await supabase
+      const { data, error } = await supabase
         .from("studies")
-        .select("state, created_at");
+        .select("*, clinics(name)")
+        .order("created_at", { ascending: false });
 
-      const { data: wallet } = await supabase
-        .from("wallets")
-        .select("tokens")
-        .single();
-
-      const { data: earnings } = await supabase
-        .from("earnings_wallets")
-        .select("balance_inr, total_earned_inr")
-        .single();
-
-      const totalTokens = wallet?.tokens || 0;
-      const uploaded = studies?.filter(s => s.state === "uploaded").length || 0;
-      const inReview = studies?.filter(s => s.state === "in_review").length || 0;
-      const signed = studies?.filter(s => s.state === "signed").length || 0;
-      const earningsBalance = earnings?.balance_inr || 0;
-      const totalEarned = earnings?.total_earned_inr || 0;
-
-      return { totalTokens, uploaded, inReview, signed, earningsBalance, totalEarned };
+      if (error) throw error;
+      return data;
     }
   });
+
+  const today = dayjs().format('YYYY-MM-DD');
+  
+  const todayPatients = studies?.filter(s => 
+    dayjs(s.created_at).format('YYYY-MM-DD') === today && 
+    (s.state === 'uploaded' || s.state === 'in_review')
+  ) || [];
+
+  const pendingReports = studies?.filter(s => 
+    s.state === 'ai_draft' || s.state === 'in_review'
+  ) || [];
+
+  const previousStudies = studies?.filter(s => 
+    dayjs(s.created_at).format('YYYY-MM-DD') !== today
+  ) || [];
+
+  // Get unique dates for previous EEGs
+  const previousDates = Array.from(new Set(
+    previousStudies.map(s => dayjs(s.created_at).format('YYYY-MM-DD'))
+  )).slice(0, 5);
 
   if (isLoading) {
     return (
@@ -43,60 +50,140 @@ export default function Dashboard() {
     );
   }
 
-  const kpis = [
-    { title: "Available Tokens", value: stats?.totalTokens || 0, icon: Coins, color: "text-primary", bgColor: "bg-primary/10" },
-    { title: "In Queue", value: stats?.uploaded || 0, icon: Clock, color: "text-yellow-500", bgColor: "bg-yellow-500/10" },
-    { title: "In Review", value: stats?.inReview || 0, icon: AlertCircle, color: "text-orange-500", bgColor: "bg-orange-500/10" },
-    { title: "Signed Reports", value: stats?.signed || 0, icon: CheckCircle, color: "text-green-500", bgColor: "bg-green-500/10" },
-    { title: "Earnings Balance", value: `₹${stats?.earningsBalance || 0}`, icon: DollarSign, color: "text-green-500", bgColor: "bg-green-500/10" },
-    { title: "Total Earned", value: `₹${stats?.totalEarned || 0}`, icon: TrendingUp, color: "text-primary", bgColor: "bg-primary/10" },
-  ];
-
   return (
-    <div className="space-y-6 md:space-y-8 lg:space-y-12 max-w-full lg:max-w-[1600px]">
-      <div className="animate-fade-in space-y-2 md:space-y-3">
-        <h1 className="text-3xl md:text-4xl lg:text-5xl font-semibold tracking-tight text-foreground">
-          Dashboard
-        </h1>
-        <p className="text-muted-foreground text-sm md:text-base lg:text-lg">Welcome back! Here's your triage care overview.</p>
+    <div className="space-y-6 max-w-full">
+      {/* Date Header */}
+      <div className="flex items-center gap-3 text-muted-foreground">
+        <Calendar className="h-5 w-5" />
+        <span className="text-lg font-medium">
+          {dayjs().format('dddd, MMMM D, YYYY')}
+        </span>
       </div>
 
-      <div className="grid gap-4 md:gap-6 lg:gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {kpis.map((kpi, index) => {
-          const Icon = kpi.icon;
-          return (
-            <Card 
-              key={kpi.title} 
-              className="border-border/50 hover:border-border transition-all duration-150 hover:shadow-xl hover:-translate-y-1 animate-fade-in bg-card/50 backdrop-blur-sm"
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 md:pb-6 pt-6 md:pt-8 px-6 md:px-8">
-                <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground uppercase tracking-wider">{kpi.title}</CardTitle>
-                <div className={cn("p-2 md:p-3 rounded-xl", kpi.bgColor)}>
-                  <Icon className={cn("h-4 w-4 md:h-5 md:w-5", kpi.color)} />
-                </div>
-              </CardHeader>
-              <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
-                <div className="text-2xl md:text-3xl lg:text-4xl font-semibold tracking-tight">{kpi.value}</div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {/* Collapsible Sections */}
+      <Accordion type="multiple" defaultValue={["today", "pending"]} className="space-y-4">
+        
+        {/* Today's EEG Patients */}
+        <AccordionItem value="today" className="border rounded-xl bg-card">
+          <AccordionTrigger className="px-6 py-4 hover:no-underline">
+            <div className="flex items-center gap-3">
+              <Users className="h-5 w-5" />
+              <span className="text-lg font-semibold">Today's EEG Patients</span>
+              <Badge variant="secondary">{todayPatients.length}</Badge>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            {todayPatients.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No patients scheduled for today</p>
+            ) : (
+              <div className="space-y-3">
+                {todayPatients.map((study) => {
+                  const meta = study.meta as any;
+                  return (
+                    <div 
+                      key={study.id} 
+                      className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="font-mono text-sm text-muted-foreground min-w-[60px]">
+                          {meta?.patient_id || 'N/A'}
+                        </div>
+                        <div>
+                          <div className="font-medium">
+                            {meta?.patient_age || '?'}y / {meta?.patient_gender || '?'}
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {dayjs(study.created_at).format('HH:mm')} • {meta?.indication || 'No indication'}
+                          </div>
+                        </div>
+                      </div>
+                      <Button size="sm" asChild>
+                        <Link to={`/app/studies/${study.id}`}>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Start EEG
+                        </Link>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </AccordionContent>
+        </AccordionItem>
 
-      <Card className="border-border/50 animate-fade-in bg-card/50 backdrop-blur-sm">
-        <CardHeader className="pt-6 md:pt-8 px-6 md:px-8 pb-4 md:pb-6">
-          <CardTitle className="flex items-center gap-2 md:gap-3 text-lg md:text-xl font-semibold tracking-tight">
-            <FileText className="h-5 w-5 md:h-6 md:w-6 text-muted-foreground" />
-            Recent Activity
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-6 md:px-8 pb-6 md:pb-8">
-          <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-            Your recent studies and activity will appear here. Upload a study to get started with triage care processing.
-          </p>
-        </CardContent>
-      </Card>
+        {/* Previous EEGs */}
+        <AccordionItem value="previous" className="border rounded-xl bg-card">
+          <AccordionTrigger className="px-6 py-4 hover:no-underline">
+            <div className="flex items-center gap-3">
+              <History className="h-5 w-5" />
+              <span className="text-lg font-semibold">Previous EEGs</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            <div className="flex flex-wrap gap-2">
+              {previousDates.map((date) => (
+                <Button
+                  key={date}
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  className="font-mono"
+                >
+                  <Link to={`/app/studies?date=${date}`}>
+                    {dayjs(date).format('YYYY-MM-DD')}
+                  </Link>
+                </Button>
+              ))}
+              {previousDates.length === 0 && (
+                <p className="text-muted-foreground">No previous studies</p>
+              )}
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        {/* Pending EEG Reports */}
+        <AccordionItem value="pending" className="border rounded-xl bg-card">
+          <AccordionTrigger className="px-6 py-4 hover:no-underline">
+            <div className="flex items-center gap-3">
+              <FileText className="h-5 w-5" />
+              <span className="text-lg font-semibold">Pending EEG Reports</span>
+              <Badge variant="destructive">{pendingReports.length}</Badge>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent className="px-6 pb-6">
+            {pendingReports.length === 0 ? (
+              <p className="text-muted-foreground text-center py-8">No pending reports</p>
+            ) : (
+              <div className="space-y-3">
+                {pendingReports.map((study) => {
+                  const meta = study.meta as any;
+                  return (
+                    <div 
+                      key={study.id}
+                      className="flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {meta?.patient_id || 'N/A'} - {meta?.patient_age || '?'}y / {meta?.patient_gender || '?'}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {dayjs(study.created_at).format('YYYY-MM-DD')} • {study.sla} • Ref: {meta?.referring_doctor || 'N/A'}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to={`/app/studies/${study.id}`}>
+                          Review
+                        </Link>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </AccordionContent>
+        </AccordionItem>
+
+      </Accordion>
     </div>
   );
 }

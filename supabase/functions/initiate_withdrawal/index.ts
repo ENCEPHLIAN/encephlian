@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Mock mode for testing without real Razorpay
+const MOCK_MODE = Deno.env.get('RAZORPAY_MOCK_MODE') === 'true';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -13,8 +16,6 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID')!;
-    const razorpaySecret = Deno.env.get('RAZORPAY_KEY_SECRET')!;
 
     const authHeader = req.headers.get('Authorization')!;
     const supabase = createClient(supabaseUrl, supabaseKey, {
@@ -35,7 +36,7 @@ Deno.serve(async (req) => {
       bank_name 
     } = await req.json();
 
-    console.log('Initiating withdrawal:', { user_id: user.id, amount_inr });
+    console.log('Initiating withdrawal:', { user_id: user.id, amount_inr, mock_mode: MOCK_MODE });
 
     // Validate minimum withdrawal
     if (amount_inr < 100) {
@@ -95,9 +96,68 @@ Deno.serve(async (req) => {
 
     console.log('Withdrawal request created:', withdrawal.id);
 
-    // For instant and standard tiers, initiate Razorpay payout
+    // For instant and standard tiers, initiate payout
     if (breakdown.tier === 'instant' || breakdown.tier === 'standard') {
-      try {
+      if (MOCK_MODE) {
+        // Mock payout for testing
+        const mockPayoutId = `payout_mock_${Date.now()}`;
+        console.log('MOCK MODE: Simulating payout', mockPayoutId);
+        
+        // Update withdrawal with mock payout ID
+        await supabase
+          .from('withdrawal_requests')
+          .update({
+            razorpay_payout_id: mockPayoutId,
+            status: 'processing'
+          })
+          .eq('id', withdrawal.id);
+
+        // Simulate webhook callback after 3 seconds
+        setTimeout(async () => {
+          console.log('MOCK MODE: Simulating webhook callback for', mockPayoutId);
+          
+          try {
+            await fetch(`${supabaseUrl}/functions/v1/razorpay_payout_webhook`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-razorpay-signature': 'mock-signature'
+              },
+              body: JSON.stringify({
+                event: 'payout.processed',
+                payload: {
+                  payout: {
+                    entity: {
+                      id: mockPayoutId,
+                      status: 'processed',
+                      reference_id: withdrawal.id
+                    }
+                  }
+                }
+              })
+            });
+          } catch (err) {
+            console.error('Mock webhook callback failed:', err);
+          }
+        }, 3000);
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            withdrawal_id: withdrawal.id,
+            razorpay_payout_id: mockPayoutId,
+            status: 'processing',
+            breakdown: breakdown,
+            mock_mode: true,
+            message: `[MOCK] Withdrawal initiated. Simulating ${breakdown.tier} payout.`,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } else {
+        // Real Razorpay payout
+        const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID')!;
+        const razorpaySecret = Deno.env.get('RAZORPAY_KEY_SECRET')!;
+
         const mode = breakdown.tier === 'instant' ? 'IMPS' : 'NEFT';
         
         const payoutPayload = {
@@ -133,6 +193,18 @@ Deno.serve(async (req) => {
         if (!razorpayResponse.ok) {
           const errorData = await razorpayResponse.json();
           console.error('Razorpay payout failed:', errorData);
+          
+          // Mark withdrawal as failed and unlock amount
+          await supabase
+            .from('withdrawal_requests')
+            .update({
+              status: 'failed',
+              failed_reason: errorData.error?.description || 'Payout initiation failed',
+            })
+            .eq('id', withdrawal.id);
+
+          await supabase.rpc('unlock_failed_withdrawal', { p_withdrawal_id: withdrawal.id });
+
           throw new Error(errorData.error?.description || 'Payout initiation failed');
         }
 
@@ -155,25 +227,11 @@ Deno.serve(async (req) => {
             razorpay_payout_id: payoutData.id,
             status: 'processing',
             breakdown: breakdown,
+            mock_mode: false,
             message: `Withdrawal initiated. Funds will be transferred via ${mode} within ${breakdown.tier === 'instant' ? '2 minutes' : '24 hours'}.`,
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      } catch (payoutError: any) {
-        console.error('Payout error:', payoutError);
-        
-        // Mark withdrawal as failed and unlock amount
-        await supabase
-          .from('withdrawal_requests')
-          .update({
-            status: 'failed',
-            failed_reason: payoutError.message,
-          })
-          .eq('id', withdrawal.id);
-
-        await supabase.rpc('unlock_failed_withdrawal', { p_withdrawal_id: withdrawal.id });
-
-        throw new Error(`Payout failed: ${payoutError.message}`);
       }
     } else {
       // Manual tier - requires admin approval
