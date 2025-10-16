@@ -1,9 +1,10 @@
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, FileSignature } from "lucide-react";
 import dayjs from "dayjs";
 
 export default function StudyDetail() {
@@ -44,15 +45,25 @@ export default function StudyDetail() {
 
   return (
     <div className="space-y-8 max-w-4xl">
-      <div>
-        <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold">{patientName}</h1>
-          <Badge className="bg-blue-500">{study.state.replace("_", " ")}</Badge>
-          <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
-            {study.sla}
-          </Badge>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-bold">{patientName}</h1>
+            <Badge className="bg-blue-500">{study.state.replace("_", " ")}</Badge>
+            <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
+              {study.sla}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground">Patient ID: {patientId}</p>
         </div>
-        <p className="text-muted-foreground">Patient ID: {patientId}</p>
+        {(study.state === 'ai_draft' || study.state === 'in_review') && (
+          <Button asChild>
+            <Link to={`/app/studies/${id}/review`}>
+              <FileSignature className="mr-2 h-4 w-4" />
+              Review & Sign
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

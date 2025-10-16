@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 import dayjs from "dayjs";
+import { TokenPurchase } from "@/components/TokenPurchase";
 
 export default function Billing() {
   const { data: payments, isLoading } = useQuery({
@@ -31,9 +32,11 @@ export default function Billing() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Billing History</h1>
-        <p className="text-muted-foreground">View your payment transactions</p>
+        <h1 className="text-3xl font-bold">Billing & Payments</h1>
+        <p className="text-muted-foreground">Purchase tokens and view your payment history</p>
       </div>
+
+      <TokenPurchase />
 
       <Card>
         <CardHeader>
