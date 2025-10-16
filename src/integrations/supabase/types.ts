@@ -119,6 +119,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
+          {
             foreignKeyName: "clinic_memberships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -129,29 +136,44 @@ export type Database = {
       }
       clinics: {
         Row: {
+          brand_name: string | null
           city: string | null
           country: string | null
           created_at: string | null
+          custom_domain: string | null
           id: string
+          logo_url: string | null
           name: string
+          primary_color: string | null
+          secondary_color: string | null
           state: string | null
           tz: string | null
         }
         Insert: {
+          brand_name?: string | null
           city?: string | null
           country?: string | null
           created_at?: string | null
+          custom_domain?: string | null
           id?: string
+          logo_url?: string | null
           name: string
+          primary_color?: string | null
+          secondary_color?: string | null
           state?: string | null
           tz?: string | null
         }
         Update: {
+          brand_name?: string | null
           city?: string | null
           country?: string | null
           created_at?: string | null
+          custom_domain?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
           state?: string | null
           tz?: string | null
         }
@@ -432,6 +454,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
+          {
             foreignKeyName: "studies_owner_fkey"
             columns: ["owner"]
             isOneToOne: false
@@ -516,6 +545,45 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_roles: {
+        Row: {
+          clinic_id: string | null
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          clinic_id?: string | null
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string | null
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
+        ]
       }
       wallets: {
         Row: {
@@ -638,7 +706,27 @@ export type Database = {
             referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
         ]
+      }
+      user_clinic_context: {
+        Row: {
+          brand_name: string | null
+          clinic_id: string | null
+          clinic_name: string | null
+          logo_url: string | null
+          primary_color: string | null
+          role: Database["public"]["Enums"]["app_role"] | null
+          secondary_color: string | null
+          user_id: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {
@@ -667,6 +755,17 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_user_clinic_id: {
+        Args: { _user_id: string }
+        Returns: string
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       lock_withdrawal_amount: {
         Args: { p_amount: number; p_user_id: string }
         Returns: boolean
@@ -681,7 +780,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "neurologist" | "clinic_admin" | "ops" | "super_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -808,6 +907,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["neurologist", "clinic_admin", "ops", "super_admin"],
+    },
   },
 } as const
