@@ -60,8 +60,6 @@ Deno.serve(async (req) => {
 
     // Handle different payout statuses
     if (status === 'processed') {
-      console.log('Payout processed successfully');
-
       // Update withdrawal status to completed
       await supabase
         .from('withdrawal_requests')
@@ -71,7 +69,8 @@ Deno.serve(async (req) => {
         })
         .eq('id', withdrawal.id);
 
-      // Process completed withdrawal (deduct from balance, update TDS)
+      // Deduct from balance and unlock
+      const grossAmount = withdrawal.gross_amount_inr || withdrawal.amount_inr;
       await supabase.rpc('process_completed_withdrawal', {
         p_withdrawal_id: withdrawal.id,
       });

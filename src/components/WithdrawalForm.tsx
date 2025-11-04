@@ -27,7 +27,6 @@ interface WithdrawalFormProps {
 
 interface Breakdown {
   requested_amount: number;
-  tds_amount: number;
   platform_fee: number;
   net_amount: number;
   tier: string;
@@ -83,16 +82,30 @@ export function WithdrawalForm({ availableBalance, onSuccess, onCancel }: Withdr
   const calculateBreakdown = async (requestedAmount: number) => {
     try {
       setCalculating(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data, error } = await supabase.rpc("calculate_withdrawal_breakdown", {
-        p_user_id: user.id,
-        p_requested_amount: requestedAmount,
+      
+      // Simple SaaS fee calculation
+      let tier = 'instant';
+      let platformFee = 3; // Base fee
+      
+      if (requestedAmount <= 10000) {
+        tier = 'instant';
+        platformFee = 3 + Math.floor(requestedAmount * 0.005); // ₹3 + 0.5%
+      } else if (requestedAmount <= 100000) {
+        tier = 'standard';
+        platformFee = 5;
+      } else {
+        tier = 'manual';
+        platformFee = 10;
+      }
+      
+      const netAmount = requestedAmount - platformFee;
+      
+      setBreakdown({
+        requested_amount: requestedAmount,
+        platform_fee: platformFee,
+        net_amount: netAmount,
+        tier: tier,
       });
-
-      if (error) throw error;
-      setBreakdown(data ? data as unknown as Breakdown : null);
     } catch (error: any) {
       console.error("Error calculating breakdown:", error);
     } finally {
@@ -245,16 +258,9 @@ export function WithdrawalForm({ availableBalance, onSuccess, onCancel }: Withdr
 
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Gross Amount</span>
+                <span className="text-muted-foreground">Withdrawal Amount</span>
                 <span className="font-medium">₹{breakdown.requested_amount.toLocaleString("en-IN")}</span>
               </div>
-
-              {breakdown.tds_amount > 0 && (
-                <div className="flex justify-between text-destructive">
-                  <span>TDS (10%)</span>
-                  <span>- ₹{breakdown.tds_amount.toLocaleString("en-IN")}</span>
-                </div>
-              )}
 
               <div className="flex justify-between text-muted-foreground">
                 <span>Platform Fee</span>
@@ -262,19 +268,10 @@ export function WithdrawalForm({ availableBalance, onSuccess, onCancel }: Withdr
               </div>
 
               <div className="border-t pt-2 flex justify-between font-semibold text-base">
-                <span>Net Amount</span>
+                <span>You'll Receive</span>
                 <span className="text-primary">₹{breakdown.net_amount.toLocaleString("en-IN")}</span>
               </div>
             </div>
-
-            {breakdown.tds_amount > 0 && (
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription className="text-xs">
-                  TDS deducted as per Income Tax Act Section 194J. Claimable when filing ITR.
-                </AlertDescription>
-              </Alert>
-            )}
           </div>
         )}
 

@@ -43,13 +43,28 @@ Deno.serve(async (req) => {
       throw new Error('Minimum withdrawal amount is ₹100');
     }
 
-    // Calculate breakdown
-    const { data: breakdown, error: calcError } = await supabase.rpc('calculate_withdrawal_breakdown', {
-      p_user_id: user.id,
-      p_requested_amount: amount_inr
-    });
-
-    if (calcError) throw calcError;
+    // Simple SaaS fee calculation
+    let tier = 'instant';
+    let platformFee = 3;
+    
+    if (amount_inr <= 10000) {
+      tier = 'instant';
+      platformFee = 3 + Math.floor(amount_inr * 0.005);
+    } else if (amount_inr <= 100000) {
+      tier = 'standard';
+      platformFee = 5;
+    } else {
+      tier = 'manual';
+      platformFee = 10;
+    }
+    
+    const netAmount = amount_inr - platformFee;
+    const breakdown = {
+      requested_amount: amount_inr,
+      platform_fee: platformFee,
+      net_amount: netAmount,
+      tier: tier,
+    };
 
     console.log('Breakdown calculated:', breakdown);
 
@@ -63,10 +78,6 @@ Deno.serve(async (req) => {
       throw new Error('Failed to lock withdrawal amount. Insufficient balance.');
     }
 
-    // Get current FY and quarter for TDS
-    const { data: fy } = await supabase.rpc('get_current_fy');
-    const { data: quarter } = await supabase.rpc('get_current_quarter');
-
     // Create withdrawal request
     const { data: withdrawal, error: withdrawalError } = await supabase
       .from('withdrawal_requests')
@@ -75,15 +86,14 @@ Deno.serve(async (req) => {
         amount_inr: amount_inr,
         gross_amount_inr: amount_inr,
         platform_fee_inr: breakdown.platform_fee,
-        tds_amount_inr: breakdown.tds_amount,
+        tds_amount_inr: 0,
         net_amount_inr: breakdown.net_amount,
         bank_account_number: account_number || '',
         bank_ifsc: ifsc || '',
         bank_account_holder: account_holder_name || '',
         bank_name: bank_name || '',
         tier: breakdown.tier,
-        tds_quarter: `${quarter}-${fy}`,
-        tds_deducted: breakdown.tds_amount > 0,
+        tds_deducted: false,
       })
       .select()
       .single();

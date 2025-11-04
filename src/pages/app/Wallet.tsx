@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Wallet as WalletIcon, History, Building2, Plus, Send, Receipt, AlertCircle } from "lucide-react";
+import { Loader2, Wallet as WalletIcon, History, Building2, Plus, Send, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -45,18 +45,6 @@ export default function Wallet() {
     }
   });
 
-  const { data: tdsRecords } = useQuery({
-    queryKey: ["tds-records"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tds_records")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) return [];
-      return data;
-    }
-  });
 
   const { data: bankAccounts } = useQuery({
     queryKey: ["bank-accounts"],
@@ -240,60 +228,6 @@ export default function Wallet() {
           </AccordionContent>
         </AccordionItem>
 
-        {/* TDS Dashboard */}
-        <AccordionItem value="tds" className="border rounded-xl bg-card">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <Receipt className="h-5 w-5" />
-              <span className="text-lg font-semibold">TDS & Tax Information</span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            {tdsRecords && tdsRecords.length > 0 ? (
-              <div className="space-y-3">
-                {tdsRecords.map((record) => (
-                  <Card key={record.id} className="border-none shadow-none bg-muted/30">
-                    <CardContent className="pt-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-sm text-muted-foreground">Period</div>
-                          <div className="font-medium">{record.financial_year} {record.quarter}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Earnings</div>
-                          <div className="font-medium">₹{record.total_earnings_inr}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">TDS Deducted</div>
-                          <div className="font-medium text-orange-600">₹{record.total_tds_deducted_inr}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-muted-foreground">Form 16A</div>
-                          <div className="font-medium">
-                            {record.form_16a_url ? (
-                              <a href={record.form_16a_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                                Download
-                              </a>
-                            ) : (
-                              <span className="text-muted-foreground">Pending</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No TDS records available. TDS is deducted when your withdrawals exceed ₹30,000 in a financial year.
-                </AlertDescription>
-              </Alert>
-            )}
-          </AccordionContent>
-        </AccordionItem>
 
       </Accordion>
 
