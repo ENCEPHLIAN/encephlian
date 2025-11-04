@@ -1,23 +1,9 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, Wallet as WalletIcon, History, Building2, Plus, Send, AlertCircle } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { BankAccountForm } from "@/components/BankAccountForm";
-import { WithdrawalForm } from "@/components/WithdrawalForm";
-import dayjs from "dayjs";
+import { Loader2 } from "lucide-react";
 
 export default function Wallet() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [showBankDialog, setShowBankDialog] = useState(false);
-
   const { data: earningsData, isLoading } = useQuery({
     queryKey: ["earnings-wallet"],
     queryFn: async () => {
@@ -27,34 +13,6 @@ export default function Wallet() {
         .single();
 
       if (error) return null;
-      return data;
-    }
-  });
-
-  const { data: withdrawalHistory } = useQuery({
-    queryKey: ["withdrawal-history"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("withdrawal_requests")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (error) return [];
-      return data;
-    }
-  });
-
-
-  const { data: bankAccounts } = useQuery({
-    queryKey: ["bank-accounts"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("bank_accounts")
-        .select("*")
-        .order("is_primary", { ascending: false });
-
-      if (error) return [];
       return data;
     }
   });
@@ -74,179 +32,105 @@ export default function Wallet() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Wallet</h1>
-        <p className="text-muted-foreground">Manage your earnings and withdrawals</p>
+        <h1 className="text-3xl font-bold">Earnings Wallet</h1>
+        <p className="text-muted-foreground">Track your commission earnings from report signings</p>
       </div>
 
-      <Accordion type="multiple" defaultValue={["overview", "withdraw"]} className="space-y-4">
-        
-        {/* Wallet Overview */}
-        <AccordionItem value="overview" className="border rounded-xl bg-card">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <WalletIcon className="h-5 w-5" />
-              <span className="text-lg font-semibold">Wallet Overview</span>
+      {/* Earnings Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="border-none shadow-lg bg-gradient-to-br from-primary/10 to-primary/5">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Total Earned</div>
+              <div className="text-4xl font-bold">₹{earningsData?.total_earned_inr || 0}</div>
+              <div className="text-xs text-muted-foreground">Lifetime earnings</div>
             </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card className="border-none shadow-none bg-muted/30">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground mb-1">Earnings Balance</div>
-                  <div className="text-2xl font-bold">₹{earningsBalance}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-none bg-muted/30">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground mb-1">Locked Amount</div>
-                  <div className="text-2xl font-bold">₹{lockedAmount}</div>
-                </CardContent>
-              </Card>
-              <Card className="border-none shadow-none bg-muted/30">
-                <CardContent className="pt-6">
-                  <div className="text-sm text-muted-foreground mb-1">Available</div>
-                  <div className="text-2xl font-bold text-green-600">₹{availableBalance}</div>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="mt-4 p-4 bg-primary/5 rounded-lg border">
-              <div className="text-sm text-muted-foreground mb-1">Total Earned (Lifetime)</div>
-              <div className="text-xl font-semibold">₹{earningsData?.total_earned_inr || 0}</div>
-            </div>
-          </AccordionContent>
-        </AccordionItem>
+          </CardContent>
+        </Card>
 
-        {/* Bank Accounts */}
-        <AccordionItem value="bank" className="border rounded-xl bg-card">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <Building2 className="h-5 w-5" />
-              <span className="text-lg font-semibold">Bank Accounts</span>
-              <Badge variant="secondary">{bankAccounts?.length || 0}</Badge>
+        <Card className="border-none shadow-lg bg-gradient-to-br from-green-500/10 to-green-500/5">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Available Balance</div>
+              <div className="text-4xl font-bold text-green-600">₹{availableBalance}</div>
+              <div className="text-xs text-muted-foreground">Ready to withdraw</div>
             </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            {bankAccounts && bankAccounts.length > 0 ? (
-              <div className="space-y-3">
-                {bankAccounts.map((account) => (
-                  <Card key={account.id} className="border-none shadow-none bg-muted/30">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{account.account_holder_name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {account.bank_name} • {account.ifsc}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            •••• {account.account_number_encrypted?.slice(-4)}
-                          </div>
-                        </div>
-                        {account.is_primary && (
-                          <Badge variant="secondary">Primary</Badge>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-lg bg-gradient-to-br from-orange-500/10 to-orange-500/5">
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="text-sm text-muted-foreground">Pending</div>
+              <div className="text-4xl font-bold text-orange-600">₹{lockedAmount}</div>
+              <div className="text-xs text-muted-foreground">In processing</div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Coming Soon Section */}
+      <Card className="border-2 border-dashed">
+        <CardContent className="pt-6">
+          <div className="text-center space-y-4 py-8">
+            <div className="text-2xl font-bold">Withdrawals Coming Soon</div>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              We're working on adding bank account linking and instant withdrawals via Razorpay. 
+              You'll be able to transfer your earnings directly to your bank account.
+            </p>
+            <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                Instant transfers
               </div>
-            ) : (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No bank accounts added. Add a bank account to enable withdrawals.
-                </AlertDescription>
-              </Alert>
-            )}
-            <Button onClick={() => setShowBankDialog(true)} className="w-full mt-4">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Bank Account
-            </Button>
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* Withdrawal Form */}
-        <AccordionItem value="withdraw" className="border rounded-xl bg-card">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <Send className="h-5 w-5" />
-              <span className="text-lg font-semibold">Withdraw Earnings</span>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            <WithdrawalForm
-              availableBalance={availableBalance}
-              onSuccess={() => {
-                queryClient.invalidateQueries({ queryKey: ["earnings-wallet"] });
-                queryClient.invalidateQueries({ queryKey: ["withdrawal-history"] });
-                toast({ title: "Withdrawal initiated successfully" });
-              }}
-              onCancel={() => {}}
-            />
-          </AccordionContent>
-        </AccordionItem>
-
-        {/* Withdrawal History */}
-        <AccordionItem value="history" className="border rounded-xl bg-card">
-          <AccordionTrigger className="px-6 py-4 hover:no-underline">
-            <div className="flex items-center gap-3">
-              <History className="h-5 w-5" />
-              <span className="text-lg font-semibold">Withdrawal History</span>
-              <Badge variant="secondary">{withdrawalHistory?.length || 0}</Badge>
-            </div>
-          </AccordionTrigger>
-          <AccordionContent className="px-6 pb-6">
-            {withdrawalHistory && withdrawalHistory.length > 0 ? (
-              <div className="space-y-3">
-                {withdrawalHistory.map((withdrawal) => (
-                  <Card key={withdrawal.id} className="border-none shadow-none bg-muted/30">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">₹{withdrawal.net_amount_inr}</div>
-                          <div className="text-sm text-muted-foreground">
-                            {dayjs(withdrawal.created_at).format("MMM D, YYYY HH:mm")}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {withdrawal.bank_name} • {withdrawal.tier.toUpperCase()}
-                          </div>
-                        </div>
-                        <Badge variant={
-                          withdrawal.status === "completed" ? "default" :
-                          withdrawal.status === "failed" ? "destructive" :
-                          "secondary"
-                        }>
-                          {withdrawal.status}
-                        </Badge>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                Secure payment gateway
               </div>
-            ) : (
-              <p className="text-muted-foreground text-center py-8">No withdrawal history</p>
-            )}
-          </AccordionContent>
-        </AccordionItem>
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                No hidden fees
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-
-      </Accordion>
-
-      {/* Bank Account Dialog */}
-      <Dialog open={showBankDialog} onOpenChange={setShowBankDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Bank Account</DialogTitle>
-          </DialogHeader>
-          <BankAccountForm
-            onSuccess={() => {
-              setShowBankDialog(false);
-              queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-              toast({ title: "Bank account added successfully" });
-            }}
-            onCancel={() => setShowBankDialog(false)}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* Earnings Info */}
+      <Card>
+        <CardContent className="pt-6">
+          <h3 className="font-semibold mb-4">How do I earn?</h3>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-primary">1</span>
+              </div>
+              <div>
+                <div className="font-medium text-foreground">Sign Reports</div>
+                <div>Review and sign EEG reports uploaded by clinic owners</div>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-primary">2</span>
+              </div>
+              <div>
+                <div className="font-medium text-foreground">Earn Commission</div>
+                <div>3% for TAT reports (₹6) • 5% for STAT reports (₹20)</div>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <span className="text-xs font-bold text-primary">3</span>
+              </div>
+              <div>
+                <div className="font-medium text-foreground">Instant Credit</div>
+                <div>Earnings are credited immediately after signing</div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

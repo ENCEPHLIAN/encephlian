@@ -1,163 +1,172 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Coins } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-declare global {
-  interface Window {
-    Razorpay: any;
-  }
-}
+const TOKEN_PACKAGES = [
+  { tokens: 50, price: 10000, popular: false },
+  { tokens: 100, price: 20000, popular: true },
+  { tokens: 200, price: 38000, popular: false },
+  { tokens: 500, price: 90000, popular: false },
+];
 
 export function TokenPurchase() {
-  const [tokens, setTokens] = useState(10);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const costInr = tokens * 200;
-
-  const handlePurchase = async () => {
-    setLoading(true);
+  const handlePurchase = async (packageTokens: number, packagePrice: number) => {
     try {
-      // Create order
+      setLoading(true);
+
+      // Create order via edge function
       const { data: orderData, error: orderError } = await supabase.functions.invoke('create_order', {
-        body: { tokens }
+        body: { tokens: packageTokens },
       });
 
       if (orderError) throw orderError;
 
       // Load Razorpay script if not already loaded
-      if (!window.Razorpay) {
+      if (!(window as any).Razorpay) {
         const script = document.createElement('script');
         script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        script.async = true;
         document.body.appendChild(script);
-        await new Promise(resolve => script.onload = resolve);
+        await new Promise((resolve) => script.onload = resolve);
       }
 
-      // Open Razorpay checkout
       const options = {
-        key: orderData.razorpay_key_id,
-        amount: orderData.order.amount,
-        currency: 'INR',
+        key: orderData.keyId,
+        amount: orderData.amount * 100,
+        currency: orderData.currency,
         name: 'ENCEPHLIAN',
-        description: `${tokens} Tokens`,
-        order_id: orderData.order.id,
-        handler: async (response: any) => {
+        description: `${packageTokens} tokens`,
+        order_id: orderData.orderId,
+        handler: async function (response: any) {
           try {
-            // Verify payment
-            const { error: verifyError } = await supabase.functions.invoke('verify_payment', {
+            const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify_payment', {
               body: {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature
-              }
+                razorpay_signature: response.razorpay_signature,
+              },
             });
 
             if (verifyError) throw verifyError;
 
             toast({
-              title: "Purchase successful!",
-              description: `${tokens} tokens added to your wallet.`
+              title: "Payment successful! 🎉",
+              description: `${verifyData.tokens_credited} tokens credited`,
             });
 
-            // Refresh wallet balance
-            queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-            queryClient.invalidateQueries({ queryKey: ['payments'] });
-            setTokens(10);
-          } catch (err) {
+            queryClient.invalidateQueries({ queryKey: ["wallet"] });
+            queryClient.invalidateQueries({ queryKey: ["payments"] });
+          } catch (error: any) {
             toast({
               title: "Payment verification failed",
-              description: "Please contact support if amount was deducted.",
-              variant: "destructive"
+              description: error.message,
+              variant: "destructive",
             });
+          } finally {
+            setLoading(false);
           }
         },
         prefill: {
-          email: (await supabase.auth.getUser()).data.user?.email
+          email: (await supabase.auth.getUser()).data.user?.email || '',
         },
         theme: {
-          color: '#000000'
+          color: '#0ea5e9',
+        },
+        modal: {
+          ondismiss: () => setLoading(false)
         }
       };
 
-      const razorpay = new window.Razorpay(options);
+      const razorpay = new (window as any).Razorpay(options);
       razorpay.open();
     } catch (error: any) {
       toast({
-        title: "Purchase failed",
-        description: error.message || "Something went wrong",
-        variant: "destructive"
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Card>
+    <Card className="border-none shadow-lg">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Coins className="h-5 w-5" />
-          Buy Tokens
-        </CardTitle>
+        <CardTitle className="text-2xl">Purchase Tokens</CardTitle>
         <CardDescription>
-          Purchase tokens to sign EEG reports. Each TAT report costs 1 token (₹200), STAT costs 2 tokens (₹400).
+          Choose a package that fits your needs. Each token = 1 TAT report signing.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="tokens">Number of Tokens</Label>
-          <Input
-            id="tokens"
-            type="number"
-            min={10}
-            step={10}
-            value={tokens}
-            onChange={(e) => setTokens(Math.max(10, parseInt(e.target.value) || 10))}
-            className="text-lg"
-          />
-          <p className="text-sm text-muted-foreground">Minimum 10 tokens</p>
+      <CardContent>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {TOKEN_PACKAGES.map((pkg) => (
+            <Card 
+              key={pkg.tokens}
+              className={cn(
+                "relative transition-all hover:shadow-xl cursor-pointer border-2",
+                pkg.popular ? "border-primary shadow-lg scale-105" : "border-border hover:border-primary/50"
+              )}
+            >
+              {pkg.popular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                  <span className="bg-primary text-primary-foreground text-xs font-bold px-3 py-1 rounded-full">
+                    POPULAR
+                  </span>
+                </div>
+              )}
+              <CardContent className="pt-8 pb-6 text-center space-y-4">
+                <div>
+                  <div className="text-4xl font-bold">{pkg.tokens}</div>
+                  <div className="text-sm text-muted-foreground">tokens</div>
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="text-2xl font-bold">₹{(pkg.price / 100).toLocaleString('en-IN')}</div>
+                  <div className="text-xs text-muted-foreground">
+                    ₹{(pkg.price / pkg.tokens / 100).toFixed(0)}/token
+                  </div>
+                </div>
+
+                {pkg.tokens >= 200 && (
+                  <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1">
+                    <Check className="h-3 w-3" />
+                    Save {Math.round((1 - (pkg.price / pkg.tokens) / 200) * 100)}%
+                  </div>
+                )}
+
+                <Button 
+                  onClick={() => handlePurchase(pkg.tokens, pkg.price)}
+                  disabled={loading}
+                  className={cn(
+                    "w-full",
+                    pkg.popular ? "bg-primary hover:bg-primary/90" : ""
+                  )}
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        <div className="p-4 bg-muted rounded-lg space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Tokens:</span>
-            <span className="font-medium">{tokens}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Rate:</span>
-            <span className="font-medium">₹200 per token</span>
-          </div>
-          <div className="border-t pt-2 mt-2 flex justify-between">
-            <span className="font-semibold">Total:</span>
-            <span className="text-xl font-bold">₹{costInr.toLocaleString()}</span>
-          </div>
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+          <h4 className="font-semibold mb-2">What are tokens used for?</h4>
+          <ul className="text-sm text-muted-foreground space-y-1">
+            <li>• 1 token = 1 TAT (Turn Around Time) report signing</li>
+            <li>• 2 tokens = 1 STAT (Urgent) report signing</li>
+            <li>• Secure payment via Razorpay</li>
+            <li>• Instant credit after successful payment</li>
+          </ul>
         </div>
-
-        <Button
-          onClick={handlePurchase}
-          disabled={loading || tokens < 10}
-          className="w-full"
-          size="lg"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
-            </>
-          ) : (
-            <>
-              <Coins className="mr-2 h-4 w-4" />
-              Buy {tokens} Tokens for ₹{costInr.toLocaleString()}
-            </>
-          )}
-        </Button>
       </CardContent>
     </Card>
   );
