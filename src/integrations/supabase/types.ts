@@ -747,18 +747,9 @@ export type Database = {
         Args: { p_tokens: number; p_user_id: string }
         Returns: undefined
       }
-      get_current_fy: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      get_current_quarter: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
-      get_user_clinic_id: {
-        Args: { _user_id: string }
-        Returns: string
-      }
+      get_current_fy: { Args: never; Returns: string }
+      get_current_quarter: { Args: never; Returns: string }
+      get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
