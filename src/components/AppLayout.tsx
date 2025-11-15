@@ -15,16 +15,18 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { LayoutDashboard, Upload, FileText, Wallet, Receipt, User, LogOut, Coins, Menu } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Coins, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
+import CommandPalette from "@/components/CommandPalette";
 import logo from "@/assets/logo.png";
 
 const navigation = [
+  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Studies", href: "/app/studies", icon: FileText },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
 ];
@@ -238,6 +240,9 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+      
+      {/* Command Palette */}
+      <CommandPalette />
     </div>
   );
 }
