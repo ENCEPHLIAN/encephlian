@@ -12,6 +12,7 @@ import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
 import StudyReview from "./pages/app/StudyReview";
 import EEGViewer from "./pages/app/EEGViewer";
+import Files from "./pages/app/Files";
 import Wallet from "./pages/app/Wallet";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
@@ -41,6 +42,7 @@ function App() {
                 <Route path="studies/:id/review" element={<StudyReview />} />
                 <Route path="studies/:id/viewer" element={<EEGViewer />} />
                 <Route path="viewer" element={<EEGViewer />} />
+                <Route path="files" element={<Files />} />
                 <Route path="wallet" element={<Wallet />} />
                 <Route path="profile" element={<Profile />} />
                 <Route path="settings" element={<Settings />} />

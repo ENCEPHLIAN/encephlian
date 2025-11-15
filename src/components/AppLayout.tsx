@@ -15,7 +15,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Coins, Menu, Activity } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Coins, Menu, Activity, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -29,6 +29,7 @@ import logo from "@/assets/logo.png";
     { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
     { name: "Studies", href: "/app/studies", icon: FileText },
     { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
+    { name: "Files", href: "/app/files", icon: FolderOpen },
     { name: "Wallet", href: "/app/wallet", icon: Wallet },
   ];
 
