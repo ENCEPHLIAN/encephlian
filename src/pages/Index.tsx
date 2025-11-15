@@ -11,7 +11,7 @@ const Index = () => {
           <div className="flex items-center justify-between h-16">
             <Link to="/" className="flex items-center gap-2">
               <Brain className="h-6 w-6 text-primary" />
-              <span className="text-xl font-bold">Encephalian</span>
+              <span className="text-xl font-bold">ENCEPHLIAN</span>
             </Link>
             <Button asChild variant="default" size="sm" className="glow-cyan-hover">
               <Link to="/login">Sign In</Link>
@@ -30,7 +30,7 @@ const Index = () => {
             
             <h1 className="text-6xl md:text-8xl font-bold tracking-tight">
               <span className="bg-gradient-to-r from-primary via-cyan-400 to-primary bg-clip-text text-transparent animate-shimmer bg-[length:200%_auto]">
-                Encephalian
+                ENCEPHLIAN
               </span>
             </h1>
             

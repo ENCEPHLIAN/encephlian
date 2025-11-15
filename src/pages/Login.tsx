@@ -128,10 +128,14 @@ export default function Login() {
       {/* STATE 1: Hero Landing */}
       {!showForm && (
         <div className="text-center space-y-12 animate-fade-in">
-          {/* MIND - Massive and tight */}
+          {/* MIND - Large and TIGHT */}
           <h1 
-            className="text-9xl md:text-[12rem] lg:text-[16rem] font-black tracking-tighter leading-none text-foreground"
-            style={{ fontFamily: 'Montserrat', fontWeight: 900 }}
+            className="text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter leading-none text-foreground"
+            style={{ 
+              fontFamily: 'Montserrat', 
+              fontWeight: 900,
+              letterSpacing: '-0.05em'
+            }}
           >
             MIND
           </h1>
@@ -141,12 +145,16 @@ export default function Login() {
             Machine Intelligence for Neural Data
           </p>
           
-          {/* encephalian - small and subtle */}
+          {/* encephlian - small and subtle */}
           <p 
             className="text-sm font-light tracking-tight opacity-40"
-            style={{ fontFamily: 'Montserrat', fontWeight: 300 }}
+            style={{ 
+              fontFamily: 'Montserrat', 
+              fontWeight: 300,
+              letterSpacing: '-0.02em'
+            }}
           >
-            encephalian
+            encephlian
           </p>
           
           {/* CTA Button */}
@@ -163,22 +171,30 @@ export default function Login() {
       {/* STATE 2: Login Form */}
       {showForm && (
         <div className="w-full max-w-6xl animate-fade-in">
-          {/* Header with logo + ENCEPHALIAN - top-left */}
+          {/* Header with logo + ENCEPHLIAN - top-left */}
           <div className="absolute top-6 left-6 flex items-center gap-3">
-            <img src={logo} alt="Encephalian Logo" className="h-12 w-12" />
+            <img src={logo} alt="ENCEPHLIAN Logo" className="h-14 w-14" />
             <span 
-              className="text-2xl font-extrabold tracking-tight text-foreground"
-              style={{ fontFamily: 'Montserrat', fontWeight: 800 }}
+              className="text-2xl font-extrabold tracking-tight text-foreground leading-none"
+              style={{ 
+                fontFamily: 'Montserrat', 
+                fontWeight: 800,
+                letterSpacing: '-0.03em'
+              }}
             >
-              ENCEPHALIAN
+              ENCEPHLIAN
             </span>
           </div>
           
           <div className="flex flex-col items-center justify-center">
             {/* MIND - Smaller, centered */}
             <h1 
-              className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter mb-2 text-foreground"
-              style={{ fontFamily: 'Montserrat', fontWeight: 700 }}
+              className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter mb-2 text-foreground"
+              style={{ 
+                fontFamily: 'Montserrat', 
+                fontWeight: 700,
+                letterSpacing: '-0.05em'
+              }}
             >
               MIND
             </h1>
@@ -189,7 +205,7 @@ export default function Login() {
             </p>
             
             {/* Login Form Card */}
-            <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border border-border rounded-lg p-8 shadow-lg">
+            <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
               <Tabs defaultValue="signin" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-8">
                   <TabsTrigger value="signin">Sign In</TabsTrigger>
