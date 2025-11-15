@@ -12,18 +12,13 @@ import { z } from "zod";
 import logo from "@/assets/logo.png";
 
 const emailSchema = z.string().email("Invalid email address");
-const passwordSchema = z
-  .string()
-  .min(8, "Password must be at least 8 characters")
-  .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-  .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-  .regex(/[0-9]/, "Password must contain at least one number")
-  .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
+const passwordSchema = z.string().min(8, "Password must be at least 8 characters");
 
 export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -73,14 +68,21 @@ export default function Login() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent, mode: "signin" | "signup") => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const isEmailValid = validateEmail(email);
-    const isPasswordValid = validatePassword(password);
-
-    if (!isEmailValid || !isPasswordValid) {
-      return;
+    
+    // Only validate password for signup
+    if (mode === "signup") {
+      const isPasswordValid = validatePassword(password);
+      if (!isEmailValid || !isPasswordValid) {
+        return;
+      }
+    } else {
+      if (!isEmailValid) {
+        return;
+      }
     }
 
     setIsLoading(true);
@@ -90,6 +92,9 @@ export default function Login() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`
+          }
         });
         if (error) throw error;
         toast({
@@ -213,7 +218,7 @@ export default function Login() {
                 </TabsList>
                 
                 <TabsContent value="signin">
-                  <form onSubmit={(e) => handleSubmit(e, "signin")} className="space-y-4">
+                  <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="email-signin">Email</Label>
                       <Input
@@ -242,7 +247,6 @@ export default function Login() {
                           value={password}
                           onChange={(e) => {
                             setPassword(e.target.value);
-                            validatePassword(e.target.value);
                           }}
                           required
                         />
@@ -277,7 +281,7 @@ export default function Login() {
                 </TabsContent>
                 
                 <TabsContent value="signup">
-                  <form onSubmit={(e) => handleSubmit(e, "signup")} className="space-y-4">
+                  <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="email-signup">Email</Label>
                       <Input

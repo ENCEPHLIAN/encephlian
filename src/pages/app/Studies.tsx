@@ -27,9 +27,13 @@ export default function Studies() {
   const { data: studies, isLoading } = useQuery({
     queryKey: ["studies", stateFilter],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
       let query = supabase
         .from("studies")
         .select("*, clinics(name)")
+        .or(`owner.eq.${user.id},sample.eq.true`)
         .order("created_at", { ascending: false });
 
       if (stateFilter !== "all") {
@@ -113,9 +117,16 @@ export default function Studies() {
                 return (
                   <TableRow key={study.id}>
                     <TableCell>
-                      <div>
-                        <div className="font-medium">{meta?.patient_name || "N/A"}</div>
-                        <div className="text-sm text-muted-foreground">{meta?.patient_id || "N/A"}</div>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-medium">{meta?.patient_name || "N/A"}</div>
+                          <div className="text-sm text-muted-foreground">{meta?.patient_id || "N/A"}</div>
+                        </div>
+                        {(study as any).sample && (
+                          <Badge variant="outline" className="ml-2">
+                            Sample
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>{study.clinics?.name}</TableCell>
