@@ -241,6 +241,59 @@ export type Database = {
         }
         Relationships: []
       }
+      eeg_markers: {
+        Row: {
+          channel: string | null
+          created_at: string
+          duration_sec: number | null
+          id: string
+          label: string | null
+          marker_type: string
+          notes: string | null
+          severity: string | null
+          study_id: string
+          timestamp_sec: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          channel?: string | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          label?: string | null
+          marker_type: string
+          notes?: string | null
+          severity?: string | null
+          study_id: string
+          timestamp_sec: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          channel?: string | null
+          created_at?: string
+          duration_sec?: number | null
+          id?: string
+          label?: string | null
+          marker_type?: string
+          notes?: string | null
+          severity?: string | null
+          study_id?: string
+          timestamp_sec?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eeg_markers_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_inr: number

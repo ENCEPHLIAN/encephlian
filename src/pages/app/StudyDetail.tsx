@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileSignature } from "lucide-react";
+import { Loader2, FileSignature, FileText } from "lucide-react";
 import dayjs from "dayjs";
 
 export default function StudyDetail() {
@@ -56,14 +56,22 @@ export default function StudyDetail() {
           </div>
           <p className="text-muted-foreground">Patient ID: {patientId}</p>
         </div>
-        {(study.state === 'ai_draft' || study.state === 'in_review') && (
-          <Button asChild>
-            <Link to={`/app/studies/${id}/review`}>
-              <FileSignature className="mr-2 h-4 w-4" />
-              Review & Sign
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link to={`/app/studies/${id}/viewer`}>
+              <FileText className="mr-2 h-4 w-4" />
+              Open EEG Viewer
             </Link>
           </Button>
-        )}
+          {(study.state === 'ai_draft' || study.state === 'in_review') && (
+            <Button asChild>
+              <Link to={`/app/studies/${id}/review`}>
+                <FileSignature className="mr-2 h-4 w-4" />
+                Review & Sign
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
