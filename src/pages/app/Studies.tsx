@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, FileText } from "lucide-react";
+import { Loader2, Search, FileText, Eye, FolderOpen } from "lucide-react";
 import dayjs from "dayjs";
 
 const stateColors = {
@@ -21,6 +21,7 @@ const stateColors = {
 };
 
 export default function Studies() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
 
@@ -65,10 +66,22 @@ export default function Studies() {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Studies</h1>
-        <p className="text-muted-foreground">View and manage all EEG studies</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Studies</h1>
+          <p className="text-muted-foreground">View and manage all EEG studies</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate('/app/viewer')}>
+            <Eye className="h-4 w-4 mr-2" />
+            EEG Viewer
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/app/files')}>
+            <FolderOpen className="h-4 w-4 mr-2" />
+            Files
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -102,14 +115,15 @@ export default function Studies() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Patient</TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>SLA</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
+                <TableRow>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Clinic</TableHead>
+                  <TableHead>Indication</TableHead>
+                  <TableHead>SLA</TableHead>
+                  <TableHead>State</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
             </TableHeader>
             <TableBody>
               {filteredStudies?.map((study) => {
@@ -117,36 +131,48 @@ export default function Studies() {
                 return (
                   <TableRow key={study.id}>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div>
-                          <div className="font-medium">{meta?.patient_name || "N/A"}</div>
-                          <div className="text-sm text-muted-foreground">{meta?.patient_id || "N/A"}</div>
+                      <div>
+                        <div className="font-medium">{meta?.patient_name || "Unknown"}</div>
+                        <div className="text-sm text-muted-foreground">
+                          ID: {meta?.patient_id || "N/A"}
+                          {study.sample && <Badge variant="outline" className="ml-2">Sample</Badge>}
                         </div>
-                        {(study as any).sample && (
-                          <Badge variant="outline" className="ml-2">
-                            Sample
-                          </Badge>
-                        )}
                       </div>
                     </TableCell>
-                    <TableCell>{study.clinics?.name}</TableCell>
+                    <TableCell>{(study.clinics as any)?.name || "—"}</TableCell>
+                    <TableCell>
+                      <div className="text-sm max-w-[200px] truncate" title={meta?.indication}>
+                        {meta?.indication || "—"}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
                         {study.sla}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={stateColors[study.state as keyof typeof stateColors]}>
-                        {study.state.replace("_", " ")}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${stateColors[study.state as keyof typeof stateColors]}`} />
+                        <span className="capitalize text-sm">{study.state?.replace("_", " ")}</span>
+                      </div>
                     </TableCell>
-                    <TableCell>{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
+                    <TableCell className="text-sm">{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
                     <TableCell>
-                      <Button asChild variant="ghost" size="sm">
+                      <div className="flex gap-1">
                         <Link to={`/app/studies/${study.id}`}>
-                          <FileText className="h-4 w-4" />
+                          <Button variant="ghost" size="sm" title="View Details">
+                            <FileText className="h-4 w-4" />
+                          </Button>
                         </Link>
-                      </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => navigate(`/app/viewer?studyId=${study.id}`)}
+                          title="View in EEG Viewer"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
