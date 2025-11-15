@@ -109,41 +109,60 @@ export default function EEGViewer() {
 
   // Initialize WaveSurfer
   useEffect(() => {
-    if (!waveformRef.current || !study?.study_files?.[0]) return;
+    if (!waveformRef.current) return;
 
-    const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: "hsl(var(--primary) / 0.5)",
-      progressColor: "hsl(var(--primary))",
-      cursorColor: "hsl(var(--accent))",
-      barWidth: 2,
-      barGap: 1,
-      height: 200,
-      normalize: true,
-      backend: "WebAudio",
-    });
+    const loadEEGFile = async () => {
+      let fileUrl = '/sample-eeg/S094R10.edf';
 
-    wavesurferRef.current = wavesurfer;
+      // Try to load from Supabase Storage if study has files
+      if (study?.study_files?.[0]) {
+        const file = study.study_files[0];
+        try {
+          const { data, error } = await supabase.storage
+            .from('eeg-raw')
+            .createSignedUrl(file.path, 3600);
+          
+          if (data && !error) {
+            fileUrl = data.signedUrl;
+          }
+        } catch (error) {
+          console.error("Failed to load from storage, using fallback:", error);
+        }
+      }
 
-    // For demo purposes - load a placeholder audio
-    // In production, you'd load the actual EEG data converted to audio or use a custom renderer
-    wavesurfer.on("ready", () => {
-      setDuration(wavesurfer.getDuration());
-    });
+      const wavesurfer = WaveSurfer.create({
+        container: waveformRef.current!,
+        waveColor: "hsl(var(--primary) / 0.5)",
+        progressColor: "hsl(var(--primary))",
+        cursorColor: "hsl(var(--accent))",
+        barWidth: 2,
+        barGap: 1,
+        height: 200,
+        normalize: true,
+        backend: "WebAudio",
+      });
 
-    wavesurfer.on("audioprocess", () => {
-      setCurrentTime(wavesurfer.getCurrentTime());
-    });
+      wavesurferRef.current = wavesurfer;
 
-    wavesurfer.on("play", () => setIsPlaying(true));
-    wavesurfer.on("pause", () => setIsPlaying(false));
+      wavesurfer.on("ready", () => {
+        setDuration(wavesurfer.getDuration());
+      });
 
-    // Load sample data (replace with actual EEG data)
-    wavesurfer.load("https://www.mfiles.co.uk/mp3-downloads/gs-cd-track2.mp3");
+      wavesurfer.on("audioprocess", () => {
+        setCurrentTime(wavesurfer.getCurrentTime());
+      });
 
-    return () => {
-      wavesurfer.destroy();
+      wavesurfer.on("play", () => setIsPlaying(true));
+      wavesurfer.on("pause", () => setIsPlaying(false));
+
+      wavesurfer.load(fileUrl);
+
+      return () => {
+        wavesurfer.destroy();
+      };
     };
+
+    loadEEGFile();
   }, [study]);
 
   const handlePlayPause = () => {

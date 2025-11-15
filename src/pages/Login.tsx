@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Eye, EyeOff } from "lucide-react";
-import encephlianLogo from "@/assets/logo.png";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { z } from "zod";
+import logo from "@/assets/logo.png";
 
 const emailSchema = z.string().email("Invalid email address");
-const passwordSchema = z.string()
+const passwordSchema = z
+  .string()
   .min(8, "Password must be at least 8 characters")
   .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
   .regex(/[a-z]/, "Password must contain at least one lowercase letter")
@@ -19,14 +21,15 @@ const passwordSchema = z.string()
   .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character");
 
 export default function Login() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const navigate = useNavigate();
-  const { toast } = useToast();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -36,7 +39,7 @@ export default function Login() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
+      if (event === "SIGNED_IN" && session) {
         navigate("/app/dashboard");
       }
     });
@@ -57,12 +60,7 @@ export default function Login() {
     }
   };
 
-  const validatePassword = (value: string, isSignUp: boolean) => {
-    if (!isSignUp) {
-      setPasswordError("");
-      return true;
-    }
-    
+  const validatePassword = (value: string) => {
     try {
       passwordSchema.parse(value);
       setPasswordError("");
@@ -75,63 +73,45 @@ export default function Login() {
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent, isSignUp: boolean) => {
+  const handleSubmit = async (e: React.FormEvent, mode: "signin" | "signup") => {
     e.preventDefault();
     
-    // Validate inputs
-    const emailValid = validateEmail(email);
-    const passwordValid = validatePassword(password, isSignUp);
-    
-    if (!emailValid || !passwordValid) {
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+
+    if (!isEmailValid || !isPasswordValid) {
       return;
     }
-    
+
     setIsLoading(true);
 
     try {
-      if (isSignUp) {
+      if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/app/dashboard`
-          }
         });
-        
-        if (error) {
-          if (error.message.includes("already registered")) {
-            throw new Error("This email is already registered. Please sign in instead.");
-          }
-          throw error;
-        }
-        
+        if (error) throw error;
         toast({
-          title: "Account created!",
-          description: "You can now sign in with your credentials."
+          title: "Account created",
+          description: "Please check your email to verify your account.",
         });
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
-          password
+          password,
         });
-        
-        if (error) {
-          if (error.message.includes("Invalid login credentials")) {
-            throw new Error("Invalid email or password. Please try again.");
-          }
-          throw error;
-        }
-        
+        if (error) throw error;
         toast({
           title: "Welcome back!",
-          description: "Signing you in..."
+          description: "You have successfully signed in.",
         });
       }
     } catch (error: any) {
       toast({
-        title: "Authentication Error",
-        description: error.message,
-        variant: "destructive"
+        title: "Error",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
@@ -139,162 +119,215 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] to-[#1a1a1a] text-white flex items-center justify-center px-4">
-      {/* Header */}
-      <header className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center p-6">
-        <div className="flex items-center gap-3">
-          <img src={encephlianLogo} alt="Encephalian" className="h-10 w-10" />
-          <span className="text-2xl font-extrabold tracking-[0.3em]" style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 800 }}>
-            ENCEPHLIAN
-          </span>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Theme Toggle - Top Right */}
+      <div className="absolute top-6 right-6 z-50">
+        <ThemeToggle />
+      </div>
 
-      {/* Main content */}
-      <div className="w-full max-w-md space-y-8">
-        {/* Title */}
-        <div className="text-center space-y-3">
-          <h1 className="text-7xl font-bold tracking-wide" style={{ fontFamily: 'Montserrat, sans-serif', fontWeight: 700 }}>
+      {/* STATE 1: Hero Landing */}
+      {!showForm && (
+        <div className="text-center space-y-12 animate-fade-in">
+          {/* MIND - Massive and tight */}
+          <h1 
+            className="text-9xl md:text-[12rem] lg:text-[16rem] font-black tracking-tighter leading-none text-foreground"
+            style={{ fontFamily: 'Montserrat', fontWeight: 900 }}
+          >
             MIND
           </h1>
-          <p className="text-sm text-white/60 tracking-widest uppercase font-light">
+          
+          {/* Subtitle */}
+          <p className="text-sm md:text-base text-muted-foreground tracking-wide uppercase font-light">
             Machine Intelligence for Neural Data
           </p>
+          
+          {/* encephalian - small and subtle */}
+          <p 
+            className="text-sm font-light tracking-tight opacity-40"
+            style={{ fontFamily: 'Montserrat', fontWeight: 300 }}
+          >
+            encephalian
+          </p>
+          
+          {/* CTA Button */}
+          <Button 
+            onClick={() => setShowForm(true)}
+            size="lg"
+            className="px-12 py-6 text-lg font-medium mt-8"
+          >
+            ACCESS CLINIC DASHBOARD
+          </Button>
         </div>
+      )}
 
-        {/* Login/Signup Card */}
-        <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-lg p-8 shadow-2xl">
-          {/* Accent line */}
-          <div className="h-1 w-20 bg-[hsl(var(--primary))] mb-8 rounded-full" />
-
-          <Tabs defaultValue="login" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6">
-              <TabsTrigger value="login">Sign In</TabsTrigger>
-              <TabsTrigger value="signup">Sign Up</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="login">
-              <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email">Email</Label>
-                  <Input
-                    id="login-email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      validateEmail(e.target.value);
-                    }}
-                    required
-                    disabled={isLoading}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-11 rounded-lg focus:border-white/30"
-                  />
-                  {emailError && <p className="text-xs text-red-400">{emailError}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="login-password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="login-password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      required
+      {/* STATE 2: Login Form */}
+      {showForm && (
+        <div className="w-full max-w-6xl animate-fade-in">
+          {/* Header with logo + ENCEPHALIAN - top-left */}
+          <div className="absolute top-6 left-6 flex items-center gap-3">
+            <img src={logo} alt="Encephalian Logo" className="h-12 w-12" />
+            <span 
+              className="text-2xl font-extrabold tracking-tight text-foreground"
+              style={{ fontFamily: 'Montserrat', fontWeight: 800 }}
+            >
+              ENCEPHALIAN
+            </span>
+          </div>
+          
+          <div className="flex flex-col items-center justify-center">
+            {/* MIND - Smaller, centered */}
+            <h1 
+              className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tighter mb-2 text-foreground"
+              style={{ fontFamily: 'Montserrat', fontWeight: 700 }}
+            >
+              MIND
+            </h1>
+            
+            {/* Subtitle */}
+            <p className="text-sm text-muted-foreground mb-12 tracking-wide uppercase">
+              Machine Intelligence for Neural Data
+            </p>
+            
+            {/* Login Form Card */}
+            <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border border-border rounded-lg p-8 shadow-lg">
+              <Tabs defaultValue="signin" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-8">
+                  <TabsTrigger value="signin">Sign In</TabsTrigger>
+                  <TabsTrigger value="signup">Sign Up</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="signin">
+                  <form onSubmit={(e) => handleSubmit(e, "signin")} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email-signin">Email</Label>
+                      <Input
+                        id="email-signin"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          validateEmail(e.target.value);
+                        }}
+                        required
+                      />
+                      {emailError && (
+                        <p className="text-sm text-destructive">{emailError}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="password-signin">Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="password-signin"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Enter your password"
+                          value={password}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            validatePassword(e.target.value);
+                          }}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      {passwordError && (
+                        <p className="text-sm text-destructive">{passwordError}</p>
+                      )}
+                    </div>
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full mt-6" 
                       disabled={isLoading}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-11 rounded-lg focus:border-white/30 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full h-11 bg-white text-black hover:bg-white/90 rounded-lg font-medium mt-6"
-                  disabled={isLoading}
-                >
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Sign In
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="signup">
-              <form onSubmit={(e) => handleSubmit(e, true)} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email">Email</Label>
-                  <Input
-                    id="signup-email"
-                    type="email"
-                    placeholder="name@example.com"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      validateEmail(e.target.value);
-                    }}
-                    required
-                    disabled={isLoading}
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-11 rounded-lg focus:border-white/30"
-                  />
-                  {emailError && <p className="text-xs text-red-400">{emailError}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password">Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="signup-password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Create a strong password"
-                      value={password}
-                      onChange={(e) => {
-                        setPassword(e.target.value);
-                        validatePassword(e.target.value, true);
-                      }}
-                      required
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Signing in...
+                        </>
+                      ) : (
+                        "Sign In"
+                      )}
+                    </Button>
+                  </form>
+                </TabsContent>
+                
+                <TabsContent value="signup">
+                  <form onSubmit={(e) => handleSubmit(e, "signup")} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="email-signup">Email</Label>
+                      <Input
+                        id="email-signup"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          validateEmail(e.target.value);
+                        }}
+                        required
+                      />
+                      {emailError && (
+                        <p className="text-sm text-destructive">{emailError}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="password-signup">Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="password-signup"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Create a password"
+                          value={password}
+                          onChange={(e) => {
+                            setPassword(e.target.value);
+                            validatePassword(e.target.value);
+                          }}
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      {passwordError && (
+                        <p className="text-sm text-destructive">{passwordError}</p>
+                      )}
+                    </div>
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full mt-6" 
                       disabled={isLoading}
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/40 h-11 rounded-lg focus:border-white/30 pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors"
                     >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {passwordError && <p className="text-xs text-red-400">{passwordError}</p>}
-                  <p className="text-xs text-white/40">
-                    Must be 8+ characters with uppercase, lowercase, number, and special character
-                  </p>
-                </div>
-
-                <Button 
-                  type="submit" 
-                  className="w-full h-11 bg-white text-black hover:bg-white/90 rounded-lg font-medium mt-6"
-                  disabled={isLoading}
-                >
-                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Account
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating account...
+                        </>
+                      ) : (
+                        "Create Account"
+                      )}
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-white/40">
-          © 2024 ENCEPHLIAN. All rights reserved.
-        </p>
-      </div>
+      )}
     </div>
   );
 }
