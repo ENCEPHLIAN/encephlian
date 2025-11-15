@@ -47,7 +47,14 @@ export default function Settings() {
           id: user.id,
           email: profile.email,
           full_name: profile.full_name,
-          role: profile.role
+          role: profile.role,
+          company_name: profile.company_name,
+          phone_number: profile.phone_number,
+          medical_license_number: profile.medical_license_number,
+          specialization: profile.specialization,
+          department: profile.department,
+          hospital_affiliation: profile.hospital_affiliation,
+          credentials: profile.credentials,
         });
       
       if (error) throw error;
@@ -70,18 +77,100 @@ export default function Settings() {
         
         <Card className="bg-card border-border">
           <CardHeader>
-            <CardTitle>Profile Information</CardTitle>
-            <CardDescription>Update your display name and account details</CardDescription>
+            <CardTitle>Company/Brand Settings</CardTitle>
+            <CardDescription>Customize your clinic or company branding</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="company_name">Company Name</Label>
+              <Input 
+                id="company_name"
+                value={profile?.company_name || ''}
+                onChange={(e) => setProfile({...profile, company_name: e.target.value})}
+                placeholder="Enter your company name (e.g., ENCEPHLIAN)"
+              />
+              <p className="text-xs text-muted-foreground">This will appear as your logo text in the sidebar</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle>Professional Information</CardTitle>
+            <CardDescription>Update your medical credentials and contact details</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="full_name">Display Name</Label>
+                <Label htmlFor="full_name">Full Name</Label>
                 <Input 
                   id="full_name"
                   value={profile?.full_name || ''}
                   onChange={(e) => setProfile({...profile, full_name: e.target.value})}
-                  placeholder="Enter your display name"
+                  placeholder="Dr. John Smith"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="credentials">Credentials</Label>
+                <Input 
+                  id="credentials"
+                  value={profile?.credentials || ''}
+                  onChange={(e) => setProfile({...profile, credentials: e.target.value})}
+                  placeholder="MD, PhD, FAES"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="medical_license_number">Medical License Number</Label>
+                <Input 
+                  id="medical_license_number"
+                  value={profile?.medical_license_number || ''}
+                  onChange={(e) => setProfile({...profile, medical_license_number: e.target.value})}
+                  placeholder="Enter license number"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="specialization">Specialization</Label>
+                <Select 
+                  value={profile?.specialization || ''} 
+                  onValueChange={(value) => setProfile({...profile, specialization: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select specialization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="neurology">Neurology</SelectItem>
+                    <SelectItem value="epileptology">Epileptology</SelectItem>
+                    <SelectItem value="sleep-medicine">Sleep Medicine</SelectItem>
+                    <SelectItem value="neurophysiology">Neurophysiology</SelectItem>
+                    <SelectItem value="pediatric-neurology">Pediatric Neurology</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Department</Label>
+                <Input 
+                  id="department"
+                  value={profile?.department || ''}
+                  onChange={(e) => setProfile({...profile, department: e.target.value})}
+                  placeholder="Department of Neurology"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="hospital_affiliation">Hospital/Clinic Affiliation</Label>
+                <Input 
+                  id="hospital_affiliation"
+                  value={profile?.hospital_affiliation || ''}
+                  onChange={(e) => setProfile({...profile, hospital_affiliation: e.target.value})}
+                  placeholder="City General Hospital"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone_number">Phone Number</Label>
+                <Input 
+                  id="phone_number"
+                  value={profile?.phone_number || ''}
+                  onChange={(e) => setProfile({...profile, phone_number: e.target.value})}
+                  placeholder="+1 (555) 123-4567"
                 />
               </div>
               <div className="space-y-2">
@@ -106,7 +195,7 @@ export default function Settings() {
             
             <Button onClick={handleSave} disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Profile
+              Save Changes
             </Button>
           </CardContent>
         </Card>

@@ -343,25 +343,46 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_name: string | null
           created_at: string | null
+          credentials: string | null
+          department: string | null
           email: string
           full_name: string | null
+          hospital_affiliation: string | null
           id: string
+          medical_license_number: string | null
+          phone_number: string | null
           role: string
+          specialization: string | null
         }
         Insert: {
+          company_name?: string | null
           created_at?: string | null
+          credentials?: string | null
+          department?: string | null
           email: string
           full_name?: string | null
+          hospital_affiliation?: string | null
           id: string
+          medical_license_number?: string | null
+          phone_number?: string | null
           role?: string
+          specialization?: string | null
         }
         Update: {
+          company_name?: string | null
           created_at?: string | null
+          credentials?: string | null
+          department?: string | null
           email?: string
           full_name?: string | null
+          hospital_affiliation?: string | null
           id?: string
+          medical_license_number?: string | null
+          phone_number?: string | null
           role?: string
+          specialization?: string | null
         }
         Relationships: []
       }
