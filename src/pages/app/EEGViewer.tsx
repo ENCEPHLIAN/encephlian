@@ -1,203 +1,291 @@
-import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import WaveSurfer from "wavesurfer.js";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { ArrowLeft, Play, Pause, Plus, Trash2, Loader2, Sparkles } from "lucide-react";
+import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
+import { useTheme } from "next-themes";
+import EDFDecoder from "edfdecoder";
+import { EEGCanvas } from "@/components/eeg/EEGCanvas";
+import { EEGControls } from "@/components/eeg/EEGControls";
+import { ChannelList } from "@/components/eeg/ChannelList";
+import { MontageSelector } from "@/components/eeg/MontageSelector";
 
 type Marker = {
   id: string;
   timestamp_sec: number;
   marker_type: string;
-  label: string | null;
-  channel: string | null;
-  duration_sec: number | null;
-  severity: string | null;
-  notes: string | null;
+  label?: string;
+  notes?: string;
 };
 
 export default function EEGViewer() {
-  const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const studyId = id || searchParams.get('studyId');
-  const navigate = useNavigate();
+  const studyId = searchParams.get("studyId");
   const queryClient = useQueryClient();
-  const waveformRef = useRef<HTMLDivElement>(null);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const { theme } = useTheme();
+
+  // EEG Data State
+  const [eegData, setEegData] = useState<{
+    signals: number[][];
+    channelLabels: string[];
+    sampleRate: number;
+    duration: number;
+  } | null>(null);
+
+  // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [generatingReport, setGeneratingReport] = useState(false);
-  const [selectedStudyId, setSelectedStudyId] = useState<string>("");
+  const [timeWindow, setTimeWindow] = useState(30);
+  const [amplitudeScale, setAmplitudeScale] = useState(2);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [montage, setMontage] = useState("referential");
 
-  const [markerType, setMarkerType] = useState<string>("annotation");
-  const [markerLabel, setMarkerLabel] = useState("");
-  const [markerNotes, setMarkerNotes] = useState("");
-  const [markerSeverity, setMarkerSeverity] = useState<string>("");
+  // Channel Visibility
+  const [visibleChannels, setVisibleChannels] = useState<Set<number>>(new Set());
 
-  const { data: availableStudies } = useQuery({
+  // Marker State
+  const [newMarkerType, setNewMarkerType] = useState("event");
+  const [newMarkerLabel, setNewMarkerLabel] = useState("");
+  const [newMarkerNotes, setNewMarkerNotes] = useState("");
+
+  // Fetch available studies
+  const { data: availableStudies = [] } = useQuery({
     queryKey: ["available-studies"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { data, error } = await supabase.from("studies").select("id, meta, state, sample, created_at").or(`owner.eq.${user.id},sample.eq.true`).order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("studies")
+        .select("id, meta, created_at, sample")
+        .order("created_at", { ascending: false });
+
       if (error) throw error;
-      return data;
-    }
+      return data || [];
+    },
   });
 
-  const { data: study, isLoading } = useQuery({
+  // Fetch selected study
+  const { data: study, isLoading: studyLoading } = useQuery({
     queryKey: ["study", studyId],
+    enabled: !!studyId,
     queryFn: async () => {
       if (!studyId) return null;
-      const { data, error } = await supabase.from("studies").select("*, study_files(*)").eq("id", studyId).single();
+
+      const { data, error } = await supabase
+        .from("studies")
+        .select("*, study_files(*)")
+        .eq("id", studyId)
+        .single();
+
       if (error) throw error;
       return data;
     },
-    enabled: !!studyId,
   });
 
+  // Fetch markers
   const { data: markers = [] } = useQuery({
-    queryKey: ["markers", studyId],
+    queryKey: ["eeg-markers", studyId],
+    enabled: !!studyId,
     queryFn: async () => {
       if (!studyId) return [];
-      const { data, error } = await supabase.from("eeg_markers").select("*").eq("study_id", studyId).order("timestamp_sec");
+
+      const { data, error } = await supabase
+        .from("eeg_markers")
+        .select("*")
+        .eq("study_id", studyId)
+        .order("timestamp_sec", { ascending: true });
+
       if (error) throw error;
-      return data as Marker[];
+      return data || [];
     },
-    enabled: !!studyId,
   });
 
-  const addMarkerMutation = useMutation({
-    mutationFn: async (markerData: any) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("eeg_markers").insert({ study_id: studyId, user_id: user.id, ...markerData });
-      if (error) throw error;
-    },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["markers", studyId] }); toast.success("Marker added"); setMarkerLabel(""); setMarkerNotes(""); setMarkerSeverity(""); },
-    onError: () => toast.error("Failed to add marker"),
-  });
-
-  const deleteMarkerMutation = useMutation({
-    mutationFn: async (markerId: string) => { const { error } = await supabase.from("eeg_markers").delete().eq("id", markerId); if (error) throw error; },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["markers", studyId] }); toast.success("Marker deleted"); },
-  });
-
+  // Load EDF file
   useEffect(() => {
-    if (!waveformRef.current || !study || !studyId) return;
-    
-    const loadEEGFile = async () => {
+    if (!study || !study.study_files?.[0]) return;
+
+    const loadEDFFile = async () => {
       try {
-        let fileUrl = '/sample-eeg/S094R10.edf';
-        
-        if (study.study_files && study.study_files.length > 0) {
-          const edfFile = study.study_files.find((f: any) => f.kind === 'edf');
-          
-          if (edfFile) {
-            // For sample studies, use the public path directly
-            if (study.sample) {
-              fileUrl = `/${edfFile.path}`;
-            } else {
-              // For user studies, get the signed URL from storage
-              const { data } = await supabase.storage
-                .from('eeg-raw')
-                .createSignedUrl(edfFile.path, 3600);
-              
-              if (data?.signedUrl) {
-                fileUrl = data.signedUrl;
-              }
-            }
-          }
+        const file = study.study_files[0];
+        let fileUrl: string;
+
+        if (study.sample) {
+          // Sample studies: use direct public path
+          fileUrl = `/sample-eeg/${file.path.split('/').pop()}`;
+        } else {
+          // User studies: get signed URL
+          const { data: signedUrlData, error: signedError } = await supabase.storage
+            .from("eeg-raw")
+            .createSignedUrl(file.path, 3600);
+
+          if (signedError) throw signedError;
+          fileUrl = signedUrlData.signedUrl;
         }
-        
-        const ws = WaveSurfer.create({ 
-          container: waveformRef.current!, 
-          waveColor: 'hsl(var(--primary))', 
-          progressColor: 'hsl(var(--primary-foreground))', 
-          cursorColor: 'hsl(var(--accent))', 
-          height: 120, 
-          normalize: true, 
-          interact: true,
-          backend: 'WebAudio'
+
+        // Fetch and parse EDF file
+        const response = await fetch(fileUrl);
+        if (!response.ok) throw new Error("Failed to fetch EDF file");
+
+        const arrayBuffer = await response.arrayBuffer();
+        const decoder = new EDFDecoder();
+        decoder.setInput(arrayBuffer);
+        decoder.decode();
+
+        const header = decoder.getHeader();
+        const physicalSignals = decoder.getPhysicalSignals();
+
+        setEegData({
+          signals: physicalSignals,
+          channelLabels: header.signalInfo.map((s: any) => s.label.trim()),
+          sampleRate: header.signalInfo[0].sampleRate,
+          duration: header.dataRecordDuration * header.dataRecordCount,
         });
-        
-        wavesurferRef.current = ws;
-        ws.on('ready', () => setDuration(ws.getDuration()));
-        ws.on('timeupdate', (time) => setCurrentTime(time));
-        ws.on('play', () => setIsPlaying(true));
-        ws.on('pause', () => setIsPlaying(false));
-        
-        await ws.load(fileUrl);
-        toast.success('EEG file loaded successfully');
-      } catch (error) { 
-        console.error('EEG load error:', error);
-        toast.error('Failed to load EEG file'); 
+
+        // Initialize visible channels (show first 10 by default)
+        const initialChannels = new Set(
+          Array.from({ length: Math.min(10, physicalSignals.length) }, (_, i) => i)
+        );
+        setVisibleChannels(initialChannels);
+
+        toast.success("EEG file loaded successfully");
+      } catch (error: any) {
+        console.error("Error loading EDF:", error);
+        toast.error(`Failed to load EEG file: ${error.message}`);
       }
     };
-    
-    loadEEGFile();
-    return () => { if (wavesurferRef.current) wavesurferRef.current.destroy(); };
-  }, [study, studyId]);
 
-  const handlePlayPause = () => { if (wavesurferRef.current) wavesurferRef.current.playPause(); };
-  const handleAddMarker = () => {
-    if (!markerType || !markerLabel) { toast.error("Please fill in marker type and label"); return; }
-    addMarkerMutation.mutate({ timestamp_sec: currentTime, marker_type: markerType, label: markerLabel, notes: markerNotes || null, severity: markerSeverity || null, channel: null, duration_sec: null });
+    loadEDFFile();
+  }, [study]);
+
+  // Playback loop
+  useEffect(() => {
+    if (!isPlaying || !eegData) return;
+
+    const interval = setInterval(() => {
+      setCurrentTime((prev) => {
+        const next = prev + (0.1 * playbackSpeed);
+        if (next >= eegData.duration - timeWindow) {
+          setIsPlaying(false);
+          return eegData.duration - timeWindow;
+        }
+        return next;
+      });
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isPlaying, eegData, timeWindow, playbackSpeed]);
+
+  // Add marker mutation
+  const addMarkerMutation = useMutation({
+    mutationFn: async () => {
+      if (!studyId) throw new Error("No study selected");
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase.from("eeg_markers").insert({
+        study_id: studyId,
+        user_id: user.id,
+        timestamp_sec: currentTime,
+        marker_type: newMarkerType,
+        label: newMarkerLabel || null,
+        notes: newMarkerNotes || null,
+      });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
+      setNewMarkerLabel("");
+      setNewMarkerNotes("");
+      toast.success("Marker added");
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to add marker: ${error.message}`);
+    },
+  });
+
+  // Delete marker mutation
+  const deleteMarkerMutation = useMutation({
+    mutationFn: async (markerId: string) => {
+      const { error } = await supabase.from("eeg_markers").delete().eq("id", markerId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
+      toast.success("Marker deleted");
+    },
+    onError: (error: any) => {
+      toast.error(`Failed to delete marker: ${error.message}`);
+    },
+  });
+
+  const handlePlayPause = () => setIsPlaying(!isPlaying);
+  const handleSkipBackward = () => setCurrentTime(Math.max(0, currentTime - timeWindow));
+  const handleSkipForward = () => setCurrentTime(Math.min(eegData?.duration || 0, currentTime + timeWindow));
+  const handleExport = () => {
+    toast.info("Export functionality coming soon");
   };
-  const formatTime = (seconds: number) => { const mins = Math.floor(seconds / 60); const secs = Math.floor(seconds % 60); return `${mins}:${secs.toString().padStart(2, '0')}`; };
+
+  const handleToggleChannel = (index: number) => {
+    setVisibleChannels((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllChannels = () => {
+    if (!eegData) return;
+    setVisibleChannels(new Set(Array.from({ length: eegData.signals.length }, (_, i) => i)));
+  };
+
+  const handleDeselectAllChannels = () => {
+    setVisibleChannels(new Set());
+  };
 
   if (!studyId) {
     return (
       <div className="min-h-screen bg-background p-6">
-        <div className="max-w-2xl mx-auto space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">EEG Viewer</h1>
-              <p className="text-muted-foreground">Select a study to begin analysis</p>
-            </div>
-            <Button variant="outline" onClick={() => navigate('/app/studies')}>
-              Back to Studies
-            </Button>
+        <div className="max-w-2xl mx-auto space-y-6">
+          <div className="flex items-center gap-4">
+            <Link to="/app/studies">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Studies
+              </Button>
+            </Link>
           </div>
-          
+
           <Card>
             <CardHeader>
-              <CardTitle>Select Study</CardTitle>
-              <CardDescription>Choose from your studies or sample data</CardDescription>
+              <CardTitle>EEG Viewer</CardTitle>
+              <CardDescription>Select a study to view EEG recordings</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Select value={selectedStudyId} onValueChange={(value) => { 
-                setSelectedStudyId(value); 
-                navigate(`/app/viewer?studyId=${value}`); 
-              }}>
-                <SelectTrigger>
+            <CardContent>
+              <Label>Select Study</Label>
+              <Select onValueChange={(value) => (window.location.href = `/app/viewer?studyId=${value}`)}>
+                <SelectTrigger className="mt-2">
                   <SelectValue placeholder="Choose a study..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableStudies?.map((s) => (
+                  {availableStudies.map((s: any) => (
                     <SelectItem key={s.id} value={s.id}>
-                      <div className="flex items-center gap-2">
-                        {s.sample && <Badge variant="secondary">Sample</Badge>}
-                        <span>{(s.meta as any)?.patient_name || 'Unknown'} - {(s.meta as any)?.patient_id || 'N/A'}</span>
-                      </div>
+                      {s.sample ? "Sample: " : ""}
+                      {(s.meta as any)?.patient_name || "Unnamed Study"} - {new Date(s.created_at).toLocaleDateString()}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {availableStudies?.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No studies available. Upload a study or check out the sample data.
-                </p>
-              )}
             </CardContent>
           </Card>
         </div>
@@ -205,136 +293,195 @@ export default function EEGViewer() {
     );
   }
 
-  if (isLoading) return (<div className="min-h-screen flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>);
-  if (!study) return (<div className="min-h-screen bg-background p-6"><Card><CardContent className="pt-6"><p className="text-center text-muted-foreground">Study not found</p><Button variant="outline" onClick={() => navigate("/app/viewer")} className="mt-4 mx-auto block">Back to Study Selector</Button></CardContent></Card></div>);
+  if (studyLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
-  const patientMeta = study.meta as any;
+  if (!study) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <Card className="max-w-2xl mx-auto">
+          <CardHeader>
+            <CardTitle>Study Not Found</CardTitle>
+            <CardDescription>The requested study could not be loaded.</CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => navigate("/app/viewer")}>
+    <div className="min-h-screen bg-background p-4 md:p-6">
+      <div className="max-w-[1800px] mx-auto space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/app/studies">
+              <Button variant="ghost" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back
+                Back to Studies
               </Button>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold">{patientMeta?.patient_name || 'Unknown Patient'}</h1>
-                  {study.sample && <Badge variant="secondary">Sample</Badge>}
-                </div>
-                <p className="text-sm text-muted-foreground">Patient ID: {patientMeta?.patient_id || 'N/A'}</p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => navigate('/app/studies')}>
-                View All Studies
-              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">EEG Viewer</h1>
+              <p className="text-sm text-muted-foreground">
+                {(study.meta as any)?.patient_name || "Unnamed Study"} - {new Date(study.created_at).toLocaleDateString()}
+              </p>
             </div>
           </div>
         </div>
-      </div>
-      
-      <div className="max-w-7xl mx-auto px-6 py-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>EEG Waveform</CardTitle>
-            <CardDescription>
-              {patientMeta?.indication || 'No indication specified'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div ref={waveformRef} className="w-full" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <Button onClick={handlePlayPause} size="sm" variant="outline">
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Add Marker</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Timestamp</Label>
-                <Input value={formatTime(currentTime)} disabled />
-              </div>
-              <div>
-                <Label htmlFor="markerType">Type</Label>
-                <Select value={markerType} onValueChange={setMarkerType}>
-                  <SelectTrigger id="markerType">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="annotation">Annotation</SelectItem>
-                    <SelectItem value="artifact">Artifact</SelectItem>
-                    <SelectItem value="event">Event</SelectItem>
-                    <SelectItem value="seizure">Seizure</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="markerLabel">Label</Label>
-                <Input 
-                  id="markerLabel" 
-                  value={markerLabel} 
-                  onChange={(e) => setMarkerLabel(e.target.value)} 
-                  placeholder="e.g., Eye movement artifact" 
-                />
-              </div>
-              <div>
-                <Label htmlFor="markerNotes">Notes</Label>
-                <Textarea 
-                  id="markerNotes" 
-                  value={markerNotes} 
-                  onChange={(e) => setMarkerNotes(e.target.value)} 
-                  rows={3} 
-                />
-              </div>
-              <Button onClick={handleAddMarker} disabled={addMarkerMutation.isPending} className="w-full">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Marker
-              </Button>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Markers ({markers.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
-                {markers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No markers yet</p>
-                ) : (
-                  markers.map((marker) => (
-                    <div key={marker.id} className="flex items-start justify-between p-3 border border-border rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline">{marker.marker_type}</Badge>
-                          <span className="text-sm font-medium">{marker.label}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">@ {formatTime(marker.timestamp_sec)}</p>
-                      </div>
-                      <Button variant="ghost" size="sm" onClick={() => deleteMarkerMutation.mutate(marker.id)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+
+        {/* Main Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+          {/* Left Sidebar - Channels */}
+          <div className="lg:col-span-1">
+            <ChannelList
+              channelLabels={eegData?.channelLabels || []}
+              visibleChannels={visibleChannels}
+              onToggleChannel={handleToggleChannel}
+              onSelectAll={handleSelectAllChannels}
+              onDeselectAll={handleDeselectAllChannels}
+            />
+          </div>
+
+          {/* Main Area - Waveforms and Controls */}
+          <div className="lg:col-span-3 space-y-4">
+            {/* Waveform Display */}
+            <Card>
+              <CardContent className="p-0">
+                <div className="h-[500px] bg-card">
+                  {eegData ? (
+                    <EEGCanvas
+                      signals={eegData.signals}
+                      channelLabels={eegData.channelLabels}
+                      sampleRate={eegData.sampleRate}
+                      currentTime={currentTime}
+                      timeWindow={timeWindow}
+                      amplitudeScale={amplitudeScale}
+                      visibleChannels={visibleChannels}
+                      theme={theme || "dark"}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
-                  ))
-                )}
-              </div>
-            </CardContent>
-          </Card>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Controls */}
+            <EEGControls
+              isPlaying={isPlaying}
+              currentTime={currentTime}
+              duration={eegData?.duration || 0}
+              timeWindow={timeWindow}
+              amplitudeScale={amplitudeScale}
+              playbackSpeed={playbackSpeed}
+              onPlayPause={handlePlayPause}
+              onTimeChange={setCurrentTime}
+              onTimeWindowChange={setTimeWindow}
+              onAmplitudeScaleChange={setAmplitudeScale}
+              onPlaybackSpeedChange={setPlaybackSpeed}
+              onSkipBackward={handleSkipBackward}
+              onSkipForward={handleSkipForward}
+              onExport={handleExport}
+            />
+
+            {/* Montage and Markers */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
+
+              {/* Add Marker */}
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Add Marker</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={newMarkerType} onValueChange={setNewMarkerType}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="event">Event</SelectItem>
+                        <SelectItem value="seizure">Seizure</SelectItem>
+                        <SelectItem value="artifact">Artifact</SelectItem>
+                        <SelectItem value="sleep">Sleep Stage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Label"
+                      value={newMarkerLabel}
+                      onChange={(e) => setNewMarkerLabel(e.target.value)}
+                      className="h-9"
+                    />
+                  </div>
+                  <Textarea
+                    placeholder="Notes (optional)"
+                    value={newMarkerNotes}
+                    onChange={(e) => setNewMarkerNotes(e.target.value)}
+                    rows={2}
+                    className="text-sm"
+                  />
+                  <Button
+                    onClick={() => addMarkerMutation.mutate()}
+                    disabled={addMarkerMutation.isPending}
+                    size="sm"
+                    className="w-full"
+                  >
+                    Add at {Math.floor(currentTime)}s
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Markers List */}
+            {markers.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm">Markers ({markers.length})</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {markers.map((marker: Marker) => (
+                      <div
+                        key={marker.id}
+                        className="flex items-start justify-between p-2 bg-muted rounded border border-border hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono text-foreground">
+                              {Math.floor(marker.timestamp_sec)}s
+                            </span>
+                            <span className="text-xs font-semibold text-primary">{marker.marker_type}</span>
+                            {marker.label && (
+                              <span className="text-xs text-muted-foreground truncate">{marker.label}</span>
+                            )}
+                          </div>
+                          {marker.notes && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{marker.notes}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          onClick={() => deleteMarkerMutation.mutate(marker.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
       </div>
     </div>

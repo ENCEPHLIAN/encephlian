@@ -38,14 +38,33 @@ export default function AppLayout() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [userEmail, setUserEmail] = useState<string>("");
+  const [userName, setUserName] = useState<string>("");
+  const [companyName, setCompanyName] = useState<string>("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    const loadUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setUserEmail(user.email || "");
+        
+        // Fetch profile for full name and company name
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, company_name')
+          .eq('id', user.id)
+          .single();
+        
+        if (profile) {
+          // Extract first name from full name
+          const firstName = profile.full_name?.split(' ')[0] || user.email?.split('@')[0] || 'User';
+          setUserName(firstName);
+          setCompanyName(profile.company_name || 'ENCEPHLIAN');
+        }
       }
-    });
+    };
+    
+    loadUserData();
   }, []);
 
   // Fetch clinic branding context
@@ -89,7 +108,7 @@ export default function AppLayout() {
           {!isMobile && (
             <div>
               <h1 className="text-2xl md:text-3xl font-bold logo-text text-sidebar-foreground">
-                {clinicContext?.brand_name || "ENCEPHLIAN"}
+                {clinicContext?.brand_name || companyName || "ENCEPHLIAN"}
               </h1>
             </div>
           )}
@@ -134,13 +153,11 @@ export default function AppLayout() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="w-full justify-start h-11 md:h-12 hover:bg-sidebar-accent/50 transition-all duration-150">
-                <Avatar className="h-8 w-8 md:h-9 md:w-9 mr-3">
-                  <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground font-medium">
-                    {userEmail.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="h-8 w-8 md:h-9 md:w-9 mr-3 rounded-full bg-sidebar-accent flex items-center justify-center text-sidebar-foreground">
+                  <User className="h-4 w-4 md:h-5 md:w-5" />
+                </div>
                 <div className="flex flex-col items-start flex-1 min-w-0">
-                  <span className="text-sm font-medium truncate w-full text-sidebar-foreground">{userEmail}</span>
+                  <span className="text-sm font-medium truncate w-full text-sidebar-foreground">{userName}</span>
                 </div>
               </Button>
             </DropdownMenuTrigger>
