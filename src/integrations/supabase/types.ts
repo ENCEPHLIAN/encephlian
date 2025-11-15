@@ -466,6 +466,7 @@ export type Database = {
           montage: string | null
           owner: string
           reference: string | null
+          sample: boolean | null
           sla: string
           srate_hz: number | null
           state: string | null
@@ -480,6 +481,7 @@ export type Database = {
           montage?: string | null
           owner: string
           reference?: string | null
+          sample?: boolean | null
           sla?: string
           srate_hz?: number | null
           state?: string | null
@@ -494,6 +496,7 @@ export type Database = {
           montage?: string | null
           owner?: string
           reference?: string | null
+          sample?: boolean | null
           sla?: string
           srate_hz?: number | null
           state?: string | null
