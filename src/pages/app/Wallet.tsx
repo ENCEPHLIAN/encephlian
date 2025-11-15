@@ -2,9 +2,23 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { TokenPurchase } from "@/components/TokenPurchase";
 
 export default function Wallet() {
-  const { data: earningsData, isLoading } = useQuery({
+  const { data: walletData, isLoading: walletLoading } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("*")
+        .single();
+
+      if (error) return null;
+      return data;
+    }
+  });
+
+  const { data: earningsData, isLoading: earningsLoading } = useQuery({
     queryKey: ["earnings-wallet"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -17,9 +31,11 @@ export default function Wallet() {
     }
   });
 
+  const tokenBalance = walletData?.tokens || 0;
   const earningsBalance = earningsData?.balance_inr || 0;
   const lockedAmount = earningsData?.locked_amount_inr || 0;
   const availableBalance = earningsBalance - lockedAmount;
+  const isLoading = walletLoading || earningsLoading;
 
   if (isLoading) {
     return (
@@ -32,9 +48,23 @@ export default function Wallet() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Earnings Wallet</h1>
-        <p className="text-muted-foreground">Track your commission earnings from report signings</p>
+        <h1 className="text-3xl font-bold">Wallet</h1>
+        <p className="text-muted-foreground">Manage your tokens and earnings</p>
       </div>
+
+      {/* Token Balance Card */}
+      <Card className="border-none shadow-lg bg-gradient-to-br from-blue-500/10 to-blue-500/5">
+        <CardContent className="pt-6">
+          <div className="space-y-2">
+            <div className="text-sm text-muted-foreground">Token Balance</div>
+            <div className="text-4xl font-bold">{tokenBalance}</div>
+            <div className="text-xs text-muted-foreground">Available for signing reports</div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Token Purchase */}
+      <TokenPurchase />
 
       {/* Earnings Overview Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

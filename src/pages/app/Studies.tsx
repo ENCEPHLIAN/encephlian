@@ -62,14 +62,9 @@ export default function Studies() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Studies</h1>
-          <p className="text-muted-foreground">View and manage all EEG studies</p>
-        </div>
-        <Button asChild>
-          <Link to="/app/upload">Upload New Study</Link>
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold">Studies</h1>
+        <p className="text-muted-foreground">View and manage all EEG studies</p>
       </div>
 
       <Card>

@@ -7,6 +7,7 @@ import { ThemeProvider } from "next-themes";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
+import Dashboard from "./pages/app/Dashboard";
 import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
 import StudyReview from "./pages/app/StudyReview";
@@ -27,11 +28,12 @@ function App() {
           <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Navigate to="/app/studies" replace />} />
+            <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
             
             <Route element={<ProtectedRoute />}>
               <Route path="/app" element={<AppLayout />}>
-                <Route index element={<Navigate to="/app/studies" replace />} />
+                <Route index element={<Navigate to="/app/dashboard" replace />} />
+                <Route path="dashboard" element={<Dashboard />} />
                 <Route path="studies" element={<Studies />} />
                 <Route path="studies/:id" element={<StudyDetail />} />
                 <Route path="studies/:id/review" element={<StudyReview />} />
