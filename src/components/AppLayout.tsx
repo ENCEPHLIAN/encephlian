@@ -15,7 +15,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { LayoutDashboard, Upload, FileText, Wallet, Receipt, User, LogOut, Coins, DollarSign, Menu } from "lucide-react";
+import { LayoutDashboard, Upload, FileText, Wallet, Receipt, User, LogOut, Coins, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -25,11 +25,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import logo from "@/assets/logo.png";
 
 const navigation = [
-  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Upload", href: "/app/upload", icon: Upload },
   { name: "Studies", href: "/app/studies", icon: FileText },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
-  { name: "Billing", href: "/app/billing", icon: Receipt },
 ];
 
 export default function AppLayout() {
@@ -67,13 +64,6 @@ export default function AppLayout() {
     }
   });
 
-  const { data: earnings } = useQuery({
-    queryKey: ["earnings-balance"],
-    queryFn: async () => {
-      const { data } = await supabase.from("earnings_wallets").select("balance_inr").single();
-      return data;
-    }
-  });
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -109,21 +99,12 @@ export default function AppLayout() {
               <Coins className="h-3.5 w-3.5 md:h-4 md:w-4 text-sidebar-foreground/50" />
               <span className="text-xs md:text-sm font-medium text-sidebar-foreground/70">Tokens</span>
             </div>
-            <span className="text-base md:text-xl font-semibold text-sidebar-foreground">{wallet?.tokens || 0}</span>
-          </div>
-          {earnings && (
-            <div className="flex items-center justify-between pt-2 md:pt-3 border-t border-sidebar-border/50">
-              <div className="flex items-center gap-2">
-                <DollarSign className="h-3.5 w-3.5 md:h-4 md:w-4 text-sidebar-foreground/50" />
-                <span className="text-xs md:text-sm font-medium text-sidebar-foreground/70">Earnings</span>
-              </div>
-              <span className="text-base md:text-xl font-semibold text-sidebar-foreground">₹{earnings.balance_inr || 0}</span>
+              <span className="text-base md:text-xl font-semibold text-sidebar-foreground">{wallet?.tokens || 0}</span>
             </div>
-          )}
-        </div>
-      )}
-      
-      <nav className="flex-1 p-4 md:p-5 space-y-1">
+          </div>
+        )}
+        
+        <nav className="flex-1 p-4 md:p-5 space-y-1">
         {navigation.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.href || location.pathname.startsWith(item.href + "/");
