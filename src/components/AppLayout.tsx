@@ -15,7 +15,7 @@ import {
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Coins, Menu } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Coins, Menu, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -25,11 +25,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import CommandPalette from "@/components/CommandPalette";
 import logo from "@/assets/logo.png";
 
-const navigation = [
-  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Studies", href: "/app/studies", icon: FileText },
-  { name: "Wallet", href: "/app/wallet", icon: Wallet },
-];
+  const navigation = [
+    { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
+    { name: "Studies", href: "/app/studies", icon: FileText },
+    { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
+    { name: "Wallet", href: "/app/wallet", icon: Wallet },
+  ];
 
 export default function AppLayout() {
   const location = useLocation();
@@ -86,7 +87,7 @@ export default function AppLayout() {
           />
           {!isMobile && (
             <div>
-              <h1 className="text-xl md:text-2xl font-bold logo-text text-sidebar-foreground">
+              <h1 className="text-2xl md:text-3xl font-bold logo-text text-sidebar-foreground">
                 {clinicContext?.brand_name || "ENCEPHLIAN"}
               </h1>
             </div>
