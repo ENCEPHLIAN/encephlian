@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.parse_eeg_study]
 verify_jwt = true
+
+[functions.generate_ai_report]
+verify_jwt = true

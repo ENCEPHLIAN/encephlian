@@ -10,6 +10,7 @@ import AppLayout from "./components/AppLayout";
 import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
 import StudyReview from "./pages/app/StudyReview";
+import EEGViewer from "./pages/app/EEGViewer";
 import Wallet from "./pages/app/Wallet";
 import NotFound from "./pages/NotFound";
 import "./App.css";
@@ -34,6 +35,7 @@ function App() {
                 <Route path="studies" element={<Studies />} />
                 <Route path="studies/:id" element={<StudyDetail />} />
                 <Route path="studies/:id/review" element={<StudyReview />} />
+                <Route path="studies/:id/viewer" element={<EEGViewer />} />
                 <Route path="wallet" element={<Wallet />} />
               </Route>
             </Route>
