@@ -32,6 +32,7 @@ export default function EditableBranding({ companyName, logoUrl }: EditableBrand
     onSuccess: (newName) => {
       toast.success("Company name updated");
       queryClient.invalidateQueries({ queryKey: ["clinic-context"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
       setEditing(false);
     },
     onError: (error: any) => {

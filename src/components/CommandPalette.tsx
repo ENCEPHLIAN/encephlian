@@ -10,11 +10,13 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { FileText, PlayCircle, Coins, Search } from "lucide-react";
+import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, Settings, Moon, Sun } from "lucide-react";
+import { useTheme } from "next-themes";
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { setTheme, theme } = useTheme();
 
   const { data: studies } = useQuery({
     queryKey: ["command-studies"],
@@ -45,10 +47,34 @@ export default function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search studies, patients..." />
+      <CommandInput placeholder="Search studies, patients, navigate..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
-        <CommandGroup heading="Studies">
+        
+        <CommandGroup heading="Navigation">
+          <CommandItem onSelect={() => { navigate("/app/dashboard"); setOpen(false); }}>
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            <span>Dashboard</span>
+          </CommandItem>
+          <CommandItem onSelect={() => { navigate("/app/studies"); setOpen(false); }}>
+            <FileText className="mr-2 h-4 w-4" />
+            <span>Studies</span>
+          </CommandItem>
+          <CommandItem onSelect={() => { navigate("/app/viewer"); setOpen(false); }}>
+            <Activity className="mr-2 h-4 w-4" />
+            <span>EEG Viewer</span>
+          </CommandItem>
+          <CommandItem onSelect={() => { navigate("/app/files"); setOpen(false); }}>
+            <FolderOpen className="mr-2 h-4 w-4" />
+            <span>Files</span>
+          </CommandItem>
+          <CommandItem onSelect={() => { navigate("/app/wallet"); setOpen(false); }}>
+            <Coins className="mr-2 h-4 w-4" />
+            <span>Wallet</span>
+          </CommandItem>
+        </CommandGroup>
+
+        <CommandGroup heading="Recent Studies">
           {studies?.map((study) => {
             const meta = study.meta as any;
             const patientId = meta?.patient_id || 'Unknown';
@@ -68,24 +94,15 @@ export default function CommandPalette() {
             );
           })}
         </CommandGroup>
-        <CommandGroup heading="Quick Actions">
-          <CommandItem
-            onSelect={() => {
-              navigate("/app/studies");
-              setOpen(false);
-            }}
-          >
-            <Search className="mr-2 h-4 w-4" />
-            <span>Browse all studies</span>
+        
+        <CommandGroup heading="Settings">
+          <CommandItem onSelect={() => { navigate("/app/settings"); setOpen(false); }}>
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
           </CommandItem>
-          <CommandItem
-            onSelect={() => {
-              navigate("/app/wallet");
-              setOpen(false);
-            }}
-          >
-            <Coins className="mr-2 h-4 w-4" />
-            <span>Buy tokens</span>
+          <CommandItem onSelect={() => { setTheme(theme === "dark" ? "light" : "dark"); setOpen(false); }}>
+            {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+            <span>Toggle theme</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

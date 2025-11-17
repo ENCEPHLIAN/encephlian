@@ -18,7 +18,9 @@ import {
   List,
   Star,
   ChevronRight,
-  MoreVertical
+  MoreVertical,
+  Activity,
+  FileText
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,12 +37,20 @@ import relativeTime from "dayjs/plugin/relativeTime";
 dayjs.extend(relativeTime);
 
 const BUCKETS = [
-  { id: "eeg-raw", name: "EEG Raw", icon: FolderOpen },
-  { id: "eeg-clean", name: "EEG Clean", icon: FolderOpen },
-  { id: "eeg-reports", name: "Reports", icon: File },
-  { id: "eeg-json", name: "JSON Data", icon: File },
-  { id: "eeg-preview", name: "Previews", icon: Eye },
-  { id: "clinic-logos", name: "Logos", icon: Star },
+  { 
+    id: "eeg-raw", 
+    name: "EEG Studies", 
+    icon: Activity,
+    description: "Raw EEG recordings (.edf files)",
+    color: "text-blue-600"
+  },
+  { 
+    id: "eeg-reports", 
+    name: "Reports", 
+    icon: FileText,
+    description: "Signed PDF reports",
+    color: "text-green-600"
+  },
 ];
 
 export default function Files() {
@@ -137,6 +147,11 @@ export default function Files() {
     });
   };
 
+  const handleFolderClick = (folderName: string) => {
+    const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+    setCurrentPath(newPath);
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -215,14 +230,21 @@ export default function Files() {
                 <Button
                   key={bucket.id}
                   variant={selectedBucket === bucket.id ? "secondary" : "ghost"}
-                  className="w-full justify-start h-11"
+                  className="w-full justify-start h-auto py-3"
                   onClick={() => {
                     setSelectedBucket(bucket.id);
                     setCurrentPath("");
                   }}
                 >
-                  <bucket.icon className="h-4 w-4 mr-3" />
-                  {bucket.name}
+                  <div className="flex flex-col items-start gap-1 w-full">
+                    <div className="flex items-center gap-3">
+                      <bucket.icon className={cn("h-4 w-4", bucket.color)} />
+                      <span className="font-medium">{bucket.name}</span>
+                    </div>
+                    <span className="text-xs text-muted-foreground ml-7">
+                      {bucket.description}
+                    </span>
+                  </div>
                 </Button>
               ))}
             </div>
@@ -285,6 +307,16 @@ export default function Files() {
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
+            ) : !files || files.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium">No files in this folder</p>
+                <p className="text-sm text-muted-foreground mb-4">Upload files to get started</p>
+                <Button onClick={() => fileInputRef.current?.click()}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Files
+                </Button>
+              </div>
             ) : (
               <ScrollArea className="h-[500px]">
                 <div className={cn(
@@ -299,7 +331,7 @@ export default function Files() {
                         "flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
                         viewMode === "grid" && "flex-col items-start"
                       )}
-                      onClick={() => setCurrentPath(folder.name)}
+                      onClick={() => handleFolderClick(folder.name)}
                     >
                       <div className="flex items-center gap-3">
                         <FolderOpen className="h-5 w-5 text-blue-500" />
