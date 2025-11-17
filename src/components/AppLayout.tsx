@@ -219,6 +219,7 @@ export default function AppLayout() {
 
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         </div>
-      </SidebarProvider>
-    );
-  }
+      </div>
+    </SidebarProvider>
+  );
+}
