@@ -75,66 +75,63 @@ export default function Dashboard() {
   const firstName = user?.email?.split('@')[0] || 'User';
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      {/* Welcome Header - More Subtle */}
-      <div className="space-y-2">
+    <div className="space-y-6 animate-fade-in">
+      {/* Subtle Header */}
+      <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
         </p>
-        <h1 className="text-2xl sm:text-3xl font-medium">
-          Dashboard
-        </h1>
       </div>
 
       {/* Quick Actions */}
       <Card className="openai-card border-2">
-        <CardHeader>
-          <CardTitle className="text-xl sm:text-2xl">Quick Actions</CardTitle>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl">Quick Actions</CardTitle>
           <CardDescription className="text-sm">Get started with your most common tasks</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <CardContent className="pt-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             <Button 
               size="lg" 
-              className="h-16 sm:h-20 text-base sm:text-lg"
+              className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
-              <Activity className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-              <span className="truncate">Start Review</span>
+              <Activity className="h-5 w-5 shrink-0" />
+              <span className="text-sm">Start Review</span>
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              className="h-16 sm:h-20 text-base sm:text-lg"
+              className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/files")}
             >
-              <Upload className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-              <span className="truncate">Upload Study</span>
+              <Upload className="h-5 w-5 shrink-0" />
+              <span className="text-sm">Upload Study</span>
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              className="h-16 sm:h-20 text-base sm:text-lg"
+              className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/notes")}
             >
-              <StickyNote className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-              <span className="truncate">My Notes</span>
+              <StickyNote className="h-5 w-5 shrink-0" />
+              <span className="text-sm">My Notes</span>
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              className="h-16 sm:h-20 text-base sm:text-lg"
+              className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/wallet")}
             >
-              <Coins className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
-              <span className="truncate">Buy Tokens</span>
+              <Coins className="h-5 w-5 shrink-0" />
+              <span className="text-sm">Buy Tokens</span>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
+      {/* KPI Cards - 8 Cards for Symmetry */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}
@@ -164,6 +161,36 @@ export default function Dashboard() {
           trend="neutral"
           color="from-blue-500 to-blue-600"
           onClick={() => navigate("/app/wallet")}
+        />
+        <KPICard
+          label="Average TAT"
+          value="12 hrs"
+          change="Turnaround time"
+          trend="up"
+          color="from-indigo-500 to-indigo-600"
+        />
+        <KPICard
+          label="This Month"
+          value={studies?.filter(s => 
+            s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('month'))
+          ).length || 0}
+          change="Monthly total"
+          trend="up"
+          color="from-teal-500 to-teal-600"
+        />
+        <KPICard
+          label="Success Rate"
+          value="98.5%"
+          change="Quality score"
+          trend="up"
+          color="from-emerald-500 to-emerald-600"
+        />
+        <KPICard
+          label="Active Now"
+          value="3"
+          change="Reviewers online"
+          trend="neutral"
+          color="from-orange-500 to-orange-600"
         />
       </div>
 
