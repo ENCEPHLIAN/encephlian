@@ -26,7 +26,8 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
 } from "@/components/ui/resizable";
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, Stethoscope, Settings } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, BarChart3, Users, Settings } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -36,13 +37,17 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import CommandPalette from "@/components/CommandPalette";
 import EditableBranding from "@/components/EditableBranding";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 
 const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Studies", href: "/app/studies", icon: FileText },
   { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
+  { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Files", href: "/app/files", icon: FolderOpen },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
+  { name: "Analytics", href: "/app/analytics", icon: BarChart3, badge: "Soon" },
+  { name: "Team", href: "/app/team", icon: Users, badge: "Soon" },
 ];
 
 function AppSidebar() {
@@ -63,8 +68,17 @@ function AppSidebar() {
                 <SidebarMenuItem key={item.name}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.href}>
                     <Link to={item.href} className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5" />
-                      {!collapsed && <span>{item.name}</span>}
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1">{item.name}</span>
+                          {item.badge && (
+                            <Badge variant="secondary" className="ml-auto text-xs">
+                              {item.badge}
+                            </Badge>
+                          )}
+                        </>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -142,7 +156,8 @@ export default function AppLayout() {
                 />
               </div>
               
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
+                <QuickTipsDialog />
                 <ThemeToggle />
                 
                 <DropdownMenu>

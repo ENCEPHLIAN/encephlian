@@ -33,8 +33,8 @@ serve(async (req) => {
       throw new Error('Invalid tokens amount - minimum 10 tokens required');
     }
 
-    // Calculate amount: 200 INR per token
-    const amountInr = tokens * 200;
+    // Calculate amount: 150 INR per token
+    const amountInr = tokens * 150;
 
     console.log(`Creating order for ${tokens} tokens, amount: ₹${amountInr}`);
 

@@ -10,7 +10,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, Settings, Moon, Sun } from "lucide-react";
+import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, StickyNote, Settings, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
 export default function CommandPalette() {
@@ -63,6 +63,10 @@ export default function CommandPalette() {
           <CommandItem onSelect={() => { navigate("/app/viewer"); setOpen(false); }}>
             <Activity className="mr-2 h-4 w-4" />
             <span>EEG Viewer</span>
+          </CommandItem>
+          <CommandItem onSelect={() => { navigate("/app/notes"); setOpen(false); }}>
+            <StickyNote className="mr-2 h-4 w-4" />
+            <span>Notes</span>
           </CommandItem>
           <CommandItem onSelect={() => { navigate("/app/files"); setOpen(false); }}>
             <FolderOpen className="mr-2 h-4 w-4" />
