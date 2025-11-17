@@ -47,7 +47,7 @@ const navigation = [
   { name: "Scheduler", href: "/app/scheduler", icon: Calendar, badge: "Soon" },
   { name: "Integrations", href: "/app/integrations", icon: Plug, badge: "Soon" },
   { name: "Team", href: "/app/team", icon: Users, badge: "Soon" },
-  { name: "Support", href: "/app/support", icon: HelpCircle, badge: "Soon" },
+  { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
 function AppSidebar() {
