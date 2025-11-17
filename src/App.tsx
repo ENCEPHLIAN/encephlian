@@ -17,6 +17,8 @@ import Wallet from "./pages/app/Wallet";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
 import Notes from "./pages/app/Notes";
+import Support from "./pages/app/Support";
+import Documentation from "./pages/app/Documentation";
 import ComingSoon from "./pages/app/ComingSoon";
 import NotFound from "./pages/NotFound";
 import "./App.css";
@@ -54,7 +56,8 @@ function App() {
                 <Route path="scheduler" element={<ComingSoon feature="Scheduler" />} />
                 <Route path="integrations" element={<ComingSoon feature="Integrations" />} />
                 <Route path="team" element={<ComingSoon feature="Team" />} />
-                <Route path="support" element={<ComingSoon feature="Support" />} />
+                <Route path="support" element={<Support />} />
+                <Route path="documentation" element={<Documentation />} />
               </Route>
             </Route>
 

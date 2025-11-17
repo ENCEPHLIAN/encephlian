@@ -58,6 +58,31 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
     enabled: open
   });
 
+  const { data: storageFiles } = useQuery({
+    queryKey: ["command-files", searchQuery],
+    queryFn: async () => {
+      if (!searchQuery || searchQuery.length < 2) return [];
+      
+      const results: any[] = [];
+      const buckets = ['eeg-studies', 'reports'];
+      
+      for (const bucket of buckets) {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .list('', { limit: 100 });
+        
+        if (data) {
+          const filtered = data.filter((file: any) => 
+            file.name.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+          results.push(...filtered.map(f => ({ ...f, bucket })));
+        }
+      }
+      return results;
+    },
+    enabled: open && searchQuery.length >= 2
+  });
+
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
@@ -134,6 +159,39 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
             );
           })}
         </CommandGroup>
+
+        {searchQuery && storageFiles && storageFiles.length > 0 && (
+          <CommandGroup heading="Files">
+            {storageFiles.map((file: any) => (
+              <CommandItem
+                key={`${file.bucket}-${file.name}`}
+                onSelect={async () => {
+                  const { data } = await supabase.storage
+                    .from(file.bucket)
+                    .download(file.name);
+                  
+                  if (data) {
+                    const url = URL.createObjectURL(data);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file.name;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }
+                  setOpen(false);
+                }}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                <div className="flex-1">
+                  <div className="font-medium">{file.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {file.bucket} • {((file.metadata?.size || 0) / 1024).toFixed(1)} KB
+                  </div>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
         
         <CommandGroup heading="Settings">
           <CommandItem onSelect={() => { navigate("/app/settings"); setOpen(false); }}>
