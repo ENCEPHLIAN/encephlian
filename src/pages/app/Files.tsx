@@ -20,7 +20,8 @@ import {
   ChevronRight,
   MoreVertical,
   Activity,
-  FileText
+  FileText,
+  StickyNote
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,6 +52,13 @@ const BUCKETS = [
     description: "Signed PDF reports",
     color: "text-green-600"
   },
+  { 
+    id: "notes", 
+    name: "My Notes", 
+    icon: StickyNote,
+    description: "Private notes and annotations",
+    color: "text-purple-600"
+  },
 ];
 
 export default function Files() {
@@ -67,6 +75,35 @@ export default function Files() {
   const { data: files, isLoading } = useQuery({
     queryKey: ["storage-files", selectedBucket, currentPath],
     queryFn: async () => {
+      // Handle notes bucket - fetch from notes table
+      if (selectedBucket === 'notes') {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const { data, error } = await supabase
+          .from('notes')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Transform notes to file-like structure
+        return (data || []).map(note => ({
+          name: note.title + '.txt',
+          id: note.id,
+          created_at: note.created_at,
+          updated_at: note.updated_at,
+          metadata: { 
+            size: new Blob([note.content]).size,
+            mimetype: 'text/plain',
+            noteContent: note.content,
+            isPinned: note.is_pinned
+          }
+        }));
+      }
+
+      // Handle storage buckets
       const { data, error } = await supabase.storage
         .from(selectedBucket)
         .list(currentPath, { 
@@ -105,6 +142,23 @@ export default function Files() {
   });
 
   const handleDownload = async (fileName: string) => {
+    // Handle notes download
+    const file = files?.find((f: any) => f.name === fileName);
+    if (selectedBucket === 'notes' && file?.metadata?.noteContent) {
+      const blob = new Blob([file.metadata.noteContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success('Note downloaded successfully');
+      return;
+    }
+
+    // Handle storage file download
     const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
     const { data, error } = await supabase.storage.from(selectedBucket).download(filePath);
     if (error) {
@@ -122,6 +176,12 @@ export default function Files() {
   };
 
   const handleViewInViewer = async (fileName: string) => {
+    // For notes, navigate to notes page
+    if (selectedBucket === 'notes') {
+      navigate('/app/notes');
+      return;
+    }
+
     if (!fileName.toLowerCase().endsWith('.edf')) {
       toast.error("Only EDF files can be opened in viewer");
       return;

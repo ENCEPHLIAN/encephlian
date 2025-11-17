@@ -167,7 +167,13 @@ All colors MUST be HSL.
   .openai-container {
     max-width: var(--max-width-content);
     margin: 0 auto;
-    padding: var(--space-2xl) var(--space-lg);
+    padding: clamp(1rem, 3vw, 3rem) clamp(1rem, 5vw, 5rem);
+  }
+
+  @media (max-width: 768px) {
+    .openai-container {
+      padding: 1rem;
+    }
   }
 
   .openai-section {
@@ -178,10 +184,14 @@ All colors MUST be HSL.
     padding: var(--space-xl);
     border-radius: 16px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    max-width: 100%;
+    margin: 0 auto;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
   }
 
   .openai-card:hover {
     transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   }
 
   .logo-text {

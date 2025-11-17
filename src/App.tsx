@@ -47,10 +47,14 @@ function App() {
                 <Route path="notes" element={<Notes />} />
                 <Route path="files" element={<Files />} />
                 <Route path="wallet" element={<Wallet />} />
-                <Route path="analytics" element={<ComingSoon feature="Analytics" />} />
-                <Route path="team" element={<ComingSoon feature="Team" />} />
                 <Route path="profile" element={<Profile />} />
                 <Route path="settings" element={<Settings />} />
+                <Route path="analytics" element={<ComingSoon feature="Analytics" />} />
+                <Route path="templates" element={<ComingSoon feature="Templates" />} />
+                <Route path="scheduler" element={<ComingSoon feature="Scheduler" />} />
+                <Route path="integrations" element={<ComingSoon feature="Integrations" />} />
+                <Route path="team" element={<ComingSoon feature="Team" />} />
+                <Route path="support" element={<ComingSoon feature="Support" />} />
               </Route>
             </Route>
 
