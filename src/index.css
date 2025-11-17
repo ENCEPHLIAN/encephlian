@@ -164,12 +164,10 @@ All colors MUST be HSL.
   }
 
   /* OpenAI-style container utilities */
-  .openai-container {
-    max-width: 1800px;
-    margin-left: auto;
-    margin-right: auto;
-    padding: var(--space-lg) var(--space-xl);
-  }
+.openai-container {
+  width: 100%;
+  padding: var(--space-lg) var(--space-xl);
+}
   
   @media (max-width: 768px) {
     .openai-container {

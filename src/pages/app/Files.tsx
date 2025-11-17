@@ -296,14 +296,14 @@ export default function Files() {
                     setCurrentPath("");
                   }}
                 >
-                  <div className="flex flex-col items-start gap-1.5 w-full min-w-0">
-                    <div className="flex items-center gap-3">
-                      <bucket.icon className={cn("h-5 w-5 shrink-0", bucket.color)} />
+                  <div className="flex items-start gap-3 w-full">
+                    <bucket.icon className={cn("h-5 w-5 shrink-0 mt-0.5", bucket.color)} />
+                    <div className="flex flex-col gap-1 flex-1 min-w-0">
                       <span className="font-semibold text-sm leading-tight">{bucket.name}</span>
+                      <span className="text-xs text-muted-foreground leading-relaxed folder-btn-text">
+                        {bucket.description}
+                      </span>
                     </div>
-                    <span className="text-xs text-muted-foreground leading-relaxed folder-btn-text w-full ml-8">
-                      {bucket.description}
-                    </span>
                   </div>
                 </Button>
               ))}
