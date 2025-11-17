@@ -1,20 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, FileText, TrendingUp, Lightbulb, Keyboard, Zap, Search } from "lucide-react";
+import { Loader2, Activity, Upload, FileText, StickyNote, Coins } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PerformanceCharts from "@/components/dashboard/PerformanceCharts";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
+import { CalendarWidget } from "@/components/CalendarWidget";
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useState } from "react";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [commandOpen, setCommandOpen] = useState(false);
 
   const { data: user } = useQuery({
     queryKey: ["current-user"],
@@ -41,17 +40,6 @@ export default function Dashboard() {
     queryKey: ["wallet-balance"],
     queryFn: async () => {
       const { data } = await supabase.from("wallets").select("tokens").single();
-      return data;
-    }
-  });
-
-  const { data: earningsData } = useQuery({
-    queryKey: ["earnings-wallet"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("earnings_wallets")
-        .select("*")
-        .single();
       return data;
     }
   });
@@ -83,117 +71,72 @@ export default function Dashboard() {
   const completedWeek = studies?.filter(s => 
     s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('week'))
   ).length || 0;
-  const earningsThisMonth = earningsData?.balance_inr || 0;
 
   const firstName = user?.email?.split('@')[0] || 'User';
 
   return (
     <div className="space-y-[var(--space-3xl)] animate-fade-in">
-      {/* Welcome Header with Search */}
+      {/* Welcome Header */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-              Welcome back, {firstName}
-            </h1>
-            <p className="text-lg text-muted-foreground">
-              {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
+            Welcome back, {firstName}
+          </h1>
+          <p className="text-sm sm:text-base lg:text-lg text-muted-foreground">
+            {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
+          </p>
         </div>
-        
-        {/* Command Palette Hint */}
-        <Button 
-          variant="outline" 
-          className="relative h-12 w-full max-w-xl justify-start text-muted-foreground hover:bg-muted"
-          onClick={() => {
-            const event = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true });
-            document.dispatchEvent(event);
-          }}
-        >
-          <Search className="mr-2 h-4 w-4" />
-          <span>Search studies, patients, navigate...</span>
-          <kbd className="pointer-events-none absolute right-3 hidden h-6 select-none items-center gap-1 rounded border bg-background px-2 font-mono text-xs font-medium opacity-100 sm:flex">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </Button>
       </div>
 
-      {/* Quick Actions - Prominent */}
+      {/* Quick Actions */}
       <Card className="openai-card border-2">
         <CardHeader>
-          <CardTitle className="text-2xl">Quick Actions</CardTitle>
-          <CardDescription>Get started with your most common tasks</CardDescription>
+          <CardTitle className="text-xl sm:text-2xl">Quick Actions</CardTitle>
+          <CardDescription className="text-sm">Get started with your most common tasks</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             <Button 
               size="lg" 
-              className="h-20 text-lg"
+              className="h-16 sm:h-20 text-base sm:text-lg"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
-              <Activity className="mr-2 h-6 w-6" />
-              Start Review
+              <Activity className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="truncate">Start Review</span>
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              className="h-20 text-lg"
+              className="h-16 sm:h-20 text-base sm:text-lg"
               onClick={() => navigate("/app/files")}
             >
-              <Upload className="mr-2 h-6 w-6" />
-              Upload Study
+              <Upload className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="truncate">Upload Study</span>
             </Button>
             <Button 
               size="lg" 
               variant="outline" 
-              className="h-20 text-lg"
-              onClick={() => navigate("/app/studies")}
+              className="h-16 sm:h-20 text-base sm:text-lg"
+              onClick={() => navigate("/app/notes")}
             >
-              <FileText className="mr-2 h-6 w-6" />
-              View Reports
+              <StickyNote className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="truncate">My Notes</span>
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="h-16 sm:h-20 text-base sm:text-lg"
+              onClick={() => navigate("/app/wallet")}
+            >
+              <Coins className="mr-2 h-5 w-5 sm:h-6 sm:w-6" />
+              <span className="truncate">Buy Tokens</span>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Quick Tips Card */}
-      <Card className="openai-card bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 border-2 border-blue-200 dark:border-blue-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5 text-blue-600" />
-            Quick Tips
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-3">
-            <li className="flex gap-3">
-              <Keyboard className="h-5 w-5 text-blue-600 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Press <kbd className="px-2 py-1 bg-background rounded text-xs">Ctrl+K</kbd> to search</p>
-                <p className="text-sm text-muted-foreground">Quickly find studies, navigate, or take actions</p>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <Upload className="h-5 w-5 text-blue-600 flex-shrink-0" />
-              <div>
-                <p className="font-medium">Drag & drop EEG files</p>
-                <p className="text-sm text-muted-foreground">Upload directly from Files page</p>
-              </div>
-            </li>
-            <li className="flex gap-3">
-              <Zap className="h-5 w-5 text-blue-600 flex-shrink-0" />
-              <div>
-                <p className="font-medium">AI assists your reviews</p>
-                <p className="text-sm text-muted-foreground">Get draft reports in seconds, review and sign</p>
-              </div>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-
-      {/* KPI Cards with generous spacing */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}
@@ -217,11 +160,11 @@ export default function Dashboard() {
           color="from-purple-500 to-purple-600"
         />
         <KPICard
-          label="Earnings (30d)"
-          value={`₹${earningsThisMonth.toLocaleString()}`}
-          change="+15% vs last month"
-          trend="up"
-          color="from-orange-500 to-orange-600"
+          label="Token Balance"
+          value={wallet?.tokens || 0}
+          change="Available for signing"
+          trend="neutral"
+          color="from-blue-500 to-blue-600"
           onClick={() => navigate("/app/wallet")}
         />
       </div>
@@ -249,8 +192,8 @@ export default function Dashboard() {
                 <div className="text-sm text-muted-foreground">On-Time Rate</div>
               </div>
               <div>
-                <div className="text-3xl font-bold">₹{earningsThisMonth.toLocaleString()}</div>
-                <div className="text-sm text-muted-foreground">Earned</div>
+                <div className="text-3xl font-bold">{wallet?.tokens || 0}</div>
+                <div className="text-sm text-muted-foreground">Tokens</div>
               </div>
             </div>
           </CardContent>
@@ -298,35 +241,10 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Keyboard Shortcuts Guide */}
-      <Card className="openai-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Keyboard className="h-5 w-5" />
-            Keyboard Shortcuts
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground">Open command palette</span>
-              <kbd className="px-2 py-1 bg-muted rounded text-xs w-fit">Ctrl+K</kbd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground">Toggle sidebar</span>
-              <kbd className="px-2 py-1 bg-muted rounded text-xs w-fit">Ctrl+B</kbd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground">Go to dashboard</span>
-              <kbd className="px-2 py-1 bg-muted rounded text-xs w-fit">G then D</kbd>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-muted-foreground">Go to studies</span>
-              <kbd className="px-2 py-1 bg-muted rounded text-xs w-fit">G then S</kbd>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Calendar Widget */}
+      <div className="mt-16">
+        <CalendarWidget />
+      </div>
 
       {/* Urgent Queue */}
       <div className="openai-section">

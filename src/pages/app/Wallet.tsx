@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Coins } from "lucide-react";
 import { TokenPurchase } from "@/components/TokenPurchase";
 
 export default function Wallet() {

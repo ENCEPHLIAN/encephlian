@@ -8,10 +8,10 @@ import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const TOKEN_PACKAGES = [
-  { tokens: 50, price: 10000, popular: false },
-  { tokens: 100, price: 20000, popular: true },
-  { tokens: 200, price: 38000, popular: false },
-  { tokens: 500, price: 90000, popular: false },
+  { tokens: 10, price: 1500, popular: false },
+  { tokens: 25, price: 3750, popular: true },
+  { tokens: 50, price: 7500, popular: false },
+  { tokens: 100, price: 15000, popular: false },
 ];
 
 export function TokenPurchase() {
@@ -103,7 +103,7 @@ export function TokenPurchase() {
       <CardHeader>
         <CardTitle className="text-2xl">Purchase Tokens</CardTitle>
         <CardDescription>
-          Choose a package that fits your needs. Each token = 1 TAT report signing.
+          Choose a package that fits your needs. TAT reports: 1 token (₹150) • STAT reports: 2 tokens (₹300)
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -130,16 +130,16 @@ export function TokenPurchase() {
                 </div>
                 
                 <div className="space-y-1">
-                  <div className="text-2xl font-bold">₹{(pkg.price / 100).toLocaleString('en-IN')}</div>
+                  <div className="text-2xl font-bold">₹{pkg.price.toLocaleString('en-IN')}</div>
                   <div className="text-xs text-muted-foreground">
-                    ₹{(pkg.price / pkg.tokens / 100).toFixed(0)}/token
+                    ₹{(pkg.price / pkg.tokens).toFixed(0)}/token
                   </div>
                 </div>
 
-                {pkg.tokens >= 200 && (
+                {pkg.tokens >= 50 && (
                   <div className="text-xs text-green-600 font-medium flex items-center justify-center gap-1">
                     <Check className="h-3 w-3" />
-                    Save {Math.round((1 - (pkg.price / pkg.tokens) / 200) * 100)}%
+                    Best Value
                   </div>
                 )}
 
