@@ -22,10 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-} from "@/components/ui/resizable";
 import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, BarChart3, Users, Settings, Search, Calendar, Plug, HelpCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -44,6 +40,7 @@ const navigation = [
   { name: "Studies", href: "/app/studies", icon: FileText },
   { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
   { name: "Files", href: "/app/files", icon: FolderOpen },
+  { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
   { name: "Analytics", href: "/app/analytics", icon: BarChart3, badge: "Soon" },
   { name: "Templates", href: "/app/templates", icon: FileText, badge: "Soon" },
@@ -205,17 +202,13 @@ export default function AppLayout() {
             </div>
           </header>
 
-          {/* Main Content with Resizable Panels */}
-          <ResizablePanelGroup direction="horizontal" className="flex-1">
-            <ResizablePanel defaultSize={100} minSize={50}>
-              <main className="flex-1 overflow-y-auto">
-                <div className="openai-container">
-                  <Breadcrumbs />
-                  <Outlet />
-                </div>
-              </main>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="openai-container">
+              <Breadcrumbs />
+              <Outlet />
+            </div>
+          </main>
 
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         </div>

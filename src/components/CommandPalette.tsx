@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/command";
 import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, StickyNote, Settings, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
+import dayjs from "dayjs";
 
 interface CommandPaletteProps {
   open?: boolean;
@@ -20,6 +21,7 @@ interface CommandPaletteProps {
 
 export default function CommandPalette({ open: externalOpen, onOpenChange: externalOnOpenChange }: CommandPaletteProps = {}) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const { setTheme, theme } = useTheme();
 
@@ -28,13 +30,27 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
   const setOpen = externalOnOpenChange || setInternalOpen;
 
   const { data: studies } = useQuery({
-    queryKey: ["command-studies"],
+    queryKey: ["command-studies", searchQuery],
     queryFn: async () => {
+      if (!searchQuery || searchQuery.length < 2) {
+        // Show recent studies when no search query
+        const { data, error } = await supabase
+          .from("studies")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(10);
+        
+        if (error) throw error;
+        return data;
+      }
+
+      // Search by patient name, ID, or age
       const { data, error } = await supabase
         .from("studies")
         .select("*")
+        .or(`meta->>patient_name.ilike.%${searchQuery}%,meta->>patient_id.ilike.%${searchQuery}%,meta->>patient_age.ilike.%${searchQuery}%`)
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(20);
       
       if (error) throw error;
       return data;
@@ -56,7 +72,10 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search studies, patients, navigate..." />
+      <CommandInput 
+        placeholder="Search studies, patients..." 
+        onValueChange={setSearchQuery}
+      />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         
@@ -87,11 +106,12 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
           </CommandItem>
         </CommandGroup>
 
-        <CommandGroup heading="Recent Studies">
+        <CommandGroup heading={searchQuery ? "Search Results" : "Recent Studies"}>
           {studies?.map((study) => {
             const meta = study.meta as any;
             const patientId = meta?.patient_id || 'Unknown';
             const patientName = meta?.patient_name || '';
+            const patientAge = meta?.patient_age || '';
             
             return (
               <CommandItem
@@ -102,7 +122,14 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
                 }}
               >
                 <FileText className="mr-2 h-4 w-4" />
-                <span>{patientId} - {patientName}</span>
+                <div className="flex-1">
+                  <div className="font-medium">
+                    {patientId} - {patientName}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Age: {patientAge} • {dayjs(study.created_at).format('MMM D, YYYY')}
+                  </div>
+                </div>
               </CommandItem>
             );
           })}

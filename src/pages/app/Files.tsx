@@ -290,18 +290,18 @@ export default function Files() {
                 <Button
                   key={bucket.id}
                   variant={selectedBucket === bucket.id ? "secondary" : "ghost"}
-                  className="w-full justify-start h-auto py-3"
+                  className="w-full justify-start h-auto py-4"
                   onClick={() => {
                     setSelectedBucket(bucket.id);
                     setCurrentPath("");
                   }}
                 >
-                  <div className="flex flex-col items-start gap-1 w-full">
+                  <div className="flex flex-col items-start gap-1.5 w-full min-w-0">
                     <div className="flex items-center gap-3">
-                      <bucket.icon className={cn("h-4 w-4", bucket.color)} />
-                      <span className="font-medium">{bucket.name}</span>
+                      <bucket.icon className={cn("h-5 w-5 shrink-0", bucket.color)} />
+                      <span className="font-semibold text-base">{bucket.name}</span>
                     </div>
-                    <span className="text-xs text-muted-foreground ml-7">
+                    <span className="text-sm text-muted-foreground ml-8 leading-snug">
                       {bucket.description}
                     </span>
                   </div>
