@@ -75,17 +75,15 @@ export default function Dashboard() {
   const firstName = user?.email?.split('@')[0] || 'User';
 
   return (
-    <div className="space-y-[var(--space-3xl)] animate-fade-in">
-      {/* Welcome Header */}
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight">
-            Welcome back, {firstName}
-          </h1>
-          <p className="text-sm sm:text-base lg:text-lg text-muted-foreground">
-            {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
-          </p>
-        </div>
+    <div className="space-y-8 animate-fade-in">
+      {/* Welcome Header - More Subtle */}
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
+        </p>
+        <h1 className="text-2xl sm:text-3xl font-medium">
+          Dashboard
+        </h1>
       </div>
 
       {/* Quick Actions */}
@@ -136,7 +134,7 @@ export default function Dashboard() {
       </Card>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}

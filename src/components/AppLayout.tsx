@@ -26,7 +26,7 @@ import {
   ResizablePanelGroup,
   ResizablePanel,
 } from "@/components/ui/resizable";
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, BarChart3, Users, Settings } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, BarChart3, Users, Settings, Search, Calendar, Plug, HelpCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -43,11 +43,14 @@ const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Studies", href: "/app/studies", icon: FileText },
   { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
-  { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Files", href: "/app/files", icon: FolderOpen },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
   { name: "Analytics", href: "/app/analytics", icon: BarChart3, badge: "Soon" },
+  { name: "Templates", href: "/app/templates", icon: FileText, badge: "Soon" },
+  { name: "Scheduler", href: "/app/scheduler", icon: Calendar, badge: "Soon" },
+  { name: "Integrations", href: "/app/integrations", icon: Plug, badge: "Soon" },
   { name: "Team", href: "/app/team", icon: Users, badge: "Soon" },
+  { name: "Support", href: "/app/support", icon: HelpCircle, badge: "Soon" },
 ];
 
 function AppSidebar() {
@@ -97,6 +100,7 @@ export default function AppLayout() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [userName, setUserName] = useState<string>("");
+  const [commandOpen, setCommandOpen] = useState(false);
 
   // Fetch user profile data with query
   const { data: profile } = useQuery({
@@ -147,7 +151,7 @@ export default function AppLayout() {
         <div className="flex-1 flex flex-col w-full">
           {/* Top Bar */}
           <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="flex h-16 items-center justify-between px-6">
+            <div className="flex h-16 items-center justify-between px-6 gap-4">
               <div className="flex items-center gap-4">
                 <SidebarTrigger />
                 <EditableBranding 
@@ -155,6 +159,18 @@ export default function AppLayout() {
                   logoUrl={clinicContext?.logo_url}
                 />
               </div>
+              
+              <Button 
+                variant="outline" 
+                className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground text-sm">Search studies, patients...</span>
+                <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
+                  <span>⌘</span>K
+                </kbd>
+              </Button>
               
               <div className="flex items-center gap-2 sm:gap-4">
                 <QuickTipsDialog />
@@ -200,10 +216,9 @@ export default function AppLayout() {
               </main>
             </ResizablePanel>
           </ResizablePanelGroup>
-        </div>
 
-        <CommandPalette />
-      </div>
-    </SidebarProvider>
-  );
-}
+          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+        </div>
+      </SidebarProvider>
+    );
+  }

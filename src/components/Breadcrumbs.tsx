@@ -1,9 +1,11 @@
-import { Link, useLocation } from "react-router-dom";
-import { ChevronRight, Home } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ChevronRight, Home, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 export default function Breadcrumbs() {
   const location = useLocation();
+  const navigate = useNavigate();
   const pathnames = location.pathname.split("/").filter((x) => x);
 
   const breadcrumbNames: Record<string, string> = {
@@ -17,10 +19,26 @@ export default function Breadcrumbs() {
     settings: "Settings",
   };
 
-  if (pathnames.length <= 1) return null;
+  const showBackButton = location.pathname !== "/app/dashboard";
+  
+  if (pathnames.length <= 1 && !showBackButton) return null;
 
   return (
     <nav className="flex items-center space-x-2 text-sm text-muted-foreground mb-6">
+      {showBackButton && (
+        <>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="gap-2 h-8"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back</span>
+          </Button>
+          {pathnames.length > 1 && <ChevronRight className="h-4 w-4" />}
+        </>
+      )}
       <Link 
         to="/app/dashboard" 
         className="hover:text-foreground transition-colors flex items-center gap-1"
