@@ -1,37 +1,69 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { toast } from "sonner";
-import { Loader2, FolderOpen, File, Download, Trash2, Upload, Eye, Home, ChevronRight } from "lucide-react";
+import { 
+  Loader2, 
+  FolderOpen, 
+  File, 
+  Download, 
+  Trash2, 
+  Upload, 
+  Eye, 
+  Search,
+  Grid3x3,
+  List,
+  Star,
+  ChevronRight,
+  MoreVertical
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
+import relativeTime from "dayjs/plugin/relativeTime";
+
+dayjs.extend(relativeTime);
 
 const BUCKETS = [
-  { id: "eeg-raw", name: "EEG Raw" },
-  { id: "eeg-clean", name: "EEG Clean" },
-  { id: "eeg-reports", name: "Reports" },
-  { id: "eeg-json", name: "JSON Data" },
-  { id: "eeg-preview", name: "Previews" },
-  { id: "clinic-logos", name: "Logos" }
+  { id: "eeg-raw", name: "EEG Raw", icon: FolderOpen },
+  { id: "eeg-clean", name: "EEG Clean", icon: FolderOpen },
+  { id: "eeg-reports", name: "Reports", icon: File },
+  { id: "eeg-json", name: "JSON Data", icon: File },
+  { id: "eeg-preview", name: "Previews", icon: Eye },
+  { id: "clinic-logos", name: "Logos", icon: Star },
 ];
 
 export default function Files() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [selectedBucket, setSelectedBucket] = useState("eeg-raw");
   const [currentPath, setCurrentPath] = useState("");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [dragActive, setDragActive] = useState(false);
 
   const { data: files, isLoading } = useQuery({
     queryKey: ["storage-files", selectedBucket, currentPath],
     queryFn: async () => {
-      const { data, error } = await supabase.storage.from(selectedBucket).list(currentPath, { limit: 100, offset: 0, sortBy: { column: "name", order: "asc" } });
+      const { data, error } = await supabase.storage
+        .from(selectedBucket)
+        .list(currentPath, { 
+          limit: 100, 
+          offset: 0, 
+          sortBy: { column: "name", order: "asc" } 
+        });
       if (error) throw error;
       return data;
     }
@@ -43,7 +75,10 @@ export default function Files() {
       const { error } = await supabase.storage.from(selectedBucket).upload(filePath, file);
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("File uploaded"); queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] }); setUploadFile(null); },
+    onSuccess: () => {
+      toast.success("File uploaded successfully");
+      queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] });
+    },
     onError: (error: any) => toast.error(error.message || "Upload failed")
   });
 
@@ -53,26 +88,73 @@ export default function Files() {
       const { error } = await supabase.storage.from(selectedBucket).remove([filePath]);
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("File deleted"); queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] }); }
+    onSuccess: () => {
+      toast.success("File deleted");
+      queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] });
+    }
   });
 
   const handleDownload = async (fileName: string) => {
     const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
     const { data, error } = await supabase.storage.from(selectedBucket).download(filePath);
-    if (error) { toast.error("Download failed"); return; }
+    if (error) {
+      toast.error("Download failed");
+      return;
+    }
     const url = URL.createObjectURL(data);
     const a = document.createElement("a");
-    a.href = url; a.download = fileName;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleViewInViewer = async (fileName: string) => {
-    if (!fileName.toLowerCase().endsWith('.edf')) { toast.error("Only EDF files supported"); return; }
+    if (!fileName.toLowerCase().endsWith('.edf')) {
+      toast.error("Only EDF files can be opened in viewer");
+      return;
+    }
     const filePath = currentPath ? `${currentPath}/${fileName}` : fileName;
-    const { data: studyFile } = await supabase.from("study_files").select("study_id").eq("path", filePath).single();
-    if (!studyFile) { toast.error("No study found"); return; }
+    const { data: studyFile } = await supabase
+      .from("study_files")
+      .select("study_id")
+      .eq("path", filePath)
+      .single();
+    
+    if (!studyFile) {
+      toast.error("No study found for this file");
+      return;
+    }
     navigate(`/app/viewer?studyId=${studyFile.study_id}`);
+  };
+
+  const handleFileUpload = (uploadedFiles: FileList | null) => {
+    if (!uploadedFiles) return;
+    Array.from(uploadedFiles).forEach(file => {
+      uploadMutation.mutate(file);
+    });
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -81,78 +163,204 @@ export default function Files() {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
+  const filteredFiles = files?.filter(file => 
+    file.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const folders = filteredFiles?.filter(f => !f.name.includes('.')) || [];
+  const regularFiles = filteredFiles?.filter(f => f.name.includes('.')) || [];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-[var(--space-xl)] animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">File Browser</h1>
-          <p className="text-muted-foreground">Browse and manage storage files</p>
+          <h1 className="text-3xl md:text-4xl font-bold">Files</h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your EEG files and reports securely
+          </p>
         </div>
-        <Button variant="outline" onClick={() => navigate('/app/dashboard')}><Home className="h-4 w-4 mr-2" />Dashboard</Button>
+        
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setViewMode(viewMode === "list" ? "grid" : "list")}
+          >
+            {viewMode === "list" ? <Grid3x3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+          </Button>
+          
+          <Button onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload
+          </Button>
+          <Input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
+        </div>
       </div>
-      
-      <Breadcrumb>
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink onClick={() => setCurrentPath('')} className="cursor-pointer flex items-center gap-1">
-              <Home className="h-4 w-4" /><span>{BUCKETS.find(b => b.id === selectedBucket)?.name}</span>
-            </BreadcrumbLink>
-          </BreadcrumbItem>
-          {currentPath.split('/').filter(Boolean).map((segment, idx, arr) => (
-            <span key={segment} className="flex items-center">
-              <BreadcrumbSeparator><ChevronRight className="h-4 w-4" /></BreadcrumbSeparator>
-              <BreadcrumbItem>{idx === arr.length - 1 ? <BreadcrumbPage>{segment}</BreadcrumbPage> : <BreadcrumbLink onClick={() => setCurrentPath(arr.slice(0, idx + 1).join('/'))} className="cursor-pointer">{segment}</BreadcrumbLink>}</BreadcrumbItem>
-            </span>
-          ))}
-        </BreadcrumbList>
-      </Breadcrumb>
 
-      <Card>
-        <CardHeader><CardTitle>Files</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-4">
-            <Select value={selectedBucket} onValueChange={(v) => { setSelectedBucket(v); setCurrentPath(""); }}>
-              <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
-              <SelectContent>{BUCKETS.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-            </Select>
-            <div className="flex gap-2 flex-1">
-              <Input type="file" onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="flex-1" />
-              <Button onClick={() => uploadFile && uploadMutation.mutate(uploadFile)} disabled={!uploadFile || uploadMutation.isPending}>
-                {uploadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Upload className="h-4 w-4 mr-2" />Upload</>}
-              </Button>
+      {/* Main Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Sidebar */}
+        <Card className="lg:col-span-1 openai-card">
+          <CardContent className="p-6">
+            <div className="space-y-1">
+              <h3 className="font-semibold mb-4 text-sm text-muted-foreground">FOLDERS</h3>
+              {BUCKETS.map((bucket) => (
+                <Button
+                  key={bucket.id}
+                  variant={selectedBucket === bucket.id ? "secondary" : "ghost"}
+                  className="w-full justify-start h-11"
+                  onClick={() => {
+                    setSelectedBucket(bucket.id);
+                    setCurrentPath("");
+                  }}
+                >
+                  <bucket.icon className="h-4 w-4 mr-3" />
+                  {bucket.name}
+                </Button>
+              ))}
             </div>
-          </div>
+          </CardContent>
+        </Card>
 
-          {isLoading ? <div className="flex items-center justify-center py-8"><Loader2 className="h-8 w-8 animate-spin" /></div> : (
-            <div className="border rounded-lg">
-              <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-3 bg-muted font-semibold text-sm">
-                <div></div><div>Name</div><div>Size</div><div>Modified</div><div>Actions</div>
+        {/* Main Content */}
+        <Card className="lg:col-span-3 openai-card">
+          <CardContent className="p-8">
+            {/* Search and Path */}
+            <div className="space-y-4 mb-6">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <FolderOpen className="h-4 w-4" />
+                <span>{BUCKETS.find(b => b.id === selectedBucket)?.name}</span>
+                {currentPath && (
+                  <>
+                    <ChevronRight className="h-4 w-4" />
+                    <span>{currentPath}</span>
+                  </>
+                )}
               </div>
-              {files?.length === 0 ? <div className="p-8 text-center text-muted-foreground">No files found</div> : (
-                <div className="divide-y">
-                  {files?.map(f => (
-                    <div key={f.id} className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-4 p-3 items-center hover:bg-muted/50">
-                      <div>{f.id === null ? <FolderOpen className="h-5 w-5 text-blue-500" /> : <File className="h-5 w-5 text-muted-foreground" />}</div>
-                      <div className={f.id === null ? "font-medium cursor-pointer" : ""} onClick={() => f.id === null && setCurrentPath(currentPath ? `${currentPath}/${f.name}` : f.name)}>
-                        {f.name}{f.name.toLowerCase().endsWith('.edf') && <Badge variant="secondary" className="ml-2 text-xs">EDF</Badge>}
-                      </div>
-                      <div className="text-sm text-muted-foreground">{f.metadata?.size ? formatFileSize(f.metadata.size) : "—"}</div>
-                      <div className="text-sm text-muted-foreground">{f.created_at ? dayjs(f.created_at).format("MMM D, YYYY") : "—"}</div>
-                      <div className="flex gap-1">
-                        {f.id !== null && (
-                          <>{f.name.toLowerCase().endsWith('.edf') && <Button variant="ghost" size="sm" onClick={() => handleViewInViewer(f.name)} title="View in EEG Viewer"><Eye className="h-4 w-4" /></Button>}
-                          <Button variant="ghost" size="sm" onClick={() => handleDownload(f.name)}><Download className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => deleteMutation.mutate(f.name)}><Trash2 className="h-4 w-4 text-destructive" /></Button></>
-                        )}
+              
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-11"
+                />
+              </div>
+            </div>
+
+            {/* Drop Zone */}
+            <div
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              className={cn(
+                "border-2 border-dashed rounded-lg p-12 mb-8 transition-colors",
+                dragActive ? "border-primary bg-primary/5" : "border-muted",
+                "hover:border-primary/50 cursor-pointer"
+              )}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="flex flex-col items-center justify-center text-center">
+                <Upload className="h-12 w-12 text-muted-foreground mb-4" />
+                <p className="text-lg font-medium mb-1">
+                  {dragActive ? "Drop files here" : "Drag & drop files here"}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  or click to browse
+                </p>
+              </div>
+            </div>
+
+            {/* Files List */}
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
+              <ScrollArea className="h-[500px]">
+                <div className={cn(
+                  viewMode === "grid" 
+                    ? "grid grid-cols-2 md:grid-cols-3 gap-4" 
+                    : "space-y-2"
+                )}>
+                  {folders.map((folder) => (
+                    <div
+                      key={folder.name}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors",
+                        viewMode === "grid" && "flex-col items-start"
+                      )}
+                      onClick={() => setCurrentPath(folder.name)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <FolderOpen className="h-5 w-5 text-blue-500" />
+                        <span className="font-medium">{folder.name}</span>
                       </div>
                     </div>
                   ))}
+                  
+                  {regularFiles.map((file) => (
+                    <div
+                      key={file.name}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-lg hover:bg-muted/50 transition-colors group",
+                        viewMode === "grid" && "flex-col items-start"
+                      )}
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <File className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{file.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {file.metadata?.size && formatFileSize(file.metadata.size)}
+                            {file.updated_at && ` • ${dayjs(file.updated_at).fromNow()}`}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {file.name.toLowerCase().endsWith('.edf') && (
+                            <DropdownMenuItem onClick={() => handleViewInViewer(file.name)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              Open in Viewer
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => handleDownload(file.name)}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => deleteMutation.mutate(file.name)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

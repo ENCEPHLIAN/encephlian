@@ -1,18 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Loader2 } from "lucide-react";
+import { Loader2, Activity, Upload, FileText, TrendingUp } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import QuickActions from "@/components/dashboard/QuickActions";
 import PerformanceCharts from "@/components/dashboard/PerformanceCharts";
 import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import dayjs from "dayjs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Dashboard() {
   const navigate = useNavigate();
 
-  // Fetch user info
   const { data: user } = useQuery({
     queryKey: ["current-user"],
     queryFn: async () => {
@@ -21,7 +22,6 @@ export default function Dashboard() {
     }
   });
 
-  // Fetch studies for metrics
   const { data: studies, isLoading } = useQuery({
     queryKey: ["dashboard-studies"],
     queryFn: async () => {
@@ -35,7 +35,6 @@ export default function Dashboard() {
     }
   });
 
-  // Fetch wallet balance
   const { data: wallet } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {
@@ -44,7 +43,6 @@ export default function Dashboard() {
     }
   });
 
-  // Fetch earnings
   const { data: earningsData } = useQuery({
     queryKey: ["earnings-wallet"],
     queryFn: async () => {
@@ -64,7 +62,6 @@ export default function Dashboard() {
     );
   }
 
-  // Calculate metrics
   const pendingStudies = studies?.filter(s => s.state === 'uploaded' || s.state === 'ai_draft' || s.state === 'in_review') || [];
   const completedToday = studies?.filter(s => 
     s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('day'))
@@ -74,21 +71,60 @@ export default function Dashboard() {
   ).length || 0;
   const earningsThisMonth = earningsData?.balance_inr || 0;
 
-  // Get user's first name
   const firstName = user?.email?.split('@')[0] || 'User';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-[var(--space-3xl)] animate-fade-in">
       {/* Welcome Header */}
-      <div>
-        <h1 className="text-4xl font-bold">Welcome back, {firstName}</h1>
-        <p className="text-muted-foreground mt-1">
+      <div className="space-y-2">
+        <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
+          Welcome back, {firstName}
+        </h1>
+        <p className="text-lg text-muted-foreground">
           {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
         </p>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Quick Actions - Prominent */}
+      <Card className="openai-card border-2">
+        <CardHeader>
+          <CardTitle className="text-2xl">Quick Actions</CardTitle>
+          <CardDescription>Get started with your most common tasks</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button 
+              size="lg" 
+              className="h-20 text-lg"
+              onClick={() => navigate("/app/studies?filter=uploaded")}
+            >
+              <Activity className="mr-2 h-6 w-6" />
+              Start Review
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="h-20 text-lg"
+              onClick={() => navigate("/app/files")}
+            >
+              <Upload className="mr-2 h-6 w-6" />
+              Upload Study
+            </Button>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="h-20 text-lg"
+              onClick={() => navigate("/app/studies")}
+            >
+              <FileText className="mr-2 h-6 w-6" />
+              View Reports
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* KPI Cards with generous spacing */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}
@@ -105,13 +141,6 @@ export default function Dashboard() {
           color="from-green-500 to-green-600"
         />
         <KPICard
-          label="This Week"
-          value={completedWeek}
-          change={`${Math.round((completedWeek / 30) * 100)}% of monthly goal`}
-          trend="up"
-          color="from-purple-500 to-purple-600"
-        />
-        <KPICard
           label="Earnings (30d)"
           value={`₹${earningsThisMonth.toLocaleString()}`}
           change="+15% vs last month"
@@ -122,19 +151,19 @@ export default function Dashboard() {
       </div>
 
       {/* Urgent Queue */}
-      <UrgentQueue studies={pendingStudies} />
-
-      {/* Quick Actions */}
-      <QuickActions 
-        pendingStudies={pendingStudies}
-        tokenBalance={wallet?.tokens || 0}
-      />
+      <div className="openai-section">
+        <UrgentQueue studies={pendingStudies} />
+      </div>
 
       {/* Performance Charts */}
-      <PerformanceCharts studies={studies || []} />
+      <div className="openai-section">
+        <PerformanceCharts studies={studies || []} />
+      </div>
 
       {/* Activity Feed */}
-      <ActivityFeed studies={studies || []} />
+      <div className="openai-section">
+        <ActivityFeed studies={studies || []} />
+      </div>
     </div>
   );
 }
