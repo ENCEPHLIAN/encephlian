@@ -83,28 +83,28 @@ export default function AppLayout() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   const [userName, setUserName] = useState<string>("");
-  const [companyName, setCompanyName] = useState<string>("ENCEPHLIAN");
 
-  useEffect(() => {
-    const loadUserData = async () => {
+  // Fetch user profile data with query
+  const { data: profile } = useQuery({
+    queryKey: ["user-profile"],
+    queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name, company_name')
-          .eq('id', user.id)
-          .single();
-        
-        if (profile) {
-          const firstName = profile.full_name?.split(' ')[0] || user.email?.split('@')[0] || 'User';
-          setUserName(firstName);
-          setCompanyName(profile.company_name || 'ENCEPHLIAN');
-        }
-      }
-    };
-    
-    loadUserData();
-  }, []);
+      if (!user) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name, company_name')
+        .eq('id', user.id)
+        .single();
+      return data;
+    }
+  });
+
+  // Update local state when profile data changes
+  useEffect(() => {
+    if (profile) {
+      setUserName(profile.full_name || 'User');
+    }
+  }, [profile]);
 
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
@@ -137,7 +137,7 @@ export default function AppLayout() {
               <div className="flex items-center gap-4">
                 <SidebarTrigger />
                 <EditableBranding 
-                  companyName={clinicContext?.brand_name || companyName}
+                  companyName={profile?.company_name || "ENCEPHLIAN"}
                   logoUrl={clinicContext?.logo_url}
                 />
               </div>
