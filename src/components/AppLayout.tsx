@@ -163,7 +163,7 @@ export default function AppLayout() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="flex items-center gap-2">
-                      <Stethoscope className="h-5 w-5" />
+                      <User className="h-5 w-5" />
                       <span className="hidden md:inline">{userName}</span>
                     </Button>
                   </DropdownMenuTrigger>
