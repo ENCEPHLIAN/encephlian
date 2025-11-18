@@ -66,18 +66,35 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
       const results: any[] = [];
       const buckets = ['eeg-raw', 'eeg-reports', 'notes'];
       
-      for (const bucket of buckets) {
+      // Recursive function to search through folders
+      const searchBucket = async (bucket: string, path: string = '') => {
         const { data, error } = await supabase.storage
           .from(bucket)
-          .list('', { limit: 100 });
+          .list(path, { limit: 1000 });
         
-        if (data) {
-          const filtered = data.filter((file: any) => 
-            file.name.toLowerCase().includes(searchQuery.toLowerCase())
-          );
-          results.push(...filtered.map(f => ({ ...f, bucket })));
+        if (!data) return;
+        
+        for (const item of data) {
+          if (item.id) { // It's a file
+            if (item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+              results.push({ 
+                ...item, 
+                bucket,
+                fullPath: path ? `${path}/${item.name}` : item.name
+              });
+            }
+          } else { // It's a folder, search recursively
+            const folderPath = path ? `${path}/${item.name}` : item.name;
+            await searchBucket(bucket, folderPath);
+          }
         }
+      };
+      
+      // Search all buckets
+      for (const bucket of buckets) {
+        await searchBucket(bucket);
       }
+      
       return results;
     },
     enabled: open && searchQuery.length >= 2
@@ -164,11 +181,11 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
           <CommandGroup heading="Files">
             {storageFiles.map((file: any) => (
               <CommandItem
-                key={`${file.bucket}-${file.name}`}
+                key={`${file.bucket}-${file.fullPath || file.name}`}
                 onSelect={async () => {
                   const { data } = await supabase.storage
                     .from(file.bucket)
-                    .download(file.name);
+                    .download(file.fullPath || file.name);
                   
                   if (data) {
                     const url = URL.createObjectURL(data);
@@ -185,7 +202,7 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
                 <div className="flex-1">
                   <div className="font-medium">{file.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {file.bucket} • {((file.metadata?.size || 0) / 1024).toFixed(1)} KB
+                    {file.bucket}{file.fullPath && file.fullPath !== file.name ? ` • ${file.fullPath}` : ''}
                   </div>
                 </div>
               </CommandItem>

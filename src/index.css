@@ -169,7 +169,7 @@ All colors MUST be HSL.
   }
 
   [data-sidebar-collapsed="true"] {
-    --content-padding-x: 3rem;
+    --content-padding-x: 1rem;
   }
 
   .openai-container {
@@ -282,6 +282,43 @@ All colors MUST be HSL.
     line-height: 1.5;
     max-width: 100%;
     white-space: normal;
+  }
+
+  /* Force disable ALL Radix UI slide/transform animations */
+  [data-radix-popper-content-wrapper],
+  [data-radix-collection-item] {
+    transform: none !important;
+  }
+
+  /* Disable directional animations on ALL Radix dropdown/popover content */
+  [role="menu"][data-state="open"],
+  [role="menu"][data-state="closed"],
+  [data-radix-dropdown-menu-content],
+  [data-radix-popover-content],
+  [data-radix-context-menu-content],
+  [data-radix-hover-card-content],
+  [data-radix-menubar-content] {
+    animation: none !important;
+    transform: none !important;
+    transition: opacity 0.15s ease, scale 0.15s ease !important;
+  }
+
+  [data-radix-dropdown-menu-content][data-state="open"],
+  [data-radix-popover-content][data-state="open"],
+  [data-radix-context-menu-content][data-state="open"],
+  [data-radix-hover-card-content][data-state="open"],
+  [data-radix-menubar-content][data-state="open"] {
+    opacity: 1;
+    scale: 1;
+  }
+
+  [data-radix-dropdown-menu-content][data-state="closed"],
+  [data-radix-popover-content][data-state="closed"],
+  [data-radix-context-menu-content][data-state="closed"],
+  [data-radix-hover-card-content][data-state="closed"],
+  [data-radix-menubar-content][data-state="closed"] {
+    opacity: 0;
+    scale: 0.95;
   }
 }
 
