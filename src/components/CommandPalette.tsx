@@ -64,7 +64,7 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
       if (!searchQuery || searchQuery.length < 2) return [];
       
       const results: any[] = [];
-      const buckets = ['eeg-raw', 'eeg-reports'];
+      const buckets = ['eeg-raw', 'eeg-reports', 'notes'];
       
       for (const bucket of buckets) {
         const { data, error } = await supabase.storage

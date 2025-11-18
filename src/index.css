@@ -164,14 +164,26 @@ All colors MUST be HSL.
   }
 
   /* OpenAI-style container utilities */
-.openai-container {
-  width: 100%;
-  padding: var(--space-lg) var(--space-xl);
-}
+  :root {
+    --content-padding-x: 1.5rem;
+  }
+
+  [data-sidebar-collapsed="true"] {
+    --content-padding-x: 3rem;
+  }
+
+  .openai-container {
+    width: 100%;
+    padding: 1rem var(--content-padding-x);
+  }
   
   @media (max-width: 768px) {
     .openai-container {
-      padding: var(--space-md);
+      padding: 0.75rem 1rem;
+    }
+    
+    [data-sidebar-collapsed="true"] .openai-container {
+      padding: 0.75rem 1.5rem;
     }
   }
 
@@ -265,10 +277,11 @@ All colors MUST be HSL.
   /* Fix folder button text overflow */
   .folder-btn-text {
     word-break: break-word;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
     hyphens: auto;
     line-height: 1.5;
     max-width: 100%;
+    white-space: normal;
   }
 }
 

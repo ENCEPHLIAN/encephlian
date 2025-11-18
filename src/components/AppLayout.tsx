@@ -98,6 +98,7 @@ export default function AppLayout() {
   const isMobile = useIsMobile();
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
+  const { state } = useSidebar();
 
   // Fetch user profile data with query
   const { data: profile } = useQuery({
@@ -203,7 +204,10 @@ export default function AppLayout() {
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto">
+          <main 
+            className="flex-1 overflow-y-auto" 
+            data-sidebar-collapsed={state === "collapsed"}
+          >
             <div className="openai-container">
               <Breadcrumbs />
               <Outlet />
