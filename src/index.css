@@ -164,28 +164,28 @@ All colors MUST be HSL.
   }
 
   /* OpenAI-style container utilities */
-  :root {
-    --content-padding-x: 1.5rem;
-  }
+:root {
+  --content-padding-x: 1.5rem;
+}
 
-  [data-sidebar-collapsed="true"] {
-    --content-padding-x: 1rem;
-  }
+[data-sidebar-collapsed="true"] {
+  --content-padding-x: 0.5rem;
+}
 
+.openai-container {
+  width: 100%;
+  padding: 0.75rem var(--content-padding-x);
+}
+
+@media (max-width: 768px) {
   .openai-container {
-    width: 100%;
-    padding: 1rem var(--content-padding-x);
+    padding: 0.75rem 1rem;
   }
   
-  @media (max-width: 768px) {
-    .openai-container {
-      padding: 0.75rem 1rem;
-    }
-    
-    [data-sidebar-collapsed="true"] .openai-container {
-      padding: 0.75rem 1.5rem;
-    }
+  [data-sidebar-collapsed="true"] .openai-container {
+    padding: 0.75rem 0.75rem;
   }
+}
 
   .openai-section {
     margin-top: var(--space-xl);
@@ -284,41 +284,51 @@ All colors MUST be HSL.
     white-space: normal;
   }
 
-  /* Force disable ALL Radix UI slide/transform animations */
-  [data-radix-popper-content-wrapper],
-  [data-radix-collection-item] {
-    transform: none !important;
-  }
+/* Force disable ONLY slide/directional animations, NOT positioning transforms */
+[data-radix-dropdown-menu-content],
+[data-radix-popover-content],
+[data-radix-context-menu-content],
+[data-radix-hover-card-content],
+[data-radix-menubar-content] {
+  animation: none !important;
+}
 
-  /* Disable directional animations on ALL Radix dropdown/popover content */
-  [role="menu"][data-state="open"],
-  [role="menu"][data-state="closed"],
-  [data-radix-dropdown-menu-content],
-  [data-radix-popover-content],
-  [data-radix-context-menu-content],
-  [data-radix-hover-card-content],
-  [data-radix-menubar-content] {
-    animation: none !important;
-    transform: none !important;
-    transition: opacity 0.15s ease, scale 0.15s ease !important;
-  }
+/* Only fade and scale, starting from anchor point */
+[data-radix-dropdown-menu-content][data-state="open"],
+[data-radix-popover-content][data-state="open"],
+[data-radix-context-menu-content][data-state="open"],
+[data-radix-hover-card-content][data-state="open"],
+[data-radix-menubar-content][data-state="open"] {
+  animation: fadeIn 0.15s ease, scaleIn 0.15s ease !important;
+}
 
-  [data-radix-dropdown-menu-content][data-state="open"],
-  [data-radix-popover-content][data-state="open"],
-  [data-radix-context-menu-content][data-state="open"],
-  [data-radix-hover-card-content][data-state="open"],
-  [data-radix-menubar-content][data-state="open"] {
-    opacity: 1;
-    scale: 1;
-  }
+[data-radix-dropdown-menu-content][data-state="closed"],
+[data-radix-popover-content][data-state="closed"],
+[data-radix-context-menu-content][data-state="closed"],
+[data-radix-hover-card-content][data-state="closed"],
+[data-radix-menubar-content][data-state="closed"] {
+  animation: fadeOut 0.15s ease, scaleOut 0.15s ease !important;
+}
 
-  [data-radix-dropdown-menu-content][data-state="closed"],
-  [data-radix-popover-content][data-state="closed"],
-  [data-radix-context-menu-content][data-state="closed"],
-  [data-radix-hover-card-content][data-state="closed"],
-  [data-radix-menubar-content][data-state="closed"] {
-    opacity: 0;
-    scale: 0.95;
-  }
+/* Define the animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); }
+  to { transform: scale(1); }
+}
+
+@keyframes scaleOut {
+  from { transform: scale(1); }
+  to { transform: scale(0.95); }
+}
 }
 

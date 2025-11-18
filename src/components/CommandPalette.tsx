@@ -64,7 +64,7 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
       if (!searchQuery || searchQuery.length < 2) return [];
       
       const results: any[] = [];
-      const buckets = ['eeg-raw', 'eeg-reports', 'notes'];
+      const buckets = ['eeg-raw', 'eeg-reports', 'eeg-clean', 'eeg-json'];
       
       // Recursive function to search through folders
       const searchBucket = async (bucket: string, path: string = '') => {
@@ -75,7 +75,8 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
         if (!data) return;
         
         for (const item of data) {
-          if (item.id) { // It's a file
+          // Files have NO 'id' in list response, folders do
+          if (item.id === null || item.id === undefined) { // It's a file
             if (item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
               results.push({ 
                 ...item, 
