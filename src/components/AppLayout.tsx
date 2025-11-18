@@ -91,7 +91,7 @@ function AppSidebar() {
   );
 }
 
-export default function AppLayout() {
+function AppLayoutContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -142,7 +142,7 @@ export default function AppLayout() {
   };
 
   return (
-    <SidebarProvider defaultOpen={!isMobile}>
+    <>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
         
@@ -217,6 +217,16 @@ export default function AppLayout() {
           <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
         </div>
       </div>
+    </>
+  );
+}
+
+export default function AppLayout() {
+  const isMobile = useIsMobile();
+  
+  return (
+    <SidebarProvider defaultOpen={!isMobile}>
+      <AppLayoutContent />
     </SidebarProvider>
   );
 }
