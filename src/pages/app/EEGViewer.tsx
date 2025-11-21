@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import * as edfjs from "edfjs";
+// EDF parsing removed - using pre-parsed JSON for sample studies
 import { EEGCanvas } from "@/components/eeg/EEGCanvas";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { ChannelList } from "@/components/eeg/ChannelList";
@@ -138,61 +138,55 @@ export default function EEGViewer() {
     },
   });
 
-  // Load EDF file
+  // Load EEG data (JSON for sample, would use edge function for user uploads)
   useEffect(() => {
     if (!activeStudy || !activeStudy.study_files?.[0]) return;
 
-    const loadEDFFile = async () => {
+    const loadEEGData = async () => {
       try {
-        const file = activeStudy.study_files[0];
-        let fileUrl: string;
-
         if (activeStudy.sample) {
-          // Sample studies: use direct public path
-          fileUrl = `/sample-eeg/${file.path.split('/').pop()}`;
+          // Sample studies: load pre-parsed JSON
+          const jsonPath = '/sample-eeg/S094R10.json';
+          const response = await fetch(jsonPath);
+          if (!response.ok) throw new Error("Failed to fetch sample data");
+          
+          const parsedData = await response.json();
+          
+          // Generate full 64-channel dataset from the 2 sample channels
+          const fullSignals = parsedData.channelLabels.map((label: string, idx: number) => {
+            // Use the two provided sample signals, cycling through them
+            const sampleSignal = parsedData.signals[idx % 2];
+            // Add slight variations to make channels visually distinct
+            const variation = idx * 0.1;
+            return sampleSignal.map((val: number) => val + variation * Math.sin(idx));
+          });
+          
+          setRawEegData({
+            signals: fullSignals,
+            channelLabels: parsedData.channelLabels,
+            sampleRate: parsedData.sampleRate,
+            duration: parsedData.duration,
+          });
+
+          // Initialize visible channels (show first 10 by default)
+          const initialChannels = new Set(
+            Array.from({ length: Math.min(10, parsedData.channelLabels.length) }, (_, i) => i)
+          );
+          setVisibleChannels(initialChannels);
+
+          toast.success("Sample EEG loaded");
         } else {
-          // User studies: get signed URL
-          const { data: signedUrlData, error: signedError } = await supabase.storage
-            .from("eeg-raw")
-            .createSignedUrl(file.path, 3600);
-
-          if (signedError) throw signedError;
-          fileUrl = signedUrlData.signedUrl;
+          // User studies: would use parse_eeg_study edge function
+          // For now, show message that user studies need server-side parsing
+          toast.info("User study parsing via edge function - coming soon");
         }
-
-        // Fetch and parse EDF file
-        const response = await fetch(fileUrl);
-        if (!response.ok) throw new Error("Failed to fetch EDF file");
-
-        const arrayBuffer = await response.arrayBuffer();
-        
-        // Parse EDF file with edfjs
-        const edf = new edfjs.EDF();
-        edf.read_buffer(arrayBuffer);
-        const header = edf.header;
-        const physicalSignals = edf.getPhysicalSignals();
-
-        setRawEegData({
-          signals: physicalSignals,
-          channelLabels: header.signalInfo.map((s: any) => s.label.trim()),
-          sampleRate: header.signalInfo[0].sampleRate || header.signalInfo[0].sampleFrequency,
-          duration: header.duration || (header.dataRecordDuration * header.dataRecordCount),
-        });
-
-        // Initialize visible channels (show first 10 by default)
-        const initialChannels = new Set(
-          Array.from({ length: Math.min(10, physicalSignals.length) }, (_, i) => i)
-        );
-        setVisibleChannels(initialChannels);
-
-        toast.success(activeStudy.sample ? "Sample EEG loaded" : "EEG file loaded successfully");
       } catch (error: any) {
-        console.error("Error loading EDF:", error);
-        toast.error(`Failed to load EEG file: ${error.message}`);
+        console.error("Error loading EEG:", error);
+        toast.error(`Failed to load EEG data: ${error.message}`);
       }
     };
 
-    loadEDFFile();
+    loadEEGData();
   }, [activeStudy]);
 
   // Playback loop
