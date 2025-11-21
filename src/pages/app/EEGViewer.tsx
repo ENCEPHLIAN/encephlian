@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import EDFDecoder from "edfdecoder";
+import { EdfReader } from "edfjs";
 import { EEGCanvas } from "@/components/eeg/EEGCanvas";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { ChannelList } from "@/components/eeg/ChannelList";
@@ -165,18 +165,17 @@ export default function EEGViewer() {
         if (!response.ok) throw new Error("Failed to fetch EDF file");
 
         const arrayBuffer = await response.arrayBuffer();
-        const decoder = new EDFDecoder();
-        decoder.setInput(arrayBuffer);
-        decoder.decode();
-
-        const header = decoder.getHeader();
-        const physicalSignals = decoder.getPhysicalSignals();
+        
+        // Parse EDF file with edfjs
+        const edfReader = new EdfReader(arrayBuffer);
+        const header = edfReader.getHeader();
+        const physicalSignals = edfReader.getPhysicalSignals();
 
         setRawEegData({
           signals: physicalSignals,
           channelLabels: header.signalInfo.map((s: any) => s.label.trim()),
-          sampleRate: header.signalInfo[0].sampleRate,
-          duration: header.dataRecordDuration * header.dataRecordCount,
+          sampleRate: header.signalInfo[0].sampleRate || header.signalInfo[0].sampleFrequency,
+          duration: header.duration,
         });
 
         // Initialize visible channels (show first 10 by default)
