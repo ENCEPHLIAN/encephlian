@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +17,8 @@ import { EEGCanvas } from "@/components/eeg/EEGCanvas";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { ChannelList } from "@/components/eeg/ChannelList";
 import { MontageSelector } from "@/components/eeg/MontageSelector";
+import { applyMontage } from "@/lib/eeg/montage-transforms";
+import { getChannelColor } from "@/lib/eeg/channel-groups";
 
 type Marker = {
   id: string;
@@ -31,14 +34,6 @@ export default function EEGViewer() {
   const queryClient = useQueryClient();
   const { theme } = useTheme();
 
-  // EEG Data State
-  const [eegData, setEegData] = useState<{
-    signals: number[][];
-    channelLabels: string[];
-    sampleRate: number;
-    duration: number;
-  } | null>(null);
-
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -46,6 +41,24 @@ export default function EEGViewer() {
   const [amplitudeScale, setAmplitudeScale] = useState(2);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [montage, setMontage] = useState("referential");
+
+  // EEG Data State (original raw data)
+  const [rawEegData, setRawEegData] = useState<{
+    signals: number[][];
+    channelLabels: string[];
+    sampleRate: number;
+    duration: number;
+  } | null>(null);
+  
+  // Transformed data based on montage
+  const eegData = rawEegData ? (() => {
+    const transformed = applyMontage(rawEegData.signals, rawEegData.channelLabels, montage);
+    return {
+      ...rawEegData,
+      signals: transformed.signals,
+      channelLabels: transformed.labels
+    };
+  })() : null;
 
   // Channel Visibility
   const [visibleChannels, setVisibleChannels] = useState<Set<number>>(new Set());
@@ -69,6 +82,23 @@ export default function EEGViewer() {
     },
   });
 
+  // Auto-load sample study if no studyId provided
+  const { data: sampleStudy } = useQuery({
+    queryKey: ["sample-study"],
+    enabled: !studyId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("studies")
+        .select("*, study_files(*)")
+        .eq("sample", true)
+        .limit(1)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+  
   // Fetch selected study
   const { data: study, isLoading: studyLoading } = useQuery({
     queryKey: ["study", studyId],
@@ -86,6 +116,9 @@ export default function EEGViewer() {
       return data;
     },
   });
+  
+  // Use sample study if no study selected
+  const activeStudy = study || sampleStudy;
 
   // Fetch markers
   const { data: markers = [] } = useQuery({
@@ -107,14 +140,14 @@ export default function EEGViewer() {
 
   // Load EDF file
   useEffect(() => {
-    if (!study || !study.study_files?.[0]) return;
+    if (!activeStudy || !activeStudy.study_files?.[0]) return;
 
     const loadEDFFile = async () => {
       try {
-        const file = study.study_files[0];
+        const file = activeStudy.study_files[0];
         let fileUrl: string;
 
-        if (study.sample) {
+        if (activeStudy.sample) {
           // Sample studies: use direct public path
           fileUrl = `/sample-eeg/${file.path.split('/').pop()}`;
         } else {
@@ -139,7 +172,7 @@ export default function EEGViewer() {
         const header = decoder.getHeader();
         const physicalSignals = decoder.getPhysicalSignals();
 
-        setEegData({
+        setRawEegData({
           signals: physicalSignals,
           channelLabels: header.signalInfo.map((s: any) => s.label.trim()),
           sampleRate: header.signalInfo[0].sampleRate,
@@ -152,7 +185,7 @@ export default function EEGViewer() {
         );
         setVisibleChannels(initialChannels);
 
-        toast.success("EEG file loaded successfully");
+        toast.success(activeStudy.sample ? "Sample EEG loaded" : "EEG file loaded successfully");
       } catch (error: any) {
         console.error("Error loading EDF:", error);
         toast.error(`Failed to load EEG file: ${error.message}`);
@@ -160,7 +193,7 @@ export default function EEGViewer() {
     };
 
     loadEDFFile();
-  }, [study]);
+  }, [activeStudy]);
 
   // Playback loop
   useEffect(() => {
@@ -253,45 +286,7 @@ export default function EEGViewer() {
     setVisibleChannels(new Set());
   };
 
-  if (!studyId) {
-    return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-2xl mx-auto space-y-6">
-          <div className="flex items-center gap-4">
-            <Link to="/app/studies">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Studies
-              </Button>
-            </Link>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>EEG Viewer</CardTitle>
-              <CardDescription>Select a study to view EEG recordings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Label>Select Study</Label>
-              <Select onValueChange={(value) => (window.location.href = `/app/viewer?studyId=${value}`)}>
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Choose a study..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableStudies.map((s: any) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.sample ? "Sample: " : ""}
-                      {(s.meta as any)?.patient_name || "Unnamed Study"} - {new Date(s.created_at).toLocaleDateString()}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+  // No early return - sample study will auto-load
 
   if (studyLoading) {
     return (
@@ -301,7 +296,7 @@ export default function EEGViewer() {
     );
   }
 
-  if (!study) {
+  if (!activeStudy) {
     return (
       <div className="min-h-screen bg-background p-6">
         <Card className="max-w-2xl mx-auto">
@@ -313,6 +308,8 @@ export default function EEGViewer() {
       </div>
     );
   }
+  
+  const isSampleStudy = !studyId && activeStudy.sample;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
@@ -327,9 +324,12 @@ export default function EEGViewer() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">EEG Viewer</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-foreground">EEG Viewer</h1>
+                {isSampleStudy && <Badge variant="secondary">Sample Study</Badge>}
+              </div>
               <p className="text-sm text-muted-foreground">
-                {(study.meta as any)?.patient_name || "Unnamed Study"} - {new Date(study.created_at).toLocaleDateString()}
+                {(activeStudy.meta as any)?.patient_name || "Unnamed Study"} - {new Date(activeStudy.created_at).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -350,9 +350,34 @@ export default function EEGViewer() {
 
           {/* Main Area - Waveforms and Controls */}
           <div className="lg:col-span-3 space-y-4">
+            {/* Quick Triage Panel */}
+            {eegData && (
+              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
+                <div className="flex items-center gap-4">
+                  <Badge variant="outline">
+                    Duration: {Math.floor(eegData.duration / 60)}:{(Math.floor(eegData.duration % 60)).toString().padStart(2, "0")}
+                  </Badge>
+                  <Badge variant="outline">
+                    Channels: {eegData.channelLabels.length}
+                  </Badge>
+                  <Badge variant="outline">
+                    Montage: {montage.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                  </Badge>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => toast.info("Marked as normal")}>
+                    Mark as Normal
+                  </Button>
+                  <Button size="sm" variant="default" onClick={() => toast.info("Flagged for review")}>
+                    Flag for Review
+                  </Button>
+                </div>
+              </div>
+            )}
+            
             {/* Waveform Display */}
             <Card>
-              <CardContent className="p-0">
+              <CardContent className="p-2">
                 <div className="h-[500px] bg-card">
                   {eegData ? (
                     <EEGCanvas
@@ -364,6 +389,7 @@ export default function EEGViewer() {
                       amplitudeScale={amplitudeScale}
                       visibleChannels={visibleChannels}
                       theme={theme || "dark"}
+                      markers={markers}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full">
