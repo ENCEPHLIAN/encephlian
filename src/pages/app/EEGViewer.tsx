@@ -15,10 +15,11 @@ import { useTheme } from "next-themes";
 // EDF parsing removed - using pre-parsed JSON for sample studies
 import { EEGCanvas } from "@/components/eeg/EEGCanvas";
 import { EEGControls } from "@/components/eeg/EEGControls";
-import { ChannelList } from "@/components/eeg/ChannelList";
+import { ChannelGroupList } from "@/components/eeg/ChannelGroupList";
 import { MontageSelector } from "@/components/eeg/MontageSelector";
 import { applyMontage } from "@/lib/eeg/montage-transforms";
-import { getChannelColor } from "@/lib/eeg/channel-groups";
+import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
+import { filterStandardChannels } from "@/lib/eeg/standard-channels";
 
 type Marker = {
   id: string;
@@ -60,8 +61,27 @@ export default function EEGViewer() {
     };
   })() : null;
 
-  // Channel Visibility
-  const [visibleChannels, setVisibleChannels] = useState<Set<number>>(new Set());
+  // Channel Group Visibility
+  const [visibleGroups, setVisibleGroups] = useState<Set<ChannelGroup>>(
+    new Set(["frontal", "central", "temporal", "occipital"])
+  );
+  
+  // Compute visible channels based on selected groups
+  const visibleChannels = eegData ? (() => {
+    const standardIndices = filterStandardChannels(eegData.channelLabels);
+    const standardLabels = standardIndices.map(i => eegData.channelLabels[i]);
+    const groups = groupChannels(standardLabels);
+    
+    const visible = new Set<number>();
+    groups.forEach((localIndices, group) => {
+      if (visibleGroups.has(group)) {
+        localIndices.forEach(localIdx => {
+          visible.add(standardIndices[localIdx]);
+        });
+      }
+    });
+    return visible;
+  })() : new Set<number>();
 
   // Marker State
   const [newMarkerType, setNewMarkerType] = useState("event");
@@ -168,11 +188,7 @@ export default function EEGViewer() {
             duration: parsedData.duration,
           });
 
-          // Initialize visible channels (show first 10 by default)
-          const initialChannels = new Set(
-            Array.from({ length: Math.min(10, parsedData.channelLabels.length) }, (_, i) => i)
-          );
-          setVisibleChannels(initialChannels);
+          // All groups are selected by default (set in state initialization)
 
           toast.success("Sample EEG loaded");
         } else {
@@ -259,25 +275,24 @@ export default function EEGViewer() {
     toast.info("Export functionality coming soon");
   };
 
-  const handleToggleChannel = (index: number) => {
-    setVisibleChannels((prev) => {
+  const handleToggleGroup = (group: ChannelGroup) => {
+    setVisibleGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) {
-        next.delete(index);
+      if (next.has(group)) {
+        next.delete(group);
       } else {
-        next.add(index);
+        next.add(group);
       }
       return next;
     });
   };
 
-  const handleSelectAllChannels = () => {
-    if (!eegData) return;
-    setVisibleChannels(new Set(Array.from({ length: eegData.signals.length }, (_, i) => i)));
+  const handleSelectAllGroups = () => {
+    setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
   };
 
-  const handleDeselectAllChannels = () => {
-    setVisibleChannels(new Set());
+  const handleDeselectAllGroups = () => {
+    setVisibleGroups(new Set());
   };
 
   // No early return - sample study will auto-load
@@ -334,14 +349,14 @@ export default function EEGViewer() {
 
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Left Sidebar - Channels */}
+          {/* Left Sidebar - Channel Groups */}
           <div className="lg:col-span-1">
-            <ChannelList
+            <ChannelGroupList
               channelLabels={eegData?.channelLabels || []}
-              visibleChannels={visibleChannels}
-              onToggleChannel={handleToggleChannel}
-              onSelectAll={handleSelectAllChannels}
-              onDeselectAll={handleDeselectAllChannels}
+              visibleGroups={visibleGroups}
+              onToggleGroup={handleToggleGroup}
+              onSelectAll={handleSelectAllGroups}
+              onDeselectAll={handleDeselectAllGroups}
             />
           </div>
 
@@ -355,7 +370,7 @@ export default function EEGViewer() {
                     Duration: {Math.floor(eegData.duration / 60)}:{(Math.floor(eegData.duration % 60)).toString().padStart(2, "0")}
                   </Badge>
                   <Badge variant="outline">
-                    Channels: {eegData.channelLabels.length}
+                    Channels: {visibleChannels.size} / {filterStandardChannels(eegData.channelLabels).length}
                   </Badge>
                   <Badge variant="outline">
                     Montage: {montage.replace("-", " ").replace(/\b\w/g, l => l.toUpperCase())}
