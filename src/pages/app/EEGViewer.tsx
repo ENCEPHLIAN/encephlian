@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { EdfReader } from "edfjs";
+import * as edfjs from "edfjs";
 import { EEGCanvas } from "@/components/eeg/EEGCanvas";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { ChannelList } from "@/components/eeg/ChannelList";
@@ -167,15 +167,16 @@ export default function EEGViewer() {
         const arrayBuffer = await response.arrayBuffer();
         
         // Parse EDF file with edfjs
-        const edfReader = new EdfReader(arrayBuffer);
-        const header = edfReader.getHeader();
-        const physicalSignals = edfReader.getPhysicalSignals();
+        const edf = new edfjs.EDF();
+        edf.read_buffer(arrayBuffer);
+        const header = edf.header;
+        const physicalSignals = edf.getPhysicalSignals();
 
         setRawEegData({
           signals: physicalSignals,
           channelLabels: header.signalInfo.map((s: any) => s.label.trim()),
           sampleRate: header.signalInfo[0].sampleRate || header.signalInfo[0].sampleFrequency,
-          duration: header.duration,
+          duration: header.duration || (header.dataRecordDuration * header.dataRecordCount),
         });
 
         // Initialize visible channels (show first 10 by default)
