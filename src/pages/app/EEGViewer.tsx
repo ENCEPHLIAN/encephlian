@@ -83,7 +83,7 @@ export default function EEGViewer() {
   });
 
   // Auto-load sample study if no studyId provided
-  const { data: sampleStudy } = useQuery({
+  const { data: sampleStudy, isLoading: sampleLoading } = useQuery({
     queryKey: ["sample-study"],
     enabled: !studyId,
     queryFn: async () => {
@@ -92,7 +92,7 @@ export default function EEGViewer() {
         .select("*, study_files(*)")
         .eq("sample", true)
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (error) throw error;
       return data;
@@ -288,10 +288,13 @@ export default function EEGViewer() {
 
   // No early return - sample study will auto-load
 
-  if (studyLoading) {
+  if (studyLoading || sampleLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center space-y-2">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Loading EEG data...</p>
+        </div>
       </div>
     );
   }
