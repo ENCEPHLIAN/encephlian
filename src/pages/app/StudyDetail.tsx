@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, FileSignature, FileText } from "lucide-react";
 import dayjs from "dayjs";
+import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -125,6 +126,9 @@ export default function StudyDetail() {
           </CardContent>
         </Card>
       </div>
+      
+      {/* AI Anomaly Detection Preview */}
+      <AnomalyDetectionPreview studyId={id} />
 
       <Card>
         <CardHeader>

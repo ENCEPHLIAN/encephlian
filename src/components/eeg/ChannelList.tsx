@@ -2,6 +2,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { getChannelColor } from "@/lib/eeg/channel-groups";
 
 interface ChannelListProps {
   channelLabels: string[];
@@ -34,21 +35,28 @@ export function ChannelList({
       
       <ScrollArea className="flex-1 -mx-2 px-2">
         <div className="space-y-2">
-          {channelLabels.map((label, index) => (
-            <div key={index} className="flex items-center space-x-2 py-1">
-              <Checkbox
-                id={`channel-${index}`}
-                checked={visibleChannels.has(index)}
-                onCheckedChange={() => onToggleChannel(index)}
-              />
-              <label
-                htmlFor={`channel-${index}`}
-                className="text-sm font-mono cursor-pointer flex-1"
-              >
-                {label}
-              </label>
-            </div>
-          ))}
+          {channelLabels.map((label, index) => {
+            const color = getChannelColor(label);
+            return (
+              <div key={index} className="flex items-center space-x-2 py-1 group">
+                <Checkbox
+                  id={`channel-${index}`}
+                  checked={visibleChannels.has(index)}
+                  onCheckedChange={() => onToggleChannel(index)}
+                />
+                <div 
+                  className="w-3 h-3 rounded-sm shrink-0" 
+                  style={{ backgroundColor: color.stroke }}
+                />
+                <label
+                  htmlFor={`channel-${index}`}
+                  className="text-sm font-mono cursor-pointer flex-1 group-hover:text-foreground transition-colors"
+                >
+                  {label}
+                </label>
+              </div>
+            );
+          })}
         </div>
       </ScrollArea>
     </div>

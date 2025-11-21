@@ -1,4 +1,12 @@
 import { useEffect, useRef } from "react";
+import { getChannelColor } from "@/lib/eeg/channel-groups";
+
+interface Marker {
+  id: string;
+  timestamp_sec: number;
+  marker_type: string;
+  label?: string;
+}
 
 interface EEGCanvasProps {
   signals: number[][];
@@ -9,6 +17,7 @@ interface EEGCanvasProps {
   amplitudeScale: number;
   visibleChannels: Set<number>;
   theme: string;
+  markers?: Marker[];
 }
 
 export function EEGCanvas({
@@ -20,6 +29,7 @@ export function EEGCanvas({
   amplitudeScale,
   visibleChannels,
   theme,
+  markers = [],
 }: EEGCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -81,15 +91,21 @@ export function EEGCanvas({
       if (!signal) return;
 
       const baselineY = (displayIndex + 0.5) * channelHeight;
+      
+      // Get channel color based on anatomical group
+      const channelColor = getChannelColor(channelLabels[channelIndex]);
 
-      // Draw channel label
-      ctx.fillStyle = theme === "dark" ? "#a0a0a0" : "#404040";
-      ctx.font = "12px monospace";
-      ctx.fillText(channelLabels[channelIndex] || `Ch${channelIndex + 1}`, 5, baselineY - channelHeight / 2 + 15);
+      // Draw channel label with color indicator
+      ctx.fillStyle = channelColor.stroke;
+      ctx.fillRect(2, baselineY - channelHeight / 2 + 5, 3, 12);
+      
+      ctx.fillStyle = theme === "dark" ? "#e0e0e0" : "#202020";
+      ctx.font = "14px monospace";
+      ctx.fillText(channelLabels[channelIndex] || `Ch${channelIndex + 1}`, 10, baselineY - channelHeight / 2 + 17);
 
-      // Draw signal
-      ctx.strokeStyle = theme === "dark" ? "#00ff00" : "#000000";
-      ctx.lineWidth = 1;
+      // Draw signal with channel color
+      ctx.strokeStyle = channelColor.stroke;
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
 
       const endSample = Math.min(startSample + samplesToShow, signal.length);
@@ -108,6 +124,36 @@ export function EEGCanvas({
 
       ctx.stroke();
     });
+    
+    // Draw markers on waveform
+    const markerColors: Record<string, string> = {
+      event: "#3b82f6",
+      seizure: "#ef4444",
+      artifact: "#f59e0b",
+      sleep: "#8b5cf6"
+    };
+    
+    markers.forEach(marker => {
+      const markerTime = marker.timestamp_sec - currentTime;
+      if (markerTime >= 0 && markerTime <= timeWindow) {
+        const x = (markerTime / timeWindow) * width;
+        
+        // Draw dashed vertical line
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = markerColors[marker.marker_type] || "#888888";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Draw label at top
+        ctx.fillStyle = markerColors[marker.marker_type] || "#888888";
+        ctx.font = "bold 11px monospace";
+        ctx.fillText(marker.label || marker.marker_type, x + 3, 15);
+      }
+    });
 
     // Draw time labels
     ctx.fillStyle = theme === "dark" ? "#a0a0a0" : "#404040";
@@ -120,7 +166,7 @@ export function EEGCanvas({
       ctx.fillText(`${minutes}:${seconds.toString().padStart(2, "0")}`, x + 2, height - 5);
     }
 
-  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme]);
+  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers]);
 
   return (
     <canvas
