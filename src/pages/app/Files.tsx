@@ -34,6 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { FilePreviewDialog } from "@/components/FilePreviewDialog";
 
 dayjs.extend(relativeTime);
 
@@ -71,6 +72,7 @@ export default function Files() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [dragActive, setDragActive] = useState(false);
+  const [previewFile, setPreviewFile] = useState<any>(null);
 
   const { data: files, isLoading } = useQuery({
     queryKey: ["storage-files", selectedBucket, currentPath],
@@ -236,6 +238,35 @@ export default function Files() {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const handleGenerateReport = async (filePath: string) => {
+    try {
+      toast.info("Creating study from file...");
+      
+      const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
+        body: { filePath, fileName: filePath.split('/').pop() }
+      });
+
+      if (error) throw error;
+
+      if (data?.studyId) {
+        toast.success("Study created! Generating AI draft...");
+        
+        const { error: aiError } = await supabase.functions.invoke("generate_ai_report", {
+          body: { study_id: data.studyId }
+        });
+
+        if (aiError) {
+          toast.error("AI draft generation failed, but study was created");
+        } else {
+          toast.success("AI draft generated! View in Studies page");
+        }
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      toast.error("Failed to create study");
+    }
   };
 
   const filteredFiles = files?.filter(file => 
@@ -408,7 +439,15 @@ export default function Files() {
                         viewMode === "grid" && "flex-col items-start"
                       )}
                     >
-                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div 
+                        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                        onClick={() => setPreviewFile({
+                          name: file.name,
+                          path: currentPath ? `${currentPath}/${file.name}` : file.name,
+                          size: file.metadata?.size || 0,
+                          created_at: file.created_at || file.updated_at
+                        })}
+                      >
                         <File className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">{file.name}</p>
@@ -453,6 +492,17 @@ export default function Files() {
           </CardContent>
         </Card>
       </div>
+
+      {/* File Preview Dialog */}
+      {previewFile && (
+        <FilePreviewDialog
+          file={previewFile}
+          bucket={selectedBucket}
+          open={!!previewFile}
+          onOpenChange={(open) => !open && setPreviewFile(null)}
+          onGenerateReport={handleGenerateReport}
+        />
+      )}
     </div>
   );
 }

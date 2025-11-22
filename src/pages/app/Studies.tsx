@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, FileText, Eye, FolderOpen } from "lucide-react";
+import { Loader2, Search, FileText, Eye, FolderOpen, Download, Upload } from "lucide-react";
 import dayjs from "dayjs";
+import { useToast } from "@/hooks/use-toast";
+import { useRef } from "react";
 
 const stateColors = {
   uploaded: "bg-blue-500",
@@ -22,6 +24,8 @@ const stateColors = {
 
 export default function Studies() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
 
@@ -57,6 +61,110 @@ export default function Studies() {
     );
   });
 
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith('.edf')) {
+      toast({
+        title: "Invalid file type",
+        description: "Only .edf files are supported",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      toast({ title: "Uploading file..." });
+      
+      const filePath = `${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("eeg-raw")
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      toast({ title: "Creating study..." });
+      const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
+        body: { filePath, fileName: file.name }
+      });
+
+      if (error) throw error;
+
+      if (data?.studyId) {
+        toast({ title: "Generating AI draft..." });
+        await supabase.functions.invoke("generate_ai_report", {
+          body: { study_id: data.studyId }
+        });
+        
+        toast({
+          title: "Success!",
+          description: "Study created and AI draft generated",
+        });
+        
+        navigate(`/app/studies/${data.studyId}`);
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to create study from uploaded file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDownloadReport = async (study: any) => {
+    try {
+      const { data: report } = await supabase
+        .from("reports")
+        .select("pdf_path")
+        .eq("study_id", study.id)
+        .single();
+
+      if (!report?.pdf_path) {
+        toast({ title: "Generating PDF...", description: "Please wait" });
+        
+        const { data: reportData } = await supabase
+          .from("reports")
+          .select("id")
+          .eq("study_id", study.id)
+          .single();
+
+        if (reportData) {
+          await supabase.functions.invoke("generate_report_pdf", {
+            body: { reportId: reportData.id }
+          });
+        }
+        
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from("eeg-reports")
+        .download(report.pdf_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-${study.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({ title: "Download started" });
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        title: "Download failed",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -73,6 +181,17 @@ export default function Studies() {
           <p className="text-muted-foreground">View and manage all EEG studies</p>
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => fileInputRef.current?.click()}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Study
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".edf"
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
           <Button variant="outline" onClick={() => navigate('/app/viewer')}>
             <Eye className="h-4 w-4 mr-2" />
             EEG Viewer
@@ -172,6 +291,16 @@ export default function Studies() {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
+                        {study.state === 'signed' && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownloadReport(study)}
+                            title="Download Report"
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
