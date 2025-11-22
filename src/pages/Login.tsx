@@ -33,7 +33,9 @@ export default function Login() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) {
         navigate("/app/dashboard");
       }
@@ -70,9 +72,9 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const isEmailValid = validateEmail(email);
-    
+
     // Only validate password for signup
     if (mode === "signup") {
       const isPasswordValid = validatePassword(password);
@@ -93,8 +95,8 @@ export default function Login() {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`
-          }
+            emailRedirectTo: `${window.location.origin}/`,
+          },
         });
         if (error) throw error;
         toast({
@@ -134,40 +136,36 @@ export default function Login() {
       {!showForm && (
         <div className="text-center space-y-12 animate-fade-in">
           {/* MIND - Large and TIGHT */}
-          <h1 
+          <h1
             className="text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter leading-none text-foreground"
-            style={{ 
-              fontFamily: 'Montserrat', 
+            style={{
+              fontFamily: "Montserrat",
               fontWeight: 900,
-              letterSpacing: '-0.05em'
+              letterSpacing: "-0.05em",
             }}
           >
             MIND
           </h1>
-          
+
           {/* Subtitle */}
           <p className="text-sm md:text-base text-muted-foreground tracking-wide uppercase font-light">
             Machine Intelligence for Neural Data
           </p>
-          
+
           {/* encephlian - small and subtle */}
-          <p 
+          <p
             className="text-sm font-light tracking-tight opacity-40"
-            style={{ 
-              fontFamily: 'Montserrat', 
+            style={{
+              fontFamily: "Montserrat",
               fontWeight: 300,
-              letterSpacing: '-0.02em'
+              letterSpacing: "-0.02em",
             }}
           >
-            encephlian
+            ENCEPHLIAN
           </p>
-          
+
           {/* CTA Button */}
-          <Button 
-            onClick={() => setShowForm(true)}
-            size="lg"
-            className="px-12 py-6 text-lg font-medium mt-8"
-          >
+          <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-lg font-medium mt-8">
             ACCESS CLINIC DASHBOARD
           </Button>
         </div>
@@ -179,36 +177,36 @@ export default function Login() {
           {/* Header with logo + ENCEPHLIAN - top-left */}
           <div className="absolute top-6 left-6 flex items-center gap-3">
             <img src={logo} alt="ENCEPHLIAN Logo" className="h-14 w-14" />
-            <span 
+            <span
               className="text-2xl font-extrabold tracking-tight text-foreground leading-none"
-              style={{ 
-                fontFamily: 'Montserrat', 
+              style={{
+                fontFamily: "Montserrat",
                 fontWeight: 800,
-                letterSpacing: '-0.03em'
+                letterSpacing: "-0.03em",
               }}
             >
               ENCEPHLIAN
             </span>
           </div>
-          
+
           <div className="flex flex-col items-center justify-center">
             {/* MIND - Smaller, centered */}
-            <h1 
+            <h1
               className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter mb-2 text-foreground"
-              style={{ 
-                fontFamily: 'Montserrat', 
+              style={{
+                fontFamily: "Montserrat",
                 fontWeight: 700,
-                letterSpacing: '-0.05em'
+                letterSpacing: "-0.05em",
               }}
             >
               MIND
             </h1>
-            
+
             {/* Subtitle */}
             <p className="text-sm text-muted-foreground mb-12 tracking-wide uppercase">
               Machine Intelligence for Neural Data
             </p>
-            
+
             {/* Login Form Card */}
             <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
               <Tabs defaultValue="signin" className="w-full">
@@ -216,7 +214,7 @@ export default function Login() {
                   <TabsTrigger value="signin">Sign In</TabsTrigger>
                   <TabsTrigger value="signup">Sign Up</TabsTrigger>
                 </TabsList>
-                
+
                 <TabsContent value="signin">
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
@@ -232,11 +230,9 @@ export default function Login() {
                         }}
                         required
                       />
-                      {emailError && (
-                        <p className="text-sm text-destructive">{emailError}</p>
-                      )}
+                      {emailError && <p className="text-sm text-destructive">{emailError}</p>}
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label htmlFor="password-signin">Password</Label>
                       <div className="relative">
@@ -258,16 +254,10 @@ export default function Login() {
                           {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                       </div>
-                      {passwordError && (
-                        <p className="text-sm text-destructive">{passwordError}</p>
-                      )}
+                      {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
                     </div>
-                    
-                    <Button 
-                      type="submit" 
-                      className="w-full mt-6" 
-                      disabled={isLoading}
-                    >
+
+                    <Button type="submit" className="w-full mt-6" disabled={isLoading}>
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -279,7 +269,7 @@ export default function Login() {
                     </Button>
                   </form>
                 </TabsContent>
-                
+
                 <TabsContent value="signup">
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-2">
@@ -295,11 +285,9 @@ export default function Login() {
                         }}
                         required
                       />
-                      {emailError && (
-                        <p className="text-sm text-destructive">{emailError}</p>
-                      )}
+                      {emailError && <p className="text-sm text-destructive">{emailError}</p>}
                     </div>
-                    
+
                     <div className="space-y-2">
                       <Label htmlFor="password-signup">Password</Label>
                       <div className="relative">
@@ -322,16 +310,10 @@ export default function Login() {
                           {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                       </div>
-                      {passwordError && (
-                        <p className="text-sm text-destructive">{passwordError}</p>
-                      )}
+                      {passwordError && <p className="text-sm text-destructive">{passwordError}</p>}
                     </div>
-                    
-                    <Button 
-                      type="submit" 
-                      className="w-full mt-6" 
-                      disabled={isLoading}
-                    >
+
+                    <Button type="submit" className="w-full mt-6" disabled={isLoading}>
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
