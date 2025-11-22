@@ -416,6 +416,33 @@ export type Database = {
         }
         Relationships: []
       }
+      report_templates: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          style_config: Json | null
+          template_content: Json
+          type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          style_config?: Json | null
+          template_content: Json
+          type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          style_config?: Json | null
+          template_content?: Json
+          type?: string | null
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           content: Json
@@ -515,12 +542,14 @@ export type Database = {
           indication: string | null
           meta: Json | null
           montage: string | null
+          original_format: string | null
           owner: string
           reference: string | null
           sample: boolean | null
           sla: string
           srate_hz: number | null
           state: string | null
+          uploaded_file_path: string | null
         }
         Insert: {
           clinic_id: string
@@ -530,12 +559,14 @@ export type Database = {
           indication?: string | null
           meta?: Json | null
           montage?: string | null
+          original_format?: string | null
           owner: string
           reference?: string | null
           sample?: boolean | null
           sla?: string
           srate_hz?: number | null
           state?: string | null
+          uploaded_file_path?: string | null
         }
         Update: {
           clinic_id?: string
@@ -545,12 +576,14 @@ export type Database = {
           indication?: string | null
           meta?: Json | null
           montage?: string | null
+          original_format?: string | null
           owner?: string
           reference?: string | null
           sample?: boolean | null
           sla?: string
           srate_hz?: number | null
           state?: string | null
+          uploaded_file_path?: string | null
         }
         Relationships: [
           {

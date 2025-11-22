@@ -4,12 +4,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileSignature, FileText } from "lucide-react";
+import { Loader2, FileSignature, FileText, Download } from "lucide-react";
 import dayjs from "dayjs";
 import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
+import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>();
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState(false);
 
   const { data: study, isLoading } = useQuery({
     queryKey: ["study", id],
@@ -44,6 +48,59 @@ export default function StudyDetail() {
   const patientAge = meta?.patient_age;
   const patientGender = meta?.patient_gender;
 
+  const handleDownloadReport = async () => {
+    setDownloading(true);
+    try {
+      const report = study.reports?.[0];
+      if (!report) {
+        toast({
+          title: "No report found",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!report.pdf_path) {
+        toast({ title: "Generating PDF...", description: "Please wait" });
+        
+        await supabase.functions.invoke("generate_report_pdf", {
+          body: { reportId: report.id }
+        });
+        
+        toast({
+          title: "PDF generated",
+          description: "Refresh to download",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.storage
+        .from("eeg-reports")
+        .download(report.pdf_path);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-${study.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast({ title: "Download started" });
+    } catch (error) {
+      console.error("Download error:", error);
+      toast({
+        title: "Download failed",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className="space-y-8 max-w-4xl">
       <div className="flex items-center justify-between">
@@ -70,6 +127,12 @@ export default function StudyDetail() {
                 <FileSignature className="mr-2 h-4 w-4" />
                 Review & Sign
               </Link>
+            </Button>
+          )}
+          {study.state === 'signed' && (
+            <Button onClick={handleDownloadReport} disabled={downloading}>
+              <Download className="mr-2 h-4 w-4" />
+              {downloading ? "Downloading..." : "Download Report"}
             </Button>
           )}
         </div>
