@@ -18,8 +18,10 @@ export default function Support() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Support Center</h1>
-        <p className="text-muted-foreground">Get help and find answers to your questions</p>
+        <h1 className="text-[var(--text-3xl)] font-bold">Support Center</h1>
+        <p className="text-[var(--text-base)] text-muted-foreground mt-2">
+          Get help and find answers to your questions
+        </p>
       </div>
 
       {/* Quick Help Cards */}
@@ -27,10 +29,10 @@ export default function Support() {
         <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => navigate('/app/documentation')}>
           <CardHeader>
             <BookOpen className="h-8 w-8 text-primary mb-2" />
-            <CardTitle className="text-lg">Documentation</CardTitle>
+            <CardTitle className="text-[var(--text-xl)]">Documentation</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[var(--text-sm)] text-muted-foreground leading-relaxed">
               Browse comprehensive guides about TAT, STAT, SLA and workflows
             </p>
           </CardContent>
@@ -39,10 +41,10 @@ export default function Support() {
         <Card className="cursor-pointer hover:shadow-lg transition-shadow opacity-60">
           <CardHeader>
             <MessageSquare className="h-8 w-8 text-primary mb-2" />
-            <CardTitle className="text-lg">Live Chat</CardTitle>
+            <CardTitle className="text-[var(--text-xl)]">Live Chat</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-3">
+            <p className="text-[var(--text-sm)] text-muted-foreground mb-3 leading-relaxed">
               Chat with our support team in real-time
             </p>
             <Badge variant="secondary">Coming Soon</Badge>
@@ -52,10 +54,10 @@ export default function Support() {
         <Card className="cursor-pointer hover:shadow-lg transition-shadow">
           <CardHeader>
             <Mail className="h-8 w-8 text-primary mb-2" />
-            <CardTitle className="text-lg">Email Support</CardTitle>
+            <CardTitle className="text-[var(--text-xl)]">Email Support</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-[var(--text-sm)] text-muted-foreground leading-relaxed">
               Send us an email at{" "}
               <a href="mailto:support@eegplatform.com" className="text-primary hover:underline">
                 support@eegplatform.com
@@ -88,8 +90,10 @@ export default function Support() {
         <CardContent>
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="item-1">
-              <AccordionTrigger>What is TAT (Turn Around Time)?</AccordionTrigger>
-              <AccordionContent>
+              <AccordionTrigger className="text-[var(--text-base)]">
+                What is TAT (Turn Around Time)?
+              </AccordionTrigger>
+              <AccordionContent className="text-[var(--text-sm)] leading-relaxed">
                 TAT is the total time from when a study is uploaded until the final signed report is delivered. 
                 Standard TAT is typically 24-48 hours for routine studies.
               </AccordionContent>

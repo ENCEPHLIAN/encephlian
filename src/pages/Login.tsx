@@ -127,7 +127,7 @@ export default function Login() {
         <div className="w-full max-w-6xl animate-fade-in">
           {/* Header with logo */}
           <div className="absolute top-6 left-6 flex items-center gap-3">
-            <img src={logo} alt="ENCEPHLIAN Logo" className="h-14 w-14" />
+            <img src={logo} alt="ENCEPHLIAN Logo" className="h-16 w-16" />
             <span
               className="text-2xl font-extrabold tracking-tight text-foreground leading-none"
               style={{
