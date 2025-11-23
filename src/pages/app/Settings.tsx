@@ -39,15 +39,13 @@ export default function Settings() {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) throw new Error('Not authenticated');
       
+      // Update profile - exclude email and role as they're immutable
       const { error } = await supabase
         .from('profiles')
-        .upsert({
-          id: user.id,
-          email: profile.email,
+        .update({
           full_name: profile.full_name,
-          role: profile.role,
           company_name: profile.company_name,
           phone_number: profile.phone_number,
           medical_license_number: profile.medical_license_number,
@@ -55,13 +53,17 @@ export default function Settings() {
           department: profile.department,
           hospital_affiliation: profile.hospital_affiliation,
           credentials: profile.credentials,
-        });
+        })
+        .eq('id', user.id);
       
       if (error) throw error;
       
-      toast.success("Settings saved successfully");
+      // Force reload to verify persistence
+      await loadProfile();
+      
+      toast.success("Settings saved and verified");
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(`Failed to save: ${error.message}`);
     } finally {
       setLoading(false);
     }

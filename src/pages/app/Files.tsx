@@ -105,10 +105,14 @@ export default function Files() {
         }));
       }
 
-      // Handle storage buckets
+      // Handle storage buckets with user-specific paths
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
+      const userPath = currentPath ? `${user.id}/${currentPath}` : user.id;
       const { data, error } = await supabase.storage
         .from(selectedBucket)
-        .list(currentPath, { 
+        .list(userPath, { 
           limit: 100, 
           offset: 0, 
           sortBy: { column: "name", order: "asc" } 
@@ -120,8 +124,12 @@ export default function Files() {
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
-      const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-      const { error } = await supabase.storage.from(selectedBucket).upload(filePath, file);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
+      // Enforce user-specific paths for security
+      const userFilePath = `${user.id}/${currentPath ? `${currentPath}/` : ''}${file.name}`;
+      const { error } = await supabase.storage.from(selectedBucket).upload(userFilePath, file);
       if (error) throw error;
     },
     onSuccess: () => {

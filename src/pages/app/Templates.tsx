@@ -42,39 +42,42 @@ export default function Templates() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold">Report Templates</h1>
-        <p className="text-muted-foreground">Standard templates for EEG report generation</p>
+        <h1 className="text-[var(--text-3xl)] font-bold">Report Templates</h1>
+        <p className="text-[var(--text-base)] text-muted-foreground mt-2">
+          Standardized EEG report templates for consistent clinical documentation
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {templates?.map((template) => (
-          <Card key={template.id}>
+          <Card key={template.id} className="openai-card hover:shadow-lg transition-shadow">
             <CardHeader>
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                   <FileText className="h-8 w-8 text-primary" />
                   <div>
-                    <CardTitle>{template.name}</CardTitle>
-                    <CardDescription className="mt-1">
+                    <CardTitle className="text-[var(--text-xl)]">{template.name}</CardTitle>
+                    <CardDescription className="mt-1 text-[var(--text-sm)]">
                       {template.type === 'normal' ? 'Normal EEG findings' : 'Abnormal EEG findings'}
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant={template.type === 'normal' ? 'default' : 'destructive'}>
+                <Badge variant={template.type === 'normal' ? 'default' : 'destructive'} className="uppercase">
                   {template.type}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
+                <p className="text-[var(--text-sm)] text-muted-foreground leading-relaxed">
                   This template is used by the AI to generate structured reports with consistent
-                  formatting and medical terminology.
+                  formatting and medical terminology. Includes montage documentation and clinical-grade language.
                 </p>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => setPreviewTemplate(template)}
                 >
                   <Eye className="h-4 w-4 mr-2" />

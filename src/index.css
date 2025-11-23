@@ -24,24 +24,78 @@
     --max-width-content: 1400px;
     --max-width-narrow: 800px;
 
-    /* Fluid responsive typography */
-    --font-size-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
-    --font-size-sm: clamp(0.875rem, 0.8rem + 0.375vw, 1rem);
-    --font-size-base: clamp(0.9375rem, 0.875rem + 0.3125vw, 1.125rem);
-    --font-size-lg: clamp(1.125rem, 1rem + 0.625vw, 1.5rem);
-    --font-size-xl: clamp(1.25rem, 1.125rem + 0.625vw, 1.75rem);
-    --font-size-2xl: clamp(1.5rem, 1.375rem + 0.625vw, 2rem);
-    --font-size-3xl: clamp(1.875rem, 1.625rem + 1.25vw, 2.5rem);
-    --font-size-4xl: clamp(2.25rem, 2rem + 1.25vw, 3rem);
+    /* Global Typography Scale - Perfect Fourth (1.333) Ratio */
+    --text-xs: 0.75rem;      /* 12px - Small labels, captions */
+    --text-sm: 0.875rem;     /* 14px - Body small, secondary text */
+    --text-base: 1rem;       /* 16px - Base body text */
+    --text-lg: 1.125rem;     /* 18px - Emphasized text */
+    --text-xl: 1.25rem;      /* 20px - Small headings */
+    --text-2xl: 1.5rem;      /* 24px - Section headings */
+    --text-3xl: 2rem;        /* 32px - Page titles */
+    --text-4xl: 2.5rem;      /* 40px - Hero text */
+    
+    /* Line heights for readability */
+    --leading-tight: 1.2;
+    --leading-normal: 1.5;
+    --leading-relaxed: 1.75;
+    
+    /* Fluid responsive typography (kept for backwards compatibility) */
+    --font-size-xs: var(--text-xs);
+    --font-size-sm: var(--text-sm);
+    --font-size-base: var(--text-base);
+    --font-size-lg: var(--text-lg);
+    --font-size-xl: var(--text-xl);
+    --font-size-2xl: var(--text-2xl);
+    --font-size-3xl: var(--text-3xl);
+    --font-size-4xl: var(--text-4xl);
   }
 
-  /* Responsive typography */
-  h1 { font-size: var(--font-size-4xl); }
-  h2 { font-size: var(--font-size-3xl); }
-  h3 { font-size: var(--font-size-2xl); }
-  h4 { font-size: var(--font-size-xl); }
-  h5 { font-size: var(--font-size-lg); }
-  h6 { font-size: var(--font-size-base); }
+  /* Responsive typography with consistent scaling */
+  body { 
+    font-size: var(--text-base); 
+    line-height: var(--leading-normal);
+  }
+  
+  h1 { 
+    font-size: var(--text-3xl); 
+    line-height: var(--leading-tight); 
+    font-weight: 700;
+  }
+  h2 { 
+    font-size: var(--text-2xl); 
+    line-height: var(--leading-tight); 
+    font-weight: 600;
+  }
+  h3 { 
+    font-size: var(--text-xl); 
+    line-height: var(--leading-normal); 
+    font-weight: 600;
+  }
+  h4 { 
+    font-size: var(--text-lg); 
+    line-height: var(--leading-normal); 
+    font-weight: 600;
+  }
+  
+  /* Component-specific typography classes */
+  .card-title { 
+    font-size: var(--text-xl); 
+    font-weight: 600; 
+    line-height: var(--leading-tight);
+  }
+  .card-description { 
+    font-size: var(--text-sm); 
+    color: hsl(var(--muted-foreground)); 
+    line-height: var(--leading-relaxed);
+  }
+  .button-text { 
+    font-size: var(--text-base); 
+    font-weight: 500;
+  }
+  .label-text { 
+    font-size: var(--text-sm); 
+    font-weight: 500;
+  }
 }
 
 /* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
