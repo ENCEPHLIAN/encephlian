@@ -32,6 +32,7 @@ import {
   Plug,
   HelpCircle,
   PanelLeft,
+  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -60,9 +61,9 @@ const navigation = [
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
-// --------------- SHARED SIDEBAR CONTENT ---------------
+// --------------- SHARED SIDEBAR NAV ---------------
 
-function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
   const location = useLocation();
 
   return (
@@ -77,17 +78,22 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
             to={item.href}
             onClick={onNavigate}
             className={cn(
-              "flex items-center justify-between rounded-full px-3 py-1.5 text-sm transition-colors",
+              "group flex items-center rounded-full px-3 py-2 text-sm transition-colors",
               "hover:bg-secondary hover:text-foreground",
               active && "bg-secondary text-foreground font-medium",
+              collapsed && "justify-center px-0",
             )}
           >
-            <span className="flex items-center gap-2">
-              {Icon && <Icon className="h-4 w-4" />}
-              {item.name}
-            </span>
-            {item.badge && (
-              <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">{item.badge}</span>
+            {Icon && <Icon className={cn("h-4 w-4", !collapsed && "mr-2")} />}
+            {!collapsed && (
+              <div className="flex-1 flex items-center justify-between gap-2">
+                <span>{item.name}</span>
+                {item.badge && (
+                  <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">
+                    {item.badge}
+                  </span>
+                )}
+              </div>
             )}
           </NavLink>
         );
@@ -96,35 +102,56 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-// Desktop sidebar – nav centered vertically and stationary
-function AppSidebarDesktop() {
+// --------------- DESKTOP SIDEBAR (STICKY + FROSTED) ---------------
+
+function AppSidebarDesktop({ collapsed }: { collapsed: boolean }) {
   return (
-    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 text-muted-foreground">
-      <div className="flex-1 flex items-center justify-center px-4">
-        <div className="w-full">
-          <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70 text-center">
+    <aside
+      className={cn(
+        "hidden md:flex flex-col border-r",
+        "bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60",
+        "sticky top-16 h-[calc(100vh-4rem)] z-30",
+        "transition-[width] duration-200",
+        collapsed ? "w-16" : "w-56",
+      )}
+    >
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        {!collapsed && (
+          <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
             Navigation
           </div>
-          <SidebarNav />
-        </div>
+        )}
+        <SidebarNav collapsed={collapsed} />
       </div>
-    </nav>
+    </aside>
   );
 }
 
-// Mobile sidebar (sheet) – nav centered vertically as well
+// --------------- MOBILE SIDEBAR (FULLSCREEN SHEET) ---------------
+
 function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="left" className="w-64 p-0 bg-sidebar text-sidebar-foreground">
-        <div className="h-full flex">
-          <div className="flex-1 flex items-center justify-center px-4">
-            <div className="w-full">
-              <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70 text-center">
-                Navigation
-              </div>
-              <SidebarNav onNavigate={() => onOpenChange(false)} />
-            </div>
+      <SheetContent
+        side="left"
+        className={cn(
+          "w-full max-w-none p-0 border-none",
+          "bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70",
+        )}
+      >
+        <div className="h-full flex flex-col">
+          {/* Top bar inside mobile nav */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Navigation</span>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close navigation</span>
+            </Button>
+          </div>
+
+          {/* Nav list */}
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            <SidebarNav onNavigate={() => onOpenChange(false)} />
           </div>
         </div>
       </SheetContent>
@@ -142,13 +169,10 @@ function AppLayoutContent() {
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
 
-  // single source of truth for sidebar – desktop + mobile
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Default: desktop → open, mobile → closed
-  useEffect(() => {
-    setSidebarOpen(!isMobile);
-  }, [isMobile]);
+  // desktop: collapsed vs expanded; mobile: ignored
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // mobile: full-screen nav open/close
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // profile
   const { data: profile } = useQuery({
@@ -189,38 +213,28 @@ function AppLayoutContent() {
     });
   };
 
+  const handleSidebarToggle = () => {
+    if (isMobile) {
+      setMobileNavOpen((v) => !v);
+    } else {
+      setSidebarCollapsed((v) => !v);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* APP BAR */}
+      {/* APP BAR (STICKY, FROSTED) */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: branding + sidebar toggle */}
+          {/* LEFT: logo + sidebar toggle */}
           <div className="flex items-center gap-3">
-            {/* Desktop / larger: full branding (logo + text, editable) */}
-            <div className="hidden sm:flex">
-              <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
-            </div>
+            {/* Always use real branding component, no fake E box */}
+            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
 
-            {/* Mobile: logo only, no text */}
-            <div className="flex sm:hidden items-center">
-              {logoUrl ? (
-                <img src={logoUrl} alt={brandName} className="h-8 w-8 rounded-md object-cover" />
-              ) : (
-                <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
-                  {brandName.charAt(0)}
-                </div>
-              )}
-            </div>
-
-            {/* Sidebar toggle – works for both desktop & mobile */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-              onClick={() => setSidebarOpen((v) => !v)}
-            >
+            {/* Sidebar toggle – desktop: collapse; mobile: open/close full nav */}
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleSidebarToggle}>
               <PanelLeft className="h-4 w-4" />
-              <span className="sr-only">Toggle sidebar</span>
+              <span className="sr-only">Toggle navigation</span>
             </Button>
           </div>
 
@@ -282,15 +296,15 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY */}
-      <div className="flex flex-1">
-        {/* Desktop sidebar – only when not mobile and sidebarOpen */}
-        {!isMobile && sidebarOpen && <AppSidebarDesktop />}
+      {/* BODY: sidebar pinned; only main scrolls */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Desktop sidebar (sticky, frosted) */}
+        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} />}
 
-        {/* Mobile sidebar – sheet driven by same sidebarOpen */}
-        {isMobile && <AppSidebarMobile open={sidebarOpen} onOpenChange={setSidebarOpen} />}
+        {/* Mobile full-screen nav */}
+        {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} />}
 
-        {/* Main content scrolls; sidebar stays stationary */}
+        {/* Main content scroll area */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
           <Breadcrumbs />
           <Outlet />
