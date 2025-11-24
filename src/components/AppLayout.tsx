@@ -43,7 +43,7 @@ import EditableBranding from "@/components/EditableBranding";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 
-// ---------------- NAV DATA ----------------
+// --------------- NAV DATA ---------------
 
 const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
@@ -60,7 +60,7 @@ const navigation = [
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
-// ---------------- SHARED SIDEBAR CONTENT ----------------
+// --------------- SHARED SIDEBAR CONTENT ---------------
 
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
@@ -96,7 +96,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-// Desktop sidebar (always visible when >= md)
+// Desktop sidebar (shown only on md+ when sidebarOpen === true)
 function AppSidebarDesktop() {
   return (
     <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 px-4 pt-6 pb-8 text-muted-foreground">
@@ -106,7 +106,7 @@ function AppSidebarDesktop() {
   );
 }
 
-// Mobile sidebar (sheet that slides in from the left)
+// Mobile sidebar (sheet)
 function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -122,7 +122,7 @@ function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange:
   );
 }
 
-// ---------------- MAIN LAYOUT ----------------
+// --------------- MAIN LAYOUT ---------------
 
 function AppLayoutContent() {
   const navigate = useNavigate();
@@ -131,7 +131,14 @@ function AppLayoutContent() {
 
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // ONE source of truth for sidebar state – used for both desktop & mobile
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Default behavior: desktop -> open, mobile -> closed
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
 
   // profile
   const { data: profile } = useQuery({
@@ -152,7 +159,7 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
-  // clinic context / logo
+  // clinic / logo
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -174,7 +181,7 @@ function AppLayoutContent() {
       {/* APP BAR */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: branding THEN sidebar button */}
+          {/* LEFT: branding THEN sidebar toggle button */}
           <div className="flex items-center gap-3">
             <EditableBranding
               companyName={profile?.company_name || "ENCEPHLIAN"}
@@ -182,7 +189,12 @@ function AppLayoutContent() {
               logoClassName="h-8 w-8"
             />
 
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMobileSidebarOpen(true)}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full"
+              onClick={() => setSidebarOpen((v) => !v)}
+            >
               <PanelLeft className="h-4 w-4" />
               <span className="sr-only">Toggle sidebar</span>
             </Button>
@@ -190,7 +202,7 @@ function AppLayoutContent() {
 
           {/* RIGHT: search + actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Desktop command palette trigger */}
+            {/* Desktop command palette button */}
             <Button
               variant="outline"
               className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full"
@@ -203,7 +215,7 @@ function AppLayoutContent() {
               </kbd>
             </Button>
 
-            {/* Mobile command palette trigger (icon only) */}
+            {/* Mobile command palette icon */}
             <Button
               variant="ghost"
               size="icon"
@@ -248,11 +260,11 @@ function AppLayoutContent() {
 
       {/* BODY */}
       <div className="flex flex-1">
-        {/* Desktop sidebar */}
-        <AppSidebarDesktop />
+        {/* Desktop sidebar – only when !mobile && sidebarOpen */}
+        {!isMobile && sidebarOpen && <AppSidebarDesktop />}
 
-        {/* Mobile sidebar sheet */}
-        {isMobile && <AppSidebarMobile open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen} />}
+        {/* Mobile sidebar – sheet uses same sidebarOpen state */}
+        {isMobile && <AppSidebarMobile open={sidebarOpen} onOpenChange={setSidebarOpen} />}
 
         {/* Main content */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
