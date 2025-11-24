@@ -169,7 +169,7 @@ function AppLayoutContent() {
                 <EditableBranding
                   companyName={profile?.company_name || "ENCEPHLIAN"}
                   logoUrl={clinicContext?.logo_url}
-                  logoClassName="h-12 w-12 mr-4"
+                  logoClassName="h-12 w-12"
                 />
               </div>
 
