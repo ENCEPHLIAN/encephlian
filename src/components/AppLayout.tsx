@@ -162,7 +162,7 @@ function AppLayoutContent() {
       {/* RIGHT: APP BAR + SCROLLING CONTENT */}
       <div className="flex flex-1 flex-col w-full">
         {/* APP BAR – FIXED HEIGHT, DOES NOT SCROLL */}
-        <header className="z-40 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6 lg:px-8">
           {/* LEFT: BRAND + SIDEBAR BUTTON */}
           <div className="flex items-center gap-3 flex-shrink-0">
             <EditableBranding
