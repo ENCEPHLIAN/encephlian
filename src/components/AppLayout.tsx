@@ -169,7 +169,7 @@ function AppLayoutContent() {
                 <EditableBranding
                   companyName={profile?.company_name || "ENCEPHLIAN"}
                   logoUrl={clinicContext?.logo_url}
-                  logoClassName="h-12 w-12"
+                  logoClassName="h-12 w-12 mr-4"
                 />
               </div>
 
@@ -180,7 +180,7 @@ function AppLayoutContent() {
               >
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" />
                 <span className="text-muted-foreground text-sm">Search studies, patients...</span>
-                <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-3 rounded border px-1.5 text-xs">
+                <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
                   <span>⌘</span>K
                 </kbd>
               </Button>
