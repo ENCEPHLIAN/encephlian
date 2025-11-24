@@ -118,6 +118,7 @@ function AppLayoutContent() {
   const [commandOpen, setCommandOpen] = useState(false);
   const { state } = useSidebar();
 
+  // profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -136,6 +137,7 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
+  // clinic / logo context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -154,16 +156,17 @@ function AppLayoutContent() {
 
   return (
     <div className="flex min-h-screen w-full">
-      {/* LEFT: sidebar (shadcn-style, full height) */}
+      {/* LEFT: shadcn sidebar */}
       <AppSidebar />
 
-      {/* RIGHT: app bar + page content */}
-      <div className="flex flex-1 flex-col w-full">
-        {/* APP BAR – sticky, logo left, actions right */}
-        <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 gap-4">
-            {/* LEFT: branding + sidebar toggle */}
-            <div className="flex items-center gap-3">
+      {/* RIGHT: app bar + content */}
+      <div className="flex-1 flex flex-col w-full">
+        {/* APP BAR */}
+        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          {/* Small fixed padding so branding can sit close to the corner */}
+          <div className="flex h-16 items-center justify-between gap-4 px-2 sm:px-4 lg:px-6">
+            {/* LEFT: branding hard-left, then sidebar trigger */}
+            <div className="flex items-center gap-2 flex-shrink-0">
               <EditableBranding
                 companyName={profile?.company_name || "ENCEPHLIAN"}
                 logoUrl={clinicContext?.logo_url}
@@ -172,11 +175,11 @@ function AppLayoutContent() {
               <SidebarTrigger />
             </div>
 
-            {/* RIGHT: search + actions (OpenAI-ish cluster) */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            {/* RIGHT: search + actions cluster */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <Button
                 variant="outline"
-                className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start"
+                className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full"
                 onClick={() => setCommandOpen(true)}
               >
                 <Search className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -191,7 +194,7 @@ function AppLayoutContent() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="flex items-center gap-2">
+                  <Button variant="ghost" className="flex items-center gap-2 rounded-full">
                     <User className="h-5 w-5" />
                     <span className="hidden md:inline">{userName}</span>
                   </Button>
@@ -218,14 +221,15 @@ function AppLayoutContent() {
           </div>
         </header>
 
-        {/* PAGE CONTENT – body scrolls, bar stays pinned */}
-        <main className="flex-1" data-sidebar-collapsed={state === "collapsed"}>
+        {/* MAIN CONTENT */}
+        <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
           <div className="openai-container">
             <Breadcrumbs />
             <Outlet />
           </div>
         </main>
 
+        {/* COMMAND PALETTE */}
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </div>
     </div>
