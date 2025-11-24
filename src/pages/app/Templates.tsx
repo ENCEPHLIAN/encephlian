@@ -102,7 +102,13 @@ export default function Templates() {
                     <h3 className="font-semibold text-sm uppercase text-primary mb-2">
                       {key.replace(/_/g, ' ')}
                     </h3>
-                    <p className="text-sm leading-relaxed">{value}</p>
+                    {typeof value === 'object' && value !== null ? (
+                      <pre className="text-xs bg-muted/50 p-3 rounded-lg overflow-x-auto leading-relaxed">
+                        {JSON.stringify(value, null, 2)}
+                      </pre>
+                    ) : (
+                      <p className="text-sm leading-relaxed">{String(value)}</p>
+                    )}
                   </div>
                 ))
               )}
