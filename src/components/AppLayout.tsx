@@ -30,6 +30,7 @@ import {
   Calendar,
   Plug,
   HelpCircle,
+  PanelLeft, // sidebar toggle icon
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -99,8 +100,9 @@ function AppLayoutContent() {
   const { toast } = useToast();
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // <- new sidebar state
 
-  useIsMobile(); // you can wire this into responsive behavior later
+  useIsMobile(); // keep for future responsive tweaks
 
   // profile
   const { data: profile } = useQuery({
@@ -140,17 +142,24 @@ function AppLayoutContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* FULL-WIDTH STICKY APP BAR – no max-width, no huge side padding */}
+      {/* FULL-WIDTH STICKY APP BAR */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: branding locked top-left */}
-          <EditableBranding
-            companyName={profile?.company_name || "ENCEPHLIAN"}
-            logoUrl={clinicContext?.logo_url}
-            logoClassName="h-8 w-8"
-          />
+          {/* LEFT: sidebar toggle + branding (OpenAI-style) */}
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSidebarOpen((v) => !v)}>
+              <PanelLeft className="h-4 w-4" />
+              <span className="sr-only">Toggle sidebar</span>
+            </Button>
 
-          {/* RIGHT: search + actions cluster */}
+            <EditableBranding
+              companyName={profile?.company_name || "ENCEPHLIAN"}
+              logoUrl={clinicContext?.logo_url}
+              logoClassName="h-8 w-8"
+            />
+          </div>
+
+          {/* RIGHT: search + actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
@@ -196,12 +205,12 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY: full-width flex. No max-width, no centering. */}
+      {/* BODY: full-width flex; sidebar can collapse */}
       <div className="flex flex-1">
-        {/* LEFT: OpenAI-style sidebar column */}
-        <AppSidebar />
+        {/* LEFT: collapsible sidebar */}
+        {sidebarOpen && <AppSidebar />}
 
-        {/* RIGHT: main content, modest padding only */}
+        {/* RIGHT: main content */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
           <Breadcrumbs />
           <Outlet />
@@ -214,6 +223,5 @@ function AppLayoutContent() {
 }
 
 export default function AppLayout() {
-  // no SidebarProvider; we’re not using the shadcn shell anymore
   return <AppLayoutContent />;
 }
