@@ -19,13 +19,12 @@ export default function EditableBranding({ companyName, logoUrl, logoClassName =
 
   const updateMutation = useMutation({
     mutationFn: async (newName: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { error } = await supabase
-        .from("profiles")
-        .update({ company_name: newName })
-        .eq("id", user.id);
+      const { error } = await supabase.from("profiles").update({ company_name: newName }).eq("id", user.id);
 
       if (error) throw error;
       return newName;
@@ -39,7 +38,7 @@ export default function EditableBranding({ companyName, logoUrl, logoClassName =
     onError: (error: any) => {
       toast.error(error.message || "Failed to update");
       setValue(companyName);
-    }
+    },
   });
 
   const handleSave = () => {
@@ -61,13 +60,9 @@ export default function EditableBranding({ companyName, logoUrl, logoClassName =
   };
 
   return (
-    <div className="flex items-center gap-3 group">
-      <img 
-        src={logoUrl || logo} 
-        alt="Logo" 
-        className={`${logoClassName} object-contain flex-shrink-0`}
-      />
-      
+    <div className="flex items-center gap-1 group">
+      <img src={logoUrl || logo} alt="Logo" className={`${logoClassName} object-contain flex-shrink-0`} />
+
       {editing ? (
         <Input
           value={value}
@@ -79,13 +74,11 @@ export default function EditableBranding({ companyName, logoUrl, logoClassName =
           disabled={updateMutation.isPending}
         />
       ) : (
-        <div 
+        <div
           onClick={() => setEditing(true)}
           className="cursor-pointer flex items-center gap-2 hover:opacity-80 transition-opacity"
         >
-          <h1 className="text-2xl md:text-3xl font-bold logo-text">
-            {companyName}
-          </h1>
+          <h1 className="text-2xl md:text-3xl font-bold logo-text">{companyName}</h1>
           <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
         </div>
       )}
