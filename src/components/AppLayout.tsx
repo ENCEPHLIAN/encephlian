@@ -102,7 +102,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
   );
 }
 
-// --------------- DESKTOP SIDEBAR (STICKY + FROSTED) ---------------
+// --------------- DESKTOP SIDEBAR (PINNED + STICKY + FROSTED) ---------------
 
 function AppSidebarDesktop({ collapsed }: { collapsed: boolean }) {
   return (
@@ -127,7 +127,7 @@ function AppSidebarDesktop({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-// --------------- MOBILE SIDEBAR (FULLSCREEN SHEET) ---------------
+// --------------- MOBILE SIDEBAR (FULLSCREEN FROSTED SHEET) ---------------
 
 function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
@@ -140,7 +140,7 @@ function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange:
         )}
       >
         <div className="h-full flex flex-col">
-          {/* Top bar inside mobile nav */}
+          {/* Top row: "Navigation" + X */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Navigation</span>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
@@ -169,7 +169,7 @@ function AppLayoutContent() {
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
 
-  // desktop: collapsed vs expanded; mobile: ignored
+  // desktop: collapsed vs expanded
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // mobile: full-screen nav open/close
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -228,10 +228,9 @@ function AppLayoutContent() {
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* LEFT: logo + sidebar toggle */}
           <div className="flex items-center gap-3">
-            {/* Always use real branding component, no fake E box */}
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
 
-            {/* Sidebar toggle – desktop: collapse; mobile: open/close full nav */}
+            {/* Sidebar toggle – desktop collapses, mobile opens sheet */}
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleSidebarToggle}>
               <PanelLeft className="h-4 w-4" />
               <span className="sr-only">Toggle navigation</span>
@@ -264,7 +263,9 @@ function AppLayoutContent() {
               <span className="sr-only">Open search</span>
             </Button>
 
-            <QuickTipsDialog />
+            {/* QuickTips only on desktop */}
+            {!isMobile && <QuickTipsDialog />}
+
             <ThemeToggle />
 
             <DropdownMenu>
@@ -296,16 +297,16 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY: sidebar pinned; only main scrolls */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Desktop sidebar (sticky, frosted) */}
+      {/* BODY: sidebar pinned; whole page scrolls */}
+      <div className="flex flex-1">
+        {/* Desktop sidebar (sticky, frosted, pinned left) */}
         {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} />}
 
         {/* Mobile full-screen nav */}
         {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} />}
 
-        {/* Main content scroll area */}
-        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+        {/* Main content; no custom scroll container so sticky works */}
+        <main className="flex-1 px-4 sm:px-6 py-6">
           <Breadcrumbs />
           <Outlet />
         </main>
