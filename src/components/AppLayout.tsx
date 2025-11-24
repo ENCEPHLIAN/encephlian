@@ -118,7 +118,6 @@ function AppLayoutContent() {
   const [commandOpen, setCommandOpen] = useState(false);
   const { state } = useSidebar();
 
-  // user profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -137,7 +136,6 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
-  // clinic / logo context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -156,40 +154,36 @@ function AppLayoutContent() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      {/* FULL-WIDTH STICKY TOP BAR */}
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 w-full">
-        <div
-          className="flex h-16 items-center gap-4"
-          style={{
-            paddingLeft: "var(--content-padding-x)",
-            paddingRight: "var(--content-padding-x)",
-          }}
-        >
-          {/* Left: sidebar trigger + branding */}
-          <div className="flex items-center gap-4">
-            <SidebarTrigger />
+      {/* FULL-WIDTH STICKY HEADER */}
+      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex h-16 items-center gap-4 px-[var(--content-padding-x)]">
+          {/* LEFT: BRANDING THEN SIDEBAR BUTTON */}
+          <div className="flex items-center gap-3">
             <EditableBranding
               companyName={profile?.company_name || "ENCEPHLIAN"}
               logoUrl={clinicContext?.logo_url}
               logoClassName="h-12 w-12"
             />
+            <SidebarTrigger />
           </div>
 
-          {/* Command palette – with extra padding from branding */}
-          <Button
-            variant="outline"
-            className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3 ml-4"
-            onClick={() => setCommandOpen(true)}
-          >
-            <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground text-sm">Search studies, patients...</span>
-            <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
-              <span>⌘</span>K
-            </kbd>
-          </Button>
+          {/* CENTER: COMMAND PALETTE – FLEXES, HIDDEN ON VERY SMALL SCREENS */}
+          <div className="flex-1 flex justify-center">
+            <Button
+              variant="outline"
+              className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3"
+              onClick={() => setCommandOpen(true)}
+            >
+              <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground text-sm">Search studies, patients...</span>
+              <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
+                <span>⌘</span>K
+              </kbd>
+            </Button>
+          </div>
 
-          {/* Right: quick actions + user menu */}
-          <div className="flex items-center gap-2 sm:gap-4 ml-auto">
+          {/* RIGHT: QUICK ACTIONS + USER MENU */}
+          <div className="flex items-center gap-2 sm:gap-4">
             <QuickTipsDialog />
             <ThemeToggle />
 
