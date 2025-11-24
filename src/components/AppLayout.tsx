@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 import {
   LayoutDashboard,
@@ -30,7 +31,7 @@ import {
   Calendar,
   Plug,
   HelpCircle,
-  PanelLeft, // sidebar toggle icon
+  PanelLeft,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -41,6 +42,8 @@ import CommandPalette from "@/components/CommandPalette";
 import EditableBranding from "@/components/EditableBranding";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
+
+// ---------------- NAV DATA ----------------
 
 const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
@@ -57,52 +60,78 @@ const navigation = [
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
-// OpenAI-style sidebar: simple text nav on the left, fixed width
-function AppSidebar() {
+// ---------------- SHARED SIDEBAR CONTENT ----------------
+
+function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
 
   return (
-    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 px-4 pt-6 pb-8 text-sm text-muted-foreground">
+    <div className="flex flex-col gap-1.5">
+      {navigation.map((item) => {
+        const active = location.pathname.startsWith(item.href);
+        const Icon = item.icon;
+
+        return (
+          <NavLink
+            key={item.name}
+            to={item.href}
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center justify-between rounded-full px-3 py-1.5 text-sm transition-colors",
+              "hover:bg-secondary hover:text-foreground",
+              active && "bg-secondary text-foreground font-medium",
+            )}
+          >
+            <span className="flex items-center gap-2">
+              {Icon && <Icon className="h-4 w-4" />}
+              {item.name}
+            </span>
+            {item.badge && (
+              <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">{item.badge}</span>
+            )}
+          </NavLink>
+        );
+      })}
+    </div>
+  );
+}
+
+// Desktop sidebar (always visible when >= md)
+function AppSidebarDesktop() {
+  return (
+    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 px-4 pt-6 pb-8 text-muted-foreground">
       <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Navigation</div>
-      <div className="flex flex-col gap-1.5">
-        {navigation.map((item) => {
-          const active = location.pathname.startsWith(item.href);
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              className={cn(
-                "flex items-center justify-between rounded-full px-3 py-1.5 transition-colors",
-                "hover:bg-secondary hover:text-foreground",
-                active && "bg-secondary text-foreground font-medium",
-              )}
-            >
-              <span className="flex items-center gap-2">
-                {Icon && <Icon className="h-4 w-4" />}
-                {item.name}
-              </span>
-              {item.badge && (
-                <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">
-                  {item.badge}
-                </span>
-              )}
-            </NavLink>
-          );
-        })}
-      </div>
+      <SidebarNav />
     </nav>
   );
 }
 
+// Mobile sidebar (sheet that slides in from the left)
+function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="left" className="w-64 p-0 bg-sidebar text-sidebar-foreground">
+        <div className="h-full flex flex-col px-4 pt-6 pb-8">
+          <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
+            Navigation
+          </div>
+          <SidebarNav onNavigate={() => onOpenChange(false)} />
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ---------------- MAIN LAYOUT ----------------
+
 function AppLayoutContent() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true); // <- new sidebar state
-
-  useIsMobile(); // keep for future responsive tweaks
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // profile
   const { data: profile } = useQuery({
@@ -142,25 +171,26 @@ function AppLayoutContent() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* FULL-WIDTH STICKY APP BAR */}
+      {/* APP BAR */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: sidebar toggle + branding (OpenAI-style) */}
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSidebarOpen((v) => !v)}>
-              <PanelLeft className="h-4 w-4" />
-              <span className="sr-only">Toggle sidebar</span>
-            </Button>
-
+          {/* LEFT: branding THEN sidebar button */}
+          <div className="flex items-center gap-3">
             <EditableBranding
               companyName={profile?.company_name || "ENCEPHLIAN"}
               logoUrl={clinicContext?.logo_url}
               logoClassName="h-8 w-8"
             />
+
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setMobileSidebarOpen(true)}>
+              <PanelLeft className="h-4 w-4" />
+              <span className="sr-only">Toggle sidebar</span>
+            </Button>
           </div>
 
           {/* RIGHT: search + actions */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Desktop command palette trigger */}
             <Button
               variant="outline"
               className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full"
@@ -171,6 +201,17 @@ function AppLayoutContent() {
               <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-[10px]">
                 <span>⌘</span>K
               </kbd>
+            </Button>
+
+            {/* Mobile command palette trigger (icon only) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="flex md:hidden h-8 w-8 rounded-full"
+              onClick={() => setCommandOpen(true)}
+            >
+              <Search className="h-4 w-4" />
+              <span className="sr-only">Open search</span>
             </Button>
 
             <QuickTipsDialog />
@@ -205,12 +246,15 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY: full-width flex; sidebar can collapse */}
+      {/* BODY */}
       <div className="flex flex-1">
-        {/* LEFT: collapsible sidebar */}
-        {sidebarOpen && <AppSidebar />}
+        {/* Desktop sidebar */}
+        <AppSidebarDesktop />
 
-        {/* RIGHT: main content */}
+        {/* Mobile sidebar sheet */}
+        {isMobile && <AppSidebarMobile open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen} />}
+
+        {/* Main content */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
           <Breadcrumbs />
           <Outlet />
