@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import jsPDF from "https://esm.sh/jspdf@2.5.2";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -55,90 +56,134 @@ serve(async (req) => {
 
     if (reportError) throw reportError;
 
-    // Generate simple HTML-based PDF (in production, use proper PDF library)
+    // Generate professional PDF using jsPDF
     const reportContent = report.content as any;
     const studyMeta = report.studies.meta as any;
     
-    const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-    .header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
-    .clinic-name { font-size: 24px; font-weight: bold; }
-    .report-id { text-align: right; color: #666; }
-    .patient-info { background: #f5f5f5; padding: 15px; margin-bottom: 20px; border-radius: 5px; }
-    .section { margin-bottom: 25px; }
-    .section-title { font-weight: bold; font-size: 16px; margin-bottom: 10px; color: #2563eb; }
-    .content { line-height: 1.6; }
-    .signature { margin-top: 40px; border-top: 2px solid #333; padding-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="clinic-name">${report.studies.clinics?.name || 'Medical Clinic'}</div>
-    <div class="report-id">Report ID: ${report.id.slice(0, 8)}</div>
-    <div class="report-id">Date: ${new Date(report.created_at).toLocaleDateString()}</div>
-  </div>
+    // Create PDF document
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
 
-  <h1 style="text-align: center; color: #1e40af;">ELECTROENCEPHALOGRAM REPORT</h1>
+    // Set default font
+    pdf.setFont('helvetica');
 
-  <div class="patient-info">
-    <h3>PATIENT INFORMATION</h3>
-    <p><strong>Name:</strong> ${studyMeta.patient_name || 'N/A'}</p>
-    <p><strong>Patient ID:</strong> ${studyMeta.patient_id || 'N/A'}</p>
-    <p><strong>Age:</strong> ${studyMeta.age || 'N/A'} &nbsp;&nbsp; <strong>Gender:</strong> ${studyMeta.gender || 'N/A'}</p>
-    <p><strong>Study Date:</strong> ${new Date(report.studies.created_at).toLocaleDateString()}</p>
-  </div>
-
-  <div class="section">
-    <div class="section-title">BACKGROUND ACTIVITY:</div>
-    <div class="content">${reportContent.background_activity || 'Not documented'}</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">SLEEP STAGES:</div>
-    <div class="content">${reportContent.sleep_stages || 'Not documented'}</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">ABNORMALITIES:</div>
-    <div class="content">${reportContent.abnormalities || 'None observed'}</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">IMPRESSION:</div>
-    <div class="content">${reportContent.impression || 'Not documented'}</div>
-  </div>
-
-  <div class="section">
-    <div class="section-title">RECOMMENDATIONS:</div>
-    <div class="content">${reportContent.recommendations || 'None at this time'}</div>
-  </div>
-
-  <div class="signature">
-    <p><strong>SIGNATURE:</strong></p>
-    <p>${report.profiles?.full_name || 'Neurologist'}</p>
-    <p>${report.profiles?.credentials || ''}</p>
-    <p>License: ${report.profiles?.medical_license_number || 'N/A'}</p>
-    <p>Signed: ${new Date(report.signed_at).toLocaleString()}</p>
-  </div>
-</body>
-</html>
-    `;
-
-    // Convert HTML to PDF using browser print (simplified for MVP)
-    // In production, use proper PDF generation library
-    const pdfFileName = `report-${report.studies.id}.pdf`;
-    const pdfBlob = new Blob([htmlContent], { type: "text/html" });
+    // Header - Clinic Name and Report Info
+    pdf.setFontSize(18);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(report.studies.clinics?.name || 'MEDICAL CLINIC', 105, 20, { align: 'center' });
     
-    // Upload to storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Report ID: ${report.id.slice(0, 8)}`, 20, 30);
+    pdf.text(`Date: ${new Date(report.created_at).toLocaleDateString()}`, 150, 30);
+    
+    // Title
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('ELECTROENCEPHALOGRAM REPORT', 105, 45, { align: 'center' });
+
+    // Patient Info Box
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(15, 55, 180, 35, 'F');
+    pdf.setDrawColor(0, 0, 0);
+    pdf.rect(15, 55, 180, 35);
+    
+    pdf.setFontSize(12);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('PATIENT INFORMATION', 20, 62);
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Name: ${studyMeta.patient_name || 'N/A'}`, 20, 70);
+    pdf.text(`Patient ID: ${studyMeta.patient_id || 'N/A'}`, 20, 76);
+    pdf.text(`Age: ${studyMeta.age || 'N/A'}`, 120, 70);
+    pdf.text(`Gender: ${studyMeta.gender || 'N/A'}`, 120, 76);
+    pdf.text(`Study Date: ${new Date(report.studies.created_at).toLocaleDateString()}`, 20, 82);
+
+    let yPos = 100;
+
+    // Helper function to add section
+    const addSection = (title: string, content: string) => {
+      if (yPos > 260) {
+        pdf.addPage();
+        yPos = 20;
+      }
+      
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(11);
+      pdf.text(title.toUpperCase(), 20, yPos);
+      yPos += 6;
+      
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      const splitText = pdf.splitTextToSize(content || 'Not documented', 170);
+      pdf.text(splitText, 20, yPos);
+      yPos += (splitText.length * 5) + 8;
+    };
+
+    // Add report sections
+    addSection('Technical Details', reportContent.technical_details ? 
+      `Montage: ${reportContent.technical_details.montage || 'Standard'}\n` +
+      `Duration: ${reportContent.technical_details.duration || 'N/A'}\n` +
+      `Channels: ${reportContent.technical_details.channels || '21-channel 10-20 system'}` : 
+      'Standard EEG recording');
+    
+    addSection('Background Activity', reportContent.background_activity);
+    addSection('Sleep Architecture', reportContent.sleep_stages || reportContent.sleep_architecture);
+    addSection('Activation Procedures', reportContent.activation_procedures ? 
+      `Hyperventilation: ${reportContent.activation_procedures.hyperventilation || 'Not performed'}\n` +
+      `Photic Stimulation: ${reportContent.activation_procedures.photic_stimulation || 'Not performed'}` :
+      'Not performed');
+    addSection('Abnormalities', reportContent.abnormalities);
+    addSection('Impression', reportContent.impression);
+    addSection('Clinical Correlation', reportContent.correlation || reportContent.clinical_correlation);
+    addSection('Recommendations', reportContent.recommendations);
+
+    // Signature Block
+    if (yPos > 240) {
+      pdf.addPage();
+      yPos = 20;
+    }
+    
+    yPos += 10;
+    pdf.setDrawColor(0, 0, 0);
+    pdf.line(20, yPos, 190, yPos);
+    yPos += 8;
+    
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(11);
+    pdf.text('ELECTRONIC SIGNATURE', 20, yPos);
+    yPos += 8;
+    
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.text(`${report.profiles?.full_name || 'Neurologist'}`, 20, yPos);
+    yPos += 5;
+    if (report.profiles?.credentials) {
+      pdf.text(report.profiles.credentials, 20, yPos);
+      yPos += 5;
+    }
+    if (report.profiles?.medical_license_number) {
+      pdf.text(`License: ${report.profiles.medical_license_number}`, 20, yPos);
+      yPos += 5;
+    }
+    pdf.text(`Electronically signed: ${new Date(report.signed_at).toLocaleString()}`, 20, yPos);
+
+    // Generate PDF as ArrayBuffer
+    const pdfArrayBuffer = pdf.output('arraybuffer');
+    
+    // Get user ID for path
+    const userId = report.studies.owner || user.id;
+    const pdfFileName = `${userId}/report-${report.id}.pdf`;
+    
+    // Upload to storage with user-specific path
+    const { error: uploadError } = await supabase.storage
       .from("eeg-reports")
-      .upload(pdfFileName, pdfBlob, {
-        contentType: "text/html",
+      .upload(pdfFileName, pdfArrayBuffer, {
+        contentType: "application/pdf",
         upsert: true,
       });
 
@@ -152,7 +197,7 @@ serve(async (req) => {
 
     if (updateError) throw updateError;
 
-    console.log("PDF generated:", pdfFileName);
+    console.log("PDF generated successfully:", pdfFileName);
 
     return new Response(
       JSON.stringify({ 

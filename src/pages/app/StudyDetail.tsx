@@ -63,14 +63,24 @@ export default function StudyDetail() {
       if (!report.pdf_path) {
         toast({ title: "Generating PDF...", description: "Please wait" });
         
-        await supabase.functions.invoke("generate_report_pdf", {
+        const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: report.id }
         });
         
+        if (genError) {
+          throw new Error(genError.message || "Failed to generate PDF");
+        }
+        
         toast({
           title: "PDF generated",
-          description: "Refresh to download",
+          description: "Downloading now...",
         });
+        
+        // Wait a moment for the file to be ready
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Retry download
+        handleDownloadReport();
         return;
       }
 
@@ -94,6 +104,7 @@ export default function StudyDetail() {
       console.error("Download error:", error);
       toast({
         title: "Download failed",
+        description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
     } finally {
