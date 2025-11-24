@@ -164,7 +164,7 @@ function AppLayoutContent() {
               className="flex h-16 items-center justify-between gap-4"
               style={{ paddingLeft: "var(--content-padding-x)", paddingRight: "var(--content-padding-x)" }}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0">
                 <SidebarTrigger />
                 <EditableBranding
                   companyName={profile?.company_name || "ENCEPHLIAN"}
