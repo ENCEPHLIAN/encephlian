@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -56,37 +56,40 @@ const navigation = [
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
-function OpenAISidebar() {
+// OpenAI-style sidebar: simple text nav on the left, fixed width
+function AppSidebar() {
   const location = useLocation();
 
   return (
-    <nav className="hidden md:flex w-52 flex-col pt-8 pr-10 text-sm text-muted-foreground gap-1.5">
-      {navigation.map((item) => {
-        const active = location.pathname.startsWith(item.href);
-        const Icon = item.icon;
-
-        return (
-          <NavLink
-            key={item.name}
-            to={item.href}
-            className={cn(
-              "flex items-center justify-between rounded-full px-0 py-1 transition-colors",
-              "hover:text-foreground",
-              active && "text-foreground font-medium",
-            )}
-          >
-            <span className="flex items-center gap-2">
-              {Icon && <Icon className="h-4 w-4" />}
-              {item.name}
-            </span>
-            {item.badge && (
-              <span className="ml-2 rounded-full bg-secondary px-2 py-0.5 text-[11px] leading-none text-secondary-foreground">
-                {item.badge}
+    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 px-4 pt-6 pb-8 text-sm text-muted-foreground">
+      <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Navigation</div>
+      <div className="flex flex-col gap-1.5">
+        {navigation.map((item) => {
+          const active = location.pathname.startsWith(item.href);
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.name}
+              to={item.href}
+              className={cn(
+                "flex items-center justify-between rounded-full px-3 py-1.5 transition-colors",
+                "hover:bg-secondary hover:text-foreground",
+                active && "bg-secondary text-foreground font-medium",
+              )}
+            >
+              <span className="flex items-center gap-2">
+                {Icon && <Icon className="h-4 w-4" />}
+                {item.name}
               </span>
-            )}
-          </NavLink>
-        );
-      })}
+              {item.badge && (
+                <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">
+                  {item.badge}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
+      </div>
     </nav>
   );
 }
@@ -96,9 +99,10 @@ function AppLayoutContent() {
   const { toast } = useToast();
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
-  useIsMobile(); // keep hook handy, not critical for layout here
 
-  // profile data
+  useIsMobile(); // you can wire this into responsive behavior later
+
+  // profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -117,7 +121,7 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
-  // clinic / logo context
+  // clinic context / logo
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -135,18 +139,18 @@ function AppLayoutContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* APP BAR – sticky, full-width, does NOT move horizontally */}
-      <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          {/* Left: logo + company name (top-left corner relative to content) */}
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
+      {/* FULL-WIDTH STICKY APP BAR – no max-width, no huge side padding */}
+      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+          {/* LEFT: branding locked top-left */}
           <EditableBranding
             companyName={profile?.company_name || "ENCEPHLIAN"}
             logoUrl={clinicContext?.logo_url}
             logoClassName="h-8 w-8"
           />
 
-          {/* Right: search + actions cluster */}
+          {/* RIGHT: search + actions cluster */}
           <div className="flex items-center gap-2 sm:gap-3">
             <Button
               variant="outline"
@@ -192,18 +196,15 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY – OpenAI-style: centered content with a left nav column */}
-      <div className="mx-auto flex max-w-6xl px-4 sm:px-6 lg:px-8">
-        {/* Left navigation – OpenAI-style sidebar (static, no push/pull) */}
-        <OpenAISidebar />
+      {/* BODY: full-width flex. No max-width, no centering. */}
+      <div className="flex flex-1">
+        {/* LEFT: OpenAI-style sidebar column */}
+        <AppSidebar />
 
-        {/* Main content area */}
-        <main className="flex-1 pt-8 pb-10">
-          {/* Use your existing container but remove extra horizontal padding */}
-          <div className="openai-container px-0">
-            <Breadcrumbs />
-            <Outlet />
-          </div>
+        {/* RIGHT: main content, modest padding only */}
+        <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+          <Breadcrumbs />
+          <Outlet />
         </main>
       </div>
 
@@ -213,6 +214,6 @@ function AppLayoutContent() {
 }
 
 export default function AppLayout() {
-  // SidebarProvider no longer needed because we’re not using the shadcn Sidebar here.
+  // no SidebarProvider; we’re not using the shadcn shell anymore
   return <AppLayoutContent />;
 }
