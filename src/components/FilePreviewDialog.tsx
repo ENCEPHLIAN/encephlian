@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Download, FileText, X, Sparkles } from "lucide-react";
@@ -69,10 +69,29 @@ export function FilePreviewDialog({
     }
   };
 
-  const getFileUrl = () => {
-    const { data } = supabase.storage.from(bucket).getPublicUrl(file.path);
-    return data.publicUrl;
+  const getFileUrl = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return '';
+      
+      // Check if path already includes user ID
+      const filePath = file.path.startsWith(`${user.id}/`) ? file.path : `${user.id}/${file.path}`;
+      
+      const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+      return data.publicUrl;
+    } catch (error) {
+      console.error('Error getting file URL:', error);
+      return '';
+    }
   };
+
+  const [fileUrl, setFileUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (open) {
+      getFileUrl().then(setFileUrl);
+    }
+  }, [open, file.path]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -96,8 +115,8 @@ export function FilePreviewDialog({
         </DialogHeader>
 
         <div className="flex-1 px-6 pb-6 overflow-hidden">
-          {isPDF && (
-            <PDFViewer fileUrl={getFileUrl()} />
+          {isPDF && fileUrl && (
+            <PDFViewer fileUrl={fileUrl} />
           )}
 
           {isEDF && (
@@ -129,10 +148,10 @@ export function FilePreviewDialog({
             </div>
           )}
 
-          {isImage && (
+          {isImage && fileUrl && (
             <div className="flex items-center justify-center h-full">
               <img
-                src={getFileUrl()}
+                src={fileUrl}
                 alt={file.name}
                 className="max-w-full max-h-full object-contain"
               />

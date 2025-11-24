@@ -9,16 +9,18 @@ import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { useProfile } from "@/contexts/ProfileContext";
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
   const [loading, setLoading] = useState(false);
+  const { profile: contextProfile, refreshProfile } = useProfile();
   const [profile, setProfile] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   
   useEffect(() => {
     loadProfile();
-  }, []);
+  }, [contextProfile]);
   
   const loadProfile = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -60,6 +62,7 @@ export default function Settings() {
       
       // Force reload to verify persistence
       await loadProfile();
+      await refreshProfile();
       
       toast.success("Settings saved and verified");
     } catch (error: any) {

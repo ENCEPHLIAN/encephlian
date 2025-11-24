@@ -9,9 +9,10 @@ import logo from "@/assets/logo.png";
 interface EditableBrandingProps {
   companyName: string;
   logoUrl?: string;
+  logoClassName?: string;
 }
 
-export default function EditableBranding({ companyName, logoUrl }: EditableBrandingProps) {
+export default function EditableBranding({ companyName, logoUrl, logoClassName = "h-10 w-10" }: EditableBrandingProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(companyName);
   const queryClient = useQueryClient();
@@ -64,7 +65,7 @@ export default function EditableBranding({ companyName, logoUrl }: EditableBrand
       <img 
         src={logoUrl || logo} 
         alt="Logo" 
-        className="h-10 w-10 object-contain flex-shrink-0" 
+        className={`${logoClassName} object-contain flex-shrink-0`}
       />
       
       {editing ? (
