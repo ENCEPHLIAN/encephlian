@@ -137,6 +137,8 @@ function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange:
         className={cn(
           "w-full max-w-none p-0 border-none",
           "bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70",
+          // Hide shadcn's built-in close button so we only show our own X
+          "[&>button]:hidden",
         )}
       >
         <div className="h-full flex flex-col">
