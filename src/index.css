@@ -6,39 +6,39 @@
   /* OpenAI-inspired spacing system */
   :root {
     --space-unit: 8px;
-    --space-xs: calc(var(--space-unit) * 1);    /* 8px */
-    --space-sm: calc(var(--space-unit) * 2);    /* 16px */
-    --space-md: calc(var(--space-unit) * 3);    /* 24px */
-    --space-lg: calc(var(--space-unit) * 4);    /* 32px */
-    --space-xl: calc(var(--space-unit) * 6);    /* 48px */
-    --space-2xl: calc(var(--space-unit) * 8);   /* 64px */
-    --space-3xl: calc(var(--space-unit) * 12);  /* 96px */
-    
+    --space-xs: calc(var(--space-unit) * 1); /* 8px */
+    --space-sm: calc(var(--space-unit) * 2); /* 16px */
+    --space-md: calc(var(--space-unit) * 3); /* 24px */
+    --space-lg: calc(var(--space-unit) * 4); /* 32px */
+    --space-xl: calc(var(--space-unit) * 6); /* 48px */
+    --space-2xl: calc(var(--space-unit) * 8); /* 64px */
+    --space-3xl: calc(var(--space-unit) * 12); /* 96px */
+
     /* OpenAI-style shadows */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-    
+
     /* Generous max-widths */
     --max-width-content: 1400px;
     --max-width-narrow: 800px;
 
     /* Global Typography Scale - Perfect Fourth (1.333) Ratio */
-    --text-xs: 0.75rem;      /* 12px - Small labels, captions */
-    --text-sm: 0.875rem;     /* 14px - Body small, secondary text */
-    --text-base: 1rem;       /* 16px - Base body text */
-    --text-lg: 1.125rem;     /* 18px - Emphasized text */
-    --text-xl: 1.25rem;      /* 20px - Small headings */
-    --text-2xl: 1.5rem;      /* 24px - Section headings */
-    --text-3xl: 2rem;        /* 32px - Page titles */
-    --text-4xl: 2.5rem;      /* 40px - Hero text */
-    
+    --text-xs: 0.75rem; /* 12px - Small labels, captions */
+    --text-sm: 0.875rem; /* 14px - Body small, secondary text */
+    --text-base: 1rem; /* 16px - Base body text */
+    --text-lg: 1.125rem; /* 18px - Emphasized text */
+    --text-xl: 1.25rem; /* 20px - Small headings */
+    --text-2xl: 1.5rem; /* 24px - Section headings */
+    --text-3xl: 2rem; /* 32px - Page titles */
+    --text-4xl: 2.5rem; /* 40px - Hero text */
+
     /* Line heights for readability */
     --leading-tight: 1.2;
     --leading-normal: 1.5;
     --leading-relaxed: 1.75;
-    
+
     /* Fluid responsive typography (kept for backwards compatibility) */
     --font-size-xs: var(--text-xs);
     --font-size-sm: var(--text-sm);
@@ -51,49 +51,49 @@
   }
 
   /* Responsive typography with consistent scaling */
-  body { 
-    font-size: var(--text-base); 
+  body {
+    font-size: var(--text-base);
     line-height: var(--leading-normal);
   }
-  
-  h1 { 
-    font-size: var(--text-3xl); 
-    line-height: var(--leading-tight); 
+
+  h1 {
+    font-size: var(--text-3xl);
+    line-height: var(--leading-tight);
     font-weight: 700;
   }
-  h2 { 
-    font-size: var(--text-2xl); 
-    line-height: var(--leading-tight); 
+  h2 {
+    font-size: var(--text-2xl);
+    line-height: var(--leading-tight);
     font-weight: 600;
   }
-  h3 { 
-    font-size: var(--text-xl); 
-    line-height: var(--leading-normal); 
+  h3 {
+    font-size: var(--text-xl);
+    line-height: var(--leading-normal);
     font-weight: 600;
   }
-  h4 { 
-    font-size: var(--text-lg); 
-    line-height: var(--leading-normal); 
+  h4 {
+    font-size: var(--text-lg);
+    line-height: var(--leading-normal);
     font-weight: 600;
   }
-  
+
   /* Component-specific typography classes */
-  .card-title { 
-    font-size: var(--text-xl); 
-    font-weight: 600; 
+  .card-title {
+    font-size: var(--text-xl);
+    font-weight: 600;
     line-height: var(--leading-tight);
   }
-  .card-description { 
-    font-size: var(--text-sm); 
-    color: hsl(var(--muted-foreground)); 
+  .card-description {
+    font-size: var(--text-sm);
+    color: hsl(var(--muted-foreground));
     line-height: var(--leading-relaxed);
   }
-  .button-text { 
-    font-size: var(--text-base); 
+  .button-text {
+    font-size: var(--text-base);
     font-weight: 500;
   }
-  .label-text { 
-    font-size: var(--text-sm); 
+  .label-text {
+    font-size: var(--text-sm);
     font-weight: 500;
   }
 }
@@ -143,10 +143,10 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 30 10% 12%;
     --sidebar-border: 40 15% 88%;
     --sidebar-ring: 30 10% 15%;
-    
+
     --success: 142 76% 36%;
     --success-foreground: 40 30% 98%;
-    
+
     --warning: 38 92% 50%;
     --warning-foreground: 40 30% 98%;
   }
@@ -179,7 +179,7 @@ All colors MUST be HSL.
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
     --ring: 0 0% 83.1%;
-    
+
     --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 85%;
     --sidebar-primary: 0 0% 98%;
@@ -198,7 +198,13 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      system-ui,
+      sans-serif;
     font-size: var(--font-size-base);
     line-height: 1.6;
     letter-spacing: -0.011em;
@@ -206,41 +212,44 @@ All colors MUST be HSL.
 
   /* Mobile-friendly touch targets */
   @media (hover: none) and (pointer: coarse) {
-    button, a, [role="button"] {
+    button,
+    a,
+    [role="button"] {
       min-height: 44px;
       min-width: 44px;
     }
   }
 
   /* Ensure buttons and links wrap properly */
-  button, a {
+  button,
+  a {
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
 
   /* OpenAI-style container utilities */
-:root {
-  --content-padding-x: 1.5rem;
-}
+  :root {
+    --content-padding-x: 1.5rem;
+  }
 
-[data-sidebar-collapsed="true"] {
-  --content-padding-x: 0.5rem;
-}
+  [data-sidebar-collapsed="true"] {
+    --content-padding-x: 0.5rem;
+  }
 
-.openai-container {
-  width: 100%;
-  padding: 0.75rem var(--content-padding-x);
-}
-
-@media (max-width: 768px) {
   .openai-container {
-    padding: 0.75rem 1rem;
+    width: 100%;
+    padding: 0.75rem var(--content-padding-x);
   }
-  
-  [data-sidebar-collapsed="true"] .openai-container {
-    padding: 0.75rem 0.75rem;
+
+  @media (max-width: 768px) {
+    .openai-container {
+      padding: 0.75rem 1rem;
+    }
+
+    [data-sidebar-collapsed="true"] .openai-container {
+      padding: 0.75rem 0.75rem;
+    }
   }
-}
 
   .openai-section {
     margin-top: var(--space-xl);
@@ -267,7 +276,8 @@ All colors MUST be HSL.
   }
 
   /* Global button consistency */
-  button, .button {
+  button,
+  .button {
     white-space: normal;
     word-wrap: break-word;
     line-height: 1.2;
@@ -296,15 +306,26 @@ All colors MUST be HSL.
   }
 
   /* Unified typography scale */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-weight: 600;
     line-height: 1.2;
     letter-spacing: -0.01em;
   }
 
-  h1 { font-size: clamp(1.5rem, 3vw, 2rem); }
-  h2 { font-size: clamp(1.25rem, 2.5vw, 1.75rem); }
-  h3 { font-size: clamp(1.125rem, 2vw, 1.5rem); }
+  h1 {
+    font-size: clamp(1.5rem, 3vw, 2rem);
+  }
+  h2 {
+    font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+  }
+  h3 {
+    font-size: clamp(1.125rem, 2vw, 1.5rem);
+  }
 
   body {
     font-size: clamp(0.9375rem, 1vw, 1rem);
@@ -312,15 +333,27 @@ All colors MUST be HSL.
   }
 
   /* Button sizing system */
-  .btn-sm { min-height: 2rem; padding: 0.25rem 0.75rem; }
-  .btn-md { min-height: 2.5rem; padding: 0.5rem 1rem; }
-  .btn-lg { min-height: 3rem; padding: 0.75rem 1.5rem; }
-  .btn-xl { min-height: 4rem; padding: 1rem 2rem; }
+  .btn-sm {
+    min-height: 2rem;
+    padding: 0.25rem 0.75rem;
+  }
+  .btn-md {
+    min-height: 2.5rem;
+    padding: 0.5rem 1rem;
+  }
+  .btn-lg {
+    min-height: 3rem;
+    padding: 0.75rem 1.5rem;
+  }
+  .btn-xl {
+    min-height: 4rem;
+    padding: 1rem 2rem;
+  }
 
   .logo-text {
-    font-family: 'Helvetica Neue', 'Helvetica', Arial, sans-serif;
+    font-family: "Helvetica Neue", "Helvetica", Arial, sans-serif;
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: -0.03em;
   }
 
   * {
@@ -339,51 +372,70 @@ All colors MUST be HSL.
     white-space: normal;
   }
 
-/* Force disable ONLY slide/directional animations, NOT positioning transforms */
-[data-radix-dropdown-menu-content],
-[data-radix-popover-content],
-[data-radix-context-menu-content],
-[data-radix-hover-card-content],
-[data-radix-menubar-content] {
-  animation: none !important;
-}
+  /* Force disable ONLY slide/directional animations, NOT positioning transforms */
+  [data-radix-dropdown-menu-content],
+  [data-radix-popover-content],
+  [data-radix-context-menu-content],
+  [data-radix-hover-card-content],
+  [data-radix-menubar-content] {
+    animation: none !important;
+  }
 
-/* Only fade and scale, starting from anchor point */
-[data-radix-dropdown-menu-content][data-state="open"],
-[data-radix-popover-content][data-state="open"],
-[data-radix-context-menu-content][data-state="open"],
-[data-radix-hover-card-content][data-state="open"],
-[data-radix-menubar-content][data-state="open"] {
-  animation: fadeIn 0.15s ease, scaleIn 0.15s ease !important;
-}
+  /* Only fade and scale, starting from anchor point */
+  [data-radix-dropdown-menu-content][data-state="open"],
+  [data-radix-popover-content][data-state="open"],
+  [data-radix-context-menu-content][data-state="open"],
+  [data-radix-hover-card-content][data-state="open"],
+  [data-radix-menubar-content][data-state="open"] {
+    animation:
+      fadeIn 0.15s ease,
+      scaleIn 0.15s ease !important;
+  }
 
-[data-radix-dropdown-menu-content][data-state="closed"],
-[data-radix-popover-content][data-state="closed"],
-[data-radix-context-menu-content][data-state="closed"],
-[data-radix-hover-card-content][data-state="closed"],
-[data-radix-menubar-content][data-state="closed"] {
-  animation: fadeOut 0.15s ease, scaleOut 0.15s ease !important;
-}
+  [data-radix-dropdown-menu-content][data-state="closed"],
+  [data-radix-popover-content][data-state="closed"],
+  [data-radix-context-menu-content][data-state="closed"],
+  [data-radix-hover-card-content][data-state="closed"],
+  [data-radix-menubar-content][data-state="closed"] {
+    animation:
+      fadeOut 0.15s ease,
+      scaleOut 0.15s ease !important;
+  }
 
-/* Define the animations */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
+  /* Define the animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
-@keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
+  @keyframes fadeOut {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
 
-@keyframes scaleIn {
-  from { transform: scale(0.95); }
-  to { transform: scale(1); }
-}
+  @keyframes scaleIn {
+    from {
+      transform: scale(0.95);
+    }
+    to {
+      transform: scale(1);
+    }
+  }
 
-@keyframes scaleOut {
-  from { transform: scale(1); }
-  to { transform: scale(0.95); }
+  @keyframes scaleOut {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(0.95);
+    }
+  }
 }
-}
-
