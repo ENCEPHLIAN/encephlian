@@ -22,7 +22,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, BarChart3, Users, Settings, Search, Calendar, Plug, HelpCircle } from "lucide-react";
+import {
+  LayoutDashboard,
+  FileText,
+  Wallet,
+  User,
+  LogOut,
+  Activity,
+  FolderOpen,
+  StickyNote,
+  BarChart3,
+  Users,
+  Settings,
+  Search,
+  Calendar,
+  Plug,
+  HelpCircle,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -104,40 +120,35 @@ function AppLayoutContent() {
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase
-        .from('profiles')
-        .select('full_name, company_name')
-        .eq('id', user.id)
-        .single();
+      const { data } = await supabase.from("profiles").select("full_name, company_name").eq("id", user.id).single();
       return data;
-    }
+    },
   });
 
   // Update local state when profile data changes
   useEffect(() => {
     if (profile) {
-      setUserName(profile.full_name || 'User');
+      setUserName(profile.full_name || "User");
     }
   }, [profile]);
 
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("user_clinic_context")
-        .select("*")
-        .single();
+      const { data } = await supabase.from("user_clinic_context").select("*").single();
       return data;
-    }
+    },
   });
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({
       title: "Signed out",
-      description: "You have been successfully signed out."
+      description: "You have been successfully signed out.",
     });
   };
 
@@ -145,22 +156,25 @@ function AppLayoutContent() {
     <>
       <div className="flex min-h-screen w-full">
         <AppSidebar />
-        
+
         <div className="flex-1 flex flex-col w-full">
           {/* Top Bar */}
           <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 w-full">
-            <div className="flex h-16 items-center justify-between gap-4" style={{ paddingLeft: 'var(--content-padding-x)', paddingRight: 'var(--content-padding-x)' }}>
-              <div className="flex items-center gap-4">
+            <div
+              className="flex h-16 items-center justify-between gap-4"
+              style={{ paddingLeft: "var(--content-padding-x)", paddingRight: "var(--content-padding-x)" }}
+            >
+              <div className="flex items-center gap-2">
                 <SidebarTrigger />
-                <EditableBranding 
+                <EditableBranding
                   companyName={profile?.company_name || "ENCEPHLIAN"}
                   logoUrl={clinicContext?.logo_url}
                   logoClassName="h-12 w-12"
                 />
               </div>
-              
-              <Button 
-                variant="outline" 
+
+              <Button
+                variant="outline"
                 className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3"
                 onClick={() => setCommandOpen(true)}
               >
@@ -170,11 +184,11 @@ function AppLayoutContent() {
                   <span>⌘</span>K
                 </kbd>
               </Button>
-              
+
               <div className="flex items-center gap-2 sm:gap-4">
                 <QuickTipsDialog />
                 <ThemeToggle />
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="flex items-center gap-2">
@@ -205,10 +219,7 @@ function AppLayoutContent() {
           </header>
 
           {/* Main Content */}
-          <main 
-            className="flex-1 overflow-y-auto" 
-            data-sidebar-collapsed={state === "collapsed"}
-          >
+          <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
             <div className="openai-container">
               <Breadcrumbs />
               <Outlet />
@@ -224,7 +235,7 @@ function AppLayoutContent() {
 
 export default function AppLayout() {
   const isMobile = useIsMobile();
-  
+
   return (
     <SidebarProvider defaultOpen={!isMobile}>
       <AppLayoutContent />
