@@ -182,7 +182,8 @@ const Sidebar = React.forwardRef<
       {/* This is what handles the sidebar gap on desktop */}
       <div
         className={cn(
-          "relative h-svh w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear",
+          // ↓↓↓ changed: mt-16 + height under header
+          "relative mt-16 h-[calc(100svh-4rem)] w-[--sidebar-width] bg-transparent transition-[width] duration-200 ease-linear",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[side=right]:rotate-180",
           variant === "floating" || variant === "inset"
@@ -192,7 +193,8 @@ const Sidebar = React.forwardRef<
       />
       <div
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+          // ↓↓↓ changed: top-16 bottom-0 + new height
+          "fixed top-16 bottom-0 z-10 hidden h-[calc(100svh-4rem)] w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -373,7 +375,7 @@ const SidebarGroupLabel = React.forwardRef<HTMLDivElement, React.ComponentProps<
 SidebarGroupLabel.displayName = "SidebarGroupLabel";
 
 const SidebarGroupAction = React.forwardRef<HTMLButtonElement, React.ComponentProps<"button"> & { asChild?: boolean }>(
-  ({ className, asChild = false, ...props }, ref) => {
+  ({ className, asChild = false, showOnHover = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
 
     return (
@@ -385,6 +387,8 @@ const SidebarGroupAction = React.forwardRef<HTMLButtonElement, React.ComponentPr
           // Increases the hit area of the button on mobile.
           "after:absolute after:-inset-2 after:md:hidden",
           "group-data-[collapsible=icon]:hidden",
+          showOnHover &&
+            "group-focus-within/menu-item:opacity-100 group-hover/menu-item:opacity-100 data-[state=open]:opacity-100 peer-data-[active=true]/menu-button:text-sidebar-accent-foreground md:opacity-0",
           className,
         )}
         {...props}
