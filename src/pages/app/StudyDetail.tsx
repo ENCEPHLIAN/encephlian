@@ -48,6 +48,36 @@ export default function StudyDetail() {
   const patientAge = meta?.patient_age;
   const patientGender = meta?.patient_gender;
 
+  const handleGenerateAIReport = async () => {
+    setDownloading(true);
+    try {
+      toast({ title: "Generating AI report...", description: "This may take a minute" });
+      
+      const { data, error } = await supabase.functions.invoke("generate_ai_report", {
+        body: { study_id: id }
+      });
+      
+      if (error) throw error;
+      
+      toast({
+        title: "AI Report generated!",
+        description: "Refreshing page...",
+      });
+      
+      // Refresh the page to show the new report
+      window.location.reload();
+    } catch (error) {
+      console.error("AI generation error:", error);
+      toast({
+        title: "Generation failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const handleDownloadReport = async () => {
     setDownloading(true);
     try {
@@ -55,15 +85,17 @@ export default function StudyDetail() {
       if (!report) {
         toast({
           title: "No report found",
+          description: "Generate an AI report first",
           variant: "destructive",
         });
         return;
       }
 
+      // Generate PDF if it doesn't exist
       if (!report.pdf_path) {
         toast({ title: "Generating PDF...", description: "Please wait" });
         
-        const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
+        const { data: pdfData, error: genError } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: report.id }
         });
         
@@ -71,19 +103,12 @@ export default function StudyDetail() {
           throw new Error(genError.message || "Failed to generate PDF");
         }
         
-        toast({
-          title: "PDF generated",
-          description: "Downloading now...",
-        });
-        
-        // Wait a moment for the file to be ready
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Retry download
-        handleDownloadReport();
+        // Refresh to get the updated pdf_path
+        window.location.reload();
         return;
       }
 
+      // Download the PDF
       const { data, error } = await supabase.storage
         .from("eeg-reports")
         .download(report.pdf_path);
@@ -132,6 +157,12 @@ export default function StudyDetail() {
               Open EEG Viewer
             </Link>
           </Button>
+          {!study.reports?.[0] && study.state === 'uploaded' && (
+            <Button onClick={handleGenerateAIReport} disabled={downloading}>
+              <FileSignature className="mr-2 h-4 w-4" />
+              {downloading ? "Generating..." : "Generate AI Report"}
+            </Button>
+          )}
           {(study.state === 'ai_draft' || study.state === 'in_review') && (
             <Button asChild>
               <Link to={`/app/studies/${id}/review`}>
@@ -140,10 +171,10 @@ export default function StudyDetail() {
               </Link>
             </Button>
           )}
-          {study.state === 'signed' && (
+          {(study.state === 'signed' || study.reports?.[0]) && (
             <Button onClick={handleDownloadReport} disabled={downloading}>
               <Download className="mr-2 h-4 w-4" />
-              {downloading ? "Downloading..." : "Download Report"}
+              {downloading ? "Preparing..." : "Download Report"}
             </Button>
           )}
         </div>
@@ -228,14 +259,14 @@ export default function StudyDetail() {
         </CardContent>
       </Card>
 
-      {study.reports && (
+      {study.reports?.[0] ? (
         <Card>
           <CardHeader>
             <CardTitle>Report</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {(() => {
-              const report = study.reports as any;
+              const report = study.reports[0] as any;
               const content = report.content as any;
               return (
                 <div className="space-y-4">
@@ -251,9 +282,24 @@ export default function StudyDetail() {
                       <p className="text-sm">{content.impression}</p>
                     </div>
                   )}
+                  {content?.recommendations && (
+                    <div>
+                      <h3 className="font-medium mb-2">Recommendations</h3>
+                      <p className="text-sm">{content.recommendations}</p>
+                    </div>
+                  )}
                 </div>
               );
             })()}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Report</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">No report generated yet. Click "Generate AI Report" to create one.</p>
           </CardContent>
         </Card>
       )}
