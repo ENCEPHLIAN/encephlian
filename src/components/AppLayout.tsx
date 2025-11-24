@@ -118,7 +118,6 @@ function AppLayoutContent() {
   const [commandOpen, setCommandOpen] = useState(false);
   const { state } = useSidebar();
 
-  // user profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -137,7 +136,6 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
-  // clinic / logo context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -156,71 +154,72 @@ function AppLayoutContent() {
 
   return (
     <div className="flex min-h-screen w-full">
-      {/* LEFT: SIDEBAR (FULL-HEIGHT) */}
+      {/* LEFT: sidebar (shadcn-style, full height) */}
       <AppSidebar />
 
-      {/* RIGHT: APP BAR + SCROLLING CONTENT */}
+      {/* RIGHT: app bar + page content */}
       <div className="flex flex-1 flex-col w-full">
-        {/* APP BAR – FIXED HEIGHT, DOES NOT SCROLL */}
-        <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6 lg:px-8">
-          {/* LEFT: BRAND + SIDEBAR BUTTON */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <EditableBranding
-              companyName={profile?.company_name || "ENCEPHLIAN"}
-              logoUrl={clinicContext?.logo_url}
-              logoClassName="h-12 w-12"
-            />
-            <SidebarTrigger />
-          </div>
+        {/* APP BAR – sticky, logo left, actions right */}
+        <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8 gap-4">
+            {/* LEFT: branding + sidebar toggle */}
+            <div className="flex items-center gap-3">
+              <EditableBranding
+                companyName={profile?.company_name || "ENCEPHLIAN"}
+                logoUrl={clinicContext?.logo_url}
+                logoClassName="h-10 w-10"
+              />
+              <SidebarTrigger />
+            </div>
 
-          {/* MIDDLE: SEARCH / COMMAND PALETTE */}
-          <Button
-            variant="outline"
-            className="hidden sm:flex flex-1 items-center justify-start max-w-xl h-10 px-3 mx-4"
-            onClick={() => setCommandOpen(true)}
-          >
-            <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground text-sm">Search studies, patients...</span>
-            <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
-              <span>⌘</span>K
-            </kbd>
-          </Button>
+            {/* RIGHT: search + actions (OpenAI-ish cluster) */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground text-sm truncate">Search studies, patients...</span>
+                <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-[10px]">
+                  <span>⌘</span>K
+                </kbd>
+              </Button>
 
-          {/* RIGHT: ACTIONS */}
-          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-            <QuickTipsDialog />
-            <ThemeToggle />
+              <QuickTipsDialog />
+              <ThemeToggle />
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  <span className="hidden md:inline">{userName}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/app/profile")}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/app/settings")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2">
+                    <User className="h-5 w-5" />
+                    <span className="hidden md:inline">{userName}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/app/profile")}>
+                    <User className="mr-2 h-4 w-4" />
+                    Profile
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/app/settings")}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         </header>
 
-        {/* SCROLLING CONTENT AREA */}
-        <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
+        {/* PAGE CONTENT – body scrolls, bar stays pinned */}
+        <main className="flex-1" data-sidebar-collapsed={state === "collapsed"}>
           <div className="openai-container">
             <Breadcrumbs />
             <Outlet />
