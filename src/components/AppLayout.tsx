@@ -156,7 +156,8 @@ function AppLayoutContent() {
     <div className="flex min-h-screen w-full flex-col">
       {/* FULL-WIDTH STICKY HEADER */}
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex h-16 items-center gap-4 px-[var(--content-padding-x)]">
+        {/* ⬇️ Ditch var(--content-padding-x); use sane padding */}
+        <div className="flex h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
           {/* LEFT: BRANDING THEN SIDEBAR BUTTON */}
           <div className="flex items-center gap-3">
             <EditableBranding
@@ -167,22 +168,20 @@ function AppLayoutContent() {
             <SidebarTrigger />
           </div>
 
-          {/* CENTER: COMMAND PALETTE – FLEXES, HIDDEN ON VERY SMALL SCREENS */}
-          <div className="flex-1 flex justify-center">
-            <Button
-              variant="outline"
-              className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3"
-              onClick={() => setCommandOpen(true)}
-            >
-              <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground text-sm">Search studies, patients...</span>
-              <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
-                <span>⌘</span>K
-              </kbd>
-            </Button>
-          </div>
+          {/* MIDDLE: SEARCH TAKES REMAINING SPACE, NOT HARD-CENTERED */}
+          <Button
+            variant="outline"
+            className="hidden sm:flex flex-1 items-center justify-start max-w-xl h-10 px-3 mx-4"
+            onClick={() => setCommandOpen(true)}
+          >
+            <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+            <span className="text-muted-foreground text-sm">Search studies, patients...</span>
+            <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-xs">
+              <span>⌘</span>K
+            </kbd>
+          </Button>
 
-          {/* RIGHT: QUICK ACTIONS + USER MENU */}
+          {/* RIGHT: ACTIONS */}
           <div className="flex items-center gap-2 sm:gap-4">
             <QuickTipsDialog />
             <ThemeToggle />
