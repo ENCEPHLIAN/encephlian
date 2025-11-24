@@ -96,26 +96,36 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-// Desktop sidebar (shown only on md+ when sidebarOpen === true)
+// Desktop sidebar – nav centered vertically and stationary
 function AppSidebarDesktop() {
   return (
-    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 px-4 pt-6 pb-8 text-muted-foreground">
-      <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">Navigation</div>
-      <SidebarNav />
+    <nav className="hidden md:flex w-56 flex-col border-r bg-sidebar/40 text-muted-foreground">
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div className="w-full">
+          <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70 text-center">
+            Navigation
+          </div>
+          <SidebarNav />
+        </div>
+      </div>
     </nav>
   );
 }
 
-// Mobile sidebar (sheet)
+// Mobile sidebar (sheet) – nav centered vertically as well
 function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-64 p-0 bg-sidebar text-sidebar-foreground">
-        <div className="h-full flex flex-col px-4 pt-6 pb-8">
-          <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70">
-            Navigation
+        <div className="h-full flex">
+          <div className="flex-1 flex items-center justify-center px-4">
+            <div className="w-full">
+              <div className="mb-4 text-xs font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/70 text-center">
+                Navigation
+              </div>
+              <SidebarNav onNavigate={() => onOpenChange(false)} />
+            </div>
           </div>
-          <SidebarNav onNavigate={() => onOpenChange(false)} />
         </div>
       </SheetContent>
     </Sheet>
@@ -132,10 +142,10 @@ function AppLayoutContent() {
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
 
-  // ONE source of truth for sidebar state – used for both desktop & mobile
+  // single source of truth for sidebar – desktop + mobile
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Default behavior: desktop -> open, mobile -> closed
+  // Default: desktop → open, mobile → closed
   useEffect(() => {
     setSidebarOpen(!isMobile);
   }, [isMobile]);
@@ -168,6 +178,9 @@ function AppLayoutContent() {
     },
   });
 
+  const brandName = profile?.company_name || "ENCEPHLIAN";
+  const logoUrl = clinicContext?.logo_url as string | undefined;
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     toast({
@@ -181,14 +194,25 @@ function AppLayoutContent() {
       {/* APP BAR */}
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: branding THEN sidebar toggle button */}
+          {/* LEFT: branding + sidebar toggle */}
           <div className="flex items-center gap-3">
-            <EditableBranding
-              companyName={profile?.company_name || "ENCEPHLIAN"}
-              logoUrl={clinicContext?.logo_url}
-              logoClassName="h-8 w-8"
-            />
+            {/* Desktop / larger: full branding (logo + text, editable) */}
+            <div className="hidden sm:flex">
+              <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
+            </div>
 
+            {/* Mobile: logo only, no text */}
+            <div className="flex sm:hidden items-center">
+              {logoUrl ? (
+                <img src={logoUrl} alt={brandName} className="h-8 w-8 rounded-md object-cover" />
+              ) : (
+                <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-sm font-semibold">
+                  {brandName.charAt(0)}
+                </div>
+              )}
+            </div>
+
+            {/* Sidebar toggle – works for both desktop & mobile */}
             <Button
               variant="ghost"
               size="icon"
@@ -215,7 +239,7 @@ function AppLayoutContent() {
               </kbd>
             </Button>
 
-            {/* Mobile command palette icon */}
+            {/* Mobile search icon */}
             <Button
               variant="ghost"
               size="icon"
@@ -260,13 +284,13 @@ function AppLayoutContent() {
 
       {/* BODY */}
       <div className="flex flex-1">
-        {/* Desktop sidebar – only when !mobile && sidebarOpen */}
+        {/* Desktop sidebar – only when not mobile and sidebarOpen */}
         {!isMobile && sidebarOpen && <AppSidebarDesktop />}
 
-        {/* Mobile sidebar – sheet uses same sidebarOpen state */}
+        {/* Mobile sidebar – sheet driven by same sidebarOpen */}
         {isMobile && <AppSidebarMobile open={sidebarOpen} onOpenChange={setSidebarOpen} />}
 
-        {/* Main content */}
+        {/* Main content scrolls; sidebar stays stationary */}
         <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
           <Breadcrumbs />
           <Outlet />
