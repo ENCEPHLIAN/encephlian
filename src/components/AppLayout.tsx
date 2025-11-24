@@ -1,5 +1,9 @@
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
 import { supabase } from "@/integrations/supabase/client";
+
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -22,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
 import {
   LayoutDashboard,
   FileText,
@@ -39,11 +44,10 @@ import {
   Plug,
   HelpCircle,
 } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import CommandPalette from "@/components/CommandPalette";
@@ -114,6 +118,7 @@ function AppLayoutContent() {
   const [commandOpen, setCommandOpen] = useState(false);
   const { state } = useSidebar();
 
+  // user profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -132,6 +137,7 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
+  // clinic / logo context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -150,7 +156,7 @@ function AppLayoutContent() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      {/* Full-width sticky top bar */}
+      {/* FULL-WIDTH STICKY TOP BAR */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 w-full">
         <div
           className="flex h-16 items-center gap-4"
@@ -169,7 +175,7 @@ function AppLayoutContent() {
             />
           </div>
 
-          {/* Middle: command palette with extra spacing from branding */}
+          {/* Command palette – with extra padding from branding */}
           <Button
             variant="outline"
             className="hidden sm:flex items-center justify-start w-full max-w-sm h-10 px-3 ml-4"
@@ -182,7 +188,7 @@ function AppLayoutContent() {
             </kbd>
           </Button>
 
-          {/* Right: actions */}
+          {/* Right: quick actions + user menu */}
           <div className="flex items-center gap-2 sm:gap-4 ml-auto">
             <QuickTipsDialog />
             <ThemeToggle />
@@ -216,12 +222,12 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* Below header: sidebar + main content */}
+      {/* BELOW HEADER: SIDEBAR + MAIN CONTENT */}
       <div className="flex flex-1 w-full">
         <AppSidebar />
 
         <div className="flex-1 flex flex-col w-full">
-          <main className="flex-1" data-sidebar-collapsed={state === "collapsed"}>
+          <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
             <div className="openai-container">
               <Breadcrumbs />
               <Outlet />
