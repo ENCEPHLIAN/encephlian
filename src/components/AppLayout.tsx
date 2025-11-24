@@ -118,6 +118,7 @@ function AppLayoutContent() {
   const [commandOpen, setCommandOpen] = useState(false);
   const { state } = useSidebar();
 
+  // user profile
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -136,6 +137,7 @@ function AppLayoutContent() {
     }
   }, [profile]);
 
+  // clinic / logo context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -153,13 +155,16 @@ function AppLayoutContent() {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col">
-      {/* FULL-WIDTH STICKY HEADER */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        {/* ⬇️ Ditch var(--content-padding-x); use sane padding */}
-        <div className="flex h-16 items-center gap-4 px-4 sm:px-6 lg:px-8">
-          {/* LEFT: BRANDING THEN SIDEBAR BUTTON */}
-          <div className="flex items-center gap-3">
+    <div className="flex min-h-screen w-full">
+      {/* LEFT: SIDEBAR (FULL-HEIGHT) */}
+      <AppSidebar />
+
+      {/* RIGHT: APP BAR + SCROLLING CONTENT */}
+      <div className="flex flex-1 flex-col w-full">
+        {/* APP BAR – FIXED HEIGHT, DOES NOT SCROLL */}
+        <header className="z-40 flex h-16 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 sm:px-6 lg:px-8">
+          {/* LEFT: BRAND + SIDEBAR BUTTON */}
+          <div className="flex items-center gap-3 flex-shrink-0">
             <EditableBranding
               companyName={profile?.company_name || "ENCEPHLIAN"}
               logoUrl={clinicContext?.logo_url}
@@ -168,7 +173,7 @@ function AppLayoutContent() {
             <SidebarTrigger />
           </div>
 
-          {/* MIDDLE: SEARCH TAKES REMAINING SPACE, NOT HARD-CENTERED */}
+          {/* MIDDLE: SEARCH / COMMAND PALETTE */}
           <Button
             variant="outline"
             className="hidden sm:flex flex-1 items-center justify-start max-w-xl h-10 px-3 mx-4"
@@ -182,7 +187,7 @@ function AppLayoutContent() {
           </Button>
 
           {/* RIGHT: ACTIONS */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
             <QuickTipsDialog />
             <ThemeToggle />
 
@@ -212,23 +217,17 @@ function AppLayoutContent() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* BELOW HEADER: SIDEBAR + MAIN CONTENT */}
-      <div className="flex flex-1 w-full">
-        <AppSidebar />
+        {/* SCROLLING CONTENT AREA */}
+        <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
+          <div className="openai-container">
+            <Breadcrumbs />
+            <Outlet />
+          </div>
+        </main>
 
-        <div className="flex-1 flex flex-col w-full">
-          <main className="flex-1 overflow-y-auto" data-sidebar-collapsed={state === "collapsed"}>
-            <div className="openai-container">
-              <Breadcrumbs />
-              <Outlet />
-            </div>
-          </main>
-
-          <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-        </div>
+        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </div>
     </div>
   );
