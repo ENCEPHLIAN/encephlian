@@ -137,7 +137,7 @@ export default function Dashboard() {
           value={pendingStudies.length}
           change={`${pendingStudies.filter(s => s.sla === 'STAT').length} STAT cases`}
           trend={pendingStudies.length > 5 ? "up" : "neutral"}
-          color="from-blue-500 to-blue-600"
+          color="from-muted/60 to-muted/40"
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
         <KPICard
@@ -145,21 +145,21 @@ export default function Dashboard() {
           value={completedToday}
           change="Goal: 5"
           trend={completedToday >= 5 ? "up" : "neutral"}
-          color="from-green-500 to-green-600"
+          color="from-muted/50 to-muted/30"
         />
         <KPICard
           label="This Week"
           value={completedWeek}
           change="Studies completed"
           trend="neutral"
-          color="from-purple-500 to-purple-600"
+          color="from-muted/60 to-muted/40"
         />
         <KPICard
           label="Token Balance"
           value={wallet?.tokens || 0}
           change="Available for signing"
           trend="neutral"
-          color="from-blue-500 to-blue-600"
+          color="from-muted/50 to-muted/30"
           onClick={() => navigate("/app/wallet")}
         />
         <KPICard
@@ -167,7 +167,7 @@ export default function Dashboard() {
           value="12 hrs"
           change="Turnaround time"
           trend="up"
-          color="from-indigo-500 to-indigo-600"
+          color="from-muted/60 to-muted/40"
         />
         <KPICard
           label="This Month"
@@ -176,21 +176,21 @@ export default function Dashboard() {
           ).length || 0}
           change="Monthly total"
           trend="up"
-          color="from-teal-500 to-teal-600"
+          color="from-muted/50 to-muted/30"
         />
         <KPICard
           label="Success Rate"
           value="98.5%"
           change="Quality score"
           trend="up"
-          color="from-emerald-500 to-emerald-600"
+          color="from-muted/60 to-muted/40"
         />
         <KPICard
           label="Active Now"
           value="3"
           change="Reviewers online"
           trend="neutral"
-          color="from-orange-500 to-orange-600"
+          color="from-muted/50 to-muted/30"
         />
       </div>
 
