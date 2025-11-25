@@ -34,8 +34,8 @@ const Index = () => {
               </span>
             </h1>
             
-            <p className="text-xl md:text-3xl text-foreground/80 max-w-3xl mx-auto font-light">
-              AI-Powered Clinical Decision Support for <span className="text-primary font-semibold">Neurologists</span>
+            <p className="text-xl md:text-2xl text-foreground/80 max-w-2xl mx-auto font-light">
+              AI EEG analysis for neurology clinics.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center pt-12">

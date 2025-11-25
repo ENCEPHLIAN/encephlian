@@ -35,6 +35,7 @@ import {
   HelpCircle,
   PanelLeft,
   X,
+  Sparkles,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -45,6 +46,7 @@ import CommandPalette from "@/components/CommandPalette";
 import EditableBranding from "@/components/EditableBranding";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
+import { MissionPanel } from "@/components/MissionPanel";
 
 // --------------- NAV DATA ---------------
 
@@ -106,7 +108,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
 // --------------- DESKTOP SIDEBAR (PINNED + STICKY + FROSTED) ---------------
 
-function AppSidebarDesktop({ collapsed }: { collapsed: boolean }) {
+function AppSidebarDesktop({ collapsed, onMissionOpen }: { collapsed: boolean; onMissionOpen: () => void }) {
   return (
     <aside
       className={cn(
@@ -125,13 +127,31 @@ function AppSidebarDesktop({ collapsed }: { collapsed: boolean }) {
         )}
         <SidebarNav collapsed={collapsed} />
       </div>
+
+      {/* Mission CTA Button at bottom */}
+      <div
+        className={cn(
+          "border-t border-border/60 flex items-center justify-center",
+          collapsed ? "p-3" : "p-4"
+        )}
+      >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-10 w-10 rounded-full hover:bg-secondary"
+          onClick={onMissionOpen}
+          aria-label="Open mission panel"
+        >
+          <Sparkles className="h-5 w-5" />
+        </Button>
+      </div>
     </aside>
   );
 }
 
 // --------------- MOBILE SIDEBAR (FULLSCREEN FROSTED SHEET) ---------------
 
-function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean; onOpenChange: (open: boolean) => void; onMissionOpen: () => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -157,6 +177,22 @@ function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange:
           <div className="flex-1 overflow-y-auto px-4 py-4">
             <SidebarNav onNavigate={() => onOpenChange(false)} />
           </div>
+
+          {/* Mission CTA Button at bottom */}
+          <div className="border-t border-border/60 p-4 flex items-center justify-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 rounded-full hover:bg-secondary"
+              onClick={() => {
+                onOpenChange(false);
+                onMissionOpen();
+              }}
+              aria-label="Open mission panel"
+            >
+              <Sparkles className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -172,7 +208,7 @@ function AppLayoutContent() {
 
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
-  const [showAllStudies, setShowAllStudies] = useState(true);
+  const [missionOpen, setMissionOpen] = useState(false);
 
   // desktop: collapsed vs expanded
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -262,15 +298,6 @@ function AppLayoutContent() {
               aria-label="Open search"
             />
 
-            {/* Study filter toggle - example usage of PillToggle */}
-            <div className="hidden lg:flex">
-              <PillToggle
-                label={showAllStudies ? "All Studies" : "My Studies"}
-                checked={showAllStudies}
-                onChange={() => setShowAllStudies(!showAllStudies)}
-              />
-            </div>
-
             {/* QuickTips only on desktop */}
             {!isMobile && <QuickTipsDialog />}
 
@@ -308,10 +335,10 @@ function AppLayoutContent() {
       {/* BODY: sidebar pinned; whole page scrolls */}
       <div className="flex flex-1">
         {/* Desktop sidebar (sticky, frosted, pinned left) */}
-        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} />}
+        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} />}
 
         {/* Mobile full-screen nav */}
-        {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} />}
+        {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}
 
         {/* Main content; no custom scroll container so sticky works */}
         <main className="flex-1 px-4 sm:px-6 py-6">
@@ -320,7 +347,13 @@ function AppLayoutContent() {
         </main>
       </div>
 
+      {/* Footer */}
+      <footer className="border-t border-border/60 py-3 px-4 sm:px-6">
+        <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN©2025</p>
+      </footer>
+
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <MissionPanel open={missionOpen} onOpenChange={setMissionOpen} />
     </div>
   );
 }

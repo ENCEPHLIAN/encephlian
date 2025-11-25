@@ -15,13 +15,13 @@ const TOKEN_PACKAGES = [
 ];
 
 export function TokenPurchase() {
-  const [loading, setLoading] = useState(false);
+  const [loadingPackage, setLoadingPackage] = useState<number | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const handlePurchase = async (packageTokens: number, packagePrice: number) => {
     try {
-      setLoading(true);
+      setLoadingPackage(packageTokens);
 
       // Create order via edge function
       const { data: orderData, error: orderError } = await supabase.functions.invoke('create_order', {
@@ -63,7 +63,9 @@ export function TokenPurchase() {
               description: `${verifyData.tokens_credited} tokens credited`,
             });
 
-            queryClient.invalidateQueries({ queryKey: ["wallet"] });
+            // Immediately refresh wallet balance
+            await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+            await queryClient.refetchQueries({ queryKey: ["wallet-balance"] });
             queryClient.invalidateQueries({ queryKey: ["payments"] });
           } catch (error: any) {
             toast({
@@ -72,7 +74,7 @@ export function TokenPurchase() {
               variant: "destructive",
             });
           } finally {
-            setLoading(false);
+            setLoadingPackage(null);
           }
         },
         prefill: {
@@ -82,7 +84,7 @@ export function TokenPurchase() {
           color: '#0ea5e9',
         },
         modal: {
-          ondismiss: () => setLoading(false)
+          ondismiss: () => setLoadingPackage(null)
         }
       };
 
@@ -94,7 +96,7 @@ export function TokenPurchase() {
         description: error.message,
         variant: "destructive",
       });
-      setLoading(false);
+      setLoadingPackage(null);
     }
   };
 
@@ -145,13 +147,13 @@ export function TokenPurchase() {
 
                 <Button 
                   onClick={() => handlePurchase(pkg.tokens, pkg.price)}
-                  disabled={loading}
+                  disabled={loadingPackage !== null}
                   className={cn(
                     "w-full",
                     pkg.popular ? "bg-primary hover:bg-primary/90" : ""
                   )}
                 >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
+                  {loadingPackage === pkg.tokens ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
                 </Button>
               </CardContent>
             </Card>
