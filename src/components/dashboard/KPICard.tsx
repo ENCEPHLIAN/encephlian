@@ -5,44 +5,32 @@ import { cn } from "@/lib/utils";
 interface KPICardProps {
   label: string;
   value: string | number;
-  change: string;
-  trend: "up" | "down" | "neutral";
-  /**
-   * @deprecated Previously used for loud gradients. Kept only for API compatibility.
-   * The visual style is now driven by trend + dashboard card tokens.
-   */
-  color: string;
+  change?: string;
+  trend?: "up" | "down" | "neutral";
+  // which color block to use
+  variant: "blue" | "green" | "indigo" | "amber" | "cyan" | "neutral";
   onClick?: () => void;
 }
 
-export default function KPICard({ label, value, change, trend, onClick }: KPICardProps) {
+export default function KPICard({ label, value, change, trend = "neutral", variant, onClick }: KPICardProps) {
   const TrendIcon = trend === "up" ? TrendingUp : trend === "down" ? TrendingDown : Minus;
 
-  // Map trend -> subtle dashboard variant
-  const variantClass =
-    trend === "up"
-      ? "dashboard-card dashboard-card--success"
-      : trend === "down"
-        ? "dashboard-card dashboard-card--warning"
-        : "dashboard-card dashboard-card--neutral";
-
   return (
-    <Card
-      className={cn(variantClass, "cursor-pointer transition-transform", onClick && "hover:scale-[1.01]")}
-      onClick={onClick}
-    >
-      <CardContent className="pt-4">
+    <Card className={cn("kpi-card", `kpi-${variant}`, onClick && "cursor-pointer")} onClick={onClick}>
+      <CardContent>
         <div className="space-y-2">
-          <div className="dashboard-card-title">{label}</div>
+          <div className="text-sm text-muted-foreground font-medium">{label}</div>
 
-          <div className="dashboard-card-value">{value}</div>
+          <div className="text-3xl font-semibold">{value}</div>
 
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <TrendIcon
-              className={cn("h-3 w-3", trend === "up" && "text-success", trend === "down" && "text-destructive")}
-            />
-            <span className="dashboard-card-trend">{change}</span>
-          </div>
+          {change && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <TrendIcon
+                className={cn("h-3 w-3", trend === "up" && "text-success", trend === "down" && "text-destructive")}
+              />
+              <span>{change}</span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
