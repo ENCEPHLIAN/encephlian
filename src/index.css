@@ -2,44 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
+/* -------------------------------------------------- */
+/* BASE TYPOGRAPHY + SPACING + SHADOWS */
+/* -------------------------------------------------- */
+
 @layer base {
-  /* OpenAI-inspired spacing system */
   :root {
     --space-unit: 8px;
-    --space-xs: calc(var(--space-unit) * 1); /* 8px */
-    --space-sm: calc(var(--space-unit) * 2); /* 16px */
-    --space-md: calc(var(--space-unit) * 3); /* 24px */
-    --space-lg: calc(var(--space-unit) * 4); /* 32px */
-    --space-xl: calc(var(--space-unit) * 6); /* 48px */
-    --space-2xl: calc(var(--space-unit) * 8); /* 64px */
-    --space-3xl: calc(var(--space-unit) * 12); /* 96px */
+    --space-xs: calc(var(--space-unit) * 1);
+    --space-sm: calc(var(--space-unit) * 2);
+    --space-md: calc(var(--space-unit) * 3);
+    --space-lg: calc(var(--space-unit) * 4);
+    --space-xl: calc(var(--space-unit) * 6);
+    --space-2xl: calc(var(--space-unit) * 8);
+    --space-3xl: calc(var(--space-unit) * 12);
 
-    /* OpenAI-style shadows */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 
-    /* Generous max-widths */
     --max-width-content: 1400px;
     --max-width-narrow: 800px;
 
-    /* Global Typography Scale - Perfect Fourth (1.333) Ratio */
-    --text-xs: 0.75rem; /* 12px - Small labels, captions */
-    --text-sm: 0.875rem; /* 14px - Body small, secondary text */
-    --text-base: 1rem; /* 16px - Base body text */
-    --text-lg: 1.125rem; /* 18px - Emphasized text */
-    --text-xl: 1.25rem; /* 20px - Small headings */
-    --text-2xl: 1.5rem; /* 24px - Section headings */
-    --text-3xl: 2rem; /* 32px - Page titles */
-    --text-4xl: 2.5rem; /* 40px - Hero text */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 2rem;
+    --text-4xl: 2.5rem;
 
-    /* Line heights for readability */
     --leading-tight: 1.2;
     --leading-normal: 1.5;
     --leading-relaxed: 1.75;
 
-    /* Fluid responsive typography (kept for backwards compatibility) */
     --font-size-xs: var(--text-xs);
     --font-size-sm: var(--text-sm);
     --font-size-base: var(--text-base);
@@ -50,7 +48,6 @@
     --font-size-4xl: var(--text-4xl);
   }
 
-  /* Responsive typography with consistent scaling */
   body {
     font-size: var(--text-base);
     line-height: var(--leading-normal);
@@ -58,53 +55,44 @@
 
   h1 {
     font-size: var(--text-3xl);
-    line-height: var(--leading-tight);
     font-weight: 700;
+    line-height: var(--leading-tight);
   }
   h2 {
     font-size: var(--text-2xl);
-    line-height: var(--leading-tight);
     font-weight: 600;
   }
   h3 {
     font-size: var(--text-xl);
-    line-height: var(--leading-normal);
     font-weight: 600;
   }
   h4 {
     font-size: var(--text-lg);
-    line-height: var(--leading-normal);
     font-weight: 600;
   }
 
-  /* Component-specific typography classes */
   .card-title {
     font-size: var(--text-xl);
     font-weight: 600;
-    line-height: var(--leading-tight);
   }
   .card-description {
     font-size: var(--text-sm);
     color: hsl(var(--muted-foreground));
-    line-height: var(--leading-relaxed);
   }
   .button-text {
-    font-size: var(--text-base);
     font-weight: 500;
   }
   .label-text {
-    font-size: var(--text-sm);
     font-weight: 500;
   }
 }
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* -------------------------------------------------- */
+/* COLOR SYSTEM: LIGHT + DARK MODE */
+/* -------------------------------------------------- */
 
 @layer base {
   :root {
-    /* Medical-grade professional muted color palette */
     --background: 210 20% 98%;
     --foreground: 215 15% 20%;
 
@@ -149,6 +137,15 @@ All colors MUST be HSL.
 
     --warning: 38 70% 60%;
     --warning-foreground: 215 15% 20%;
+
+    /* ---------------------------------------------- */
+    /* DASHBOARD COLOR BAND TOKENS (LIGHT MODE)       */
+    /* ---------------------------------------------- */
+    --dashboard-accent-primary: 215 22% 92%;
+    --dashboard-accent-success: 150 20% 90%;
+    --dashboard-accent-warning: 38 30% 92%;
+    --dashboard-accent-info: 200 18% 92%;
+    --dashboard-accent-neutral: 220 10% 93%;
   }
 
   .dark {
@@ -188,8 +185,21 @@ All colors MUST be HSL.
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 14.9%;
     --sidebar-ring: 0 0% 83.1%;
+
+    /* ---------------------------------------------- */
+    /* DASHBOARD TOKENS (DARK MODE)                   */
+    /* ---------------------------------------------- */
+    --dashboard-accent-primary: 215 15% 16%;
+    --dashboard-accent-success: 150 20% 18%;
+    --dashboard-accent-warning: 38 30% 20%;
+    --dashboard-accent-info: 200 20% 18%;
+    --dashboard-accent-neutral: 220 10% 17%;
   }
 }
+
+/* -------------------------------------------------- */
+/* GLOBAL STYLE RESET + TYPOGRAPHY                   */
+/* -------------------------------------------------- */
 
 @layer base {
   * {
@@ -203,109 +213,12 @@ All colors MUST be HSL.
       -apple-system,
       BlinkMacSystemFont,
       "Segoe UI",
-      system-ui,
       sans-serif;
-    font-size: var(--font-size-base);
+    font-size: clamp(0.9375rem, 1vw, 1rem);
     line-height: 1.6;
     letter-spacing: -0.011em;
   }
 
-  /* Mobile-friendly touch targets */
-  @media (hover: none) and (pointer: coarse) {
-    button,
-    a,
-    [role="button"] {
-      min-height: 44px;
-      min-width: 44px;
-    }
-  }
-
-  /* Ensure buttons and links wrap properly */
-  button,
-  a {
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-  }
-
-  /* OpenAI-style container utilities */
-  :root {
-    --content-padding-x: 1.5rem;
-  }
-
-  [data-sidebar-collapsed="true"] {
-    --content-padding-x: 0.5rem;
-  }
-
-  .openai-container {
-    width: 100%;
-    padding: 0.75rem var(--content-padding-x);
-  }
-
-  @media (max-width: 768px) {
-    .openai-container {
-      padding: 0.75rem 1rem;
-    }
-
-    [data-sidebar-collapsed="true"] .openai-container {
-      padding: 0.75rem 0.75rem;
-    }
-  }
-
-  .openai-section {
-    margin-top: var(--space-xl);
-    margin-bottom: var(--space-xl);
-  }
-
-  .openai-card {
-    padding: 1rem;
-    border-radius: 0.75rem;
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--card));
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    transition: all 150ms ease;
-  }
-
-  @media (min-width: 1024px) {
-    .openai-card {
-      padding: 1.25rem;
-    }
-  }
-
-  .openai-card:hover {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  }
-
-  /* Global button consistency */
-  button,
-  .button {
-    white-space: normal;
-    word-wrap: break-word;
-    line-height: 1.2;
-    text-align: center;
-  }
-
-  button > span {
-    display: inline-block;
-    max-width: 100%;
-  }
-
-  /* Quick action buttons */
-  .quick-action-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    padding: 1rem;
-  }
-
-  .quick-action-btn span {
-    white-space: normal;
-    line-height: 1.3;
-    font-size: clamp(0.875rem, 1vw, 1rem);
-  }
-
-  /* Unified typography scale */
   h1,
   h2,
   h3,
@@ -327,52 +240,139 @@ All colors MUST be HSL.
     font-size: clamp(1.125rem, 2vw, 1.5rem);
   }
 
-  body {
-    font-size: clamp(0.9375rem, 1vw, 1rem);
-    line-height: 1.6;
+  button,
+  a {
+    word-wrap: break-word;
   }
-
-  /* Button sizing system */
-  .btn-sm {
-    min-height: 2rem;
-    padding: 0.25rem 0.75rem;
-  }
-  .btn-md {
-    min-height: 2.5rem;
-    padding: 0.5rem 1rem;
-  }
-  .btn-lg {
-    min-height: 3rem;
-    padding: 0.75rem 1.5rem;
-  }
-  .btn-xl {
-    min-height: 4rem;
-    padding: 1rem 2rem;
-  }
-
-  .logo-text {
-    font-family: "Montserat", sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-  }
-
-  * {
-    transition-property: color, background-color, border-color, opacity, transform;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-  }
-
-  /* Fix folder button text overflow */
-  .folder-btn-text {
-    word-break: break-word;
-    overflow-wrap: anywhere;
-    hyphens: auto;
-    line-height: 1.5;
+  button > span {
+    display: inline-block;
     max-width: 100%;
-    white-space: normal;
+  }
+}
+
+/* -------------------------------------------------- */
+/* OPENAI CONTAINER SYSTEM */
+/* -------------------------------------------------- */
+
+@layer base {
+  :root {
+    --content-padding-x: 1.5rem;
   }
 
-  /* Force disable ONLY slide/directional animations, NOT positioning transforms */
+  [data-sidebar-collapsed="true"] {
+    --content-padding-x: 0.5rem;
+  }
+
+  .openai-container {
+    width: 100%;
+    padding: 0.75rem var(--content-padding-x);
+  }
+
+  @media (max-width: 768px) {
+    .openai-container {
+      padding: 0.75rem 1rem;
+    }
+    [data-sidebar-collapsed="true"] .openai-container {
+      padding: 0.75rem 0.75rem;
+    }
+  }
+
+  .openai-section {
+    margin-top: var(--space-xl);
+    margin-bottom: var(--space-xl);
+  }
+
+  .openai-card {
+    padding: 1rem;
+    border-radius: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--card));
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    transition: all 150ms ease;
+  }
+
+  .openai-card:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* -------------------------------------------------- */
+/* DASHBOARD CARD SYSTEM  (NEW) */
+/* -------------------------------------------------- */
+
+@layer base {
+  .dashboard-card {
+    @apply openai-card relative overflow-hidden;
+  }
+
+  .dashboard-card-header {
+    @apply flex items-center justify-between gap-2 mb-2;
+  }
+
+  .dashboard-card-title {
+    @apply text-sm font-medium text-foreground;
+  }
+  .dashboard-card-subtitle {
+    @apply text-xs text-muted-foreground;
+  }
+  .dashboard-card-value {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  .dashboard-card-trend {
+    @apply text-xs font-medium;
+  }
+
+  .dashboard-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    height: 3px;
+    border-radius: 9999px 9999px 0 0;
+    opacity: 0.9;
+  }
+
+  .dashboard-card--primary::before {
+    background: hsl(var(--dashboard-accent-primary));
+  }
+  .dashboard-card--success::before {
+    background: hsl(var(--dashboard-accent-success));
+  }
+  .dashboard-card--warning::before {
+    background: hsl(var(--dashboard-accent-warning));
+  }
+  .dashboard-card--info::before {
+    background: hsl(var(--dashboard-accent-info));
+  }
+  .dashboard-card--neutral::before {
+    background: hsl(var(--dashboard-accent-neutral));
+  }
+
+  .dashboard-card--primary {
+    background: linear-gradient(to bottom, hsl(var(--dashboard-accent-primary) / 0.35), hsl(var(--card)));
+  }
+
+  .dashboard-card--success {
+    background: linear-gradient(to bottom, hsl(var(--dashboard-accent-success) / 0.35), hsl(var(--card)));
+  }
+
+  .dashboard-card--warning {
+    background: linear-gradient(to bottom, hsl(var(--dashboard-accent-warning) / 0.35), hsl(var(--card)));
+  }
+
+  .dashboard-card--info {
+    background: linear-gradient(to bottom, hsl(var(--dashboard-accent-info) / 0.35), hsl(var(--card)));
+  }
+
+  .dashboard-card--neutral {
+    background: linear-gradient(to bottom, hsl(var(--dashboard-accent-neutral) / 0.35), hsl(var(--card)));
+  }
+}
+
+/* -------------------------------------------------- */
+/* RADIX ANIMATION FIXES, MISC UTILITIES */
+/* -------------------------------------------------- */
+
+@layer base {
   [data-radix-dropdown-menu-content],
   [data-radix-popover-content],
   [data-radix-context-menu-content],
@@ -381,28 +381,18 @@ All colors MUST be HSL.
     animation: none !important;
   }
 
-  /* Only fade and scale, starting from anchor point */
-  [data-radix-dropdown-menu-content][data-state="open"],
-  [data-radix-popover-content][data-state="open"],
-  [data-radix-context-menu-content][data-state="open"],
-  [data-radix-hover-card-content][data-state="open"],
-  [data-radix-menubar-content][data-state="open"] {
+  [data-state="open"] {
     animation:
       fadeIn 0.15s ease,
       scaleIn 0.15s ease !important;
   }
 
-  [data-radix-dropdown-menu-content][data-state="closed"],
-  [data-radix-popover-content][data-state="closed"],
-  [data-radix-context-menu-content][data-state="closed"],
-  [data-radix-hover-card-content][data-state="closed"],
-  [data-radix-menubar-content][data-state="closed"] {
+  [data-state="closed"] {
     animation:
       fadeOut 0.15s ease,
       scaleOut 0.15s ease !important;
   }
 
-  /* Define the animations */
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -411,7 +401,6 @@ All colors MUST be HSL.
       opacity: 1;
     }
   }
-
   @keyframes fadeOut {
     from {
       opacity: 1;
@@ -420,7 +409,6 @@ All colors MUST be HSL.
       opacity: 0;
     }
   }
-
   @keyframes scaleIn {
     from {
       transform: scale(0.95);
@@ -429,7 +417,6 @@ All colors MUST be HSL.
       transform: scale(1);
     }
   }
-
   @keyframes scaleOut {
     from {
       transform: scale(1);
@@ -438,8 +425,13 @@ All colors MUST be HSL.
       transform: scale(0.95);
     }
   }
+}
 
-  /* OpenAI-style utility classes */
+/* -------------------------------------------------- */
+/* OPENAI ICON & PILL UTILITIES */
+/* -------------------------------------------------- */
+
+@layer base {
   .oa-icon-pill {
     @apply flex items-center justify-center h-9 w-9 rounded-full border border-border/60 bg-secondary/80 hover:bg-secondary transition-colors;
   }
