@@ -139,64 +139,61 @@ export default function Support() {
       </Card>
 
       {/* FAQ Section */}
-      <Card className="openai-card">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-base">Frequently Asked Questions</CardTitle>
+          <CardTitle className="text-lg font-semibold">Frequently Asked Questions</CardTitle>
         </CardHeader>
         <CardContent>
-          <Accordion type="single" collapsible className="w-full">
+          {/* note: type="multiple" and className="faq-accordion" */}
+          <Accordion type="multiple" collapsible className="w-full faq-accordion">
             <AccordionItem value="item-1">
-              <AccordionTrigger className="text-sm md:text-base font-medium">
-                What is TAT (Turnaround Time)?
-              </AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
+              <AccordionTrigger className="text-base font-medium">What is TAT (Turnaround Time)?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
                 TAT is the total time from when a study is uploaded until the final signed report is delivered. Standard
                 TAT is typically 24–48 hours for routine studies.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="item-2">
-              <AccordionTrigger className="text-sm md:text-base font-medium">What does STAT mean?</AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
-                STAT is a medical term meaning &quot;immediately&quot; or &quot;urgent.&quot; STAT studies require
-                priority review and typically have a TAT of 2–6 hours. Use STAT for seizure emergencies, status
-                epilepticus, ICU patients, or pre-surgical evaluations with time constraints.
+              <AccordionTrigger className="text-base font-medium">What does STAT mean?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                STAT is a medical term meaning “immediately” or “urgent.” STAT studies require priority review and
+                typically have a TAT of 2–6 hours. Use STAT for seizure emergencies, status epilepticus, ICU patients,
+                or pre-surgical evaluations with time constraints.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="item-3">
-              <AccordionTrigger className="text-sm md:text-base font-medium">
+              <AccordionTrigger className="text-base font-medium">
                 What is SLA (Service Level Agreement)?
               </AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
-                SLA is a contractual commitment defining guaranteed turnaround times and service quality. We offer three
-                tiers: Standard SLA (48 hours), Priority SLA (24 hours), and STAT SLA (6 hours).
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                SLA is a contractual commitment defining guaranteed turnaround times and service quality. We offer
+                multiple SLA tiers that can be tuned to your clinic’s workload.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="item-4">
-              <AccordionTrigger className="text-sm md:text-base font-medium">How do I upload studies?</AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
-                Go to the Files page and select the &quot;EEG Studies&quot; bucket. Drag and drop .edf files or click to
-                browse. The system automatically processes and parses your EEG data.
+              <AccordionTrigger className="text-base font-medium">How do I upload studies?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                Go to <span className="font-medium">Files → EEG Studies</span>, then drag and drop your EDF files or
+                click to browse. The system automatically parses and queues them for AI review.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="item-5">
-              <AccordionTrigger className="text-sm md:text-base font-medium">
-                What file formats are supported?
-              </AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
-                We support EDF (European Data Format) files, the standard format for EEG recordings. Files should
-                contain proper channel information and metadata.
+              <AccordionTrigger className="text-base font-medium">What formats are supported?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                We currently support EDF (European Data Format) for routine and long-term EEG. Other formats can be
+                onboarded for specific sites if needed.
               </AccordionContent>
             </AccordionItem>
 
             <AccordionItem value="item-6">
-              <AccordionTrigger className="text-sm md:text-base font-medium">How do tokens work?</AccordionTrigger>
-              <AccordionContent className="text-sm leading-relaxed">
-                Tokens are required for signing reports. Each signed report consumes tokens based on complexity and SLA
-                tier. You can purchase tokens from the Wallet page.
+              <AccordionTrigger className="text-base font-medium">How do tokens work?</AccordionTrigger>
+              <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
+                Tokens are consumed when you sign reports. Routine TAT reports use 1 token, STAT reports use 2 tokens.
+                You can top up anytime from the Wallet page.
               </AccordionContent>
             </AccordionItem>
           </Accordion>

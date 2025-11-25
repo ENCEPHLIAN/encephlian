@@ -510,3 +510,11 @@
     @apply bg-secondary border border-border text-foreground hover:bg-secondary/90;
   }
 }
+/* Smooth FAQ: disable global data-state animations just for the accordion */
+@layer base {
+  .faq-accordion [data-state="open"],
+  .faq-accordion [data-state="closed"] {
+    animation: none !important;
+    transform: none !important;
+  }
+}
