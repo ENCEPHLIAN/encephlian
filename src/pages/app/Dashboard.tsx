@@ -66,16 +66,13 @@ export default function Dashboard() {
   const completedWeek =
     studies?.filter((s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("week"))).length || 0;
 
-  const firstName = user?.email?.split("@")[0] || "User";
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Subtle Header */}
+      {/* Subtle Header: only date/time, no cringe greeting */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {dayjs().format("dddd, MMMM D, YYYY")} • {dayjs().format("h:mm A")}
         </p>
-        <p className="text-sm text-muted-foreground">Welcome back, {firstName}</p>
       </div>
 
       {/* Quick Actions */}
@@ -88,7 +85,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             <Button
               size="lg"
-              className="quick-action-btn h-20 flex-col"
+              className="quick-action-btn h-20 flex-col bg-primary text-primary-foreground hover:bg-primary/90"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
               <Activity className="h-5 w-5 shrink-0" />
@@ -96,8 +93,8 @@ export default function Dashboard() {
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col"
+              variant="ghost"
+              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
               onClick={() => navigate("/app/files")}
             >
               <Upload className="h-5 w-5 shrink-0" />
@@ -105,8 +102,8 @@ export default function Dashboard() {
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col"
+              variant="ghost"
+              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
               onClick={() => navigate("/app/notes")}
             >
               <StickyNote className="h-5 w-5 shrink-0" />
@@ -114,8 +111,8 @@ export default function Dashboard() {
             </Button>
             <Button
               size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col"
+              variant="ghost"
+              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
               onClick={() => navigate("/app/wallet")}
             >
               <Coins className="h-5 w-5 shrink-0" />
@@ -125,7 +122,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Cards - 8 Cards with muted business colors */}
+      {/* KPI Cards - 8 Cards with muted business colors (uses kpi- classes) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Pending Studies"

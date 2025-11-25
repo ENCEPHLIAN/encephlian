@@ -93,62 +93,65 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 215 15% 20%;
+    /* LIGHT MODE – more contrast, less washed out, business-casual */
+    --background: 210 22% 96%;
+    --foreground: 220 20% 18%;
 
-    --card: 210 25% 99%;
-    --card-foreground: 215 15% 20%;
+    --card: 210 28% 99%;
+    --card-foreground: 220 20% 18%;
 
-    --popover: 210 25% 99%;
-    --popover-foreground: 215 15% 20%;
+    --popover: 210 28% 99%;
+    --popover-foreground: 220 20% 18%;
 
-    --primary: 215 20% 30%;
-    --primary-foreground: 210 20% 98%;
+    /* Darker, more confident primary for buttons and main CTAs */
+    --primary: 222 42% 20%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 15% 96%;
-    --secondary-foreground: 215 20% 25%;
+    /* Softer but not dead grey secondary / surfaces */
+    --secondary: 215 18% 94%;
+    --secondary-foreground: 220 18% 20%;
 
-    --muted: 210 18% 95%;
-    --muted-foreground: 215 10% 50%;
+    --muted: 215 16% 92%;
+    --muted-foreground: 215 12% 45%;
 
-    --accent: 210 20% 94%;
-    --accent-foreground: 215 20% 25%;
+    --accent: 210 20% 93%;
+    --accent-foreground: 215 22% 22%;
 
-    --destructive: 0 60% 65%;
+    --destructive: 0 60% 60%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 210 15% 92%;
-    --input: 210 15% 92%;
-    --ring: 215 20% 30%;
+    --border: 215 18% 88%;
+    --input: 215 18% 88%;
+    --ring: 222 42% 20%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 210 22% 97%;
-    --sidebar-foreground: 215 15% 25%;
-    --sidebar-primary: 215 20% 30%;
-    --sidebar-primary-foreground: 210 20% 98%;
-    --sidebar-accent: 210 18% 95%;
-    --sidebar-accent-foreground: 215 20% 25%;
-    --sidebar-border: 210 15% 92%;
-    --sidebar-ring: 215 20% 30%;
+    /* Sidebar muted but not flat */
+    --sidebar-background: 210 20% 95%;
+    --sidebar-foreground: 220 18% 22%;
+    --sidebar-primary: 222 42% 20%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 215 18% 93%;
+    --sidebar-accent-foreground: 220 18% 22%;
+    --sidebar-border: 215 18% 88%;
+    --sidebar-ring: 222 42% 20%;
 
-    --success: 142 50% 50%;
+    --success: 142 45% 46%;
     --success-foreground: 210 20% 98%;
 
-    --warning: 38 70% 60%;
-    --warning-foreground: 215 15% 20%;
+    --warning: 38 70% 58%;
+    --warning-foreground: 220 20% 15%;
 
-    /* ---------------------------------------------- */
-    /* DASHBOARD COLOR BAND TOKENS (LIGHT MODE)       */
-    /* ---------------------------------------------- */
-    --dashboard-accent-primary: 215 22% 92%;
-    --dashboard-accent-success: 150 20% 90%;
-    --dashboard-accent-warning: 38 30% 92%;
-    --dashboard-accent-info: 200 18% 92%;
-    --dashboard-accent-neutral: 220 10% 93%;
+    /* DASHBOARD COLOR BAND TOKENS (LIGHT MODE) */
+    --dashboard-accent-primary: 215 26% 90%;
+    --dashboard-accent-success: 150 35% 88%;
+    --dashboard-accent-warning: 38 45% 90%;
+    --dashboard-accent-info: 200 30% 90%;
+    --dashboard-accent-neutral: 220 16% 90%;
   }
 
   .dark {
+    /* Dark mode: keep feel, just warm the “white” buttons a bit */
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
 
@@ -158,8 +161,9 @@
     --popover: 0 0% 7%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+    /* slightly warm off-white instead of pure blue-ish white */
+    --primary: 40 8% 92%;
+    --primary-foreground: 0 0% 8%;
 
     --secondary: 0 0% 10%;
     --secondary-foreground: 0 0% 98%;
@@ -179,16 +183,14 @@
 
     --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 85%;
-    --sidebar-primary: 0 0% 98%;
+    --sidebar-primary: 40 8% 92%;
     --sidebar-primary-foreground: 0 0% 9%;
     --sidebar-accent: 0 0% 10%;
     --sidebar-accent-foreground: 0 0% 98%;
     --sidebar-border: 0 0% 14.9%;
     --sidebar-ring: 0 0% 83.1%;
 
-    /* ---------------------------------------------- */
-    /* DASHBOARD TOKENS (DARK MODE)                   */
-    /* ---------------------------------------------- */
+    /* DASHBOARD TOKENS (DARK MODE) – same as before */
     --dashboard-accent-primary: 215 15% 16%;
     --dashboard-accent-success: 150 20% 18%;
     --dashboard-accent-warning: 38 30% 20%;
@@ -196,7 +198,6 @@
     --dashboard-accent-neutral: 220 10% 17%;
   }
 }
-
 /* -------------------------------------------------- */
 /* GLOBAL STYLE RESET + TYPOGRAPHY                   */
 /* -------------------------------------------------- */
