@@ -83,36 +83,41 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {/* Primary CTA – deep navy in light, warm off-white in dark */}
             <Button
               size="lg"
-              className="quick-action-btn h-20 flex-col bg-primary text-primary-foreground hover:bg-primary/90"
+              className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
               <Activity className="h-5 w-5 shrink-0" />
               <span className="text-sm">Start Review</span>
             </Button>
+
+            {/* The rest: richer surface via quick-outline */}
             <Button
               size="lg"
-              variant="ghost"
-              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
+              variant="outline"
+              className="quick-action-btn h-20 flex-col quick-outline"
               onClick={() => navigate("/app/files")}
             >
               <Upload className="h-5 w-5 shrink-0" />
               <span className="text-sm">Upload Study</span>
             </Button>
+
             <Button
               size="lg"
-              variant="ghost"
-              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
+              variant="outline"
+              className="quick-action-btn h-20 flex-col quick-outline"
               onClick={() => navigate("/app/notes")}
             >
               <StickyNote className="h-5 w-5 shrink-0" />
               <span className="text-sm">My Notes</span>
             </Button>
+
             <Button
               size="lg"
-              variant="ghost"
-              className="quick-action-btn h-20 flex-col bg-secondary border border-border/60 hover:bg-secondary/80"
+              variant="outline"
+              className="quick-action-btn h-20 flex-col quick-outline"
               onClick={() => navigate("/app/wallet")}
             >
               <Coins className="h-5 w-5 shrink-0" />

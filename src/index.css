@@ -93,61 +93,61 @@
 
 @layer base {
   :root {
-    /* LIGHT MODE – more contrast, less washed out, business-casual */
-    --background: 210 22% 96%;
-    --foreground: 220 20% 18%;
+    /* LIGHT MODE – higher contrast, less chalk */
+    --background: 215 22% 96%;
+    --foreground: 220 22% 16%;
 
-    --card: 210 28% 99%;
-    --card-foreground: 220 20% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 22% 16%;
 
-    --popover: 210 28% 99%;
-    --popover-foreground: 220 20% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 22% 16%;
 
-    /* Darker, more confident primary for buttons and main CTAs */
-    --primary: 222 42% 20%;
+    /* Primary = deep navy for CTAs */
+    --primary: 222 48% 22%;
     --primary-foreground: 210 40% 98%;
 
-    /* Softer but not dead grey secondary / surfaces */
-    --secondary: 215 18% 94%;
-    --secondary-foreground: 220 18% 20%;
+    /* Secondary = solid soft grey (for all those outline buttons) */
+    --secondary: 220 16% 88%;
+    --secondary-foreground: 220 24% 18%;
 
-    --muted: 215 16% 92%;
-    --muted-foreground: 215 12% 45%;
+    --muted: 220 16% 90%;
+    --muted-foreground: 220 12% 42%;
 
-    --accent: 210 20% 93%;
-    --accent-foreground: 215 22% 22%;
+    --accent: 220 18% 92%;
+    --accent-foreground: 220 24% 20%;
 
-    --destructive: 0 60% 60%;
+    --destructive: 0 64% 58%;
     --destructive-foreground: 210 20% 98%;
 
-    --border: 215 18% 88%;
-    --input: 215 18% 88%;
-    --ring: 222 42% 20%;
+    --border: 220 18% 84%;
+    --input: 220 18% 84%;
+    --ring: 222 48% 22%;
 
     --radius: 0.75rem;
 
-    /* Sidebar muted but not flat */
-    --sidebar-background: 210 20% 95%;
-    --sidebar-foreground: 220 18% 22%;
-    --sidebar-primary: 222 42% 20%;
+    /* Sidebar – slightly darker than content */
+    --sidebar-background: 215 20% 94%;
+    --sidebar-foreground: 220 22% 18%;
+    --sidebar-primary: 222 48% 22%;
     --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 215 18% 93%;
-    --sidebar-accent-foreground: 220 18% 22%;
-    --sidebar-border: 215 18% 88%;
-    --sidebar-ring: 222 42% 20%;
+    --sidebar-accent: 215 18% 92%;
+    --sidebar-accent-foreground: 220 22% 18%;
+    --sidebar-border: 220 18% 84%;
+    --sidebar-ring: 222 48% 22%;
 
-    --success: 142 45% 46%;
+    --success: 142 44% 46%;
     --success-foreground: 210 20% 98%;
 
-    --warning: 38 70% 58%;
-    --warning-foreground: 220 20% 15%;
+    --warning: 38 72% 56%;
+    --warning-foreground: 220 22% 14%;
 
-    /* DASHBOARD COLOR BAND TOKENS (LIGHT MODE) */
-    --dashboard-accent-primary: 215 26% 90%;
-    --dashboard-accent-success: 150 35% 88%;
-    --dashboard-accent-warning: 38 45% 90%;
-    --dashboard-accent-info: 200 30% 90%;
-    --dashboard-accent-neutral: 220 16% 90%;
+    /* KPI band tints – still business-casual, not pastel vomit */
+    --dashboard-accent-primary: 222 26% 88%;
+    --dashboard-accent-success: 150 34% 86%;
+    --dashboard-accent-warning: 38 45% 88%;
+    --dashboard-accent-info: 200 40% 88%;
+    --dashboard-accent-neutral: 220 18% 88%;
   }
 
   .dark {
@@ -503,5 +503,10 @@
   }
   .dark .kpi-neutral {
     background: linear-gradient(180deg, hsl(0 0% 14%) 0%, hsl(0 0% 8%) 100%);
+  }
+}
+@layer base {
+  .quick-outline {
+    @apply bg-secondary border border-border text-foreground hover:bg-secondary/90;
   }
 }
