@@ -19,7 +19,11 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const authHeader = req.headers.get("Authorization")!;
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      throw new Error("Missing Authorization header");
+    }
+
     const token = authHeader.replace("Bearer ", "");
     const {
       data: { user },
@@ -32,7 +36,7 @@ serve(async (req) => {
 
     const { tokens } = await req.json();
 
-    // Fixed, tiered pricing (must match your UI)
+    // ✅ FIXED: explicit tiered pricing, must match frontend
     const PRICING: Record<number, number> = {
       10: 1500, // ₹150 / token
       25: 3499, // ~₹140 / token
@@ -46,7 +50,9 @@ serve(async (req) => {
       throw new Error("Invalid token package. Allowed: 10, 25, 50, 100.");
     }
 
-    console.log(`Creating order for ${tokens} tokens, amount: ₹${amountInr}`);
+    const amountPaise = amountInr * 100;
+
+    console.log(`Creating order for ${tokens} tokens, amount: ₹${amountInr} (₹${amountPaise / 100} shown to user)`);
 
     // Create Razorpay order
     const auth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
@@ -57,7 +63,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        amount: amountInr * 100, // Convert to paise
+        amount: amountPaise, // paise
         currency: "INR",
         receipt: `receipt_${Date.now()}`,
         notes: {
@@ -74,9 +80,9 @@ serve(async (req) => {
     }
 
     const order = await razorpayResponse.json();
-    console.log("Razorpay order created:", order.id);
+    console.log("Razorpay order created:", order.id, "amount:", order.amount);
 
-    // Create payment record in database
+    // Create payment record in database (store rupees)
     const { error: insertError } = await supabase.from("payments").insert({
       user_id: user.id,
       order_id: order.id,
@@ -94,7 +100,8 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         orderId: order.id,
-        amount: amountInr,
+        amountInr, // rupees (for display if you ever need it)
+        amountPaise, // paise (for Razorpay checkout)
         currency: "INR",
         keyId: razorpayKeyId,
       }),
@@ -104,9 +111,14 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in create_order:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
   }
 });
