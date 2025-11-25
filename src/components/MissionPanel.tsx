@@ -25,7 +25,9 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("company_name").eq("id", user.id).single();
       return data;
@@ -51,24 +53,21 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="fixed inset-0 z-50 flex flex-col bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70 max-w-none w-full h-full p-0 [&>button]:hidden"
+        className="fixed inset-0 w-screen h-screen !m-0 !p-0 z-[9999] flex flex-col 
+                   bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70
+                   max-w-none [&>button]:hidden"
       >
-        {/* Top row: branding + close */}
+        {/* Top row */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
           <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full"
-            onClick={() => onOpenChange(false)}
-          >
+
+          <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => onOpenChange(false)}>
             <X className="h-5 w-5" />
-            <span className="sr-only">Close</span>
           </Button>
         </div>
 
-        {/* Body: CTA links */}
-        <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+        {/* Body */}
+        <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto">
           <div className="w-full max-w-md space-y-4">
             {missionLinks.map((link) => {
               const Icon = link.icon;
@@ -76,9 +75,11 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
                 <button
                   key={link.href}
                   onClick={() => handleNavigation(link.href)}
-                  className="w-full flex items-center gap-4 text-lg md:text-xl font-normal tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50 transition-colors text-left group"
+                  className="w-full flex items-center gap-4 text-lg md:text-xl font-normal 
+                             tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50 
+                             transition-colors text-left group"
                 >
-                  <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
                   <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>
                 </button>
               );
