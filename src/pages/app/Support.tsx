@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,138 +7,196 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, MessageSquare, Mail, FileQuestion } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Support() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmitTicket = async () => {
+    if (!subject.trim() || !message.trim()) {
+      toast({
+        title: "Missing details",
+        description: "Please add a subject and description before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+
+      // Call edge function that stores ticket + sends email
+      const { error } = await supabase.functions.invoke("submit_support_ticket", {
+        body: {
+          subject,
+          message,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Ticket submitted",
+        description: "We’ve received your request and will respond via email.",
+      });
+
+      setSubject("");
+      setMessage("");
+    } catch (err: any) {
+      toast({
+        title: "Unable to submit ticket",
+        description: err.message ?? "Please try again in a few minutes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="space-y-10 animate-fade-in">
-      {/* Page Header */}
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Support Center</h1>
-        <p className="text-muted-foreground">Everything you need to keep your EEG workflow running smoothly.</p>
+    <div className="space-y-8">
+      {/* Page header */}
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Support Center</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">Get help and find answers to your questions.</p>
       </div>
 
-      {/* Quick Tiles */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {/* Documentation */}
+      {/* Quick Help Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card
-          className="openai-card hover:shadow-md transition cursor-pointer"
+          className="cursor-pointer hover:shadow-md hover:border-border/80 transition-all"
           onClick={() => navigate("/app/documentation")}
         >
-          <CardHeader className="space-y-3">
-            <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-primary/10 border border-primary/20">
-              <BookOpen className="h-5 w-5 text-primary" />
-            </div>
-            <CardTitle className="text-lg font-semibold">Documentation</CardTitle>
+          <CardHeader className="space-y-2">
+            <BookOpen className="h-7 w-7 text-primary" />
+            <CardTitle className="text-base">Documentation</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Learn everything about TAT, STAT, uploads, triage workflows, tokens, and more.
+              Browse guides on TAT, STAT, SLA tiers and review workflows.
             </p>
           </CardContent>
         </Card>
 
-        {/* Live Chat (Coming soon) */}
-        <Card className="openai-card opacity-60 hover:opacity-75 transition relative">
-          <CardHeader className="space-y-3">
-            <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-secondary/40 border border-border">
-              <MessageSquare className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <CardTitle className="text-lg font-semibold">Live Chat</CardTitle>
+        <Card className="cursor-pointer hover:shadow-none opacity-60">
+          <CardHeader className="space-y-2">
+            <MessageSquare className="h-7 w-7 text-primary" />
+            <CardTitle className="text-base">Live Chat</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-              Realtime help right inside the platform.
+            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
+              Chat with our support team in real time.
             </p>
             <Badge variant="secondary">Coming Soon</Badge>
           </CardContent>
         </Card>
 
-        {/* Email */}
-        <Card className="openai-card hover:shadow-md transition">
-          <CardHeader className="space-y-3">
-            <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-accent/40 border border-border">
-              <Mail className="h-5 w-5 text-accent-foreground" />
-            </div>
-            <CardTitle className="text-lg font-semibold">Email Support</CardTitle>
+        <Card className="cursor-pointer hover:shadow-md hover:border-border/80 transition-all">
+          <CardHeader className="space-y-2">
+            <Mail className="h-7 w-7 text-primary" />
+            <CardTitle className="text-base">Email Support</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Write to us at{" "}
-              <a href="mailto:support@eegplatform.com" className="text-primary hover:underline">
-                support@eegplatform.com
+              Email us at{" "}
+              <a href="mailto:info@encephlian.cloud" className="font-medium text-primary hover:underline">
+                info@encephlian.cloud
               </a>
+              .
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Support Ticket Form */}
+      {/* Contact Form */}
       <Card className="openai-card">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <FileQuestion className="h-5 w-5 text-primary" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <FileQuestion className="h-5 w-5" />
             Submit a Support Ticket
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Input placeholder="Subject" className="bg-background" />
+          <Input placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
           <Textarea
-            placeholder="Describe your issue clearly (e.g., study ID, browser, device, upload error)"
+            placeholder="Describe your issue in detail…"
             rows={6}
-            className="bg-background"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
           />
-          <Button className="w-full">Submit Ticket</Button>
+          <Button onClick={handleSubmitTicket} disabled={isSubmitting} className="w-full sm:w-auto">
+            {isSubmitting ? "Submitting…" : "Submit Ticket"}
+          </Button>
         </CardContent>
       </Card>
 
-      {/* FAQ */}
+      {/* FAQ Section */}
       <Card className="openai-card">
         <CardHeader>
-          <CardTitle className="text-lg">Frequently Asked Questions</CardTitle>
+          <CardTitle className="text-base">Frequently Asked Questions</CardTitle>
         </CardHeader>
         <CardContent>
           <Accordion type="single" collapsible className="w-full">
-            <AccordionItem value="1">
-              <AccordionTrigger>What is TAT (Turnaround Time)?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Standard non-urgent routine EEG reports are delivered in 24–48 hours.
+            <AccordionItem value="item-1">
+              <AccordionTrigger className="text-sm md:text-base font-medium">
+                What is TAT (Turnaround Time)?
+              </AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                TAT is the total time from when a study is uploaded until the final signed report is delivered. Standard
+                TAT is typically 24–48 hours for routine studies.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="2">
-              <AccordionTrigger>What is STAT?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Urgent studies requiring 2–6 hour processing. Used for ICU/seizure emergency cases.
+            <AccordionItem value="item-2">
+              <AccordionTrigger className="text-sm md:text-base font-medium">What does STAT mean?</AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                STAT is a medical term meaning &quot;immediately&quot; or &quot;urgent.&quot; STAT studies require
+                priority review and typically have a TAT of 2–6 hours. Use STAT for seizure emergencies, status
+                epilepticus, ICU patients, or pre-surgical evaluations with time constraints.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="3">
-              <AccordionTrigger>What is SLA?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                The guaranteed delivery tier: Standard (48h), Priority (24h), STAT (6h).
+            <AccordionItem value="item-3">
+              <AccordionTrigger className="text-sm md:text-base font-medium">
+                What is SLA (Service Level Agreement)?
+              </AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                SLA is a contractual commitment defining guaranteed turnaround times and service quality. We offer three
+                tiers: Standard SLA (48 hours), Priority SLA (24 hours), and STAT SLA (6 hours).
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="4">
-              <AccordionTrigger>How do I upload studies?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                Go to **Files → EEG Studies** and upload .edf files. Parsing is automatic.
+            <AccordionItem value="item-4">
+              <AccordionTrigger className="text-sm md:text-base font-medium">How do I upload studies?</AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                Go to the Files page and select the &quot;EEG Studies&quot; bucket. Drag and drop .edf files or click to
+                browse. The system automatically processes and parses your EEG data.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="5">
-              <AccordionTrigger>What formats are supported?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                EDF only. Internal converters soon for Natus/Nicolet `.e` files.
+            <AccordionItem value="item-5">
+              <AccordionTrigger className="text-sm md:text-base font-medium">
+                What file formats are supported?
+              </AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                We support EDF (European Data Format) files, the standard format for EEG recordings. Files should
+                contain proper channel information and metadata.
               </AccordionContent>
             </AccordionItem>
 
-            <AccordionItem value="6">
-              <AccordionTrigger>How do tokens work?</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                1 token = TAT signing. 2 tokens = STAT signing. Buy from the Wallet section.
+            <AccordionItem value="item-6">
+              <AccordionTrigger className="text-sm md:text-base font-medium">How do tokens work?</AccordionTrigger>
+              <AccordionContent className="text-sm leading-relaxed">
+                Tokens are required for signing reports. Each signed report consumes tokens based on complexity and SLA
+                tier. You can purchase tokens from the Wallet page.
               </AccordionContent>
             </AccordionItem>
           </Accordion>
