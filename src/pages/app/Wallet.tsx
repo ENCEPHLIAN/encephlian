@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { TokenPurchase } from "@/components/TokenPurchase";
+import { AnimatedCounter } from "@/components/ui/animated-counter";
 
 export default function Wallet() {
   const { data: walletData, isLoading: walletLoading } = useQuery({
@@ -41,7 +42,9 @@ export default function Wallet() {
         <CardContent className="pt-6">
           <div className="space-y-2">
             <div className="text-sm text-muted-foreground">Token Balance</div>
-            <div className="text-4xl font-bold">{tokenBalance}</div>
+            <div className="text-4xl font-bold">
+              <AnimatedCounter value={tokenBalance} duration={1500} />
+            </div>
             <div className="text-xs text-muted-foreground">Available for signing reports</div>
           </div>
         </CardContent>

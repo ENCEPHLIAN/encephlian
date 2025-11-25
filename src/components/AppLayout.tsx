@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/icon-button";
+import { PillToggle } from "@/components/ui/pill-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -170,6 +172,7 @@ function AppLayoutContent() {
 
   const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
+  const [showAllStudies, setShowAllStudies] = useState(true);
 
   // desktop: collapsed vs expanded
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -233,10 +236,7 @@ function AppLayoutContent() {
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
 
             {/* Sidebar toggle – desktop collapses, mobile opens sheet */}
-            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={handleSidebarToggle}>
-              <PanelLeft className="h-4 w-4" />
-              <span className="sr-only">Toggle navigation</span>
-            </Button>
+            <IconButton icon={PanelLeft} onClick={handleSidebarToggle} aria-label="Toggle navigation" />
           </div>
 
           {/* RIGHT: search + actions */}
@@ -255,15 +255,21 @@ function AppLayoutContent() {
             </Button>
 
             {/* Mobile search icon */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="flex md:hidden h-8 w-8 rounded-full"
+            <IconButton
+              icon={Search}
+              className="flex md:hidden"
               onClick={() => setCommandOpen(true)}
-            >
-              <Search className="h-4 w-4" />
-              <span className="sr-only">Open search</span>
-            </Button>
+              aria-label="Open search"
+            />
+
+            {/* Study filter toggle - example usage of PillToggle */}
+            <div className="hidden lg:flex">
+              <PillToggle
+                label={showAllStudies ? "All Studies" : "My Studies"}
+                checked={showAllStudies}
+                onChange={() => setShowAllStudies(!showAllStudies)}
+              />
+            </div>
 
             {/* QuickTips only on desktop */}
             {!isMobile && <QuickTipsDialog />}
