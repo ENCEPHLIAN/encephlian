@@ -104,51 +104,51 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Warm off-white theme - eggshell/cream/French vanilla tones */
-    --background: 40 20% 97%;
-    --foreground: 30 10% 10%;
+    /* Medical-grade professional muted color palette */
+    --background: 210 20% 98%;
+    --foreground: 215 15% 20%;
 
-    --card: 40 25% 98%;
-    --card-foreground: 30 10% 10%;
+    --card: 210 25% 99%;
+    --card-foreground: 215 15% 20%;
 
-    --popover: 40 25% 98%;
-    --popover-foreground: 30 10% 10%;
+    --popover: 210 25% 99%;
+    --popover-foreground: 215 15% 20%;
 
-    --primary: 30 10% 12%;
-    --primary-foreground: 40 30% 98%;
+    --primary: 215 20% 30%;
+    --primary-foreground: 210 20% 98%;
 
-    --secondary: 40 15% 94%;
-    --secondary-foreground: 30 10% 12%;
+    --secondary: 210 15% 96%;
+    --secondary-foreground: 215 20% 25%;
 
-    --muted: 40 15% 93%;
-    --muted-foreground: 30 8% 45%;
+    --muted: 210 18% 95%;
+    --muted-foreground: 215 10% 50%;
 
-    --accent: 40 20% 92%;
-    --accent-foreground: 30 10% 12%;
+    --accent: 210 20% 94%;
+    --accent-foreground: 215 20% 25%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 40 30% 98%;
+    --destructive: 0 60% 65%;
+    --destructive-foreground: 210 20% 98%;
 
-    --border: 40 15% 88%;
-    --input: 40 15% 88%;
-    --ring: 30 10% 15%;
+    --border: 210 15% 92%;
+    --input: 210 15% 92%;
+    --ring: 215 20% 30%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 40 22% 96%;
-    --sidebar-foreground: 30 10% 20%;
-    --sidebar-primary: 30 10% 12%;
-    --sidebar-primary-foreground: 40 30% 98%;
-    --sidebar-accent: 40 18% 94%;
-    --sidebar-accent-foreground: 30 10% 12%;
-    --sidebar-border: 40 15% 88%;
-    --sidebar-ring: 30 10% 15%;
+    --sidebar-background: 210 22% 97%;
+    --sidebar-foreground: 215 15% 25%;
+    --sidebar-primary: 215 20% 30%;
+    --sidebar-primary-foreground: 210 20% 98%;
+    --sidebar-accent: 210 18% 95%;
+    --sidebar-accent-foreground: 215 20% 25%;
+    --sidebar-border: 210 15% 92%;
+    --sidebar-ring: 215 20% 30%;
 
-    --success: 142 76% 36%;
-    --success-foreground: 40 30% 98%;
+    --success: 142 50% 50%;
+    --success-foreground: 210 20% 98%;
 
-    --warning: 38 92% 50%;
-    --warning-foreground: 40 30% 98%;
+    --warning: 38 70% 60%;
+    --warning-foreground: 215 15% 20%;
   }
 
   .dark {
@@ -437,5 +437,18 @@ All colors MUST be HSL.
     to {
       transform: scale(0.95);
     }
+  }
+
+  /* OpenAI-style utility classes */
+  .oa-icon-pill {
+    @apply flex items-center justify-center h-9 w-9 rounded-full border border-border/60 bg-secondary/80 hover:bg-secondary transition-colors;
+  }
+
+  .oa-pill-toggle {
+    @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-border bg-secondary text-sm transition-colors;
+  }
+
+  .oa-pill-toggle--active {
+    @apply bg-primary text-primary-foreground;
   }
 }
