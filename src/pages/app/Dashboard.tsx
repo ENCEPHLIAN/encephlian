@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, FileText, StickyNote, Coins } from "lucide-react";
+import { Loader2, Activity, Upload, StickyNote, Coins } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PerformanceCharts from "@/components/dashboard/PerformanceCharts";
@@ -20,20 +20,17 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data } = await supabase.auth.getUser();
       return data.user;
-    }
+    },
   });
 
   const { data: studies, isLoading } = useQuery({
     queryKey: ["dashboard-studies"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("studies")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
+      const { data, error } = await supabase.from("studies").select("*").order("created_at", { ascending: false });
+
       if (error) throw error;
       return data;
-    }
+    },
   });
 
   const { data: wallet } = useQuery({
@@ -41,19 +38,15 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data } = await supabase.from("wallets").select("tokens").single();
       return data;
-    }
+    },
   });
 
   const { data: recentStudies } = useQuery({
     queryKey: ["recent-studies"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("studies")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5);
+      const { data } = await supabase.from("studies").select("*").order("created_at", { ascending: false }).limit(5);
       return data;
-    }
+    },
   });
 
   if (isLoading) {
@@ -64,23 +57,25 @@ export default function Dashboard() {
     );
   }
 
-  const pendingStudies = studies?.filter(s => s.state === 'uploaded' || s.state === 'ai_draft' || s.state === 'in_review') || [];
-  const completedToday = studies?.filter(s => 
-    s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('day'))
-  ).length || 0;
-  const completedWeek = studies?.filter(s => 
-    s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('week'))
-  ).length || 0;
+  const pendingStudies =
+    studies?.filter((s) => s.state === "uploaded" || s.state === "ai_draft" || s.state === "in_review") || [];
 
-  const firstName = user?.email?.split('@')[0] || 'User';
+  const completedToday =
+    studies?.filter((s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("day"))).length || 0;
+
+  const completedWeek =
+    studies?.filter((s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("week"))).length || 0;
+
+  const firstName = user?.email?.split("@")[0] || "User";
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Subtle Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          {dayjs().format('dddd, MMMM D, YYYY')} • {dayjs().format('h:mm A')}
+          {dayjs().format("dddd, MMMM D, YYYY")} • {dayjs().format("h:mm A")}
         </p>
+        <p className="text-sm text-muted-foreground">Welcome back, {firstName}</p>
       </div>
 
       {/* Quick Actions */}
@@ -91,35 +86,35 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
               <Activity className="h-5 w-5 shrink-0" />
               <span className="text-sm">Start Review</span>
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/files")}
             >
               <Upload className="h-5 w-5 shrink-0" />
               <span className="text-sm">Upload Study</span>
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/notes")}
             >
               <StickyNote className="h-5 w-5 shrink-0" />
               <span className="text-sm">My Notes</span>
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               className="quick-action-btn h-20 flex-col"
               onClick={() => navigate("/app/wallet")}
             >
@@ -130,68 +125,52 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Cards - 8 Cards for Symmetry */}
+      {/* KPI Cards - 8 Cards with muted business colors */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}
-          change={`${pendingStudies.filter(s => s.sla === 'STAT').length} STAT cases`}
+          change={`${pendingStudies.filter((s) => s.sla === "STAT").length} STAT cases`}
           trend={pendingStudies.length > 5 ? "up" : "neutral"}
-          color="from-muted/60 to-muted/40"
+          variant="blue"
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
+
         <KPICard
           label="Completed Today"
           value={completedToday}
           change="Goal: 5"
           trend={completedToday >= 5 ? "up" : "neutral"}
-          color="from-muted/50 to-muted/30"
+          variant="green"
         />
-        <KPICard
-          label="This Week"
-          value={completedWeek}
-          change="Studies completed"
-          trend="neutral"
-          color="from-muted/60 to-muted/40"
-        />
+
+        <KPICard label="This Week" value={completedWeek} change="Studies completed" trend="neutral" variant="cyan" />
+
         <KPICard
           label="Token Balance"
           value={wallet?.tokens || 0}
           change="Available for signing"
           trend="neutral"
-          color="from-muted/50 to-muted/30"
+          variant="indigo"
           onClick={() => navigate("/app/wallet")}
         />
-        <KPICard
-          label="Average TAT"
-          value="12 hrs"
-          change="Turnaround time"
-          trend="up"
-          color="from-muted/60 to-muted/40"
-        />
+
+        <KPICard label="Average TAT" value="12 hrs" change="Turnaround time" trend="up" variant="amber" />
+
         <KPICard
           label="This Month"
-          value={studies?.filter(s => 
-            s.state === 'signed' && dayjs(s.created_at).isAfter(dayjs().startOf('month'))
-          ).length || 0}
+          value={
+            studies?.filter((s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("month")))
+              .length || 0
+          }
           change="Monthly total"
           trend="up"
-          color="from-muted/50 to-muted/30"
+          variant="cyan"
         />
-        <KPICard
-          label="Success Rate"
-          value="98.5%"
-          change="Quality score"
-          trend="up"
-          color="from-muted/60 to-muted/40"
-        />
-        <KPICard
-          label="Active Now"
-          value="3"
-          change="Reviewers online"
-          trend="neutral"
-          color="from-muted/50 to-muted/30"
-        />
+
+        <KPICard label="Success Rate" value="98.5%" change="Quality score" trend="up" variant="green" />
+
+        <KPICard label="Active Now" value="3" change="Reviewers online" trend="neutral" variant="neutral" />
       </div>
 
       {/* Analytics & Recent Studies Grid */}
@@ -238,14 +217,14 @@ export default function Dashboard() {
             <ScrollArea className="h-48">
               {recentStudies && recentStudies.length > 0 ? (
                 <div className="space-y-3">
-                  {recentStudies.map(study => {
+                  {recentStudies.map((study) => {
                     const meta = study.meta as any;
                     return (
                       <div key={study.id} className="flex items-center justify-between py-2 border-b last:border-0">
                         <div className="flex items-center gap-3">
                           <Activity className="h-5 w-5 text-blue-600" />
                           <div>
-                            <p className="font-medium text-sm">{meta?.patient_name || 'Unknown'}</p>
+                            <p className="font-medium text-sm">{meta?.patient_name || "Unknown"}</p>
                             <p className="text-xs text-muted-foreground">{meta?.patient_id || study.id.slice(0, 8)}</p>
                           </div>
                         </div>
@@ -257,9 +236,7 @@ export default function Dashboard() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  No recent studies
-                </div>
+                <div className="text-center py-8 text-muted-foreground">No recent studies</div>
               )}
             </ScrollArea>
           </CardContent>

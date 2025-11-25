@@ -7,7 +7,7 @@ interface KPICardProps {
   value: string | number;
   change?: string;
   trend?: "up" | "down" | "neutral";
-  // which color block to use
+  // drives the gradient color
   variant: "blue" | "green" | "indigo" | "amber" | "cyan" | "neutral";
   onClick?: () => void;
 }
