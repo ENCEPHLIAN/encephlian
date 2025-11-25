@@ -127,14 +127,14 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Cards - 8 Cards with muted business colors (uses kpi- classes) */}
+      {/* KPI Cards - 8 Cards for Symmetry */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Pending Studies"
           value={pendingStudies.length}
           change={`${pendingStudies.filter((s) => s.sla === "STAT").length} STAT cases`}
           trend={pendingStudies.length > 5 ? "up" : "neutral"}
-          variant="blue"
+          color="kpi-blue"
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
 
@@ -143,21 +143,21 @@ export default function Dashboard() {
           value={completedToday}
           change="Goal: 5"
           trend={completedToday >= 5 ? "up" : "neutral"}
-          variant="green"
+          color="kpi-green"
         />
 
-        <KPICard label="This Week" value={completedWeek} change="Studies completed" trend="neutral" variant="cyan" />
+        <KPICard label="This Week" value={completedWeek} change="Studies completed" trend="neutral" color="kpi-cyan" />
 
         <KPICard
           label="Token Balance"
           value={wallet?.tokens || 0}
           change="Available for signing"
           trend="neutral"
-          variant="indigo"
+          color="kpi-indigo"
           onClick={() => navigate("/app/wallet")}
         />
 
-        <KPICard label="Average TAT" value="12 hrs" change="Turnaround time" trend="up" variant="amber" />
+        <KPICard label="Average TAT" value="12 hrs" change="Turnaround time" trend="up" color="kpi-amber" />
 
         <KPICard
           label="This Month"
@@ -167,12 +167,12 @@ export default function Dashboard() {
           }
           change="Monthly total"
           trend="up"
-          variant="cyan"
+          color="kpi-neutral"
         />
 
-        <KPICard label="Success Rate" value="98.5%" change="Quality score" trend="up" variant="green" />
+        <KPICard label="Success Rate" value="98.5%" change="Quality score" trend="up" color="kpi-green" />
 
-        <KPICard label="Active Now" value="3" change="Reviewers online" trend="neutral" variant="neutral" />
+        <KPICard label="Active Now" value="3" change="Reviewers online" trend="neutral" color="kpi-cyan" />
       </div>
 
       {/* Analytics & Recent Studies Grid */}
