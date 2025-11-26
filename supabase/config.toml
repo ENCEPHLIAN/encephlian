@@ -32,3 +32,9 @@ verify_jwt = true
 
 [functions.convert_e_to_edf]
 verify_jwt = true
+
+[functions.submit_support_ticket]
+verify_jwt = true
+
+[functions.delete_account]
+verify_jwt = true

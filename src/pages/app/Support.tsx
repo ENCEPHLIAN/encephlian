@@ -145,7 +145,7 @@ export default function Support() {
         </CardHeader>
         <CardContent>
           {/* note: type="multiple" and className="faq-accordion" */}
-          <Accordion type="multiple" collapsible className="w-full faq-accordion">
+          <Accordion type="multiple" className="w-full faq-accordion">
             <AccordionItem value="item-1">
               <AccordionTrigger className="text-base font-medium">What is TAT (Turnaround Time)?</AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
