@@ -64,7 +64,8 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
       if (!searchQuery || searchQuery.length < 2) return [];
       
       const results: any[] = [];
-      const buckets = ['eeg-raw', 'eeg-reports', 'eeg-clean', 'eeg-json'];
+      const buckets = ['eeg-uploads', 'eeg-raw', 'eeg-reports', 'eeg-clean', 'eeg-json', 'notes', 'templates'];
+      const { data: { user } } = await supabase.auth.getUser();
       
       // Recursive function to search through folders
       const searchBucket = async (bucket: string, path: string = '') => {
@@ -77,6 +78,7 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
         for (const item of data) {
           // Files have NO 'id' in list response, folders do
           if (item.id === null || item.id === undefined) { // It's a file
+            // Substring search instead of prefix search
             if (item.name.toLowerCase().includes(searchQuery.toLowerCase())) {
               results.push({ 
                 ...item, 
@@ -91,12 +93,35 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
         }
       };
       
-      // Search all buckets
+      // Search all storage buckets
       for (const bucket of buckets) {
-        await searchBucket(bucket);
+        // For user-specific buckets, search within user folder
+        if (user && ['eeg-uploads', 'notes'].includes(bucket)) {
+          await searchBucket(bucket, user.id);
+        } else {
+          await searchBucket(bucket);
+        }
       }
       
       return results;
+    },
+    enabled: open && searchQuery.length >= 2
+  });
+
+  // Search notes table
+  const { data: notesResults } = useQuery({
+    queryKey: ["command-notes", searchQuery],
+    queryFn: async () => {
+      if (!searchQuery || searchQuery.length < 2) return [];
+      
+      const { data, error } = await supabase
+        .from("notes")
+        .select("*")
+        .or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
+        .limit(10);
+      
+      if (error) throw error;
+      return data || [];
     },
     enabled: open && searchQuery.length >= 2
   });
@@ -177,6 +202,28 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
             );
           })}
         </CommandGroup>
+
+        {searchQuery && notesResults && notesResults.length > 0 && (
+          <CommandGroup heading="Notes">
+            {notesResults.map((note: any) => (
+              <CommandItem
+                key={note.id}
+                onSelect={() => {
+                  navigate("/app/notes");
+                  setOpen(false);
+                }}
+              >
+                <StickyNote className="mr-2 h-4 w-4" />
+                <div className="flex-1">
+                  <div className="font-medium">{note.title}</div>
+                  <div className="text-xs text-muted-foreground line-clamp-1">
+                    {note.content}
+                  </div>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
 
         {searchQuery && storageFiles && storageFiles.length > 0 && (
           <CommandGroup heading="Files">

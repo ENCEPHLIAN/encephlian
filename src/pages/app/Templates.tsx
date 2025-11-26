@@ -1,121 +1,116 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, FileText, Eye } from "lucide-react";
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface ReportTemplate {
-  id: string;
-  name: string;
-  type: 'normal' | 'abnormal';
-  template_content: Record<string, string>;
-  style_config?: Record<string, string>;
-  created_at: string;
-}
+import { FileText, Download, AlertCircle, CheckCircle, AlertTriangle, Info } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 export default function Templates() {
-  const [previewTemplate, setPreviewTemplate] = useState<ReportTemplate | null>(null);
-
-  const { data: templates, isLoading } = useQuery({
-    queryKey: ["report-templates"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("report_templates")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
-      if (error) throw error;
-      return data as ReportTemplate[];
+  const { toast } = useToast();
+  
+  const templates = [
+    {
+      id: "routine-triage",
+      name: "Routine Triage Template",
+      description: "Standard template for routine EEG triage reports with normal turnaround time",
+      category: "Triage",
+      downloadUrl: "/templates/routine-triage-template.pdf",
+      icon: FileText,
+      color: "text-blue-600"
+    },
+    {
+      id: "stat-triage",
+      name: "STAT Triage Template",
+      description: "Urgent triage template for time-sensitive EEG evaluations",
+      category: "Triage",
+      downloadUrl: "/templates/stat-triage-template.pdf",
+      icon: AlertCircle,
+      color: "text-red-600"
+    },
+    {
+      id: "normal-eeg",
+      name: "Normal EEG Template",
+      description: "Comprehensive template for normal EEG findings and interpretation",
+      category: "Interpretation",
+      downloadUrl: "/templates/normal-eeg-template.pdf",
+      icon: CheckCircle,
+      color: "text-green-600"
+    },
+    {
+      id: "abnormal-eeg",
+      name: "Abnormal EEG Template",
+      description: "Detailed template for abnormal EEG findings with clinical correlation",
+      category: "Interpretation",
+      downloadUrl: "/templates/abnormal-eeg-template.pdf",
+      icon: AlertTriangle,
+      color: "text-orange-600"
     }
-  });
+  ];
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const handleDownload = (template: typeof templates[0]) => {
+    // In production, this would download from storage
+    toast({
+      title: "Template download",
+      description: `${template.name} will be available soon`,
+    });
+  };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-[var(--text-3xl)] font-bold">Report Templates</h1>
-        <p className="text-[var(--text-base)] text-muted-foreground mt-2">
-          Standardized EEG report templates for consistent clinical documentation
+        <h1 className="text-3xl font-bold">Report Templates</h1>
+        <p className="text-muted-foreground mt-2">
+          Downloadable templates for standardized EEG reporting
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {templates?.map((template) => (
-          <Card key={template.id} className="openai-card hover:shadow-lg transition-shadow">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {templates.map((template) => (
+          <Card key={template.id} className="openai-card hover:shadow-lg transition-all">
             <CardHeader>
               <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-8 w-8 text-primary" />
+                <div className="flex items-start gap-3">
+                  <div className={cn("p-2 rounded-lg bg-muted", template.color)}>
+                    <template.icon className="h-6 w-6" />
+                  </div>
                   <div>
-                    <CardTitle className="text-[var(--text-xl)]">{template.name}</CardTitle>
-                    <CardDescription className="mt-1 text-[var(--text-sm)]">
-                      {template.type === 'normal' ? 'Normal EEG findings' : 'Abnormal EEG findings'}
-                    </CardDescription>
+                    <CardTitle className="text-lg">{template.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">{template.category}</p>
                   </div>
                 </div>
-                <Badge variant={template.type === 'normal' ? 'default' : 'destructive'} className="uppercase">
-                  {template.type}
-                </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <p className="text-[var(--text-sm)] text-muted-foreground leading-relaxed">
-                  This template is used by the AI to generate structured reports with consistent
-                  formatting and medical terminology. Includes montage documentation and clinical-grade language.
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPreviewTemplate(template)}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview Template
-                </Button>
-              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                {template.description}
+              </p>
+              <Button 
+                onClick={() => handleDownload(template)}
+                className="w-full"
+                variant="outline"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download Template
+              </Button>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
-        <DialogContent className="max-w-3xl max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>{previewTemplate?.name}</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[60vh]">
-            <div className="space-y-4 pr-4">
-              {previewTemplate?.template_content && (
-                Object.entries(previewTemplate.template_content).map(([key, value]) => (
-                  <div key={key}>
-                    <h3 className="font-semibold text-sm uppercase text-primary mb-2">
-                      {key.replace(/_/g, ' ')}
-                    </h3>
-                    {typeof value === 'object' && value !== null ? (
-                      <pre className="text-xs bg-muted/50 p-3 rounded-lg overflow-x-auto leading-relaxed">
-                        {JSON.stringify(value, null, 2)}
-                      </pre>
-                    ) : (
-                      <p className="text-sm leading-relaxed">{String(value)}</p>
-                    )}
-                  </div>
-                ))
-              )}
+      <Card className="border-dashed">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-4">
+            <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+            <div className="space-y-2">
+              <h3 className="font-semibold">About Templates</h3>
+              <p className="text-sm text-muted-foreground">
+                These templates follow ACNS guidelines and are designed to ensure consistent, 
+                high-quality EEG reporting. Customize them to match your clinic's specific 
+                requirements and workflow.
+              </p>
             </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

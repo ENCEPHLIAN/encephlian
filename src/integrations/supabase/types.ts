@@ -606,6 +606,8 @@ export type Database = {
       }
       studies: {
         Row: {
+          ai_draft_json: Json | null
+          ai_draft_text: string | null
           clinic_id: string
           created_at: string | null
           duration_min: number | null
@@ -623,6 +625,8 @@ export type Database = {
           uploaded_file_path: string | null
         }
         Insert: {
+          ai_draft_json?: Json | null
+          ai_draft_text?: string | null
           clinic_id: string
           created_at?: string | null
           duration_min?: number | null
@@ -640,6 +644,8 @@ export type Database = {
           uploaded_file_path?: string | null
         }
         Update: {
+          ai_draft_json?: Json | null
+          ai_draft_text?: string | null
           clinic_id?: string
           created_at?: string | null
           duration_min?: number | null
