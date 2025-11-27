@@ -210,7 +210,7 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family:
-      "Inter",
+      "Montserrat",
       -apple-system,
       BlinkMacSystemFont,
       "Segoe UI",
@@ -382,16 +382,15 @@
     animation: none !important;
   }
 
-  [data-state="open"] {
-    animation:
-      fadeIn 0.15s ease,
-      scaleIn 0.15s ease !important;
+  /* Fade-only animation for dropdown menus */
+  [data-radix-dropdown-menu-content][data-state="open"],
+  [data-radix-popover-content][data-state="open"] {
+    animation: fadeIn 0.15s ease !important;
   }
 
-  [data-state="closed"] {
-    animation:
-      fadeOut 0.15s ease,
-      scaleOut 0.15s ease !important;
+  [data-radix-dropdown-menu-content][data-state="closed"],
+  [data-radix-popover-content][data-state="closed"] {
+    animation: fadeOut 0.15s ease !important;
   }
 
   @keyframes fadeIn {
