@@ -53,7 +53,7 @@ export function PDFViewer({ fileUrl }: PDFViewerProps) {
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Toolbar - Fixed at top, no layout shift */}
-      <div className="flex-shrink-0 flex items-center justify-between p-3 border-b bg-card/95 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex-shrink-0 flex items-center justify-between p-3 border-b bg-card/95 backdrop-blur-sm z-10">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"

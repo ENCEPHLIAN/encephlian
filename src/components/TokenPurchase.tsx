@@ -69,6 +69,20 @@ export function TokenPurchase() {
               description: `${verifyData.tokens_credited} tokens credited`,
             });
 
+            // Send receipt email
+            try {
+              await supabase.functions.invoke("send_payment_receipt", {
+                body: {
+                  payment_id: response.razorpay_payment_id,
+                  order_id: response.razorpay_order_id,
+                  amount_inr: packagePrice,
+                  tokens: packageTokens,
+                },
+              });
+            } catch (emailError) {
+              console.error("Failed to send receipt email:", emailError);
+            }
+
             // Immediately refresh wallet balance
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
             await queryClient.refetchQueries({ queryKey: ["wallet-balance"] });
