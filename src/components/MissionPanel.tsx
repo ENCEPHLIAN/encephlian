@@ -63,11 +63,20 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-[9999] flex flex-col
-                 bg-background/90 backdrop-blur
-                 supports-[backdrop-filter]:bg-background/70"
-    >
+    <>
+      {/* Backdrop - click to close */}
+      <div
+        className="fixed inset-0 z-[9998] bg-background/80 backdrop-blur-sm"
+        onClick={() => onOpenChange(false)}
+      />
+      
+      {/* Content panel */}
+      <div
+        className="fixed inset-0 z-[9999] flex flex-col
+                   bg-background/95 backdrop-blur
+                   supports-[backdrop-filter]:bg-background/80"
+        onClick={(e) => e.stopPropagation()}
+      >
       {/* Top row: branding + close */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
         <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
@@ -78,7 +87,10 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
       </div>
 
       {/* Body: CTA links */}
-      <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto">
+      <div 
+        className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="w-full max-w-md space-y-4">
           {missionLinks.map((link) => {
             const Icon = link.icon;
@@ -98,5 +110,6 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }
