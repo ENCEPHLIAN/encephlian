@@ -14,15 +14,24 @@ interface MissionPanelProps {
 export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   const navigate = useNavigate();
 
-  // lock body scroll while mission panel is open
   useEffect(() => {
     if (!open) return;
+    
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onOpenChange(false);
+      }
+    };
+
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.addEventListener('keydown', handleEscape);
+    
     return () => {
       document.body.style.overflow = prev;
+      document.removeEventListener('keydown', handleEscape);
     };
-  }, [open]);
+  }, [open, onOpenChange]);
 
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
@@ -73,8 +82,8 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
       {/* Content panel */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
-                   bg-background/95 backdrop-blur
-                   supports-[backdrop-filter]:bg-background/80"
+                   bg-background/60 backdrop-blur-xl
+                   supports-[backdrop-filter]:bg-background/40"
         onClick={(e) => e.stopPropagation()}
       >
       {/* Top row: branding + close */}

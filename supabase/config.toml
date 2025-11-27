@@ -41,3 +41,12 @@ verify_jwt = true
 
 [functions.sign_report]
 verify_jwt = true
+
+[functions.send_support_email]
+verify_jwt = true
+
+[functions.send_payment_receipt]
+verify_jwt = true
+
+[functions.process_eeg_upload]
+verify_jwt = true

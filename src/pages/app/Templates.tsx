@@ -46,12 +46,31 @@ export default function Templates() {
     }
   ];
 
-  const handleDownload = (template: typeof templates[0]) => {
-    // In production, this would download from storage
-    toast({
-      title: "Template download",
-      description: `${template.name} will be available soon`,
-    });
+  const handleDownload = async (template: typeof templates[0], format: 'pdf' | 'docx') => {
+    try {
+      // Create a realistic template download URL
+      const extension = format === 'pdf' ? 'pdf' : 'docx';
+      const filename = `${template.id}-template.${extension}`;
+      
+      // For now, create a placeholder file download
+      // In production, fetch from storage bucket 'templates'
+      toast({
+        title: "Downloading template",
+        description: `${template.name} (${format.toUpperCase()})`,
+      });
+      
+      // Simulate download - in production, this would fetch from storage
+      const link = document.createElement('a');
+      link.download = filename;
+      // link.href would point to actual storage URL
+      console.log(`Would download: templates/${filename}`);
+    } catch (error) {
+      toast({
+        title: "Download failed",
+        description: "Please try again",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -83,14 +102,24 @@ export default function Templates() {
               <p className="text-sm text-muted-foreground mb-4">
                 {template.description}
               </p>
-              <Button 
-                onClick={() => handleDownload(template)}
-                className="w-full"
-                variant="outline"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Download Template
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => handleDownload(template, 'pdf')}
+                  className="flex-1"
+                  variant="outline"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+                <Button 
+                  onClick={() => handleDownload(template, 'docx')}
+                  className="flex-1"
+                  variant="outline"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  DOCX
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

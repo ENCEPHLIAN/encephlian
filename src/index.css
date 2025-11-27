@@ -103,12 +103,12 @@
     --popover: 0 0% 100%;
     --popover-foreground: 220 22% 16%;
 
-    /* Primary = deep navy for CTAs */
-    --primary: 222 48% 22%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary = vibrant sky blue for CTAs */
+    --primary: 200 98% 50%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary = solid soft grey (for all those outline buttons) */
-    --secondary: 220 16% 88%;
+    /* Secondary = stronger grey (for all those outline buttons) */
+    --secondary: 220 16% 82%;
     --secondary-foreground: 220 24% 18%;
 
     --muted: 220 16% 90%;
