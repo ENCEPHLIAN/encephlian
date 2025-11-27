@@ -50,3 +50,6 @@ verify_jwt = true
 
 [functions.process_eeg_upload]
 verify_jwt = true
+
+[functions.generate_placeholder_report]
+verify_jwt = true

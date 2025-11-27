@@ -56,7 +56,7 @@ serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    // Send email to support team if Resend is configured
+    // Send email to support team via Resend API
     if (RESEND_API_KEY) {
       try {
         const emailRes = await fetch("https://api.resend.com/emails", {
@@ -68,25 +68,53 @@ serve(async (req) => {
           body: JSON.stringify({
             from: "ENCEPHLIAN Support <support@encephlian.cloud>",
             to: ["info@encephlian.cloud"],
-            subject: `Support Ticket #${ticket.id.slice(0, 8)}: ${subject}`,
+            subject: `🎫 Support Ticket #${ticket.id.slice(0, 8)}: ${subject}`,
             html: `
-              <h2>New Support Ticket</h2>
-              <p><strong>From:</strong> ${profile?.full_name || user.email} (${user.email})</p>
-              <p><strong>Ticket ID:</strong> ${ticket.id}</p>
-              <p><strong>Subject:</strong> ${subject}</p>
-              <p><strong>Message:</strong></p>
-              <p>${message.replace(/\n/g, '<br>')}</p>
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                  New Support Ticket
+                </h2>
+                <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <p style="margin: 8px 0;"><strong>From:</strong> ${profile?.full_name || user.email}</p>
+                  <p style="margin: 8px 0;"><strong>Email:</strong> ${user.email}</p>
+                  <p style="margin: 8px 0;"><strong>Ticket ID:</strong> <code>${ticket.id}</code></p>
+                  <p style="margin: 8px 0;"><strong>Created:</strong> ${new Date().toLocaleString()}</p>
+                </div>
+                <div style="margin: 20px 0;">
+                  <h3 style="color: #334155; margin-bottom: 10px;">Subject</h3>
+                  <p style="background: #fff; padding: 12px; border-left: 4px solid #0284c7; border-radius: 4px;">
+                    ${subject}
+                  </p>
+                </div>
+                <div style="margin: 20px 0;">
+                  <h3 style="color: #334155; margin-bottom: 10px;">Message</h3>
+                  <div style="background: #fff; padding: 15px; border: 1px solid #e2e8f0; border-radius: 4px; white-space: pre-wrap;">
+${message}
+                  </div>
+                </div>
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;" />
+                <p style="color: #64748b; font-size: 12px; text-align: center;">
+                  ENCEPHLIAN Support System • Automated Notification
+                </p>
+              </div>
             `,
           }),
         });
 
         if (!emailRes.ok) {
-          console.error("Failed to send email:", await emailRes.text());
+          const errorText = await emailRes.text();
+          console.error("Resend API error:", errorText);
+          throw new Error(`Resend API responded with status ${emailRes.status}`);
         }
+
+        const emailData = await emailRes.json();
+        console.log("Support email sent successfully:", emailData);
       } catch (emailError) {
         console.error("Email sending error:", emailError);
-        // Don't fail the request if email fails
+        // Don't fail the ticket creation if email fails
       }
+    } else {
+      console.warn("RESEND_API_KEY not configured - email not sent");
     }
 
     // Log audit event

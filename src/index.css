@@ -93,23 +93,23 @@
 
 @layer base {
   :root {
-    /* LIGHT MODE – higher contrast, less chalk */
-    --background: 215 22% 96%;
-    --foreground: 220 22% 16%;
+    /* LIGHT MODE – warmer background, vibrant accent */
+    --background: 30 20% 99%;
+    --foreground: 240 10% 3.9%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 22% 16%;
+    --card-foreground: 240 10% 3.9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 22% 16%;
+    --popover-foreground: 240 10% 3.9%;
 
     /* Primary = vibrant sky blue for CTAs */
     --primary: 200 98% 50%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary = stronger grey (for all those outline buttons) */
-    --secondary: 220 16% 82%;
-    --secondary-foreground: 220 24% 18%;
+    /* Secondary = stronger blue-grey (not washed out) */
+    --secondary: 220 70% 65%;
+    --secondary-foreground: 0 0% 100%;
 
     --muted: 220 16% 90%;
     --muted-foreground: 220 12% 42%;

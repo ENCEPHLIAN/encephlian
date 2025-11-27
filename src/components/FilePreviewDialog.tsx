@@ -95,7 +95,7 @@ export function FilePreviewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] p-0">
+      <DialogContent className="max-w-4xl h-[80vh] p-0 [&>button]:hidden">
         <DialogHeader className="px-6 pt-6 pb-0">
           <div className="flex items-start justify-between">
             <div>
@@ -104,13 +104,6 @@ export function FilePreviewDialog({
                 {(file.size / 1024).toFixed(2)} KB • {new Date(file.created_at).toLocaleDateString()}
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onOpenChange(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         </DialogHeader>
 
