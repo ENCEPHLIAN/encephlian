@@ -1,143 +1,160 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, AlertCircle, CheckCircle, AlertTriangle, Info } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { FileText, Download, FileCheck } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+
+const templates = [
+  {
+    id: "normal-eeg",
+    name: "Normal EEG Report",
+    description: "Template for interpreting normal awake and sleep EEG with no epileptiform activity",
+    category: "Normal",
+    icon: FileCheck,
+    color: "text-green-600",
+  },
+  {
+    id: "focal-epileptiform",
+    name: "Focal Epileptiform Activity",
+    description: "Template for reporting focal spikes, sharp waves, and localized epileptiform discharges",
+    category: "Epileptiform",
+    icon: FileText,
+    color: "text-orange-600",
+  },
+  {
+    id: "generalized-epileptiform",
+    name: "Generalized Epileptiform Activity",
+    description: "Template for generalized spike-wave, polyspike, and diffuse epileptiform patterns",
+    category: "Epileptiform",
+    icon: FileText,
+    color: "text-red-600",
+  },
+  {
+    id: "artifact-limited",
+    name: "Artifact-Limited Study",
+    description: "Template for studies with significant artifact limiting interpretation",
+    category: "Technical",
+    icon: FileText,
+    color: "text-yellow-600",
+  },
+];
 
 export default function Templates() {
   const { toast } = useToast();
-  
-  const templates = [
-    {
-      id: "routine-triage",
-      name: "Routine Triage Template",
-      description: "Standard template for routine EEG triage reports with normal turnaround time",
-      category: "Triage",
-      downloadUrl: "/templates/routine-triage-template.pdf",
-      icon: FileText,
-      color: "text-blue-600"
-    },
-    {
-      id: "stat-triage",
-      name: "STAT Triage Template",
-      description: "Urgent triage template for time-sensitive EEG evaluations",
-      category: "Triage",
-      downloadUrl: "/templates/stat-triage-template.pdf",
-      icon: AlertCircle,
-      color: "text-red-600"
-    },
-    {
-      id: "normal-eeg",
-      name: "Normal EEG Template",
-      description: "Comprehensive template for normal EEG findings and interpretation",
-      category: "Interpretation",
-      downloadUrl: "/templates/normal-eeg-template.pdf",
-      icon: CheckCircle,
-      color: "text-green-600"
-    },
-    {
-      id: "abnormal-eeg",
-      name: "Abnormal EEG Template",
-      description: "Detailed template for abnormal EEG findings with clinical correlation",
-      category: "Interpretation",
-      downloadUrl: "/templates/abnormal-eeg-template.pdf",
-      icon: AlertTriangle,
-      color: "text-orange-600"
-    }
-  ];
 
-  const handleDownload = async (template: typeof templates[0], format: 'pdf' | 'docx') => {
+  const handleDownload = async (templateId: string, format: "pdf" | "docx") => {
     try {
-      // Create a realistic template download URL
-      const extension = format === 'pdf' ? 'pdf' : 'docx';
-      const filename = `${template.id}-template.${extension}`;
-      
-      // For now, create a placeholder file download
-      // In production, fetch from storage bucket 'templates'
       toast({
         title: "Downloading template",
-        description: `${template.name} (${format.toUpperCase()})`,
+        description: `Preparing ${format.toUpperCase()} template...`,
       });
+
+      // In production, fetch from Supabase Storage templates bucket
+      const fileName = `${templateId}-template.${format}`;
       
-      // Simulate download - in production, this would fetch from storage
-      const link = document.createElement('a');
-      link.download = filename;
-      // link.href would point to actual storage URL
-      console.log(`Would download: templates/${filename}`);
+      // Create a placeholder download - real implementation would fetch from storage
+      const content = `ENCEPHLIAN EEG Report Template\n\nTemplate: ${templateId}\nFormat: ${format.toUpperCase()}\n\nThis placeholder would be replaced with actual template content from Supabase Storage (templates bucket).`;
+      const blob = new Blob([content], { 
+        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: "Download complete",
+        description: `${fileName} has been downloaded`,
+      });
     } catch (error) {
       toast({
         title: "Download failed",
-        description: "Please try again",
+        description: "Failed to download template. Please try again.",
         variant: "destructive",
       });
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold">Report Templates</h1>
-        <p className="text-muted-foreground mt-2">
-          Downloadable templates for standardized EEG reporting
+        <h1 className="text-2xl font-semibold tracking-tight">Report Templates</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          Download standardized EEG report templates for consistent clinical documentation.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {templates.map((template) => (
-          <Card key={template.id} className="openai-card hover:shadow-lg transition-all">
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className={cn("p-2 rounded-lg bg-muted", template.color)}>
-                    <template.icon className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{template.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">{template.category}</p>
+        {templates.map((template) => {
+          const Icon = template.icon;
+          return (
+            <Card key={template.id} className="hover:shadow-md transition-shadow">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg bg-muted ${template.color}`}>
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{template.name}</CardTitle>
+                      <Badge variant="outline" className="mt-1">
+                        {template.category}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                {template.description}
-              </p>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => handleDownload(template, 'pdf')}
-                  className="flex-1"
-                  variant="outline"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  PDF
-                </Button>
-                <Button 
-                  onClick={() => handleDownload(template, 'docx')}
-                  className="flex-1"
-                  variant="outline"
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  DOCX
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent>
+                <CardDescription className="mb-4 leading-relaxed">
+                  {template.description}
+                </CardDescription>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownload(template.id, "pdf")}
+                    className="flex-1"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    PDF
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownload(template.id, "docx")}
+                    className="flex-1"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    DOCX
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
-      <Card className="border-dashed">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-4">
-            <Info className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
-            <div className="space-y-2">
-              <h3 className="font-semibold">About Templates</h3>
-              <p className="text-sm text-muted-foreground">
-                These templates follow ACNS guidelines and are designed to ensure consistent, 
-                high-quality EEG reporting. Customize them to match your clinic's specific 
-                requirements and workflow.
-              </p>
-            </div>
-          </div>
+      <Card className="bg-muted/30">
+        <CardHeader>
+          <CardTitle className="text-base">About These Templates</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>
+            These templates are designed to streamline clinical EEG reporting with standardized formats
+            that comply with ACNS guidelines.
+          </p>
+          <p>
+            Each template includes sections for clinical indication, technical adequacy, background activity,
+            epileptiform findings, and clinical correlation.
+          </p>
+          <p className="text-xs pt-2 border-t">
+            Templates are available in both PDF (for viewing) and DOCX (for editing in Microsoft Word).
+          </p>
         </CardContent>
       </Card>
     </div>

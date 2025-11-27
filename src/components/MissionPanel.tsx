@@ -75,15 +75,15 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     <>
       {/* Backdrop - click to close */}
       <div
-        className="fixed inset-0 z-[9998] bg-background/80 backdrop-blur-sm"
+        className="fixed inset-0 z-[9998] bg-background/70 backdrop-blur-2xl"
         onClick={() => onOpenChange(false)}
       />
       
       {/* Content panel */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
-                   bg-background/60 backdrop-blur-xl
-                   supports-[backdrop-filter]:bg-background/40"
+                   bg-background/70 backdrop-blur-2xl
+                   supports-[backdrop-filter]:bg-background/50"
         onClick={(e) => e.stopPropagation()}
       >
       {/* Top row: branding + close */}
