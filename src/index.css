@@ -93,61 +93,61 @@
 
 @layer base {
   :root {
-    /* LIGHT MODE – warmer background, vibrant accent */
-    --background: 30 20% 99%;
-    --foreground: 240 10% 3.9%;
+    /* LIGHT MODE – clinical, warm grey background, muted blue CTAs */
+    --background: 30 10% 98%;
+    --foreground: 220 10% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 220 10% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover-foreground: 220 10% 15%;
 
-    /* Primary = vibrant sky blue for CTAs */
-    --primary: 200 98% 50%;
+    /* Primary = clinical muted blue for CTAs */
+    --primary: 210 65% 50%;
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary = stronger blue-grey (not washed out) */
-    --secondary: 220 70% 65%;
-    --secondary-foreground: 0 0% 100%;
+    /* Secondary = warm neutral grey */
+    --secondary: 30 12% 85%;
+    --secondary-foreground: 220 10% 15%;
 
-    --muted: 220 16% 90%;
-    --muted-foreground: 220 12% 42%;
+    --muted: 30 15% 92%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 220 18% 92%;
-    --accent-foreground: 220 24% 20%;
+    --accent: 30 15% 90%;
+    --accent-foreground: 220 10% 15%;
 
-    --destructive: 0 64% 58%;
-    --destructive-foreground: 210 20% 98%;
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 18% 84%;
-    --input: 220 18% 84%;
-    --ring: 222 48% 22%;
+    --border: 30 15% 88%;
+    --input: 30 15% 88%;
+    --ring: 210 65% 50%;
 
     --radius: 0.75rem;
 
     /* Sidebar – slightly darker than content */
-    --sidebar-background: 215 20% 94%;
-    --sidebar-foreground: 220 22% 18%;
-    --sidebar-primary: 222 48% 22%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 215 18% 92%;
-    --sidebar-accent-foreground: 220 22% 18%;
-    --sidebar-border: 220 18% 84%;
-    --sidebar-ring: 222 48% 22%;
+    --sidebar-background: 30 12% 96%;
+    --sidebar-foreground: 220 10% 15%;
+    --sidebar-primary: 210 65% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 15% 92%;
+    --sidebar-accent-foreground: 220 10% 15%;
+    --sidebar-border: 30 15% 88%;
+    --sidebar-ring: 210 65% 50%;
 
-    --success: 142 44% 46%;
-    --success-foreground: 210 20% 98%;
+    --success: 145 50% 45%;
+    --success-foreground: 0 0% 100%;
 
-    --warning: 38 72% 56%;
-    --warning-foreground: 220 22% 14%;
+    --warning: 38 75% 52%;
+    --warning-foreground: 220 15% 10%;
 
-    /* KPI band tints – still business-casual, not pastel vomit */
-    --dashboard-accent-primary: 222 26% 88%;
-    --dashboard-accent-success: 150 34% 86%;
-    --dashboard-accent-warning: 38 45% 88%;
-    --dashboard-accent-info: 200 40% 88%;
-    --dashboard-accent-neutral: 220 18% 88%;
+    /* KPI band tints – clinical, predictable */
+    --dashboard-accent-primary: 210 40% 90%;
+    --dashboard-accent-success: 145 35% 88%;
+    --dashboard-accent-warning: 38 45% 90%;
+    --dashboard-accent-info: 200 35% 90%;
+    --dashboard-accent-neutral: 30 18% 90%;
   }
 
   .dark {
@@ -155,18 +155,18 @@
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
 
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
+    --card: 220 15% 8%;
+    --card-foreground: 30 8% 92%;
 
-    --popover: 0 0% 7%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 220 15% 8%;
+    --popover-foreground: 30 8% 92%;
 
     /* slightly warm off-white instead of pure blue-ish white */
-    --primary: 40 8% 92%;
-    --primary-foreground: 0 0% 8%;
+    --primary: 30 10% 90%;
+    --primary-foreground: 220 15% 10%;
 
-    --secondary: 0 0% 10%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 220 12% 14%;
+    --secondary-foreground: 30 8% 92%;
 
     --muted: 0 0% 15%;
     --muted-foreground: 0 0% 64.9%;
