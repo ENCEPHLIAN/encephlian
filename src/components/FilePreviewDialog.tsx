@@ -1,17 +1,18 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, FileText, X, Sparkles } from "lucide-react";
+import { Download, X, FileText, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { PDFViewer } from "./PDFViewer";
+import mammoth from "mammoth";
 
 interface FilePreviewDialogProps {
   file: {
     name: string;
     path: string;
-    size: number;
-    created_at: string;
+    size?: number;
+    created_at?: string;
   };
   bucket: string;
   open: boolean;
@@ -24,155 +25,178 @@ export function FilePreviewDialog({
   bucket,
   open,
   onOpenChange,
-  onGenerateReport
+  onGenerateReport,
 }: FilePreviewDialogProps) {
-  const { toast } = useToast();
   const [downloading, setDownloading] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string>("");
+  const [fileContent, setFileContent] = useState<string>("");
+  const [fileType, setFileType] = useState<"pdf" | "image" | "text" | "docx" | "edf" | "unknown">("unknown");
 
-  const fileExtension = file.name.split('.').pop()?.toLowerCase();
-  const isEDF = fileExtension === 'edf';
-  const isPDF = fileExtension === 'pdf';
-  const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
-  const isText = ['txt', 'json', 'md', 'log'].includes(fileExtension || '');
+  // Determine file type
+  useEffect(() => {
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") setFileType("pdf");
+    else if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext || "")) setFileType("image");
+    else if (["txt", "md", "json", "csv", "log"].includes(ext || "")) setFileType("text");
+    else if (["doc", "docx"].includes(ext || "")) setFileType("docx");
+    else if (ext === "edf") setFileType("edf");
+    else setFileType("unknown");
+  }, [file.name]);
+
+  // Fetch file URL or content when dialog opens
+  useEffect(() => {
+    if (!open) return;
+
+    const loadFile = async () => {
+      try {
+        if (fileType === "pdf" || fileType === "image") {
+          // Get public URL
+          const { data } = supabase.storage.from(bucket).getPublicUrl(file.path);
+          setFileUrl(data.publicUrl);
+        } else if (fileType === "text") {
+          // Download and display text content
+          const { data, error } = await supabase.storage.from(bucket).download(file.path);
+          if (error) throw error;
+          const text = await data.text();
+          setFileContent(text);
+        } else if (fileType === "docx") {
+          // Download and convert DOCX to HTML
+          const { data, error } = await supabase.storage.from(bucket).download(file.path);
+          if (error) throw error;
+          const arrayBuffer = await data.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          setFileContent(result.value);
+        } else if (fileType === "edf") {
+          // For EDF files, show metadata
+          setFileContent(
+            `EDF File: ${file.name}\nSize: ${((file.size || 0) / 1024).toFixed(2)} KB\nCreated: ${file.created_at || "Unknown"}\n\nThis is an EEG data file. Open in EEG Viewer for full analysis.`
+          );
+        }
+      } catch (error) {
+        console.error("Error loading file:", error);
+        toast.error("Failed to load file preview");
+      }
+    };
+
+    loadFile();
+  }, [open, bucket, file, fileType]);
 
   const handleDownload = async () => {
-    setDownloading(true);
     try {
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .download(file.path);
+      setDownloading(true);
+      const { data, error } = await supabase.storage.from(bucket).download(file.path);
 
       if (error) throw error;
 
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
+      const url = window.URL.createObjectURL(data);
+      const a = document.createElement("a");
       a.href = url;
       a.download = file.name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(url);
 
-      toast({
-        title: "Download started",
-        description: `${file.name} is being downloaded`,
-      });
-    } catch (error) {
-      console.error('Download error:', error);
-      toast({
-        title: "Download failed",
-        description: "Failed to download file",
-        variant: "destructive",
-      });
+      toast.success("Download started");
+    } catch (error: any) {
+      console.error("Download error:", error);
+      toast.error(error.message || "Failed to download file");
     } finally {
       setDownloading(false);
     }
   };
 
-  const getFileUrl = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return '';
-      
-      // Check if path already includes user ID
-      const filePath = file.path.startsWith(`${user.id}/`) ? file.path : `${user.id}/${file.path}`;
-      
-      const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-      return data.publicUrl;
-    } catch (error) {
-      console.error('Error getting file URL:', error);
-      return '';
+  const renderPreview = () => {
+    if (fileType === "pdf" && fileUrl) {
+      return <PDFViewer fileUrl={fileUrl} />;
     }
+
+    if (fileType === "image" && fileUrl) {
+      return (
+        <div className="flex items-center justify-center h-full bg-muted/20 p-4">
+          <img
+            src={fileUrl}
+            alt={file.name}
+            className="max-w-full max-h-full object-contain rounded"
+          />
+        </div>
+      );
+    }
+
+    if (fileType === "text" || fileType === "edf") {
+      return (
+        <div className="h-full overflow-auto bg-muted/20 p-6">
+          <pre className="text-sm font-mono whitespace-pre-wrap">{fileContent}</pre>
+        </div>
+      );
+    }
+
+    if (fileType === "docx" && fileContent) {
+      return (
+        <div
+          className="h-full overflow-auto bg-background p-6 prose prose-sm max-w-none dark:prose-invert"
+          dangerouslySetInnerHTML={{ __html: fileContent }}
+        />
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
+        <FileText className="h-16 w-16" />
+        <div className="text-center space-y-1">
+          <p className="font-medium">Preview not available</p>
+          <p className="text-sm">Download to view this file</p>
+        </div>
+      </div>
+    );
   };
-
-  const [fileUrl, setFileUrl] = useState<string>('');
-
-  useEffect(() => {
-    if (open) {
-      getFileUrl().then(setFileUrl);
-    }
-  }, [open, file.path]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] p-0 [&>button]:hidden">
-        <DialogHeader className="px-6 pt-6 pb-0">
-          <div className="flex items-start justify-between">
-            <div>
-              <DialogTitle>{file.name}</DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1">
-                {(file.size / 1024).toFixed(2)} KB • {new Date(file.created_at).toLocaleDateString()}
-              </p>
-            </div>
+      <DialogContent className="max-w-5xl h-[85vh] p-0 gap-0 [&>button]:hidden">
+        {/* Custom header with single X button */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {fileType === "image" ? (
+              <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            ) : (
+              <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+            )}
+            <span className="text-sm font-medium truncate">{file.name}</span>
           </div>
-        </DialogHeader>
 
-        <div className="flex-1 px-6 pb-6 overflow-hidden">
-          {isPDF && fileUrl && (
-            <PDFViewer fileUrl={fileUrl} />
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="h-8"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
 
-          {isEDF && (
-            <div className="flex flex-col items-center justify-center h-full bg-muted/30 rounded-lg p-8">
-              <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">EEG Data File</h3>
-              <p className="text-sm text-muted-foreground text-center mb-6">
-                This is an EDF file containing EEG waveform data. Download to view in specialized software,
-                or generate an AI report to analyze the data.
-              </p>
-              <div className="flex gap-2">
-                <Button onClick={handleDownload} disabled={downloading}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Download File
-                </Button>
-                {onGenerateReport && bucket === 'eeg-raw' && (
-                  <Button
-                    onClick={() => {
-                      onGenerateReport(file.path);
-                      onOpenChange(false);
-                    }}
-                    variant="default"
-                  >
-                    <Sparkles className="h-4 w-4 mr-2" />
-                    Generate AI Report
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {isImage && fileUrl && (
-            <div className="flex items-center justify-center h-full">
-              <img
-                src={fileUrl}
-                alt={file.name}
-                className="max-w-full max-h-full object-contain"
-              />
-            </div>
-          )}
-
-          {isText && (
-            <div className="h-full overflow-auto">
-              <pre className="text-sm bg-muted p-4 rounded-lg">
-                <code>{/* Text content would be loaded here */}</code>
-              </pre>
-            </div>
-          )}
-
-          {!isPDF && !isEDF && !isImage && !isText && (
-            <div className="flex flex-col items-center justify-center h-full bg-muted/30 rounded-lg p-8">
-              <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Preview Not Available</h3>
-              <p className="text-sm text-muted-foreground text-center mb-6">
-                This file type cannot be previewed in the browser. Download to view.
-              </p>
-              <Button onClick={handleDownload} disabled={downloading}>
-                <Download className="h-4 w-4 mr-2" />
-                Download File
+            {fileType === "edf" && onGenerateReport && (
+              <Button variant="default" size="sm" onClick={() => onGenerateReport(file.path)} className="h-8">
+                Generate AI Report
               </Button>
-            </div>
-          )}
+            )}
+
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onOpenChange(false)}
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </div>
         </div>
+
+        {/* Preview content */}
+        <div className="flex-1 overflow-hidden">{renderPreview()}</div>
       </DialogContent>
     </Dialog>
   );

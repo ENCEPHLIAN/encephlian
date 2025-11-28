@@ -53,3 +53,6 @@ verify_jwt = true
 
 [functions.generate_placeholder_report]
 verify_jwt = true
+
+[functions.join_waitlist]
+verify_jwt = true

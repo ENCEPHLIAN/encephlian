@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Brain, Lock, Mail } from "lucide-react";
 import { AnomalyTimeline } from "./AnomalyTimeline";
 import { generateMockAnomalies } from "@/lib/ai/mockAnomalyData";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -29,16 +30,26 @@ export function AnomalyDetectionPreview({ studyId }: AnomalyDetectionPreviewProp
   // Generate mock data
   const { detections, timeline, overallStatus } = generateMockAnomalies(studyId);
   
-  const handleJoinWaitlist = () => {
+  const handleJoinWaitlist = async () => {
     if (!email || !email.includes("@")) {
       toast.error("Please enter a valid email address");
       return;
     }
     
-    // Mock submission
-    toast.success("Thanks! We'll notify you when AI detection launches.");
-    setEmail("");
-    setDialogOpen(false);
+    try {
+      const { error } = await supabase.functions.invoke("join_waitlist", {
+        body: { email, feature: "AI Anomaly Detection" }
+      });
+
+      if (error) throw error;
+
+      toast.success("Thanks! We'll notify you when AI detection launches.");
+      setEmail("");
+      setDialogOpen(false);
+    } catch (error: any) {
+      console.error("Waitlist error:", error);
+      toast.error("Failed to join waitlist. Please try again.");
+    }
   };
   
   const getStatusBadge = () => {
