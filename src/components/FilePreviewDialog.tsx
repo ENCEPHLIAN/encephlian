@@ -50,9 +50,11 @@ export function FilePreviewDialog({
     const loadFile = async () => {
       try {
         if (fileType === "pdf" || fileType === "image") {
-          // Get public URL
-          const { data } = supabase.storage.from(bucket).getPublicUrl(file.path);
-          setFileUrl(data.publicUrl);
+          // Download file and create blob URL
+          const { data, error } = await supabase.storage.from(bucket).download(file.path);
+          if (error) throw error;
+          const blobUrl = URL.createObjectURL(data);
+          setFileUrl(blobUrl);
         } else if (fileType === "text") {
           // Download and display text content
           const { data, error } = await supabase.storage.from(bucket).download(file.path);
@@ -79,6 +81,13 @@ export function FilePreviewDialog({
     };
 
     loadFile();
+
+    // Cleanup blob URL when dialog closes
+    return () => {
+      if (fileUrl && (fileType === "pdf" || fileType === "image")) {
+        URL.revokeObjectURL(fileUrl);
+      }
+    };
   }, [open, bucket, file, fileType]);
 
   const handleDownload = async () => {
