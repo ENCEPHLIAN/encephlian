@@ -75,14 +75,14 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     <>
       {/* Backdrop - click to close */}
       <div
-        className="fixed inset-0 z-[9998] bg-background/50 backdrop-blur-md"
+        className="fixed inset-0 z-[9998] bg-background/30 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
       
       {/* Content panel */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
-                   bg-background/80 backdrop-blur-3xl
+                   bg-background/70 backdrop-blur-lg
                    supports-[backdrop-filter]:bg-background/60"
         onClick={(e) => e.stopPropagation()}
       >
