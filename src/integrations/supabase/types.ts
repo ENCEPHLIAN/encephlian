@@ -977,6 +977,18 @@ export type Database = {
       }
     }
     Functions: {
+      admin_adjust_tokens: {
+        Args: { p_amount: number; p_operation: string; p_user_id: string }
+        Returns: Json
+      }
+      admin_update_profile: {
+        Args: { p_updates: Json; p_user_id: string }
+        Returns: Json
+      }
+      admin_update_ticket_status: {
+        Args: { p_status: string; p_ticket_id: string }
+        Returns: Json
+      }
       calculate_withdrawal_breakdown: {
         Args: { p_requested_amount: number; p_user_id: string }
         Returns: Json
