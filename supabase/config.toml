@@ -56,6 +56,3 @@ verify_jwt = true
 
 [functions.join_waitlist]
 verify_jwt = true
-
-[functions.admin_create_user]
-verify_jwt = true

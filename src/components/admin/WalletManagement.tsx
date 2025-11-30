@@ -76,85 +76,84 @@ export default function WalletManagement() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base uppercase tracking-wide">Token Wallets</CardTitle>
+      <CardHeader>
+        <CardTitle>Token Wallets</CardTitle>
       </CardHeader>
-      <CardContent className="p-3">
+      <CardContent>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow className="text-xs">
-                <TableHead className="h-8 text-xs">User Email</TableHead>
-                <TableHead className="h-8 text-xs">Full Name</TableHead>
-                <TableHead className="h-8 text-xs">Token Balance</TableHead>
-                <TableHead className="h-8 text-xs">Last Updated</TableHead>
-                <TableHead className="text-right h-8 text-xs">Actions</TableHead>
+              <TableRow>
+                <TableHead>User Email</TableHead>
+                <TableHead>Full Name</TableHead>
+                <TableHead>Token Balance</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {wallets?.map((wallet) => (
-                <TableRow key={wallet.user_id} className="text-xs h-10">
-                  <TableCell className="font-mono text-[10px] py-2">
+                <TableRow key={wallet.user_id}>
+                  <TableCell className="font-mono text-xs">
                     {wallet.profiles?.email}
                   </TableCell>
-                  <TableCell className="text-xs py-2">{wallet.profiles?.full_name || "—"}</TableCell>
-                  <TableCell className="font-bold text-xs py-2">{wallet.tokens}</TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground py-2">
+                  <TableCell>{wallet.profiles?.full_name || "—"}</TableCell>
+                  <TableCell className="font-bold">{wallet.tokens}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
                     {wallet.updated_at ? new Date(wallet.updated_at).toLocaleString() : "—"}
                   </TableCell>
-                  <TableCell className="text-right py-2">
+                  <TableCell className="text-right">
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => setSelectedUser(wallet)}
-                          className="h-7 px-2 text-xs"
                         >
                           Adjust
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle className="text-base">Adjust Token Balance</DialogTitle>
+                          <DialogTitle>Adjust Token Balance</DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-3 py-3">
+                        <div className="space-y-4 py-4">
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase">User</p>
-                            <p className="font-medium text-sm">{wallet.profiles?.email}</p>
+                            <p className="text-sm text-muted-foreground">User</p>
+                            <p className="font-medium">{wallet.profiles?.email}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase">Current Balance</p>
-                            <p className="text-xl font-bold">{wallet.tokens} tokens</p>
+                            <p className="text-sm text-muted-foreground">Current Balance</p>
+                            <p className="text-2xl font-bold">{wallet.tokens} tokens</p>
                           </div>
                           <div>
-                            <label className="text-xs font-medium uppercase">Amount</label>
+                            <label className="text-sm font-medium">Amount</label>
                             <Input
                               type="number"
                               min="1"
                               value={amount}
                               onChange={(e) => setAmount(e.target.value)}
                               placeholder="Enter amount"
-                              className="mt-1 text-xs h-8"
+                              className="mt-1"
                             />
                           </div>
                         </div>
                         <div className="flex gap-2">
                           <Button
-                            className="flex-1 text-xs h-8"
+                            className="flex-1"
                             onClick={() => handleAdjust("add")}
                             disabled={adjustTokensMutation.isPending}
                           >
-                            <Plus className="mr-1.5 h-3.5 w-3.5" />
+                            <Plus className="mr-2 h-4 w-4" />
                             Add Tokens
                           </Button>
                           <Button
                             variant="destructive"
-                            className="flex-1 text-xs h-8"
+                            className="flex-1"
                             onClick={() => handleAdjust("remove")}
                             disabled={adjustTokensMutation.isPending}
                           >
-                            <Minus className="mr-1.5 h-3.5 w-3.5" />
+                            <Minus className="mr-2 h-4 w-4" />
                             Remove Tokens
                           </Button>
                         </div>

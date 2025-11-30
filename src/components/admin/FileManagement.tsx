@@ -65,34 +65,33 @@ export default function FileManagement() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base uppercase tracking-wide">File Storage</CardTitle>
+          <CardTitle>File Storage</CardTitle>
           <div className="flex items-center gap-2">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <Search className="h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search files..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-56 text-xs h-8"
+              className="w-64"
             />
           </div>
         </div>
-        <div className="flex gap-1.5 mt-3">
+        <div className="flex gap-2 mt-4">
           {BUCKETS.map((bucket) => (
             <Button
               key={bucket}
               variant={selectedBucket === bucket ? "default" : "outline"}
               size="sm"
               onClick={() => setSelectedBucket(bucket)}
-              className="text-[10px] h-7 px-2"
             >
               {bucket}
             </Button>
           ))}
         </div>
       </CardHeader>
-      <CardContent className="p-3">
+      <CardContent>
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -101,42 +100,38 @@ export default function FileManagement() {
           <div className="rounded-md border">
             <Table>
               <TableHeader>
-                <TableRow className="text-xs">
-                  <TableHead className="h-8 text-xs">File Name</TableHead>
-                  <TableHead className="h-8 text-xs">Size</TableHead>
-                  <TableHead className="h-8 text-xs">Last Modified</TableHead>
-                  <TableHead className="text-right h-8 text-xs">Actions</TableHead>
+                <TableRow>
+                  <TableHead>File Name</TableHead>
+                  <TableHead>Size</TableHead>
+                  <TableHead>Last Modified</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredFiles?.map((file) => (
-                  <TableRow key={file.name} className="text-xs h-10">
-                    <TableCell className="font-mono text-[10px] py-2 max-w-md truncate">{file.name}</TableCell>
-                    <TableCell className="text-xs py-2">
-                      {file.metadata?.size ? `${(file.metadata.size / 1024).toFixed(1)} KB` : "—"}
+                  <TableRow key={file.name}>
+                    <TableCell className="font-mono text-xs">{file.name}</TableCell>
+                    <TableCell>
+                      {file.metadata?.size ? `${(file.metadata.size / 1024).toFixed(2)} KB` : "—"}
                     </TableCell>
-                    <TableCell className="text-[10px] text-muted-foreground py-2">
-                      {file.updated_at ? new Date(file.updated_at).toLocaleDateString() : "—"}
+                    <TableCell className="text-xs text-muted-foreground">
+                      {file.updated_at ? new Date(file.updated_at).toLocaleString() : "—"}
                     </TableCell>
-                    <TableCell className="text-right py-2">
-                      <div className="flex gap-1 justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownload(file.name)}
-                          className="h-7 px-2"
-                        >
-                          <Download className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDelete(file.name)}
-                          className="h-7 px-2"
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      </div>
+                    <TableCell className="text-right space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownload(file.name)}
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(file.name)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

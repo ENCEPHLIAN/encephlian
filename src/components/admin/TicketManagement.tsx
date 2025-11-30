@@ -26,6 +26,7 @@ export default function TicketManagement() {
   const { data: tickets, isLoading } = useQuery({
     queryKey: ["admin-tickets"],
     queryFn: async () => {
+      // First get all tickets
       const { data: ticketsData, error: ticketsError } = await supabase
         .from("support_tickets")
         .select("*")
@@ -33,6 +34,7 @@ export default function TicketManagement() {
 
       if (ticketsError) throw ticketsError;
 
+      // Then get profiles for each ticket
       const userIds = ticketsData.map(t => t.user_id);
       const { data: profilesData, error: profilesError } = await supabase
         .from("profiles")
@@ -41,6 +43,7 @@ export default function TicketManagement() {
 
       if (profilesError) throw profilesError;
 
+      // Combine the data
       const combined = ticketsData.map(ticket => ({
         ...ticket,
         profile: profilesData.find(p => p.id === ticket.user_id)
@@ -48,7 +51,7 @@ export default function TicketManagement() {
 
       return combined;
     },
-    refetchInterval: 10000
+    refetchInterval: 10000 // Refresh every 10 seconds
   });
 
   const updateStatusMutation = useMutation({
@@ -89,73 +92,88 @@ export default function TicketManagement() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base uppercase tracking-wide">Support Tickets</CardTitle>
+      <CardHeader>
+        <CardTitle>Support Tickets</CardTitle>
       </CardHeader>
-      <CardContent className="p-3">
+      <CardContent>
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow className="text-xs">
-                <TableHead className="h-8 text-xs">User</TableHead>
-                <TableHead className="h-8 text-xs">Subject</TableHead>
-                <TableHead className="h-8 text-xs">Status</TableHead>
-                <TableHead className="h-8 text-xs">Created</TableHead>
-                <TableHead className="text-right h-8 text-xs">Actions</TableHead>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Subject</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {tickets?.map((ticket) => (
-                <TableRow key={ticket.id} className="text-xs h-10">
-                  <TableCell className="font-mono text-[10px] py-2">
-                    {ticket.profile?.email}
-                  </TableCell>
-                  <TableCell className="text-xs py-2 max-w-xs truncate">{ticket.subject}</TableCell>
-                  <TableCell className="py-2">
-                    <Badge className={`${STATUS_COLORS[ticket.status as keyof typeof STATUS_COLORS]} text-[10px] px-1.5 py-0.5`}>
-                      {ticket.status}
+                <TableRow key={ticket.id}>
+                  <TableCell>
+                    <Badge className={STATUS_COLORS[ticket.status as keyof typeof STATUS_COLORS]}>
+                      {ticket.status.replace("_", " ")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-[10px] text-muted-foreground py-2">
+                  <TableCell className="font-medium max-w-xs truncate">
+                    {ticket.subject}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    <div>{ticket.profile?.full_name || "—"}</div>
+                    <div className="text-muted-foreground font-mono">{ticket.profile?.email}</div>
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
                     {format(new Date(ticket.created_at), "MMM d, h:mm a")}
                   </TableCell>
-                  <TableCell className="text-right py-2">
+                  <TableCell className="text-xs text-muted-foreground">
+                    {format(new Date(ticket.updated_at), "MMM d, h:mm a")}
+                  </TableCell>
+                  <TableCell className="text-right">
                     <Dialog>
                       <DialogTrigger asChild>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
                           onClick={() => {
                             setSelectedTicket(ticket);
                             setNewStatus(ticket.status);
                           }}
-                          className="h-7 px-2 text-xs"
                         >
-                          <MessageSquare className="mr-1 h-3 w-3" />
-                          View
+                          <MessageSquare className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
                       <DialogContent className="max-w-2xl">
                         <DialogHeader>
-                          <DialogTitle className="text-base">Ticket Details</DialogTitle>
+                          <DialogTitle>Ticket Details</DialogTitle>
                         </DialogHeader>
-                        <div className="space-y-3 py-3">
+                        <div className="space-y-4 py-4">
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase">From</p>
-                            <p className="font-mono text-xs">{ticket.profile?.email}</p>
+                            <p className="text-sm text-muted-foreground">Subject</p>
+                            <p className="font-medium">{ticket.subject}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase">Subject</p>
-                            <p className="font-medium text-sm">{ticket.subject}</p>
+                            <p className="text-sm text-muted-foreground">Message</p>
+                            <div className="mt-2 p-4 bg-muted rounded-md">
+                              <p className="whitespace-pre-wrap">{ticket.message}</p>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">User</p>
+                              <p className="font-medium">{ticket.profile?.email}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Created</p>
+                              <p className="font-medium">
+                                {format(new Date(ticket.created_at), "MMM d, yyyy h:mm a")}
+                              </p>
+                            </div>
                           </div>
                           <div>
-                            <p className="text-xs text-muted-foreground uppercase">Message</p>
-                            <p className="text-xs whitespace-pre-wrap">{ticket.message}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-muted-foreground uppercase mb-1.5">Status</p>
+                            <label className="text-sm font-medium">Status</label>
                             <Select value={newStatus} onValueChange={setNewStatus}>
-                              <SelectTrigger className="text-xs h-8">
+                              <SelectTrigger className="mt-1">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
@@ -169,12 +187,17 @@ export default function TicketManagement() {
                         </div>
                         <div className="flex justify-end gap-2">
                           <Button
+                            variant="outline"
+                            onClick={() => setSelectedTicket(null)}
+                          >
+                            Close
+                          </Button>
+                          <Button
                             onClick={handleStatusChange}
                             disabled={updateStatusMutation.isPending || newStatus === ticket.status}
-                            className="text-xs h-8"
                           >
                             {updateStatusMutation.isPending && (
-                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             )}
                             Update Status
                           </Button>

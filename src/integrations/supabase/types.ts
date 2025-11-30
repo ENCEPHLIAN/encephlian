@@ -981,22 +981,6 @@ export type Database = {
         Args: { p_amount: number; p_operation: string; p_user_id: string }
         Returns: Json
       }
-      admin_create_user: {
-        Args: {
-          p_email: string
-          p_full_name: string
-          p_password: string
-          p_role: Database["public"]["Enums"]["app_role"]
-        }
-        Returns: Json
-      }
-      admin_revoke_role: {
-        Args: {
-          p_role: Database["public"]["Enums"]["app_role"]
-          p_user_id: string
-        }
-        Returns: Json
-      }
       admin_update_profile: {
         Args: { p_updates: Json; p_user_id: string }
         Returns: Json
