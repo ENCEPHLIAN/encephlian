@@ -19,7 +19,7 @@ export default function ActivityLog() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000 // Refresh every 5 seconds
+    refetchInterval: 5000
   });
 
   if (isLoading) {
@@ -32,37 +32,39 @@ export default function ActivityLog() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Activity Log</CardTitle>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base uppercase tracking-wide">Activity Log</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3">
         <div className="rounded-md border">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Timestamp</TableHead>
-                <TableHead>Event Type</TableHead>
-                <TableHead>User ID</TableHead>
-                <TableHead>IP Address</TableHead>
-                <TableHead>Details</TableHead>
+              <TableRow className="text-xs">
+                <TableHead className="h-8 text-xs">Timestamp</TableHead>
+                <TableHead className="h-8 text-xs">Event Type</TableHead>
+                <TableHead className="h-8 text-xs">User ID</TableHead>
+                <TableHead className="h-8 text-xs">IP Address</TableHead>
+                <TableHead className="h-8 text-xs">Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {logs?.map((log) => (
-                <TableRow key={log.id}>
-                  <TableCell className="text-xs text-muted-foreground">
+                <TableRow key={log.id} className="text-xs h-10">
+                  <TableCell className="text-[10px] text-muted-foreground py-2">
                     {format(new Date(log.created_at), "MMM d, h:mm:ss a")}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{log.event_type}</Badge>
+                  <TableCell className="py-2">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 uppercase">
+                      {log.event_type}
+                    </Badge>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">
+                  <TableCell className="font-mono text-[10px] py-2">
                     {log.user_id?.substring(0, 8)}...
                   </TableCell>
-                  <TableCell className="text-xs">
+                  <TableCell className="text-[10px] py-2">
                     {log.ip_address ? String(log.ip_address) : "—"}
                   </TableCell>
-                  <TableCell className="text-xs max-w-md truncate">
+                  <TableCell className="text-[10px] max-w-md truncate py-2">
                     {log.event_data ? JSON.stringify(log.event_data) : "—"}
                   </TableCell>
                 </TableRow>
