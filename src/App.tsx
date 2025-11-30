@@ -7,7 +7,9 @@ import { ThemeProvider } from "next-themes";
 import { ProfileProvider } from "@/contexts/ProfileContext";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/admin/AdminRoute";
 import AppLayout from "./components/AppLayout";
+import AdminCRM from "./pages/admin/AdminCRM";
 import Dashboard from "./pages/app/Dashboard";
 import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
@@ -61,6 +63,11 @@ function App() {
                   <Route path="team" element={<ComingSoon feature="Team" />} />
                   <Route path="support" element={<Support />} />
                   <Route path="documentation" element={<Documentation />} />
+                </Route>
+                
+                {/* Admin CRM Route */}
+                <Route element={<AdminRoute />}>
+                  <Route path="/admin" element={<AdminCRM />} />
                 </Route>
               </Route>
 
