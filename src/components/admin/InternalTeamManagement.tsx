@@ -12,31 +12,29 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
-type AppRole = "neurologist" | "clinic_admin" | "ops" | "super_admin";
+type InternalRole = "ops" | "super_admin";
 
-export default function TeamManagement() {
+export default function InternalTeamManagement() {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     full_name: "",
-    role: "neurologist" as AppRole,
-    clinic_id: "",
+    role: "ops" as InternalRole,
   });
   const queryClient = useQueryClient();
 
-  const { data: teamMembers, isLoading } = useQuery({
-    queryKey: ["admin-team"],
+  const { data: internalTeam, isLoading } = useQuery({
+    queryKey: ["internal-team"],
     queryFn: async () => {
-      // First get all user_roles
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*")
+        .in("role", ["ops", "super_admin"])
         .order("created_at", { ascending: false });
 
       if (rolesError) throw rolesError;
 
-      // Then get profiles for those users
       const userIds = roles?.map(r => r.user_id) || [];
       const { data: profiles, error: profilesError } = await supabase
         .from("profiles")
@@ -45,27 +43,14 @@ export default function TeamManagement() {
 
       if (profilesError) throw profilesError;
 
-      // Merge the data
       return roles?.map(role => ({
         ...role,
-        profiles: profiles?.find(p => p.id === role.user_id),
+        profile: profiles?.find(p => p.id === role.user_id),
       }));
     },
   });
 
-  const { data: clinics } = useQuery({
-    queryKey: ["admin-clinics"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clinics")
-        .select("id, name")
-        .order("name");
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const createUserMutation = useMutation({
+  const createInternalUserMutation = useMutation({
     mutationFn: async (userData: typeof formData) => {
       const { data, error } = await supabase.functions.invoke("admin_create_user", {
         body: userData,
@@ -74,25 +59,23 @@ export default function TeamManagement() {
       return data;
     },
     onSuccess: () => {
-      toast.success("User created successfully");
-      queryClient.invalidateQueries({ queryKey: ["admin-team"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+      toast.success("Internal team member created");
+      queryClient.invalidateQueries({ queryKey: ["internal-team"] });
       setOpen(false);
       setFormData({
         email: "",
         password: "",
         full_name: "",
-        role: "neurologist",
-        clinic_id: "",
+        role: "ops",
       });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to create user");
+      toast.error(error.message || "Failed to create team member");
     },
   });
 
   const revokeRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
+    mutationFn: async ({ userId, role }: { userId: string; role: InternalRole }) => {
       const { data, error } = await supabase.rpc("admin_revoke_role", {
         p_user_id: userId,
         p_role: role,
@@ -102,25 +85,12 @@ export default function TeamManagement() {
     },
     onSuccess: () => {
       toast.success("Role revoked");
-      queryClient.invalidateQueries({ queryKey: ["admin-team"] });
+      queryClient.invalidateQueries({ queryKey: ["internal-team"] });
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to revoke role");
     },
   });
-
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case "super_admin":
-        return "destructive";
-      case "ops":
-        return "default";
-      case "clinic_admin":
-        return "secondary";
-      default:
-        return "outline";
-    }
-  };
 
   if (isLoading) {
     return (
@@ -136,31 +106,31 @@ export default function TeamManagement() {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Team & Role Management
+            Internal Team (ENCEPHLIAN)
           </CardTitle>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Create User
+                Add Team Member
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Create New User</DialogTitle>
+                <DialogTitle>Add Internal Team Member</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Email</Label>
+                  <Label>Email *</Label>
                   <Input
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="user@example.com"
+                    placeholder="team@encephlian.com"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Password</Label>
+                  <Label>Password *</Label>
                   <Input
                     type="password"
                     value={formData.password}
@@ -169,7 +139,7 @@ export default function TeamManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Full Name</Label>
+                  <Label>Full Name *</Label>
                   <Input
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
@@ -177,55 +147,33 @@ export default function TeamManagement() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Role</Label>
+                  <Label>Role *</Label>
                   <Select
                     value={formData.role}
-                    onValueChange={(value: AppRole) => setFormData({ ...formData, role: value })}
+                    onValueChange={(value: InternalRole) => setFormData({ ...formData, role: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="neurologist">Neurologist</SelectItem>
-                      <SelectItem value="clinic_admin">Clinic Admin</SelectItem>
                       <SelectItem value="ops">Operations</SelectItem>
                       <SelectItem value="super_admin">Super Admin</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                {formData.role === "neurologist" && (
-                  <div className="space-y-2">
-                    <Label>Clinic</Label>
-                    <Select
-                      value={formData.clinic_id}
-                      onValueChange={(value) => setFormData({ ...formData, clinic_id: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select clinic" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clinics?.map((clinic) => (
-                          <SelectItem key={clinic.id} value={clinic.id}>
-                            {clinic.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => createUserMutation.mutate(formData)}
-                  disabled={createUserMutation.isPending}
+                  onClick={() => createInternalUserMutation.mutate(formData)}
+                  disabled={createInternalUserMutation.isPending || !formData.email || !formData.password || !formData.full_name}
                 >
-                  {createUserMutation.isPending && (
+                  {createInternalUserMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Create User
+                  Add Member
                 </Button>
               </div>
             </DialogContent>
@@ -237,29 +185,25 @@ export default function TeamManagement() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>User</TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Roles</TableHead>
-                <TableHead>Clinic</TableHead>
+                <TableHead>Role</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {teamMembers?.map((member) => (
+              {internalTeam?.map((member) => (
                 <TableRow key={member.id}>
                   <TableCell className="font-medium">
-                    {member.profiles?.full_name || "—"}
+                    {member.profile?.full_name || "—"}
                   </TableCell>
                   <TableCell className="font-mono text-xs">
-                    {member.profiles?.email}
+                    {member.profile?.email}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getRoleBadgeVariant(member.role)}>
-                      {member.role}
+                    <Badge variant={member.role === "super_admin" ? "destructive" : "default"}>
+                      {member.role === "super_admin" ? "SUPER ADMIN" : "OPERATIONS"}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {member.clinic_id || "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -268,7 +212,7 @@ export default function TeamManagement() {
                       onClick={() =>
                         revokeRoleMutation.mutate({
                           userId: member.user_id,
-                          role: member.role as AppRole,
+                          role: member.role as InternalRole,
                         })
                       }
                       disabled={revokeRoleMutation.isPending}
