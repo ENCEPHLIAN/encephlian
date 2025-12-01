@@ -23,13 +23,13 @@ export function TokenPurchase() {
   const queryClient = useQueryClient();
 
   const handlePurchase = async (packageTokens: number, packagePrice: number) => {
-    // Optional guard so user can’t multi-click different packs in the same session
+    // Prevent double-clicking different packs while one is in flight
     if (loadingPackage !== null && loadingPackage !== packageTokens) return;
 
     try {
       setLoadingPackage(packageTokens);
 
-      // Create order via edge function
+      // Create order via edge function – server must enforce the correct INR amount
       const { data: orderData, error: orderError } = await supabase.functions.invoke("create_order", {
         body: { tokens: packageTokens },
       });
@@ -45,14 +45,16 @@ export function TokenPurchase() {
         await new Promise((resolve) => (script.onload = resolve));
       }
 
-      const options = {
+      const options: any = {
         key: orderData.keyId,
+        // amount from edge function should already be in INR – Razorpay wants paise
         amount: orderData.amount * 100,
         currency: orderData.currency,
         name: "ENCEPHLIAN",
         description: `${packageTokens} tokens`,
         order_id: orderData.orderId,
-        handler: async function (response: any) {
+
+        handler: async (response: any) => {
           try {
             const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify_payment", {
               body: {
@@ -69,7 +71,7 @@ export function TokenPurchase() {
               description: `${verifyData.tokens_credited} tokens credited`,
             });
 
-            // Send receipt email
+            // Fire-and-forget receipt email via edge function (uses RESEND_API_KEY)
             try {
               await supabase.functions.invoke("send_payment_receipt", {
                 body: {
@@ -83,7 +85,7 @@ export function TokenPurchase() {
               console.error("Failed to send receipt email:", emailError);
             }
 
-            // Immediately refresh wallet balance
+            // Refresh wallet + payments
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
             await queryClient.refetchQueries({ queryKey: ["wallet-balance"] });
             queryClient.invalidateQueries({ queryKey: ["payments"] });
@@ -97,12 +99,15 @@ export function TokenPurchase() {
             setLoadingPackage(null);
           }
         },
+
         prefill: {
           email: (await supabase.auth.getUser()).data.user?.email || "",
         },
-        theme: {
-          color: "#0ea5e9",
-        },
+
+        // Do NOT override theme here; let Razorpay Dashboard styling control
+        // the checkout colors and background consistently.
+        // theme: { color: "#0ea5e9" },
+
         modal: {
           ondismiss: () => setLoadingPackage(null),
         },
@@ -128,6 +133,7 @@ export function TokenPurchase() {
           Base rate ~₹150/token. Larger packages are discounted: 1 TAT report ≈ 1 token • 1 STAT report ≈ 2 tokens.
         </CardDescription>
       </CardHeader>
+
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {TOKEN_PACKAGES.map((pkg) => (
@@ -145,6 +151,7 @@ export function TokenPurchase() {
                   </span>
                 </div>
               )}
+
               <CardContent className="pt-8 pb-6 text-center space-y-4">
                 <div>
                   <div className="text-4xl font-bold">{pkg.tokens}</div>
