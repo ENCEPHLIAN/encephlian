@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { ProfileProvider } from "@/contexts/ProfileContext";
+import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
@@ -38,42 +39,44 @@ function App() {
             <Toaster />
             <Sonner />
             <BrowserRouter>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-              
-              <Route element={<ProtectedRoute />}>
-                <Route path="/app" element={<AppLayout />}>
-                  <Route index element={<Navigate to="/app/dashboard" replace />} />
-                  <Route path="dashboard" element={<Dashboard />} />
-                  <Route path="studies" element={<Studies />} />
-                  <Route path="studies/:id" element={<StudyDetail />} />
-                  <Route path="studies/:id/review" element={<StudyReview />} />
-                  <Route path="studies/:id/viewer" element={<EEGViewer />} />
-                  <Route path="viewer" element={<EEGViewer />} />
-                  <Route path="notes" element={<Notes />} />
-                  <Route path="files" element={<Files />} />
-                  <Route path="wallet" element={<Wallet />} />
-                  <Route path="profile" element={<Profile />} />
-                  <Route path="settings" element={<Settings />} />
-                  <Route path="analytics" element={<ComingSoon feature="Analytics" />} />
-                  <Route path="templates" element={<Templates />} />
-                  <Route path="scheduler" element={<ComingSoon feature="Scheduler" />} />
-                  <Route path="integrations" element={<ComingSoon feature="Integrations" />} />
-                  <Route path="team" element={<ComingSoon feature="Team" />} />
-                  <Route path="support" element={<Support />} />
-                  <Route path="documentation" element={<Documentation />} />
-                </Route>
-                
-                {/* Admin CRM Route */}
-                <Route element={<AdminRoute />}>
-                  <Route path="/admin" element={<AdminCRM />} />
-                </Route>
-              </Route>
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+                <Route path="/preview" element={<Index />} />
+
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/app" element={<AppLayout />}>
+                    <Route index element={<Navigate to="/app/dashboard" replace />} />
+                    <Route path="dashboard" element={<Dashboard />} />
+                    <Route path="studies" element={<Studies />} />
+                    <Route path="studies/:id" element={<StudyDetail />} />
+                    <Route path="studies/:id/review" element={<StudyReview />} />
+                    <Route path="studies/:id/viewer" element={<EEGViewer />} />
+                    <Route path="viewer" element={<EEGViewer />} />
+                    <Route path="notes" element={<Notes />} />
+                    <Route path="files" element={<Files />} />
+                    <Route path="wallet" element={<Wallet />} />
+                    <Route path="profile" element={<Profile />} />
+                    <Route path="settings" element={<Settings />} />
+                    <Route path="analytics" element={<ComingSoon feature="Analytics" />} />
+                    <Route path="templates" element={<Templates />} />
+                    <Route path="scheduler" element={<ComingSoon feature="Scheduler" />} />
+                    <Route path="integrations" element={<ComingSoon feature="Integrations" />} />
+                    <Route path="team" element={<ComingSoon feature="Team" />} />
+                    <Route path="support" element={<Support />} />
+                    <Route path="documentation" element={<Documentation />} />
+                  </Route>
+
+                  {/* Admin CRM Route */}
+                  <Route element={<AdminRoute />}>
+                    <Route path="/admin" element={<AdminCRM />} />
+                  </Route>
+                </Route>
+
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </BrowserRouter>
           </TooltipProvider>
         </ProfileProvider>
       </ThemeProvider>
