@@ -199,16 +199,23 @@ export default function EEGViewer() {
 
         // 2) If not, trigger edge function to parse the uploaded EDF
         if (!jsonPath) {
-          const edfFile = studyFiles.find((f) => f.kind === "edf");
+          // Find EDF or BDF file - also check for legacy 'eeg_raw' kind
+          const edfFile = studyFiles.find((f) => 
+            f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw"
+          );
           if (!edfFile) {
-            throw new Error("No EDF file found for this study.");
+            throw new Error("No EDF/BDF file found for this study.");
           }
 
+          // Determine file type from kind or path
+          const fileType = edfFile.kind === "bdf" || edfFile.path?.toLowerCase().endsWith('.bdf') 
+            ? "bdf" : "edf";
+          
           const { data, error } = await supabase.functions.invoke("parse_eeg_study", {
             body: {
               study_id: activeStudy.id,
               file_path: edfFile.path,
-              file_type: "edf",
+              file_type: fileType,
             },
           });
 

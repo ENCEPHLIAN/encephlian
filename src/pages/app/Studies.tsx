@@ -65,10 +65,11 @@ export default function Studies() {
     if (!files || files.length === 0) return;
     
     const file = files[0];
-    if (!file.name.toLowerCase().endsWith('.edf')) {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.edf') && !lowerName.endsWith('.bdf')) {
       toast({
         title: "Invalid file type",
-        description: "Only .edf files are supported",
+        description: "Only .edf and .bdf files are supported",
         variant: "destructive",
       });
       return;
@@ -188,7 +189,7 @@ export default function Studies() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".edf"
+            accept=".edf,.bdf"
             className="hidden"
             onChange={(e) => handleFileUpload(e.target.files)}
           />
