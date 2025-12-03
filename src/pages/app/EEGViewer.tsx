@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
 import { useTheme } from "next-themes";
 
-import { EEGCanvas } from "@/components/eeg/EEGCanvas";
+import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { ChannelGroupList } from "@/components/eeg/ChannelGroupList";
 import { MontageSelector } from "@/components/eeg/MontageSelector";
@@ -527,7 +527,7 @@ export default function EEGViewer() {
               <CardContent className="p-2">
                 <div className="h-[500px] bg-card">
                   {eegData ? (
-                    <EEGCanvas
+                    <WebGLEEGViewer
                       signals={eegData.signals}
                       channelLabels={eegData.channelLabels}
                       sampleRate={eegData.sampleRate}
