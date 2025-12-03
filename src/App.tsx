@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { ProfileProvider } from "@/contexts/ProfileContext";
-import Index from "./pages/Index";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
@@ -42,8 +41,6 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
-
-                <Route path="/preview" element={<Index />} />
 
                 <Route element={<ProtectedRoute />}>
                   <Route path="/app" element={<AppLayout />}>
