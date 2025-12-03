@@ -142,10 +142,10 @@ export default function Login() {
 
           <div className="flex flex-col items-center justify-center">
             <h1
-              className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter mb-2 text-foreground"
+              className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter leading-none text-foreground"
               style={{
                 fontFamily: "Montserrat",
-                fontWeight: 700,
+                fontWeight: 900,
                 letterSpacing: "-0.05em",
               }}
             >
