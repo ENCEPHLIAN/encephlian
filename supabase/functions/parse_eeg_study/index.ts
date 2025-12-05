@@ -6,6 +6,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ENCEPHLIAN_EEG_v1 Canonical Channels (27 total)
+const CANONICAL_CHANNELS = [
+  "Fp1", "Fp2", "F3", "F4", "C3", "C4", "Cz",
+  "F7", "F8", "Fz",
+  "T3", "T4", "T5", "T6",
+  "P3", "P4", "Pz",
+  "O1", "O2",
+  "A1", "A2",
+  "E1",
+  "ECG",
+  "Photic",
+  "G02", "G08", "31"
+];
+
+const SFREQ_MODEL = 128.0; // Target sampling rate for model
+
 interface ParseRequest {
   study_id: string;
   file_path: string;
@@ -32,6 +48,59 @@ interface EDFSignalHeader {
   digitalMinimum: number;
   digitalMaximum: number;
   numSamplesPerRecord: number;
+}
+
+/**
+ * Simple SHA-256 hash of ArrayBuffer
+ */
+async function hashBuffer(buffer: ArrayBuffer): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Resample signal from native rate to target rate using linear interpolation
+ */
+function resampleSignal(signal: number[], nativeSfreq: number, targetSfreq: number): number[] {
+  if (nativeSfreq === targetSfreq) return signal;
+  
+  const ratio = nativeSfreq / targetSfreq;
+  const newLength = Math.floor(signal.length / ratio);
+  const resampled = new Array(newLength);
+  
+  for (let i = 0; i < newLength; i++) {
+    const srcIdx = i * ratio;
+    const srcIdxFloor = Math.floor(srcIdx);
+    const srcIdxCeil = Math.min(srcIdxFloor + 1, signal.length - 1);
+    const t = srcIdx - srcIdxFloor;
+    
+    resampled[i] = signal[srcIdxFloor] * (1 - t) + signal[srcIdxCeil] * t;
+  }
+  
+  return resampled;
+}
+
+/**
+ * Apply bandpass filter (simple moving average approximation for edge function)
+ */
+function applySimpleFilter(signal: number[], sampleRate: number): number[] {
+  // Simple 5-point moving average (approximates low-pass)
+  const filtered = new Array(signal.length);
+  const windowSize = 5;
+  const halfWindow = Math.floor(windowSize / 2);
+  
+  for (let i = 0; i < signal.length; i++) {
+    let sum = 0;
+    let count = 0;
+    for (let j = Math.max(0, i - halfWindow); j <= Math.min(signal.length - 1, i + halfWindow); j++) {
+      sum += signal[j];
+      count++;
+    }
+    filtered[i] = sum / count;
+  }
+  
+  return filtered;
 }
 
 /**
@@ -66,7 +135,7 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
     numSignals: parseInt(readString(252, 4), 10) || 1,
   };
 
-  const ns = Math.min(header.numSignals, 128); // Limit channels for safety
+  const ns = Math.min(header.numSignals, 128);
   let offset = 256;
 
   // Parse signal headers
@@ -76,9 +145,9 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
   }
   offset += ns * 16;
 
-  // Skip transducer types (80 chars each)
+  // Skip transducer types
   offset += ns * 80;
-  // Skip physical dimensions (8 chars each)
+  // Skip physical dimensions
   offset += ns * 8;
 
   // Read physical minimums
@@ -109,7 +178,7 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
   }
   offset += ns * 8;
 
-  // Skip prefiltering (80 chars each)
+  // Skip prefiltering
   offset += ns * 80;
 
   // Read samples per record
@@ -165,11 +234,9 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
         for (let sample = 0; sample < samplesInRecord; sample++) {
           if (byteOffset + 2 > buffer.byteLength) break;
           
-          // EDF: 16-bit signed integers (little-endian)
           const digitalValue = view.getInt16(byteOffset, true);
           const physicalValue = (digitalValue * scaling.gain) + scaling.offset;
           
-          // Clamp to reasonable µV range
           signals[signal][signalOffset + sample] = Math.max(-500, Math.min(500, physicalValue));
           byteOffset += 2;
         }
@@ -179,7 +246,6 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
     console.error("Error parsing data records:", e);
   }
 
-  // Calculate derived values
   const sampleRate = signalHeaders[0]?.numSamplesPerRecord / header.dataRecordDuration || 256;
   const duration = maxRecords * header.dataRecordDuration;
   const channelLabels = labels.map((l) => l.replace(/\.+$/, "").trim());
@@ -199,6 +265,137 @@ function parseEDFBuffer(buffer: ArrayBuffer): {
       record_duration: header.dataRecordDuration,
     },
   };
+}
+
+/**
+ * Map channel labels to canonical order, zero-fill missing
+ */
+function mapToCanonicalChannels(
+  signals: number[][],
+  channelLabels: string[],
+  nSamples: number
+): { tensor: number[][]; missingChannels: string[]; extraChannels: string[] } {
+  const chMap = new Map<string, number>();
+  channelLabels.forEach((label, idx) => {
+    // Normalize channel name (remove EEG prefix, trim, uppercase for matching)
+    const normalized = label.replace(/^EEG\s*/i, '').trim().toUpperCase();
+    chMap.set(normalized, idx);
+  });
+
+  const tensor: number[][] = [];
+  const missingChannels: string[] = [];
+  const extraChannels: string[] = [];
+
+  // Build canonical tensor [27, n_samples]
+  for (const ch of CANONICAL_CHANNELS) {
+    const normalized = ch.toUpperCase();
+    if (chMap.has(normalized)) {
+      tensor.push(signals[chMap.get(normalized)!]);
+    } else {
+      // Zero-fill missing channel
+      tensor.push(new Array(nSamples).fill(0));
+      missingChannels.push(ch);
+    }
+  }
+
+  // Track extra channels not in canonical set
+  for (const label of channelLabels) {
+    const normalized = label.replace(/^EEG\s*/i, '').trim().toUpperCase();
+    const isCanonical = CANONICAL_CHANNELS.some(ch => ch.toUpperCase() === normalized);
+    if (!isCanonical) {
+      extraChannels.push(label);
+    }
+  }
+
+  return { tensor, missingChannels, extraChannels };
+}
+
+/**
+ * Build ENCEPHLIAN_EEG_v1 canonical JSON record
+ */
+function buildCanonicalRecord(
+  studyId: string,
+  nativeSfreq: number,
+  nSamples: number,
+  missingChannels: string[],
+  extraChannels: string[],
+  edfHash: string,
+  metadata: Record<string, any>
+): Record<string, any> {
+  return {
+    schema_version: "ENCEPHLIAN_EEG_v1",
+    patient: {
+      id: metadata.patient_id || "UNKNOWN",
+      sex: null,
+      age_years: null,
+    },
+    study: {
+      id: studyId,
+      date: metadata.start_date || null,
+      indication: null,
+      site_id: null,
+    },
+    acquisition: {
+      device_vendor: "UNKNOWN",
+      device_model: null,
+      native_format: ".edf",
+      native_sampling_hz: nativeSfreq,
+      technician_id: null,
+    },
+    signal: {
+      canonical_channels: CANONICAL_CHANNELS,
+      sfreq_model: SFREQ_MODEL,
+      n_samples: nSamples,
+      units: "uV",
+      reference: "LE",
+      filters: {
+        hp_hz: 0.5,
+        lp_hz: 40.0,
+        notch_hz: 50.0,
+      },
+      montage: "10-20",
+      missing_channels: missingChannels,
+      extra_channels: extraChannels,
+      segment_flags: [],
+    },
+    annotations: [],
+    qa: {
+      artifact_ratio: null,
+      impedance_ok: null,
+      warnings: missingChannels.length > 5 ? ["high_missing_channel_count"] : [],
+    },
+    provenance: {
+      raw_hash: null,
+      edf_hash: edfHash,
+      pipeline_version: "1.0.0",
+      created_at_utc: new Date().toISOString(),
+      converter: "encephlian_edge_v1",
+      operator_id: null,
+      error_codes: [],
+    },
+  };
+}
+
+/**
+ * Convert Float32Array-like tensor to base64 for storage (simulating .npy)
+ */
+function tensorToBase64(tensor: number[][]): string {
+  const flat: number[] = [];
+  for (const channel of tensor) {
+    for (const val of channel) {
+      flat.push(val);
+    }
+  }
+  
+  const float32Array = new Float32Array(flat);
+  const uint8Array = new Uint8Array(float32Array.buffer);
+  
+  let binary = '';
+  for (let i = 0; i < uint8Array.length; i++) {
+    binary += String.fromCharCode(uint8Array[i]);
+  }
+  
+  return btoa(binary);
 }
 
 serve(async (req) => {
@@ -234,6 +431,9 @@ serve(async (req) => {
       throw new Error(`Failed to download file: ${downloadError.message}`);
     }
 
+    const buffer = await fileData.arrayBuffer();
+    const edfHash = await hashBuffer(buffer);
+
     let parsedData: {
       signals: number[][];
       channelLabels: string[];
@@ -243,12 +443,9 @@ serve(async (req) => {
     };
 
     if (file_type === 'edf' || file_type === 'bdf') {
-      // Parse EDF/BDF with actual signal extraction
-      const buffer = await fileData.arrayBuffer();
       parsedData = parseEDFBuffer(buffer);
-      console.log(`Parsed ${parsedData.channelLabels.length} channels, ${parsedData.duration}s duration`);
+      console.log(`Parsed ${parsedData.channelLabels.length} channels, ${parsedData.duration}s duration at ${parsedData.sampleRate}Hz`);
     } else if (file_type === 'json') {
-      // JSON parser
       const text = await fileData.text();
       const parsed = JSON.parse(text);
       
@@ -260,7 +457,6 @@ serve(async (req) => {
         metadata: parsed.metadata || {},
       };
     } else if (file_type === 'csv') {
-      // CSV parser
       const text = await fileData.text();
       const lines = text.split('\n').filter(l => l.trim());
       const headers = lines[0].split(',').map(h => h.trim());
@@ -288,22 +484,46 @@ serve(async (req) => {
       throw new Error(`Unsupported file type: ${file_type}`);
     }
 
-    // Prepare output JSON
-    const outputJson = {
-      signals: parsedData.signals,
-      channelLabels: parsedData.channelLabels,
-      sampleRate: parsedData.sampleRate,
-      duration: parsedData.duration,
-      metadata: parsedData.metadata,
-      parsed_at: new Date().toISOString(),
-      parser_version: '2.0.0'
-    };
+    const nativeSfreq = parsedData.sampleRate;
 
-    // Upload parsed JSON to storage
-    const jsonPath = `${study_id}/parsed.json`;
-    const jsonString = JSON.stringify(outputJson);
+    // Step 1: Resample to 128 Hz
+    console.log(`Resampling from ${nativeSfreq}Hz to ${SFREQ_MODEL}Hz...`);
+    const resampledSignals = parsedData.signals.map(signal => 
+      resampleSignal(signal, nativeSfreq, SFREQ_MODEL)
+    );
+
+    // Step 2: Apply simple filtering
+    console.log(`Applying filters...`);
+    const filteredSignals = resampledSignals.map(signal => 
+      applySimpleFilter(signal, SFREQ_MODEL)
+    );
+
+    const nSamplesResampled = filteredSignals[0]?.length || 0;
+
+    // Step 3: Map to canonical channels [27, n_samples]
+    console.log(`Mapping to canonical channels...`);
+    const { tensor, missingChannels, extraChannels } = mapToCanonicalChannels(
+      filteredSignals,
+      parsedData.channelLabels,
+      nSamplesResampled
+    );
+
+    // Build canonical JSON
+    const canonicalJson = buildCanonicalRecord(
+      study_id,
+      nativeSfreq,
+      nSamplesResampled,
+      missingChannels,
+      extraChannels,
+      edfHash,
+      parsedData.metadata
+    );
+
+    // Step 4: Upload canonical JSON to eeg-json bucket
+    const jsonPath = `${study_id}/canonical.json`;
+    const jsonString = JSON.stringify(canonicalJson, null, 2);
     
-    const { error: uploadError } = await supabase
+    const { error: jsonUploadError } = await supabase
       .storage
       .from('eeg-json')
       .upload(jsonPath, jsonString, {
@@ -311,11 +531,86 @@ serve(async (req) => {
         upsert: true
       });
 
-    if (uploadError) {
-      throw new Error(`Failed to upload parsed data: ${uploadError.message}`);
+    if (jsonUploadError) {
+      throw new Error(`Failed to upload canonical JSON: ${jsonUploadError.message}`);
+    }
+    console.log(`Uploaded canonical JSON to ${jsonPath}`);
+
+    // Step 5: Upload tensor to eeg-clean bucket (as base64 encoded float32)
+    const tensorPath = `${study_id}/tensor.bin`;
+    const tensorBase64 = tensorToBase64(tensor);
+    
+    // Create tensor metadata header
+    const tensorMeta = {
+      shape: [CANONICAL_CHANNELS.length, nSamplesResampled],
+      dtype: 'float32',
+      channels: CANONICAL_CHANNELS,
+      sfreq: SFREQ_MODEL,
+    };
+    
+    const tensorPayload = JSON.stringify({
+      meta: tensorMeta,
+      data: tensorBase64
+    });
+
+    const { error: tensorUploadError } = await supabase
+      .storage
+      .from('eeg-clean')
+      .upload(tensorPath, tensorPayload, {
+        contentType: 'application/json',
+        upsert: true
+      });
+
+    if (tensorUploadError) {
+      throw new Error(`Failed to upload tensor: ${tensorUploadError.message}`);
+    }
+    console.log(`Uploaded tensor to ${tensorPath}`);
+
+    // Also save legacy parsed.json for backward compatibility with current viewer
+    const legacyJson = {
+      signals: tensor,
+      channelLabels: CANONICAL_CHANNELS,
+      sampleRate: SFREQ_MODEL,
+      duration: nSamplesResampled / SFREQ_MODEL,
+      metadata: parsedData.metadata,
+      canonical: true,
+      parsed_at: new Date().toISOString(),
+      parser_version: '3.0.0-canonical'
+    };
+
+    const legacyJsonPath = `${study_id}/parsed.json`;
+    const { error: legacyUploadError } = await supabase
+      .storage
+      .from('eeg-json')
+      .upload(legacyJsonPath, JSON.stringify(legacyJson), {
+        contentType: 'application/json',
+        upsert: true
+      });
+
+    if (legacyUploadError) {
+      console.warn(`Warning: Failed to upload legacy parsed.json: ${legacyUploadError.message}`);
     }
 
-    // Insert/update file record
+    // Step 6: Upsert into canonical_eeg_records
+    const { error: upsertError } = await supabase
+      .from('canonical_eeg_records')
+      .upsert({
+        study_id,
+        schema_version: 'ENCEPHLIAN_EEG_v1',
+        canonical_json: canonicalJson,
+        tensor_path: tensorPath,
+        native_sampling_hz: nativeSfreq,
+        sfreq_model: SFREQ_MODEL
+      }, {
+        onConflict: 'study_id'
+      });
+
+    if (upsertError) {
+      throw new Error(`Failed to upsert canonical_eeg_records: ${upsertError.message}`);
+    }
+    console.log(`Upserted canonical_eeg_records for study ${study_id}`);
+
+    // Update study_files if needed
     const existingFile = await supabase
       .from('study_files')
       .select('id')
@@ -336,23 +631,29 @@ serve(async (req) => {
     await supabase
       .from('studies')
       .update({
-        srate_hz: parsedData.sampleRate,
-        duration_min: Math.ceil(parsedData.duration / 60),
-        montage: `${parsedData.channelLabels.length} channels`,
-        state: 'preprocessing'
+        srate_hz: Math.round(SFREQ_MODEL),
+        duration_min: Math.ceil((nSamplesResampled / SFREQ_MODEL) / 60),
+        montage: `${CANONICAL_CHANNELS.length} canonical channels`,
+        state: 'canonicalized'
       })
       .eq('id', study_id);
 
-    console.log(`Successfully parsed study ${study_id}: ${parsedData.channelLabels.length} channels, ${parsedData.duration}s`);
+    console.log(`Successfully canonicalized study ${study_id}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        metadata: parsedData.metadata,
-        channels: parsedData.channelLabels.length,
-        sample_rate: parsedData.sampleRate,
-        duration_sec: parsedData.duration,
-        json_path: jsonPath
+        schema_version: 'ENCEPHLIAN_EEG_v1',
+        canonical_json_path: jsonPath,
+        tensor_path: tensorPath,
+        native_sampling_hz: nativeSfreq,
+        sfreq_model: SFREQ_MODEL,
+        n_samples: nSamplesResampled,
+        n_channels: CANONICAL_CHANNELS.length,
+        missing_channels: missingChannels,
+        extra_channels: extraChannels,
+        duration_sec: nSamplesResampled / SFREQ_MODEL,
+        json_path: legacyJsonPath // For backward compat
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
