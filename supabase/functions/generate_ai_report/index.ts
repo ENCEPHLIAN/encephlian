@@ -26,7 +26,7 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get auth user
+    // Get auth user and verify identity
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Not authenticated" }), {
@@ -35,10 +35,21 @@ serve(async (req) => {
       });
     }
 
+    // Verify user from token
+    const { data: { user }, error: authError } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Fetch study details
     const { data: study, error: studyError } = await supabase
       .from("studies")
-      .select("*")
+      .select("*, clinic_id")
       .eq("id", study_id)
       .single();
 
@@ -48,6 +59,24 @@ serve(async (req) => {
         status: 404,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // Authorization check: user must own the study OR be a member of the study's clinic
+    if (study.owner !== user.id) {
+      const { data: membership } = await supabase
+        .from("clinic_memberships")
+        .select("clinic_id")
+        .eq("user_id", user.id)
+        .eq("clinic_id", study.clinic_id)
+        .single();
+
+      if (!membership) {
+        console.error("Authorization failed: user does not have access to study");
+        return new Response(JSON.stringify({ error: "Unauthorized: You do not have access to this study" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Fetch user markers
