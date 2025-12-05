@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Trash2 } from "lucide-react";
+import { Loader2, ArrowLeft, Trash2, AlertCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
@@ -19,6 +19,7 @@ import { MontageSelector } from "@/components/eeg/MontageSelector";
 import { applyMontage } from "@/lib/eeg/montage-transforms";
 import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
 import { filterStandardChannels } from "@/lib/eeg/standard-channels";
+import { parseEDF, parseBDF } from "@/lib/eeg/edf-parser";
 
 type Marker = {
   id: string;
@@ -42,6 +43,10 @@ export default function EEGViewer() {
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [montage, setMontage] = useState("referential");
 
+  // Loading state
+  const [isLoadingEEG, setIsLoadingEEG] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   // EEG Data State (original raw data)
   const [rawEegData, setRawEegData] = useState<{
     signals: number[][];
@@ -64,10 +69,10 @@ export default function EEGViewer() {
 
   // Channel Group Visibility
   const [visibleGroups, setVisibleGroups] = useState<Set<ChannelGroup>>(
-    new Set(["frontal", "central", "temporal", "occipital"]),
+    new Set(["frontal", "central", "temporal", "occipital"])
   );
 
-  // Compute visible channels based on selected groups
+  // Compute visible channels
   const visibleChannels = eegData
     ? (() => {
         const standardIndices = filterStandardChannels(eegData.channelLabels);
@@ -91,21 +96,7 @@ export default function EEGViewer() {
   const [newMarkerLabel, setNewMarkerLabel] = useState("");
   const [newMarkerNotes, setNewMarkerNotes] = useState("");
 
-  // Fetch available studies (for future nav / context)
-  const { data: availableStudies = [] } = useQuery({
-    queryKey: ["available-studies"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("studies")
-        .select("id, meta, created_at, sample")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Auto-load sample study if no studyId provided
+  // Fetch sample study if no studyId
   const { data: sampleStudy, isLoading: sampleLoading } = useQuery({
     queryKey: ["sample-study"],
     enabled: !studyId,
@@ -116,7 +107,6 @@ export default function EEGViewer() {
         .eq("sample", true)
         .limit(1)
         .maybeSingle();
-
       if (error) throw error;
       return data;
     },
@@ -128,19 +118,20 @@ export default function EEGViewer() {
     enabled: !!studyId,
     queryFn: async () => {
       if (!studyId) return null;
-
-      const { data, error } = await supabase.from("studies").select("*, study_files(*)").eq("id", studyId).single();
-
+      const { data, error } = await supabase
+        .from("studies")
+        .select("*, study_files(*)")
+        .eq("id", studyId)
+        .single();
       if (error) throw error;
       return data;
     },
   });
 
-  // Active study = selected or sample
   const activeStudy = study || sampleStudy;
   const isSampleStudy = !studyId && activeStudy?.sample;
 
-  // Fetch markers for this study
+  // Fetch markers
   const { data: markers = [] } = useQuery<Marker[]>({
     queryKey: ["eeg-markers", studyId],
     enabled: !!studyId,
@@ -151,18 +142,19 @@ export default function EEGViewer() {
         .select("*")
         .eq("study_id", studyId)
         .order("timestamp_sec", { ascending: true });
-
       if (error) throw error;
       return (data || []) as Marker[];
     },
   });
 
-  // ---------- EEG loading logic (sample + real uploads) ----------
-
+  // ---------- EEG loading logic ----------
   useEffect(() => {
     if (!activeStudy) return;
 
     const loadEEGData = async () => {
+      setIsLoadingEEG(true);
+      setLoadError(null);
+
       try {
         // SAMPLE STUDY: local JSON
         if (activeStudy.sample) {
@@ -171,7 +163,6 @@ export default function EEGViewer() {
           if (!response.ok) throw new Error("Failed to fetch sample data");
 
           const parsedData = await response.json();
-
           const fullSignals = parsedData.channelLabels.map((label: string, idx: number) => {
             const sampleSignal = parsedData.signals[idx % 2];
             const variation = idx * 0.1;
@@ -184,154 +175,67 @@ export default function EEGViewer() {
             sampleRate: parsedData.sampleRate,
             duration: parsedData.duration,
           });
-
           toast.success("Sample EEG loaded");
           return;
         }
 
-        // USER STUDY: Check for canonical_eeg_records first (ENCEPHLIAN_EEG_v1)
-        const { data: canonicalRecord } = await supabase
-          .from("canonical_eeg_records")
-          .select("*")
-          .eq("study_id", activeStudy.id)
-          .maybeSingle();
+        // USER STUDY: Parse EDF directly in browser
+        const studyFiles = (activeStudy.study_files as any[]) || [];
+        
+        // Find the EDF/BDF file
+        const edfFile = studyFiles.find((f) =>
+          f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw" ||
+          f.path?.toLowerCase().endsWith('.edf') || f.path?.toLowerCase().endsWith('.bdf')
+        );
 
-        if (canonicalRecord) {
-          // Load from canonical system - tensor_path points to eeg-clean bucket
-          console.log("Loading canonical EEG data...");
-          
-          const { data: tensorBlob, error: tensorError } = await supabase
-            .storage
-            .from("eeg-clean")
-            .download(canonicalRecord.tensor_path);
-
-          if (tensorError || !tensorBlob) {
-            throw new Error(`Failed to download tensor: ${tensorError?.message}`);
-          }
-
-          const tensorPayload = JSON.parse(await tensorBlob.text());
-          const { meta, data: tensorBase64 } = tensorPayload;
-
-          // Decode base64 tensor back to Float32Array
-          const binaryString = atob(tensorBase64);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-          }
-          const float32Data = new Float32Array(bytes.buffer);
-
-          // Reshape to [n_channels, n_samples]
-          const nChannels = meta.shape[0];
-          const nSamples = meta.shape[1];
-          const signals: number[][] = [];
-          
-          for (let ch = 0; ch < nChannels; ch++) {
-            const channelData = new Array(nSamples);
-            for (let s = 0; s < nSamples; s++) {
-              channelData[s] = float32Data[ch * nSamples + s];
-            }
-            signals.push(channelData);
-          }
-
-          // Use canonical_json metadata
-          const canonicalJson = canonicalRecord.canonical_json as any;
-
-          setRawEegData({
-            signals,
-            channelLabels: canonicalJson.signal?.canonical_channels || meta.channels,
-            sampleRate: canonicalJson.signal?.sfreq_model || meta.sfreq,
-            duration: nSamples / (canonicalJson.signal?.sfreq_model || meta.sfreq),
-          });
-
-          toast.success(`Canonical EEG loaded (${canonicalJson.schema_version})`);
-          return;
+        if (!edfFile) {
+          throw new Error("No EDF/BDF file found for this study");
         }
 
-        // Fallback: Legacy flow via study_files
-        const studyFiles = activeStudy.study_files as any[] || [];
+        toast.info("Loading EEG file...");
 
-        // Check for existing parsed JSON
-        let jsonFile = studyFiles.find((f) => f.kind === "json");
-        let jsonPath: string | undefined = jsonFile?.path;
+        // Download the raw EDF file
+        const { data: fileBlob, error: downloadError } = await supabase
+          .storage
+          .from("eeg-raw")
+          .download(edfFile.path);
 
-        // If no JSON, trigger canonicalization via parse_eeg_study
-        if (!jsonPath) {
-          const edfFile = studyFiles.find((f) => 
-            f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw"
-          );
-          if (!edfFile) {
-            throw new Error("No EDF/BDF file found for this study.");
-          }
-
-          const fileType = edfFile.kind === "bdf" || edfFile.path?.toLowerCase().endsWith('.bdf') 
-            ? "bdf" : "edf";
-          
-          toast.info("Canonicalizing EEG data...");
-          
-          const { data, error } = await supabase.functions.invoke("parse_eeg_study", {
-            body: {
-              study_id: activeStudy.id,
-              file_path: edfFile.path,
-              file_type: fileType,
-            },
-          });
-
-          if (error) {
-            throw error;
-          }
-
-          jsonPath = (data as any)?.json_path;
-          if (!jsonPath) {
-            throw new Error("parse_eeg_study did not return json_path.");
-          }
+        if (downloadError || !fileBlob) {
+          throw new Error(`Failed to download EDF file: ${downloadError?.message || "Unknown error"}`);
         }
 
-        // Download parsed JSON from eeg-json bucket
-        const { data: jsonBlob, error: downloadError } = await supabase.storage.from("eeg-json").download(jsonPath!);
+        // Parse EDF/BDF in browser
+        const buffer = await fileBlob.arrayBuffer();
+        const isBDF = edfFile.path?.toLowerCase().endsWith('.bdf') || edfFile.kind === 'bdf';
+        
+        toast.info("Parsing EEG signals...");
+        
+        const parsed = isBDF ? parseBDF(buffer) : parseEDF(buffer);
 
-        if (downloadError || !jsonBlob) {
-          throw new Error(`Failed to download parsed EEG JSON: ${downloadError?.message || "unknown error"}`);
-        }
-
-        const text = await jsonBlob.text();
-        const parsed = JSON.parse(text);
-
-        if (parsed.signals && parsed.channelLabels) {
-          setRawEegData({
-            signals: parsed.signals,
-            channelLabels: parsed.channelLabels,
-            sampleRate: parsed.sampleRate ?? parsed.sample_rate ?? 256,
-            duration: parsed.duration ?? parsed.duration_sec ?? 0,
-          });
-          toast.success("EEG study loaded");
-          return;
-        }
-
-        // Synthesize flat signals as placeholders
-        const nChannels = Array.isArray(parsed.channels) ? parsed.channels.length : 0;
-        const sampleRate = parsed.sample_rate ?? 256;
-        const durationSec = parsed.duration_sec ?? 0;
-        const totalSamples = sampleRate * durationSec;
-
-        if (!nChannels || !totalSamples) {
-          throw new Error("Parsed EEG JSON has no signals and insufficient metadata.");
-        }
-
-        const signals = Array.from({ length: nChannels }, () => new Array(totalSamples).fill(0));
-        const channelLabels =
-          parsed.channels?.map((c: any) => c.name) ?? Array.from({ length: nChannels }, (_, i) => `Ch ${i + 1}`);
+        // Limit to first 10 minutes for performance
+        const maxDuration = 600; // 10 minutes
+        const maxSamples = Math.floor(maxDuration * parsed.sampleRate);
+        
+        const limitedSignals = parsed.signals.map(signal => 
+          signal.length > maxSamples ? signal.slice(0, maxSamples) : signal
+        );
+        const limitedDuration = Math.min(parsed.duration, maxDuration);
 
         setRawEegData({
-          signals,
-          channelLabels,
-          sampleRate,
-          duration: durationSec,
+          signals: limitedSignals,
+          channelLabels: parsed.channelLabels,
+          sampleRate: parsed.sampleRate,
+          duration: limitedDuration,
         });
 
-        toast.warning("Parsed EEG contains metadata only – rendering flat traces as placeholders.");
+        toast.success(`EEG loaded: ${parsed.channelLabels.length} channels, ${Math.round(limitedDuration)}s`);
+
       } catch (error: any) {
         console.error("Error loading EEG:", error);
-        toast.error(`Failed to load EEG data: ${error.message}`);
+        setLoadError(error.message);
+        toast.error(`Failed to load EEG: ${error.message}`);
+      } finally {
+        setIsLoadingEEG(false);
       }
     };
 
@@ -339,7 +243,6 @@ export default function EEGViewer() {
   }, [activeStudy]);
 
   // ---------- Playback loop ----------
-
   useEffect(() => {
     if (!isPlaying || !eegData) return;
 
@@ -358,21 +261,10 @@ export default function EEGViewer() {
   }, [isPlaying, eegData, timeWindow, playbackSpeed]);
 
   // ---------- Marker mutations ----------
-
-  type AddMarkerPayload = {
-    timestamp_sec: number;
-    marker_type: string;
-    label?: string;
-    notes?: string;
-  };
-
   const addMarkerMutation = useMutation({
-    mutationFn: async (payload: AddMarkerPayload) => {
+    mutationFn: async (payload: { timestamp_sec: number; marker_type: string; label?: string; notes?: string }) => {
       if (!studyId) throw new Error("No study selected");
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("eeg_markers").insert({
@@ -383,20 +275,15 @@ export default function EEGViewer() {
         label: payload.label ?? null,
         notes: payload.notes ?? null,
       });
-
       if (error) throw error;
     },
     onSuccess: () => {
-      if (studyId) {
-        queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
-      }
+      if (studyId) queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
       setNewMarkerLabel("");
       setNewMarkerNotes("");
       toast.success("Marker added");
     },
-    onError: (error: any) => {
-      toast.error(`Failed to add marker: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Failed to add marker: ${error.message}`),
   });
 
   const deleteMarkerMutation = useMutation({
@@ -405,33 +292,31 @@ export default function EEGViewer() {
       if (error) throw error;
     },
     onSuccess: () => {
-      if (studyId) {
-        queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
-      }
+      if (studyId) queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
       toast.success("Marker deleted");
     },
-    onError: (error: any) => {
-      toast.error(`Failed to delete marker: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Failed to delete marker: ${error.message}`),
   });
 
   // ---------- Controls handlers ----------
-
   const handlePlayPause = () => setIsPlaying((prev) => !prev);
-
   const handleSkipBackward = () => setCurrentTime((prev) => Math.max(0, prev - timeWindow));
-
   const handleSkipForward = () => {
     if (!eegData) return;
     setCurrentTime((prev) => Math.min(eegData.duration - timeWindow, prev + timeWindow));
   };
+
+  const handleTimeClick = useCallback((time: number) => {
+    if (!eegData) return;
+    const clampedTime = Math.max(0, Math.min(eegData.duration - timeWindow, time - timeWindow / 2));
+    setCurrentTime(clampedTime);
+  }, [eegData, timeWindow]);
 
   const handleExport = useCallback(() => {
     if (!studyId) {
       toast.error("No study selected for export.");
       return;
     }
-
     const annotations = markers.map((m) => ({
       id: m.id,
       onset: m.timestamp_sec,
@@ -440,10 +325,7 @@ export default function EEGViewer() {
       label: m.label,
       notes: m.notes,
     }));
-
-    const blob = new Blob([JSON.stringify(annotations, null, 2)], {
-      type: "application/json",
-    });
+    const blob = new Blob([JSON.stringify(annotations, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -452,7 +334,6 @@ export default function EEGViewer() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-
     toast.success("Annotations exported as JSON");
   }, [markers, studyId]);
 
@@ -465,22 +346,16 @@ export default function EEGViewer() {
     });
   };
 
-  const handleSelectAllGroups = () => {
-    setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
-  };
-
-  const handleDeselectAllGroups = () => {
-    setVisibleGroups(new Set());
-  };
+  const handleSelectAllGroups = () => setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
+  const handleDeselectAllGroups = () => setVisibleGroups(new Set());
 
   // ---------- Loading / fallback views ----------
-
   if (studyLoading || sampleLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-2">
           <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm text-muted-foreground">Loading EEG data...</p>
+          <p className="text-sm text-muted-foreground">Loading study...</p>
         </div>
       </div>
     );
@@ -500,106 +375,50 @@ export default function EEGViewer() {
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-6">
-      <div className="max-w-[1800px] mx-auto space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/app/studies">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Studies
-              </Button>
-            </Link>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-foreground">EEG Viewer</h1>
-                {isSampleStudy && <Badge variant="secondary">Sample Study</Badge>}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {(activeStudy.meta as any)?.patient_name || "Unnamed Study"} -{" "}
-                {new Date(activeStudy.created_at).toLocaleDateString()}
-              </p>
-            </div>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <div className="border-b px-4 py-3 flex items-center gap-4">
+        <Link to="/app/studies">
+          <Button variant="ghost" size="icon">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <div className="flex-1">
+          <h1 className="text-lg font-semibold">EEG Viewer</h1>
+          <p className="text-sm text-muted-foreground">
+            {isSampleStudy ? "Sample Study" : `Study: ${studyId?.slice(0, 8)}...`}
+          </p>
+        </div>
+        {eegData && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Badge variant="outline">{eegData.channelLabels.length} Ch</Badge>
+            <Badge variant="outline">{eegData.sampleRate} Hz</Badge>
+            <Badge variant="outline">{Math.round(eegData.duration)}s</Badge>
           </div>
+        )}
+      </div>
 
-          {/* Export action */}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={!markers.length}>
-              Export JSON
-            </Button>
+      {/* Main Content */}
+      <div className="flex-1 flex">
+        {/* Left Sidebar - Channel Groups */}
+        <div className="w-48 border-r p-3 space-y-3 overflow-y-auto">
+          <ChannelGroupList
+            channelLabels={eegData?.channelLabels || []}
+            visibleGroups={visibleGroups}
+            onToggleGroup={handleToggleGroup}
+            onSelectAll={handleSelectAllGroups}
+            onDeselectAll={handleDeselectAllGroups}
+          />
+          
+          <div className="pt-3 border-t">
+            <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
           </div>
         </div>
 
-        {/* Main Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-          {/* Left Sidebar - Channel Groups */}
-          <div className="lg:col-span-1">
-            <ChannelGroupList
-              channelLabels={eegData?.channelLabels || []}
-              visibleGroups={visibleGroups}
-              onToggleGroup={handleToggleGroup}
-              onSelectAll={handleSelectAllGroups}
-              onDeselectAll={handleDeselectAllGroups}
-            />
-          </div>
-
-          {/* Main Area */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Quick Triage Panel */}
-            {eegData && (
-              <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border border-border">
-                <div className="flex items-center gap-4">
-                  <Badge variant="outline">
-                    Duration: {Math.floor(eegData.duration / 60)}:
-                    {Math.floor(eegData.duration % 60)
-                      .toString()
-                      .padStart(2, "0")}
-                  </Badge>
-                  <Badge variant="outline">
-                    Channels: {visibleChannels.size} / {filterStandardChannels(eegData.channelLabels).length}
-                  </Badge>
-                  <Badge variant="outline">
-                    Montage: {montage.replace("-", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-                  </Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => toast.info("Marked as normal")}>
-                    Mark as Normal
-                  </Button>
-                  <Button size="sm" variant="default" onClick={() => toast.info("Flagged for review")}>
-                    Flag for Review
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Waveform Display */}
-            <Card>
-              <CardContent className="p-2">
-                <div className="h-[500px] bg-card">
-                  {eegData ? (
-                    <WebGLEEGViewer
-                      signals={eegData.signals}
-                      channelLabels={eegData.channelLabels}
-                      sampleRate={eegData.sampleRate}
-                      currentTime={currentTime}
-                      timeWindow={timeWindow}
-                      amplitudeScale={amplitudeScale}
-                      visibleChannels={visibleChannels}
-                      theme={theme || "dark"}
-                      markers={markers}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Controls */}
+        {/* Center - EEG Canvas */}
+        <div className="flex-1 flex flex-col">
+          {/* Controls */}
+          <div className="border-b p-2">
             <EEGControls
               isPlaying={isPlaying}
               currentTime={currentTime}
@@ -608,114 +427,145 @@ export default function EEGViewer() {
               amplitudeScale={amplitudeScale}
               playbackSpeed={playbackSpeed}
               onPlayPause={handlePlayPause}
-              onTimeChange={setCurrentTime}
+              onSkipBackward={handleSkipBackward}
+              onSkipForward={handleSkipForward}
               onTimeWindowChange={setTimeWindow}
               onAmplitudeScaleChange={setAmplitudeScale}
               onPlaybackSpeedChange={setPlaybackSpeed}
-              onSkipBackward={handleSkipBackward}
-              onSkipForward={handleSkipForward}
+              onTimeChange={setCurrentTime}
               onExport={handleExport}
             />
+          </div>
 
-            {/* Montage + Add Marker */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
-
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Add Marker</CardTitle>
-                </CardHeader>
-                <CardContent className="pb-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <Select value={newMarkerType} onValueChange={setNewMarkerType}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="event">Event</SelectItem>
-                        <SelectItem value="seizure">Seizure</SelectItem>
-                        <SelectItem value="artifact">Artifact</SelectItem>
-                        <SelectItem value="sleep">Sleep Stage</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      placeholder="Label"
-                      value={newMarkerLabel}
-                      onChange={(e) => setNewMarkerLabel(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
-                  <Textarea
-                    placeholder="Notes (optional)"
-                    value={newMarkerNotes}
-                    onChange={(e) => setNewMarkerNotes(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                  <Button
-                    onClick={() =>
-                      addMarkerMutation.mutate({
-                        timestamp_sec: currentTime,
-                        marker_type: newMarkerType,
-                        label: newMarkerLabel || undefined,
-                        notes: newMarkerNotes || undefined,
-                      })
-                    }
-                    disabled={addMarkerMutation.isPending || !studyId}
-                    size="sm"
-                    className="w-full"
-                  >
-                    {addMarkerMutation.isPending && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
-                    Add at {Math.floor(currentTime)}s
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Markers List */}
-            {markers.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Markers ({markers.length})</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {markers.map((marker) => (
-                      <div
-                        key={marker.id}
-                        className="flex items-start justify-between p-2 bg-muted rounded border border-border hover:bg-accent/50 transition-colors"
-                      >
-                        <div
-                          className="flex-1 min-w-0 cursor-pointer"
-                          onClick={() => setCurrentTime(marker.timestamp_sec || 0)}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-foreground">
-                              {Math.floor(marker.timestamp_sec)}s
-                            </span>
-                            <span className="text-xs font-semibold text-primary">{marker.marker_type}</span>
-                            {marker.label && (
-                              <span className="text-xs text-muted-foreground truncate">{marker.label}</span>
-                            )}
-                          </div>
-                          {marker.notes && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{marker.notes}</p>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => deleteMarkerMutation.mutate(marker.id)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Viewer */}
+          <div className="flex-1 relative">
+            {isLoadingEEG ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-background">
+                <div className="text-center space-y-3">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+                  <p className="text-sm text-muted-foreground">Parsing EEG file...</p>
+                  <p className="text-xs text-muted-foreground">This may take a moment for large files</p>
+                </div>
+              </div>
+            ) : loadError ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-background">
+                <Card className="max-w-md">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-5 w-5" />
+                      Failed to Load EEG
+                    </CardTitle>
+                    <CardDescription>{loadError}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button variant="outline" onClick={() => window.location.reload()}>
+                      Retry
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            ) : eegData ? (
+              <WebGLEEGViewer
+                signals={eegData.signals}
+                channelLabels={eegData.channelLabels}
+                sampleRate={eegData.sampleRate}
+                currentTime={currentTime}
+                timeWindow={timeWindow}
+                amplitudeScale={amplitudeScale}
+                visibleChannels={visibleChannels}
+                theme={theme || "dark"}
+                markers={markers}
+                onTimeClick={handleTimeClick}
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <p className="text-muted-foreground">No EEG data available</p>
+              </div>
             )}
+          </div>
+        </div>
+
+        {/* Right Sidebar - Markers */}
+        <div className="w-64 border-l p-3 space-y-3 overflow-y-auto">
+          <div className="space-y-2">
+            <h3 className="font-medium text-sm">Add Marker at {Math.round(currentTime)}s</h3>
+            <Select value={newMarkerType} onValueChange={setNewMarkerType}>
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="event">Event</SelectItem>
+                <SelectItem value="seizure">Seizure</SelectItem>
+                <SelectItem value="artifact">Artifact</SelectItem>
+                <SelectItem value="sleep">Sleep Stage</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              placeholder="Label"
+              value={newMarkerLabel}
+              onChange={(e) => setNewMarkerLabel(e.target.value)}
+              className="h-8 text-xs"
+            />
+            <Textarea
+              placeholder="Notes..."
+              value={newMarkerNotes}
+              onChange={(e) => setNewMarkerNotes(e.target.value)}
+              className="text-xs min-h-[60px]"
+            />
+            <Button
+              size="sm"
+              className="w-full"
+              disabled={!studyId || addMarkerMutation.isPending}
+              onClick={() =>
+                addMarkerMutation.mutate({
+                  timestamp_sec: currentTime,
+                  marker_type: newMarkerType,
+                  label: newMarkerLabel || undefined,
+                  notes: newMarkerNotes || undefined,
+                })
+              }
+            >
+              {addMarkerMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add Marker"}
+            </Button>
+          </div>
+
+          <div className="pt-3 border-t">
+            <h3 className="font-medium text-sm mb-2">Markers ({markers.length})</h3>
+            <div className="space-y-1 max-h-64 overflow-y-auto">
+              {markers.map((marker) => (
+                <div
+                  key={marker.id}
+                  className="flex items-center justify-between p-2 rounded bg-muted/50 hover:bg-muted cursor-pointer"
+                  onClick={() => handleTimeClick(marker.timestamp_sec)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {marker.marker_type}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">
+                        {Math.floor(marker.timestamp_sec / 60)}:{String(Math.floor(marker.timestamp_sec % 60)).padStart(2, "0")}
+                      </span>
+                    </div>
+                    {marker.label && <p className="text-xs truncate mt-1">{marker.label}</p>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteMarkerMutation.mutate(marker.id);
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+              {markers.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">No markers yet</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
