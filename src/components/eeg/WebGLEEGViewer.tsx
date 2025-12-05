@@ -1,12 +1,17 @@
-import { useEffect, useRef, useCallback, memo } from "react";
+import { useEffect, useRef, useCallback, memo, useState } from "react";
 import * as THREE from "three";
-import { getChannelColor } from "@/lib/eeg/channel-groups";
+import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
 interface Marker {
   id: string;
   timestamp_sec: number;
   marker_type: string;
   label?: string;
+}
+
+interface Selection {
+  startTime: number;
+  endTime: number;
 }
 
 interface WebGLEEGViewerProps {
@@ -19,9 +24,73 @@ interface WebGLEEGViewerProps {
   visibleChannels: Set<number>;
   theme: string;
   markers?: Marker[];
+  onTimeClick?: (time: number) => void;
+  onSelectionChange?: (selection: Selection | null) => void;
 }
 
-// Performance-optimized WebGL EEG Viewer using Three.js
+// Color palette for dark and light themes
+const THEME_COLORS = {
+  dark: {
+    background: 0x0f0f0f,
+    grid: 0x1e1e1e,
+    gridStrong: 0x2a2a2a,
+    text: "#e0e0e0",
+    textMuted: "#808080",
+    selection: "rgba(59, 130, 246, 0.2)",
+    selectionBorder: "rgba(59, 130, 246, 0.6)",
+  },
+  light: {
+    background: 0xffffff,
+    grid: 0xf0f0f0,
+    gridStrong: 0xe0e0e0,
+    text: "#1a1a1a",
+    textMuted: "#666666",
+    selection: "rgba(59, 130, 246, 0.15)",
+    selectionBorder: "rgba(59, 130, 246, 0.5)",
+  },
+};
+
+// Enhanced channel colors with better contrast
+const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }> = {
+  frontal: { dark: 0x60a5fa, light: 0x2563eb },    // Blue
+  central: { dark: 0x4ade80, light: 0x16a34a },    // Green  
+  temporal: { dark: 0xfbbf24, light: 0xd97706 },   // Amber
+  occipital: { dark: 0xa78bfa, light: 0x7c3aed },  // Purple
+  other: { dark: 0x94a3b8, light: 0x64748b },      // Gray
+};
+
+/**
+ * Butterworth-style IIR bandpass filter (simplified)
+ * More effective than simple moving average
+ */
+function applyBandpassFilter(
+  signal: number[],
+  sampleRate: number,
+  lowCut: number = 0.5,
+  highCut: number = 40
+): number[] {
+  const n = signal.length;
+  if (n < 4) return signal;
+
+  // Simple IIR high-pass (removes DC drift)
+  const alpha = 1 / (1 + (2 * Math.PI * lowCut) / sampleRate);
+  const highPassed = new Array(n);
+  highPassed[0] = signal[0];
+  for (let i = 1; i < n; i++) {
+    highPassed[i] = alpha * (highPassed[i - 1] + signal[i] - signal[i - 1]);
+  }
+
+  // Simple IIR low-pass (removes high freq noise)
+  const beta = (2 * Math.PI * highCut) / sampleRate / (1 + (2 * Math.PI * highCut) / sampleRate);
+  const filtered = new Array(n);
+  filtered[0] = highPassed[0];
+  for (let i = 1; i < n; i++) {
+    filtered[i] = filtered[i - 1] + beta * (highPassed[i] - filtered[i - 1]);
+  }
+
+  return filtered;
+}
+
 function WebGLEEGViewerComponent({
   signals,
   channelLabels,
@@ -32,15 +101,25 @@ function WebGLEEGViewerComponent({
   visibleChannels,
   theme,
   markers = [],
+  onTimeClick,
+  onSelectionChange,
 }: WebGLEEGViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
   const linesRef = useRef<Map<number, THREE.Line>>(new Map());
-  const markerLinesRef = useRef<THREE.Line[]>([]);
-  const animationFrameRef = useRef<number>(0);
+  const gridLinesRef = useRef<THREE.Line[]>([]);
   const labelsRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef<HTMLDivElement | null>(null);
+
+  // Selection state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState<{ x: number; time: number } | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+
+  const colors = theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light;
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -50,23 +129,29 @@ function WebGLEEGViewerComponent({
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // Create renderer with antialiasing
-    const renderer = new THREE.WebGLRenderer({ 
+    // Create canvas
+    const canvas = document.createElement("canvas");
+    canvas.style.cssText = "position: absolute; top: 0; left: 0; width: 100%; height: 100%;";
+    container.appendChild(canvas);
+    canvasRef.current = canvas;
+
+    // Create renderer
+    const renderer = new THREE.WebGLRenderer({
+      canvas,
       antialias: true,
       alpha: true,
-      powerPreference: "high-performance"
+      powerPreference: "high-performance",
     });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(theme === "dark" ? 0x0a0a0a : 0xffffff);
-    container.appendChild(renderer.domElement);
+    renderer.setClearColor(colors.background);
     rendererRef.current = renderer;
 
     // Create scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Create orthographic camera for 2D view
+    // Create orthographic camera
     const camera = new THREE.OrthographicCamera(0, width, height, 0, 0.1, 1000);
     camera.position.z = 100;
     cameraRef.current = camera;
@@ -74,16 +159,21 @@ function WebGLEEGViewerComponent({
     // Create labels container
     const labelsDiv = document.createElement("div");
     labelsDiv.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      overflow: hidden;
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; overflow: hidden; z-index: 10;
     `;
     container.appendChild(labelsDiv);
     labelsRef.current = labelsDiv;
+
+    // Create selection overlay
+    const selectionDiv = document.createElement("div");
+    selectionDiv.style.cssText = `
+      position: absolute; top: 0; height: 100%; pointer-events: none;
+      background: ${colors.selection}; border-left: 2px solid ${colors.selectionBorder};
+      border-right: 2px solid ${colors.selectionBorder}; display: none; z-index: 5;
+    `;
+    container.appendChild(selectionDiv);
+    selectionRef.current = selectionDiv;
 
     // Handle resize
     const handleResize = () => {
@@ -101,15 +191,103 @@ function WebGLEEGViewerComponent({
 
     return () => {
       resizeObserver.disconnect();
-      cancelAnimationFrame(animationFrameRef.current);
       renderer.dispose();
-      container.removeChild(renderer.domElement);
-      if (labelsRef.current) {
+      if (canvasRef.current && container.contains(canvasRef.current)) {
+        container.removeChild(canvasRef.current);
+      }
+      if (labelsRef.current && container.contains(labelsRef.current)) {
         container.removeChild(labelsRef.current);
       }
+      if (selectionRef.current && container.contains(selectionRef.current)) {
+        container.removeChild(selectionRef.current);
+      }
       linesRef.current.clear();
+      gridLinesRef.current = [];
     };
-  }, [theme]);
+  }, []);
+
+  // Update colors when theme changes
+  useEffect(() => {
+    if (rendererRef.current) {
+      rendererRef.current.setClearColor(colors.background);
+    }
+  }, [theme, colors.background]);
+
+  // Mouse handlers for click and drag selection
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const timeAtClick = currentTime + (x / rect.width) * timeWindow;
+    
+    setIsDragging(true);
+    setDragStart({ x, time: timeAtClick });
+    setSelection(null);
+    
+    if (selectionRef.current) {
+      selectionRef.current.style.display = "none";
+    }
+  }, [currentTime, timeWindow]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isDragging || !dragStart || !containerRef.current || !selectionRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const timeAtMouse = currentTime + (x / rect.width) * timeWindow;
+    
+    const left = Math.min(dragStart.x, x);
+    const width = Math.abs(x - dragStart.x);
+    
+    if (width > 5) {
+      selectionRef.current.style.display = "block";
+      selectionRef.current.style.left = `${left}px`;
+      selectionRef.current.style.width = `${width}px`;
+      
+      const newSelection = {
+        startTime: Math.min(dragStart.time, timeAtMouse),
+        endTime: Math.max(dragStart.time, timeAtMouse),
+      };
+      setSelection(newSelection);
+    }
+  }, [isDragging, dragStart, currentTime, timeWindow]);
+
+  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    
+    if (isDragging && dragStart) {
+      const distance = Math.abs(x - dragStart.x);
+      
+      if (distance < 5) {
+        // Click - jump to time
+        const timeAtClick = currentTime + (x / rect.width) * timeWindow;
+        onTimeClick?.(timeAtClick);
+        
+        if (selectionRef.current) {
+          selectionRef.current.style.display = "none";
+        }
+        setSelection(null);
+      } else {
+        // Drag complete - notify selection
+        if (selection) {
+          onSelectionChange?.(selection);
+        }
+      }
+    }
+    
+    setIsDragging(false);
+    setDragStart(null);
+  }, [isDragging, dragStart, currentTime, timeWindow, selection, onTimeClick, onSelectionChange]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (isDragging) {
+      setIsDragging(false);
+      setDragStart(null);
+    }
+  }, [isDragging]);
 
   // Update waveforms
   const updateWaveforms = useCallback(() => {
@@ -130,10 +308,19 @@ function WebGLEEGViewerComponent({
     const samplesToShow = Math.floor(timeWindow * sampleRate);
 
     // Clear existing lines
-    linesRef.current.forEach((line) => scene.remove(line));
+    linesRef.current.forEach((line) => {
+      scene.remove(line);
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    });
     linesRef.current.clear();
-    markerLinesRef.current.forEach((line) => scene.remove(line));
-    markerLinesRef.current = [];
+
+    gridLinesRef.current.forEach((line) => {
+      scene.remove(line);
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    });
+    gridLinesRef.current = [];
 
     // Clear labels
     if (labelsRef.current) {
@@ -141,20 +328,26 @@ function WebGLEEGViewerComponent({
     }
 
     // Draw grid lines
-    const gridMaterial = new THREE.LineBasicMaterial({ 
-      color: theme === "dark" ? 0x1a1a1a : 0xf0f0f0,
+    const gridMaterial = new THREE.LineBasicMaterial({
+      color: colors.grid,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.4,
+    });
+    const gridStrongMaterial = new THREE.LineBasicMaterial({
+      color: colors.gridStrong,
+      transparent: true,
+      opacity: 0.6,
     });
 
-    // Vertical grid (every second)
+    // Vertical grid (every second, stronger every 5 seconds)
     for (let i = 0; i <= timeWindow; i++) {
       const x = (i / timeWindow) * width;
       const points = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, height, 0)];
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const line = new THREE.Line(geometry, gridMaterial);
+      const material = i % 5 === 0 ? gridStrongMaterial : gridMaterial;
+      const line = new THREE.Line(geometry, material);
       scene.add(line);
-      markerLinesRef.current.push(line);
+      gridLinesRef.current.push(line);
     }
 
     // Horizontal grid (channel separators)
@@ -164,36 +357,42 @@ function WebGLEEGViewerComponent({
       const geometry = new THREE.BufferGeometry().setFromPoints(points);
       const line = new THREE.Line(geometry, gridMaterial);
       scene.add(line);
-      markerLinesRef.current.push(line);
+      gridLinesRef.current.push(line);
     }
 
     // Draw each visible channel
     visibleChannelIndices.forEach((channelIndex, displayIndex) => {
-      const signal = signals[channelIndex];
-      if (!signal) return;
+      const rawSignal = signals[channelIndex];
+      if (!rawSignal) return;
+
+      // Extract window and apply filter
+      const endSample = Math.min(startSample + samplesToShow, rawSignal.length);
+      const windowSignal = rawSignal.slice(startSample, endSample);
+      const filteredSignal = applyBandpassFilter(windowSignal, sampleRate, 0.5, 40);
 
       const baselineY = height - (displayIndex + 0.5) * channelHeight;
-      const channelColor = getChannelColor(channelLabels[channelIndex]);
-      
-      // Convert hex color to Three.js color
-      const colorHex = channelColor.stroke.replace("#", "0x");
-      const material = new THREE.LineBasicMaterial({ 
-        color: parseInt(colorHex, 16),
-        linewidth: 1.5
+      const label = channelLabels[channelIndex] || `Ch${channelIndex + 1}`;
+      const colorInfo = getChannelColor(label);
+      const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
+      const channelColorHex = CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] || 
+                              (theme === "dark" ? 0x94a3b8 : 0x64748b);
+
+      const material = new THREE.LineBasicMaterial({
+        color: channelColorHex,
+        linewidth: 1,
       });
 
-      // Build points array with downsampling for performance
+      // Build points array with downsampling
       const points: THREE.Vector3[] = [];
-      const endSample = Math.min(startSample + samplesToShow, signal.length);
-      
-      // Downsample if too many points (max ~2000 points per channel for smooth rendering)
-      const maxPoints = 2000;
-      const step = Math.max(1, Math.floor(samplesToShow / maxPoints));
-      
-      for (let i = startSample; i < endSample; i += step) {
-        const x = ((i - startSample) / samplesToShow) * width;
-        const value = signal[i] || 0;
-        const y = baselineY - (value * amplitudeScale * 3);
+      const maxPoints = 3000;
+      const step = Math.max(1, Math.floor(filteredSignal.length / maxPoints));
+
+      for (let i = 0; i < filteredSignal.length; i += step) {
+        const x = (i / samplesToShow) * width;
+        const value = filteredSignal[i] || 0;
+        // Scale with amplitude and clamp
+        const scaledValue = Math.max(-channelHeight * 0.45, Math.min(channelHeight * 0.45, value * amplitudeScale * 2));
+        const y = baselineY - scaledValue;
         points.push(new THREE.Vector3(x, y, 0));
       }
 
@@ -204,106 +403,100 @@ function WebGLEEGViewerComponent({
         linesRef.current.set(channelIndex, line);
       }
 
-      // Add channel label
+      // Add channel label with color indicator
       if (labelsRef.current) {
-        const label = document.createElement("div");
-        label.style.cssText = `
-          position: absolute;
-          left: 8px;
-          top: ${(displayIndex + 0.5) * channelHeight - 8}px;
+        const labelEl = document.createElement("div");
+        const colorHexStr = `#${channelColorHex.toString(16).padStart(6, "0")}`;
+        labelEl.style.cssText = `
+          position: absolute; left: 8px;
+          top: ${(displayIndex + 0.5) * channelHeight - 10}px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 12px;
-          color: ${theme === "dark" ? "#e0e0e0" : "#202020"};
-          display: flex;
-          align-items: center;
-          gap: 4px;
+          font-size: 11px; font-weight: 500;
+          color: ${colors.text};
+          display: flex; align-items: center; gap: 6px;
+          background: ${theme === "dark" ? "rgba(15,15,15,0.85)" : "rgba(255,255,255,0.85)"};
+          padding: 2px 6px; border-radius: 3px;
         `;
-        
+
         const colorDot = document.createElement("span");
         colorDot.style.cssText = `
-          width: 4px;
-          height: 12px;
-          background: ${channelColor.stroke};
+          width: 3px; height: 14px;
+          background: ${colorHexStr};
           border-radius: 1px;
         `;
-        
-        label.appendChild(colorDot);
-        label.appendChild(document.createTextNode(channelLabels[channelIndex] || `Ch${channelIndex + 1}`));
-        labelsRef.current.appendChild(label);
+
+        labelEl.appendChild(colorDot);
+        labelEl.appendChild(document.createTextNode(label));
+        labelsRef.current.appendChild(labelEl);
       }
     });
 
     // Draw markers
     const markerColors: Record<string, number> = {
-      event: 0x3b82f6,
-      seizure: 0xef4444,
-      artifact: 0xf59e0b,
-      sleep: 0x8b5cf6
+      event: theme === "dark" ? 0x3b82f6 : 0x2563eb,
+      seizure: theme === "dark" ? 0xef4444 : 0xdc2626,
+      artifact: theme === "dark" ? 0xf59e0b : 0xd97706,
+      sleep: theme === "dark" ? 0x8b5cf6 : 0x7c3aed,
     };
 
-    markers.forEach(marker => {
+    markers.forEach((marker) => {
       const markerTime = marker.timestamp_sec - currentTime;
       if (markerTime >= 0 && markerTime <= timeWindow) {
         const x = (markerTime / timeWindow) * width;
-        
+        const markerColor = markerColors[marker.marker_type] || (theme === "dark" ? 0x888888 : 0x666666);
+
         const markerMaterial = new THREE.LineBasicMaterial({
-          color: markerColors[marker.marker_type] || 0x888888,
-          linewidth: 2
+          color: markerColor,
+          linewidth: 2,
         });
 
         const points = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, height, 0)];
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const line = new THREE.Line(geometry, markerMaterial);
         scene.add(line);
-        markerLinesRef.current.push(line);
+        gridLinesRef.current.push(line);
 
         // Marker label
         if (labelsRef.current) {
-          const label = document.createElement("div");
-          const colorStr = `#${markerColors[marker.marker_type]?.toString(16).padStart(6, "0") || "888888"}`;
-          label.style.cssText = `
-            position: absolute;
-            left: ${x + 4}px;
-            top: 4px;
+          const labelEl = document.createElement("div");
+          const colorStr = `#${markerColor.toString(16).padStart(6, "0")}`;
+          labelEl.style.cssText = `
+            position: absolute; left: ${x + 4}px; top: 4px;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 10px;
-            font-weight: bold;
+            font-size: 10px; font-weight: 600;
             color: ${colorStr};
-            background: ${theme === "dark" ? "rgba(0,0,0,0.7)" : "rgba(255,255,255,0.7)"};
-            padding: 2px 4px;
-            border-radius: 2px;
+            background: ${theme === "dark" ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.9)"};
+            padding: 2px 6px; border-radius: 3px;
+            border: 1px solid ${colorStr};
           `;
-          label.textContent = marker.label || marker.marker_type;
-          labelsRef.current.appendChild(label);
+          labelEl.textContent = marker.label || marker.marker_type;
+          labelsRef.current.appendChild(labelEl);
         }
       }
     });
 
-    // Add time labels
+    // Add time labels at bottom
     if (labelsRef.current) {
-      for (let i = 0; i <= timeWindow; i++) {
+      for (let i = 0; i <= timeWindow; i += 5) {
         const x = (i / timeWindow) * width;
         const time = currentTime + i;
         const minutes = Math.floor(time / 60);
         const seconds = Math.floor(time % 60);
-        
-        const label = document.createElement("div");
-        label.style.cssText = `
-          position: absolute;
-          left: ${x + 2}px;
-          bottom: 4px;
+
+        const labelEl = document.createElement("div");
+        labelEl.style.cssText = `
+          position: absolute; left: ${x + 2}px; bottom: 4px;
           font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 10px;
-          color: ${theme === "dark" ? "#a0a0a0" : "#404040"};
+          font-size: 10px; color: ${colors.textMuted};
         `;
-        label.textContent = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-        labelsRef.current.appendChild(label);
+        labelEl.textContent = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+        labelsRef.current.appendChild(labelEl);
       }
     }
 
     // Render
     rendererRef.current.render(scene, cameraRef.current);
-  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers]);
+  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers, colors]);
 
   // Run update on dependency changes
   useEffect(() => {
@@ -311,14 +504,18 @@ function WebGLEEGViewerComponent({
   }, [updateWaveforms]);
 
   return (
-    <div 
-      ref={containerRef} 
-      className="w-full h-full relative"
-      style={{ 
-        background: theme === "dark" ? "#0a0a0a" : "#ffffff",
+    <div
+      ref={containerRef}
+      className="w-full h-full relative cursor-crosshair"
+      style={{
+        background: theme === "dark" ? "#0f0f0f" : "#ffffff",
         borderRadius: 6,
-        overflow: "hidden"
+        overflow: "hidden",
       }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseLeave}
     />
   );
 }
