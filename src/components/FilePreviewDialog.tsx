@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PDFViewer } from "./PDFViewer";
 import mammoth from "mammoth";
+import DOMPurify from "dompurify";
 
 interface FilePreviewDialogProps {
   file: {
@@ -62,12 +63,19 @@ export function FilePreviewDialog({
           const text = await data.text();
           setFileContent(text);
         } else if (fileType === "docx") {
-          // Download and convert DOCX to HTML
+          // Download and convert DOCX to HTML with sanitization
           const { data, error } = await supabase.storage.from(bucket).download(file.path);
           if (error) throw error;
           const arrayBuffer = await data.arrayBuffer();
           const result = await mammoth.convertToHtml({ arrayBuffer });
-          setFileContent(result.value);
+          // Sanitize HTML to prevent XSS attacks
+          const sanitizedHtml = DOMPurify.sanitize(result.value, {
+            ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 
+                          'strong', 'em', 'u', 'table', 'tr', 'td', 'th', 'br', 'span', 
+                          'thead', 'tbody', 'b', 'i', 'a', 'img', 'blockquote', 'pre', 'code'],
+            ALLOWED_ATTR: ['style', 'href', 'src', 'alt', 'class']
+          });
+          setFileContent(sanitizedHtml);
         } else if (fileType === "edf") {
           // For EDF files, show metadata
           setFileContent(

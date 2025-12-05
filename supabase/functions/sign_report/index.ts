@@ -33,15 +33,32 @@ serve(async (req) => {
       );
     }
 
-    // Get study details
+    // Get study details including clinic_id for authorization
     const { data: study, error: studyError } = await supabase
       .from("studies")
-      .select("sla, owner")
+      .select("sla, owner, clinic_id")
       .eq("id", studyId)
       .single();
 
     if (studyError || !study) {
       throw new Error("Study not found");
+    }
+
+    // Authorization check: user must own the study OR be a member of the study's clinic
+    if (study.owner !== user.id) {
+      const { data: membership } = await supabase
+        .from("clinic_memberships")
+        .select("clinic_id")
+        .eq("user_id", user.id)
+        .eq("clinic_id", study.clinic_id)
+        .single();
+
+      if (!membership) {
+        return new Response(
+          JSON.stringify({ error: "Unauthorized: You do not have access to this study" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Calculate token cost
