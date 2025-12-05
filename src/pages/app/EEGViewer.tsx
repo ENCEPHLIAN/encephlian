@@ -160,7 +160,7 @@ export default function EEGViewer() {
   // ---------- EEG loading logic (sample + real uploads) ----------
 
   useEffect(() => {
-    if (!activeStudy || !activeStudy.study_files?.length) return;
+    if (!activeStudy) return;
 
     const loadEEGData = async () => {
       try {
@@ -172,7 +172,6 @@ export default function EEGViewer() {
 
           const parsedData = await response.json();
 
-          // Generate full 64-channel dataset from 2 sample channels (your existing hack)
           const fullSignals = parsedData.channelLabels.map((label: string, idx: number) => {
             const sampleSignal = parsedData.signals[idx % 2];
             const variation = idx * 0.1;
@@ -190,16 +189,73 @@ export default function EEGViewer() {
           return;
         }
 
-        // USER STUDY: go via parse_eeg_study + eeg-json bucket
-        const studyFiles = activeStudy.study_files as any[];
+        // USER STUDY: Check for canonical_eeg_records first (ENCEPHLIAN_EEG_v1)
+        const { data: canonicalRecord } = await supabase
+          .from("canonical_eeg_records")
+          .select("*")
+          .eq("study_id", activeStudy.id)
+          .maybeSingle();
 
-        // 1) Do we already have a parsed JSON file for this study?
+        if (canonicalRecord) {
+          // Load from canonical system - tensor_path points to eeg-clean bucket
+          console.log("Loading canonical EEG data...");
+          
+          const { data: tensorBlob, error: tensorError } = await supabase
+            .storage
+            .from("eeg-clean")
+            .download(canonicalRecord.tensor_path);
+
+          if (tensorError || !tensorBlob) {
+            throw new Error(`Failed to download tensor: ${tensorError?.message}`);
+          }
+
+          const tensorPayload = JSON.parse(await tensorBlob.text());
+          const { meta, data: tensorBase64 } = tensorPayload;
+
+          // Decode base64 tensor back to Float32Array
+          const binaryString = atob(tensorBase64);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const float32Data = new Float32Array(bytes.buffer);
+
+          // Reshape to [n_channels, n_samples]
+          const nChannels = meta.shape[0];
+          const nSamples = meta.shape[1];
+          const signals: number[][] = [];
+          
+          for (let ch = 0; ch < nChannels; ch++) {
+            const channelData = new Array(nSamples);
+            for (let s = 0; s < nSamples; s++) {
+              channelData[s] = float32Data[ch * nSamples + s];
+            }
+            signals.push(channelData);
+          }
+
+          // Use canonical_json metadata
+          const canonicalJson = canonicalRecord.canonical_json as any;
+
+          setRawEegData({
+            signals,
+            channelLabels: canonicalJson.signal?.canonical_channels || meta.channels,
+            sampleRate: canonicalJson.signal?.sfreq_model || meta.sfreq,
+            duration: nSamples / (canonicalJson.signal?.sfreq_model || meta.sfreq),
+          });
+
+          toast.success(`Canonical EEG loaded (${canonicalJson.schema_version})`);
+          return;
+        }
+
+        // Fallback: Legacy flow via study_files
+        const studyFiles = activeStudy.study_files as any[] || [];
+
+        // Check for existing parsed JSON
         let jsonFile = studyFiles.find((f) => f.kind === "json");
         let jsonPath: string | undefined = jsonFile?.path;
 
-        // 2) If not, trigger edge function to parse the uploaded EDF
+        // If no JSON, trigger canonicalization via parse_eeg_study
         if (!jsonPath) {
-          // Find EDF or BDF file - also check for legacy 'eeg_raw' kind
           const edfFile = studyFiles.find((f) => 
             f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw"
           );
@@ -207,9 +263,10 @@ export default function EEGViewer() {
             throw new Error("No EDF/BDF file found for this study.");
           }
 
-          // Determine file type from kind or path
           const fileType = edfFile.kind === "bdf" || edfFile.path?.toLowerCase().endsWith('.bdf') 
             ? "bdf" : "edf";
+          
+          toast.info("Canonicalizing EEG data...");
           
           const { data, error } = await supabase.functions.invoke("parse_eeg_study", {
             body: {
@@ -225,11 +282,11 @@ export default function EEGViewer() {
 
           jsonPath = (data as any)?.json_path;
           if (!jsonPath) {
-            throw new Error("parse_eeg_study did not return json_path. Check edge function.");
+            throw new Error("parse_eeg_study did not return json_path.");
           }
         }
 
-        // 3) Download parsed JSON from eeg-json bucket
+        // Download parsed JSON from eeg-json bucket
         const { data: jsonBlob, error: downloadError } = await supabase.storage.from("eeg-json").download(jsonPath!);
 
         if (downloadError || !jsonBlob) {
@@ -238,15 +295,6 @@ export default function EEGViewer() {
 
         const text = await jsonBlob.text();
         const parsed = JSON.parse(text);
-
-        // Expectation for "full" parser (future):
-        // {
-        //   signals: number[][],
-        //   channelLabels: string[],
-        //   sampleRate: number,
-        //   duration: number,
-        //   ...metadata
-        // }
 
         if (parsed.signals && parsed.channelLabels) {
           setRawEegData({
@@ -259,15 +307,14 @@ export default function EEGViewer() {
           return;
         }
 
-        // Current parse_eeg_study only writes metadata; no samples.
-        // We synthesize flat signals as placeholders so the viewer doesn't explode.
+        // Synthesize flat signals as placeholders
         const nChannels = Array.isArray(parsed.channels) ? parsed.channels.length : 0;
         const sampleRate = parsed.sample_rate ?? 256;
         const durationSec = parsed.duration_sec ?? 0;
         const totalSamples = sampleRate * durationSec;
 
         if (!nChannels || !totalSamples) {
-          throw new Error("Parsed EEG JSON has no signals and insufficient metadata to synthesize placeholders.");
+          throw new Error("Parsed EEG JSON has no signals and insufficient metadata.");
         }
 
         const signals = Array.from({ length: nChannels }, () => new Array(totalSamples).fill(0));
@@ -281,9 +328,7 @@ export default function EEGViewer() {
           duration: durationSec,
         });
 
-        toast.warning(
-          "Parsed EEG contains metadata only – rendering flat traces as placeholders. Extend parse_eeg_study to include signals when ready.",
-        );
+        toast.warning("Parsed EEG contains metadata only – rendering flat traces as placeholders.");
       } catch (error: any) {
         console.error("Error loading EEG:", error);
         toast.error(`Failed to load EEG data: ${error.message}`);

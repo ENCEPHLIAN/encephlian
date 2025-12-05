@@ -124,6 +124,47 @@ export type Database = {
         }
         Relationships: []
       }
+      canonical_eeg_records: {
+        Row: {
+          canonical_json: Json
+          created_at: string
+          id: string
+          native_sampling_hz: number | null
+          schema_version: string
+          sfreq_model: number | null
+          study_id: string
+          tensor_path: string
+        }
+        Insert: {
+          canonical_json: Json
+          created_at?: string
+          id?: string
+          native_sampling_hz?: number | null
+          schema_version?: string
+          sfreq_model?: number | null
+          study_id: string
+          tensor_path: string
+        }
+        Update: {
+          canonical_json?: Json
+          created_at?: string
+          id?: string
+          native_sampling_hz?: number | null
+          schema_version?: string
+          sfreq_model?: number | null
+          study_id?: string
+          tensor_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "canonical_eeg_records_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: true
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clinic_memberships: {
         Row: {
           clinic_id: string

@@ -16,6 +16,7 @@ import { useRef } from "react";
 const stateColors = {
   uploaded: "bg-blue-500",
   preprocessing: "bg-yellow-500",
+  canonicalized: "bg-cyan-500",
   ai_draft: "bg-purple-500",
   in_review: "bg-orange-500",
   signed: "bg-green-500",
@@ -224,6 +225,7 @@ export default function Studies() {
                 <SelectItem value="all">All States</SelectItem>
                 <SelectItem value="uploaded">Uploaded</SelectItem>
                 <SelectItem value="preprocessing">Preprocessing</SelectItem>
+                <SelectItem value="canonicalized">Canonicalized</SelectItem>
                 <SelectItem value="ai_draft">AI Draft</SelectItem>
                 <SelectItem value="in_review">In Review</SelectItem>
                 <SelectItem value="signed">Signed</SelectItem>
