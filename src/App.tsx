@@ -8,8 +8,14 @@ import { ProfileProvider } from "@/contexts/ProfileContext";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
+import AdminLayout from "./components/admin/AdminLayout";
 import AppLayout from "./components/AppLayout";
-import AdminCRM from "./pages/admin/AdminCRM";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminStudies from "./pages/admin/AdminStudies";
+import AdminStudyDetail from "./pages/admin/AdminStudyDetail";
+import AdminClinics from "./pages/admin/AdminClinics";
+import AdminUsers from "./pages/admin/AdminUsers";
+import AdminHealth from "./pages/admin/AdminHealth";
 import Dashboard from "./pages/app/Dashboard";
 import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
@@ -23,7 +29,6 @@ import Notes from "./pages/app/Notes";
 import Support from "./pages/app/Support";
 import Documentation from "./pages/app/Documentation";
 import Templates from "./pages/app/Templates";
-import ComingSoon from "./pages/app/ComingSoon";
 import NotFound from "./pages/NotFound";
 import "./App.css";
 
@@ -56,18 +61,21 @@ function App() {
                     <Route path="wallet" element={<Wallet />} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="settings" element={<Settings />} />
-                    <Route path="analytics" element={<ComingSoon feature="Analytics" />} />
                     <Route path="templates" element={<Templates />} />
-                    <Route path="scheduler" element={<ComingSoon feature="Scheduler" />} />
-                    <Route path="integrations" element={<ComingSoon feature="Integrations" />} />
-                    <Route path="team" element={<ComingSoon feature="Team" />} />
                     <Route path="support" element={<Support />} />
                     <Route path="documentation" element={<Documentation />} />
                   </Route>
 
-                  {/* Admin CRM Route */}
+                  {/* Admin Routes */}
                   <Route element={<AdminRoute />}>
-                    <Route path="/admin" element={<AdminCRM />} />
+                    <Route path="/admin" element={<AdminLayout />}>
+                      <Route index element={<AdminDashboard />} />
+                      <Route path="studies" element={<AdminStudies />} />
+                      <Route path="studies/:id" element={<AdminStudyDetail />} />
+                      <Route path="clinics" element={<AdminClinics />} />
+                      <Route path="users" element={<AdminUsers />} />
+                      <Route path="health" element={<AdminHealth />} />
+                    </Route>
                   </Route>
                 </Route>
 
