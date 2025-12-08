@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import AdminCleanup from "@/pages/admin/AdminCleanup";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import AdminAccount from "@/pages/admin/AdminAccount";
+import AdminWallets from "@/pages/admin/AdminWallets";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -78,6 +79,7 @@ function App() {
                       <Route path="clinics" element={<AdminClinics />} />
                       <Route path="users" element={<AdminUsers />} />
                       <Route path="health" element={<AdminHealth />} />
+                      <Route path="wallets" element={<AdminWallets />} />
                       <Route path="cleanup" element={<AdminCleanup />} />
                       <Route path="audit" element={<AdminAuditLogs />} />
                       <Route path="account" element={<AdminAccount />} />

@@ -27,19 +27,25 @@ export default function AdminRoute() {
           return;
         }
 
-        // Check if user has admin role via server-side RLS
-        const { data, error } = await supabase
+        // Check if user has admin role - fetch ALL roles for this user
+        const { data: roles, error } = await supabase
           .from("user_roles")
           .select("role")
-          .eq("user_id", user.id)
-          .in("role", ["super_admin", "ops", "management"])
-          .maybeSingle();
+          .eq("user_id", user.id);
 
-        if (error || !data) {
+        if (error) {
+          console.error("Error checking roles:", error);
           setIsAdmin(false);
-        } else {
-          setIsAdmin(true);
+          setLoading(false);
+          return;
         }
+
+        // Check if any of the roles are admin roles
+        const adminRoles = ["super_admin", "ops", "management"];
+        const hasAdminRole = roles?.some(r => adminRoles.includes(r.role));
+        
+        console.log("User roles:", roles, "Has admin role:", hasAdminRole);
+        setIsAdmin(hasAdminRole);
       } catch (error) {
         console.error("Admin check error:", error);
         setIsAdmin(false);

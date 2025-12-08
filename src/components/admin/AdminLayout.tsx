@@ -15,6 +15,7 @@ import {
   ScrollText,
   Settings,
   LogOut,
+  Coins,
 } from "lucide-react";
 
 const adminNav = [
@@ -22,6 +23,7 @@ const adminNav = [
   { name: "Studies", href: "/admin/studies", icon: FileText },
   { name: "Clinics", href: "/admin/clinics", icon: Building2 },
   { name: "Users", href: "/admin/users", icon: Users },
+  { name: "Wallets", href: "/admin/wallets", icon: Coins },
   { name: "Health", href: "/admin/health", icon: Activity },
   { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
   { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
