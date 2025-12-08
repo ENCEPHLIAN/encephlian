@@ -1189,6 +1189,16 @@ export type Database = {
           tokens: number
         }[]
       }
+      admin_get_all_wallets: {
+        Args: never
+        Returns: {
+          email: string
+          full_name: string
+          tokens: number
+          updated_at: string
+          user_id: string
+        }[]
+      }
       admin_get_dashboard_stats: { Args: never; Returns: Json }
       admin_get_recent_audit_logs: {
         Args: { p_limit?: number }

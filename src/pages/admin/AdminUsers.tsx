@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -86,9 +86,7 @@ type ClinicOption = {
 const CLINIC_ROLES = ["clinician", "neurologist"] as const;
 // Roles that should NOT have clinic assignment  
 const SYSTEM_ROLES = ["management", "ops", "super_admin"] as const;
-// All assignable roles (super_admin hidden from UI per requirements)
-// Management can create clinician but not management/super_admin
-const ALL_ROLES = ["clinician", "management"] as const;
+
 
 export default function AdminUsers() {
   const queryClient = useQueryClient();
@@ -102,17 +100,45 @@ export default function AdminUsers() {
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
   const [tokenAmount, setTokenAmount] = useState("");
+  const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
+
+  // Check if current user is super_admin
+  useEffect(() => {
+    const checkSuperAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+        setIsSuperAdminUser(roles?.some(r => r.role === "super_admin") || false);
+      }
+    };
+    checkSuperAdmin();
+  }, []);
+
+  // Dynamic role list based on current user's permissions
+  // Only super_admin can create/assign management roles
+  const availableRoles = useMemo(() => {
+    if (isSuperAdminUser) {
+      return ["clinician", "management"] as const;
+    }
+    return ["clinician"] as const;
+  }, [isSuperAdminUser]);
+
+  // For role filters
+  const filterRoles = availableRoles;
 
   const [createForm, setCreateForm] = useState({
     email: "",
     full_name: "",
     password: "",
-    role: "neurologist" as string,
+    role: "clinician" as string,
     clinic_id: "",
   });
 
   const [roleForm, setRoleForm] = useState({
-    role: "neurologist" as string,
+    role: "clinician" as string,
     clinic_id: "",
   });
 
@@ -469,7 +495,7 @@ export default function AdminUsers() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            {ALL_ROLES.map((role) => (
+            {filterRoles.map((role) => (
               <SelectItem key={role} value={role}>
                 {role}
               </SelectItem>
@@ -691,7 +717,7 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_ROLES.map((role) => (
+                  {availableRoles.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
@@ -805,7 +831,7 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ALL_ROLES.map((role) => (
+                  {availableRoles.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
