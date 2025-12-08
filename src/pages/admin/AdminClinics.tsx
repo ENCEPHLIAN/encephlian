@@ -1,10 +1,19 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -20,10 +29,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Building2, Edit } from "lucide-react";
+import { Loader2, Building2, Edit, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 type ClinicRow = {
@@ -36,11 +53,26 @@ type ClinicRow = {
   member_count: number;
 };
 
+type UserOption = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
 export default function AdminClinics() {
   const queryClient = useQueryClient();
   const [editingClinic, setEditingClinic] = useState<ClinicRow | null>(null);
   const [formData, setFormData] = useState({ name: "", city: "" });
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [deleteClinic, setDeleteClinic] = useState<ClinicRow | null>(null);
 
+  const [createForm, setCreateForm] = useState({
+    name: "",
+    city: "",
+    admin_user_id: "",
+  });
+
+  // Fetch clinics
   const { data: clinics, isLoading } = useQuery<ClinicRow[]>({
     queryKey: ["admin-all-clinics"],
     queryFn: async () => {
@@ -50,6 +82,20 @@ export default function AdminClinics() {
     },
   });
 
+  // Fetch users for admin selection
+  const { data: users } = useQuery<UserOption[]>({
+    queryKey: ["admin-users-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .order("email");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Update clinic mutation
   const updateClinicMutation = useMutation({
     mutationFn: async ({ clinicId, updates }: { clinicId: string; updates: Record<string, any> }) => {
       const { error } = await supabase.rpc("admin_update_clinic", {
@@ -62,6 +108,43 @@ export default function AdminClinics() {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
       toast.success("Clinic updated");
       setEditingClinic(null);
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Create clinic mutation
+  const createClinicMutation = useMutation({
+    mutationFn: async (form: typeof createForm) => {
+      const { data, error } = await supabase.rpc("admin_create_clinic", {
+        p_name: form.name,
+        p_city: form.city || null,
+        p_admin_user_id: form.admin_user_id || null,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
+      toast.success("Clinic created");
+      setShowCreateDialog(false);
+      setCreateForm({ name: "", city: "", admin_user_id: "" });
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Delete clinic mutation
+  const deleteClinicMutation = useMutation({
+    mutationFn: async (clinicId: string) => {
+      const { data, error } = await supabase.rpc("admin_delete_clinic", {
+        p_clinic_id: clinicId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
+      toast.success("Clinic deleted");
+      setDeleteClinic(null);
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -96,11 +179,17 @@ export default function AdminClinics() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Clinics</h1>
-        <p className="text-sm text-muted-foreground font-mono">
-          Manage clinic accounts and settings
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-mono font-bold tracking-tight">Clinics</h1>
+          <p className="text-sm text-muted-foreground font-mono">
+            Manage clinic accounts and provisioning
+          </p>
+        </div>
+        <Button onClick={() => setShowCreateDialog(true)}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Clinic
+        </Button>
       </div>
 
       <Card>
@@ -119,11 +208,16 @@ export default function AdminClinics() {
             </TableHeader>
             <TableBody>
               {clinics?.map((clinic) => (
-                <TableRow key={clinic.id}>
+                <TableRow key={clinic.id} className={!clinic.is_active ? "opacity-50" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
                       <span className="font-mono text-sm">{clinic.name}</span>
+                      {!clinic.is_active && (
+                        <Badge variant="destructive" className="text-xs">
+                          Disabled
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
@@ -149,14 +243,25 @@ export default function AdminClinics() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => handleEdit(clinic)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleEdit(clinic)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        onClick={() => setDeleteClinic(clinic)}
+                        disabled={clinic.study_count > 0}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -208,6 +313,87 @@ export default function AdminClinics() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Create Clinic Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="font-mono">Create New Clinic</DialogTitle>
+            <DialogDescription>Add a new clinic to the platform</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>Clinic Name</Label>
+              <Input
+                value={createForm.name}
+                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>City</Label>
+              <Input
+                value={createForm.city}
+                onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
+                className="font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Clinic Admin (optional)</Label>
+              <Select
+                value={createForm.admin_user_id}
+                onValueChange={(v) => setCreateForm((f) => ({ ...f, admin_user_id: v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select admin user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users?.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.email} {user.full_name && `(${user.full_name})`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => createClinicMutation.mutate(createForm)}
+                disabled={createClinicMutation.isPending || !createForm.name}
+              >
+                {createClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Clinic
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteClinic} onOpenChange={(open) => !open && setDeleteClinic(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Clinic?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete "{deleteClinic?.name}" and all associated memberships.
+              This action cannot be undone. Storage files will NOT be deleted automatically.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteClinic && deleteClinicMutation.mutate(deleteClinic.id)}
+            >
+              {deleteClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete Clinic
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -10,6 +10,8 @@ import {
   Activity,
   ArrowLeft,
   Shield,
+  Trash2,
+  ScrollText,
 } from "lucide-react";
 
 const adminNav = [
@@ -18,6 +20,8 @@ const adminNav = [
   { name: "Clinics", href: "/admin/clinics", icon: Building2 },
   { name: "Users", href: "/admin/users", icon: Users },
   { name: "Health", href: "/admin/health", icon: Activity },
+  { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
+  { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
 ];
 
 export default function AdminLayout() {
