@@ -364,6 +364,16 @@ export default function AdminUsers() {
     return user.app_roles?.some((r) => r.role === "super_admin");
   };
 
+  // Helper to check if user is management or super_admin (system role)
+  const isSystemRole = (user: UserRow) => {
+    return user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management" || r.role === "ops");
+  };
+
+  // Helper to check if user is clinician only
+  const isClinician = (user: UserRow) => {
+    return !isSystemRole(user);
+  };
+
   // Filter users
   const filteredUsers = useMemo(() => {
     if (!users) return [];
@@ -602,14 +612,20 @@ export default function AdminUsers() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenRoleDialog(user)}>
-                          <Shield className="h-4 w-4 mr-2" />
-                          Manage Roles
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleOpenClinicDialog(user)}>
-                          <Building2 className="h-4 w-4 mr-2" />
-                          Manage Clinics
-                        </DropdownMenuItem>
+                        {/* Only clinicians get Manage Roles - system roles managed by super_admin only */}
+                        {isClinician(user) && (
+                          <DropdownMenuItem onClick={() => handleOpenRoleDialog(user)}>
+                            <Shield className="h-4 w-4 mr-2" />
+                            Manage Roles
+                          </DropdownMenuItem>
+                        )}
+                        {/* Only clinicians get clinic management */}
+                        {isClinician(user) && (
+                          <DropdownMenuItem onClick={() => handleOpenClinicDialog(user)}>
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Manage Clinics
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={() => sendResetMutation.mutate(user.email)}
                           disabled={sendResetMutation.isPending}
@@ -624,10 +640,13 @@ export default function AdminUsers() {
                           <ShieldOff className="h-4 w-4 mr-2" />
                           Reset TFA
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleOpenTokenDialog(user)}>
-                          <Coins className="h-4 w-4 mr-2" />
-                          Adjust Tokens
-                        </DropdownMenuItem>
+                        {/* Only clinicians have wallets/tokens */}
+                        {isClinician(user) && (
+                          <DropdownMenuItem onClick={() => handleOpenTokenDialog(user)}>
+                            <Coins className="h-4 w-4 mr-2" />
+                            Adjust Tokens
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         {user.is_disabled ? (
                           <DropdownMenuItem

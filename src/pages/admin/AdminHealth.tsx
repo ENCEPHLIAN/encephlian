@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import {
   Database,
   Cloud,
   Cpu,
+  Circle,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -66,7 +67,7 @@ export default function AdminHealth() {
       // Check Database
       try {
         const start = Date.now();
-        await supabase.from("studies").select("count").limit(1);
+        await supabase.from("clinics").select("id").limit(1);
         const latency = Date.now() - start;
         results.push({
           service: "database",
@@ -79,7 +80,7 @@ export default function AdminHealth() {
       // Check Storage
       try {
         const start = Date.now();
-        await supabase.storage.from("eeg-uploads").list("", { limit: 1 });
+        await supabase.storage.from("clinic-logos").list("", { limit: 1 });
         const latency = Date.now() - start;
         results.push({
           service: "storage",
@@ -89,10 +90,10 @@ export default function AdminHealth() {
         results.push({ service: "storage", status: "down", error: error.message });
       }
 
-      // Log results
+      // Log results using direct insert (management users have insert policy)
       const { data: { user } } = await supabase.auth.getUser();
       for (const result of results) {
-        await supabase.from("service_health_logs").insert({
+        const { error: insertError } = await supabase.from("service_health_logs").insert({
           service_name: result.service,
           status: result.status,
           last_success_at: result.status !== "down" ? new Date().toISOString() : null,
@@ -100,14 +101,10 @@ export default function AdminHealth() {
           last_error_message: result.error || null,
           checked_by: user?.id,
         });
+        if (insertError) {
+          console.error("Failed to log health check:", insertError);
+        }
       }
-
-      // Log to review_events as well
-      await supabase.rpc("admin_log_event", {
-        p_study_id: null,
-        p_event: "healthcheck",
-        p_payload: { results },
-      });
 
       return results;
     },
@@ -165,8 +162,28 @@ export default function AdminHealth() {
   const dbStatus = getServiceStatus("database");
   const storageStatus = getServiceStatus("storage");
 
+  // Determine overall system status
+  const allHealthy = dbStatus?.status === "healthy" && storageStatus?.status === "healthy";
+  const anyDown = dbStatus?.status === "down" || storageStatus?.status === "down";
+
   return (
     <div className="space-y-6">
+      {/* Operational Status Banner */}
+      <div className={`flex items-center gap-3 p-4 rounded-lg border ${
+        allHealthy 
+          ? "bg-green-500/10 border-green-500/30" 
+          : anyDown 
+            ? "bg-red-500/10 border-red-500/30" 
+            : "bg-yellow-500/10 border-yellow-500/30"
+      }`}>
+        <Circle className={`h-4 w-4 fill-current ${
+          allHealthy ? "text-green-500" : anyDown ? "text-red-500" : "text-yellow-500"
+        }`} />
+        <span className="font-mono font-medium">
+          {allHealthy ? "All Systems Operational" : anyDown ? "System Outage Detected" : "Degraded Performance"}
+        </span>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-mono font-bold tracking-tight">Service Health</h1>
