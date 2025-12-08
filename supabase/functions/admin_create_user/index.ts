@@ -30,95 +30,103 @@ Deno.serve(async (req) => {
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .in('role', ['super_admin', 'ops', 'management'])
-      .single();
+      .in('role', ['super_admin', 'ops', 'management']);
 
-    if (!roleCheck) {
+    if (!roleCheck || roleCheck.length === 0) {
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    const callerRole = roleCheck[0].role;
     const { email, password, full_name, role, clinic_id } = await req.json();
 
     // Management cannot create management/super_admin/ops users
-    if (roleCheck.role === 'management' && ['management', 'super_admin', 'ops'].includes(role)) {
+    if (callerRole === 'management' && ['management', 'super_admin', 'ops'].includes(role)) {
       return new Response(JSON.stringify({ error: 'Management users cannot create system-level roles' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Create user with service role
+    // Create admin client with service role
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Check if user exists in auth.users first
-    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-    const existingUser = existingUsers?.users?.find(u => u.email === email);
-
-    let newUser;
+    // First, try to find if user exists in auth.users by email
+    const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
     
-    if (existingUser) {
-      // User exists in auth - check if they have a profile
-      const { data: existingProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('id')
-        .eq('id', existingUser.id)
-        .single();
-
-      if (existingProfile) {
-        // User fully exists - cannot create
-        return new Response(JSON.stringify({ error: 'A user with this email already exists. Please delete the existing user first.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-
-      // User exists in auth but not in profiles - use existing auth user
-      newUser = { user: existingUser };
-      
-      // Update password if different
-      await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
-        password,
-        email_confirm: true,
-        user_metadata: { full_name },
-      });
-    } else {
-      // Create new user
-      const { data, error: createError } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { full_name },
-      });
-
-      if (createError) throw createError;
-      newUser = data;
+    if (listError) {
+      console.error('Error listing users:', listError);
     }
 
-    // Create or update profile
+    const existingAuthUser = authUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+
+    let userId: string;
+
+    if (existingAuthUser) {
+      // User exists in auth - delete them first to allow recreation
+      console.log('Found existing auth user, deleting first:', existingAuthUser.id);
+      
+      // Delete from auth.users (this should cascade or we clean up manually)
+      const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
+      
+      if (deleteAuthError) {
+        console.error('Error deleting existing auth user:', deleteAuthError);
+        // Continue anyway - might already be deleted
+      }
+
+      // Also clean up any orphaned profile data
+      await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('wallets').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('tfa_secrets').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('notes').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('support_tickets').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('clinic_memberships').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('payments').delete().eq('user_id', existingAuthUser.id);
+      await supabaseAdmin.from('profiles').delete().eq('id', existingAuthUser.id);
+    }
+
+    // Now create the new user
+    const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name },
+    });
+
+    if (createError) {
+      console.error('Error creating user:', createError);
+      throw createError;
+    }
+
+    userId = newUser.user.id;
+    console.log('Created new user:', userId);
+
+    // Create profile
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
       .upsert({
-        id: newUser.user.id,
+        id: userId,
         email,
         full_name,
-        role: 'clinician', // Default profile role
+        role: role === 'clinician' || role === 'neurologist' ? 'neurologist' : role,
       }, { onConflict: 'id' });
 
     if (profileError) {
-      console.error('Profile upsert error:', profileError);
+      console.error('Profile error:', profileError);
     }
 
     // Assign role
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
       .upsert({ 
-        user_id: newUser.user.id, 
+        user_id: userId, 
         role, 
         clinic_id: clinic_id || null 
       }, { 
@@ -126,25 +134,20 @@ Deno.serve(async (req) => {
       });
 
     if (roleError) {
-      console.error('Role upsert error:', roleError);
+      console.error('Role error:', roleError);
     }
 
-    // Create wallet for the user
+    // Create wallet
     await supabaseAdmin
       .from('wallets')
-      .upsert({ 
-        user_id: newUser.user.id, 
-        tokens: 0 
-      }, { 
-        onConflict: 'user_id' 
-      });
+      .upsert({ user_id: userId, tokens: 0 }, { onConflict: 'user_id' });
 
     // Add to clinic membership if clinic specified
     if (clinic_id) {
       await supabaseAdmin
         .from('clinic_memberships')
         .upsert({
-          user_id: newUser.user.id,
+          user_id: userId,
           clinic_id,
           role: 'neurologist'
         }, {
@@ -156,12 +159,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin.from('audit_logs').insert({
       user_id: user.id,
       event_type: 'admin_user_created',
-      event_data: {
-        created_user_id: newUser.user.id,
-        email,
-        role,
-        clinic_id,
-      },
+      event_data: { created_user_id: userId, email, role, clinic_id },
     });
 
     return new Response(JSON.stringify({ success: true, user: newUser.user }), {
