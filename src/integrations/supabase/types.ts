@@ -455,6 +455,7 @@ export type Database = {
           full_name: string | null
           hospital_affiliation: string | null
           id: string
+          is_disabled: boolean | null
           medical_license_number: string | null
           phone_number: string | null
           role: string
@@ -469,6 +470,7 @@ export type Database = {
           full_name?: string | null
           hospital_affiliation?: string | null
           id: string
+          is_disabled?: boolean | null
           medical_license_number?: string | null
           phone_number?: string | null
           role?: string
@@ -483,6 +485,7 @@ export type Database = {
           full_name?: string | null
           hospital_affiliation?: string | null
           id?: string
+          is_disabled?: boolean | null
           medical_license_number?: string | null
           phone_number?: string | null
           role?: string
@@ -1061,6 +1064,10 @@ export type Database = {
         Args: { p_amount: number; p_operation: string; p_user_id: string }
         Returns: Json
       }
+      admin_create_clinic: {
+        Args: { p_admin_user_id?: string; p_city?: string; p_name: string }
+        Returns: Json
+      }
       admin_create_user: {
         Args: {
           p_email: string
@@ -1070,6 +1077,8 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_delete_clinic: { Args: { p_clinic_id: string }; Returns: Json }
+      admin_delete_test_files: { Args: { p_file_ids: string[] }; Returns: Json }
       admin_get_all_clinics: {
         Args: never
         Returns: {
@@ -1111,9 +1120,51 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      admin_get_all_users: {
+        Args: never
+        Returns: {
+          app_roles: Json
+          clinics: Json
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          is_disabled: boolean
+          profile_role: string
+          tokens: number
+        }[]
+      }
       admin_get_dashboard_stats: { Args: never; Returns: Json }
+      admin_get_recent_audit_logs: {
+        Args: { p_limit?: number }
+        Returns: {
+          actor_email: string
+          actor_id: string
+          created_at: string
+          event_data: Json
+          event_type: string
+          id: string
+        }[]
+      }
+      admin_grant_role: {
+        Args: {
+          p_clinic_id?: string
+          p_role: Database["public"]["Enums"]["app_role"]
+          p_user_id: string
+        }
+        Returns: Json
+      }
       admin_log_event: {
         Args: { p_event: string; p_payload?: Json; p_study_id: string }
+        Returns: Json
+      }
+      admin_manage_clinic_membership: {
+        Args: {
+          p_action: string
+          p_clinic_id: string
+          p_role?: string
+          p_user_id: string
+        }
         Returns: Json
       }
       admin_revoke_role: {
@@ -1121,6 +1172,21 @@ export type Database = {
           p_role: Database["public"]["Enums"]["app_role"]
           p_user_id: string
         }
+        Returns: Json
+      }
+      admin_scan_test_files: {
+        Args: never
+        Returns: {
+          clinic_name: string
+          created_at: string
+          file_id: string
+          file_kind: string
+          file_path: string
+          study_id: string
+        }[]
+      }
+      admin_suspend_user: {
+        Args: { p_suspend?: boolean; p_user_id: string }
         Returns: Json
       }
       admin_update_clinic: {
