@@ -96,19 +96,35 @@ export default function EEGViewer() {
   const [newMarkerLabel, setNewMarkerLabel] = useState("");
   const [newMarkerNotes, setNewMarkerNotes] = useState("");
 
-  // Fetch sample study if no studyId
-  const { data: sampleStudy, isLoading: sampleLoading } = useQuery({
-    queryKey: ["sample-study"],
+  // Fetch most recent study if no studyId provided
+  const { data: recentStudy, isLoading: recentLoading } = useQuery({
+    queryKey: ["recent-study"],
     enabled: !studyId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      
+      // First try to get user's most recent study
+      const { data: userStudy, error: userError } = await supabase
+        .from("studies")
+        .select("*, study_files(*)")
+        .eq("owner", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      if (userStudy) return userStudy;
+      
+      // Fallback to sample study
+      const { data: sampleStudy, error: sampleError } = await supabase
         .from("studies")
         .select("*, study_files(*)")
         .eq("sample", true)
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      
+      if (sampleError) throw sampleError;
+      return sampleStudy;
     },
   });
 
@@ -128,19 +144,19 @@ export default function EEGViewer() {
     },
   });
 
-  const activeStudy = study || sampleStudy;
-  const isSampleStudy = !studyId && activeStudy?.sample;
+  const activeStudy = study || recentStudy;
+  const isSampleStudy = activeStudy?.sample;
 
   // Fetch markers
   const { data: markers = [] } = useQuery<Marker[]>({
-    queryKey: ["eeg-markers", studyId],
-    enabled: !!studyId,
+    queryKey: ["eeg-markers", activeStudy?.id],
+    enabled: !!activeStudy?.id && !isSampleStudy,
     queryFn: async () => {
-      if (!studyId) return [];
+      if (!activeStudy?.id) return [];
       const { data, error } = await supabase
         .from("eeg_markers")
         .select("*")
-        .eq("study_id", studyId)
+        .eq("study_id", activeStudy.id)
         .order("timestamp_sec", { ascending: true });
       if (error) throw error;
       return (data || []) as Marker[];
@@ -263,12 +279,12 @@ export default function EEGViewer() {
   // ---------- Marker mutations ----------
   const addMarkerMutation = useMutation({
     mutationFn: async (payload: { timestamp_sec: number; marker_type: string; label?: string; notes?: string }) => {
-      if (!studyId) throw new Error("No study selected");
+      if (!activeStudy?.id || isSampleStudy) throw new Error("Cannot add markers to sample study");
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("eeg_markers").insert({
-        study_id: studyId,
+        study_id: activeStudy.id,
         user_id: user.id,
         timestamp_sec: payload.timestamp_sec,
         marker_type: payload.marker_type,
@@ -278,7 +294,7 @@ export default function EEGViewer() {
       if (error) throw error;
     },
     onSuccess: () => {
-      if (studyId) queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
+      if (activeStudy?.id) queryClient.invalidateQueries({ queryKey: ["eeg-markers", activeStudy.id] });
       setNewMarkerLabel("");
       setNewMarkerNotes("");
       toast.success("Marker added");
@@ -292,7 +308,7 @@ export default function EEGViewer() {
       if (error) throw error;
     },
     onSuccess: () => {
-      if (studyId) queryClient.invalidateQueries({ queryKey: ["eeg-markers", studyId] });
+      if (activeStudy?.id) queryClient.invalidateQueries({ queryKey: ["eeg-markers", activeStudy.id] });
       toast.success("Marker deleted");
     },
     onError: (error: any) => toast.error(`Failed to delete marker: ${error.message}`),
@@ -313,8 +329,8 @@ export default function EEGViewer() {
   }, [eegData, timeWindow]);
 
   const handleExport = useCallback(() => {
-    if (!studyId) {
-      toast.error("No study selected for export.");
+    if (!activeStudy?.id || isSampleStudy) {
+      toast.error("Cannot export from sample study.");
       return;
     }
     const annotations = markers.map((m) => ({
@@ -329,13 +345,13 @@ export default function EEGViewer() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `eeg_annotations_${studyId}.json`;
+    a.download = `eeg_annotations_${activeStudy.id}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success("Annotations exported as JSON");
-  }, [markers, studyId]);
+  }, [markers, activeStudy, isSampleStudy]);
 
   const handleToggleGroup = (group: ChannelGroup) => {
     setVisibleGroups((prev) => {
@@ -350,7 +366,7 @@ export default function EEGViewer() {
   const handleDeselectAllGroups = () => setVisibleGroups(new Set());
 
   // ---------- Loading / fallback views ----------
-  if (studyLoading || sampleLoading) {
+  if (studyLoading || recentLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-2">
@@ -366,9 +382,14 @@ export default function EEGViewer() {
       <div className="min-h-screen bg-background p-6">
         <Card className="max-w-2xl mx-auto">
           <CardHeader>
-            <CardTitle>Study Not Found</CardTitle>
-            <CardDescription>The requested study could not be loaded.</CardDescription>
+            <CardTitle>No Studies Found</CardTitle>
+            <CardDescription>Upload an EEG file to get started.</CardDescription>
           </CardHeader>
+          <CardContent>
+            <Link to="/app/studies">
+              <Button>Go to Studies</Button>
+            </Link>
+          </CardContent>
         </Card>
       </div>
     );
@@ -386,7 +407,7 @@ export default function EEGViewer() {
         <div className="flex-1">
           <h1 className="text-lg font-semibold">EEG Viewer</h1>
           <p className="text-sm text-muted-foreground">
-            {isSampleStudy ? "Sample Study" : `Study: ${studyId?.slice(0, 8)}...`}
+            {isSampleStudy ? "Sample Study" : `Study: ${activeStudy.id?.slice(0, 8)}...`}
           </p>
         </div>
         {eegData && (
@@ -486,86 +507,90 @@ export default function EEGViewer() {
         </div>
 
         {/* Right Sidebar - Markers */}
-        <div className="w-64 border-l p-3 space-y-3 overflow-y-auto">
-          <div className="space-y-2">
-            <h3 className="font-medium text-sm">Add Marker at {Math.round(currentTime)}s</h3>
-            <Select value={newMarkerType} onValueChange={setNewMarkerType}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="seizure">Seizure</SelectItem>
-                <SelectItem value="artifact">Artifact</SelectItem>
-                <SelectItem value="sleep">Sleep Stage</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Label"
-              value={newMarkerLabel}
-              onChange={(e) => setNewMarkerLabel(e.target.value)}
-              className="h-8 text-xs"
-            />
-            <Textarea
-              placeholder="Notes..."
-              value={newMarkerNotes}
-              onChange={(e) => setNewMarkerNotes(e.target.value)}
-              className="text-xs min-h-[60px]"
-            />
-            <Button
-              size="sm"
-              className="w-full"
-              disabled={!studyId || addMarkerMutation.isPending}
-              onClick={() =>
-                addMarkerMutation.mutate({
-                  timestamp_sec: currentTime,
-                  marker_type: newMarkerType,
-                  label: newMarkerLabel || undefined,
-                  notes: newMarkerNotes || undefined,
-                })
-              }
-            >
-              {addMarkerMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add Marker"}
-            </Button>
-          </div>
-
-          <div className="pt-3 border-t">
-            <h3 className="font-medium text-sm mb-2">Markers ({markers.length})</h3>
-            <div className="space-y-1 max-h-64 overflow-y-auto">
-              {markers.map((marker) => (
-                <div
-                  key={marker.id}
-                  className="flex items-center justify-between p-2 rounded bg-muted/50 hover:bg-muted cursor-pointer"
-                  onClick={() => handleTimeClick(marker.timestamp_sec)}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        {marker.marker_type}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">
-                        {Math.floor(marker.timestamp_sec / 60)}:{String(Math.floor(marker.timestamp_sec % 60)).padStart(2, "0")}
-                      </span>
-                    </div>
-                    {marker.label && <p className="text-xs truncate mt-1">{marker.label}</p>}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteMarkerMutation.mutate(marker.id);
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              ))}
-              {markers.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">No markers yet</p>
-              )}
+        <div className="w-64 border-l p-3 overflow-y-auto">
+          <h3 className="font-semibold text-sm mb-3">Markers</h3>
+          
+          {!isSampleStudy && (
+            <div className="space-y-2 mb-4 p-3 bg-muted/50 rounded-lg">
+              <Select value={newMarkerType} onValueChange={setNewMarkerType}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="event">Event</SelectItem>
+                  <SelectItem value="spike">Spike</SelectItem>
+                  <SelectItem value="seizure">Seizure</SelectItem>
+                  <SelectItem value="artifact">Artifact</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input
+                placeholder="Label..."
+                value={newMarkerLabel}
+                onChange={(e) => setNewMarkerLabel(e.target.value)}
+                className="h-8 text-xs"
+              />
+              <Textarea
+                placeholder="Notes..."
+                value={newMarkerNotes}
+                onChange={(e) => setNewMarkerNotes(e.target.value)}
+                className="text-xs min-h-[60px]"
+              />
+              <Button
+                size="sm"
+                className="w-full h-8 text-xs"
+                onClick={() =>
+                  addMarkerMutation.mutate({
+                    timestamp_sec: currentTime,
+                    marker_type: newMarkerType,
+                    label: newMarkerLabel || undefined,
+                    notes: newMarkerNotes || undefined,
+                  })
+                }
+                disabled={addMarkerMutation.isPending}
+              >
+                Add at {currentTime.toFixed(1)}s
+              </Button>
             </div>
+          )}
+
+          <div className="space-y-2">
+            {markers.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No markers</p>
+            ) : (
+              markers.map((m) => (
+                <div
+                  key={m.id}
+                  className="p-2 bg-muted/50 rounded cursor-pointer hover:bg-muted transition-colors"
+                  onClick={() => handleTimeClick(m.timestamp_sec)}
+                >
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="text-[10px]">
+                      {m.marker_type}
+                    </Badge>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground">
+                        {m.timestamp_sec.toFixed(1)}s
+                      </span>
+                      {!isSampleStudy && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteMarkerMutation.mutate(m.id);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {m.label && <p className="text-xs font-medium mt-1">{m.label}</p>}
+                  {m.notes && <p className="text-[10px] text-muted-foreground mt-0.5">{m.notes}</p>}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

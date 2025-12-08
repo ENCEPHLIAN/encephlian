@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,12 +34,10 @@ import { format } from "date-fns";
 
 type WalletRow = {
   user_id: string;
+  email: string;
+  full_name: string | null;
   tokens: number;
   updated_at: string | null;
-  profiles: {
-    email: string;
-    full_name: string | null;
-  } | null;
 };
 
 type TransactionRow = {
@@ -65,20 +63,11 @@ export default function AdminWallets() {
     operation: "add" as "add" | "remove" | "set",
   });
 
-  // Fetch all wallets
+  // Fetch all wallets using RPC function (respects admin visibility rules)
   const { data: wallets, isLoading } = useQuery({
     queryKey: ["admin-wallets"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select(`
-          user_id,
-          tokens,
-          updated_at,
-          profiles!wallets_user_id_fkey(email, full_name)
-        `)
-        .order("updated_at", { ascending: false });
-
+      const { data, error } = await supabase.rpc("admin_get_all_wallets");
       if (error) throw error;
       return data as WalletRow[];
     },
@@ -141,8 +130,8 @@ export default function AdminWallets() {
     const query = searchQuery.toLowerCase();
     return wallets.filter(
       (w) =>
-        w.profiles?.email?.toLowerCase().includes(query) ||
-        w.profiles?.full_name?.toLowerCase().includes(query)
+        w.email?.toLowerCase().includes(query) ||
+        w.full_name?.toLowerCase().includes(query)
     );
   }, [wallets, searchQuery]);
 
@@ -247,8 +236,8 @@ export default function AdminWallets() {
                 <TableRow key={wallet.user_id}>
                   <TableCell>
                     <div>
-                      <p className="font-mono text-sm">{wallet.profiles?.full_name || "—"}</p>
-                      <p className="text-xs text-muted-foreground">{wallet.profiles?.email}</p>
+                      <p className="font-mono text-sm">{wallet.full_name || "—"}</p>
+                      <p className="text-xs text-muted-foreground">{wallet.email}</p>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -297,7 +286,7 @@ export default function AdminWallets() {
           <DialogHeader>
             <DialogTitle className="font-mono">Adjust Token Balance</DialogTitle>
             <DialogDescription>
-              {selectedWallet?.profiles?.email} - Current: {selectedWallet?.tokens} tokens
+              {selectedWallet?.email} - Current: {selectedWallet?.tokens} tokens
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-4">
@@ -361,7 +350,7 @@ export default function AdminWallets() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="font-mono">Transaction History</DialogTitle>
-            <DialogDescription>{selectedWallet?.profiles?.email}</DialogDescription>
+            <DialogDescription>{selectedWallet?.email}</DialogDescription>
           </DialogHeader>
           <div className="max-h-96 overflow-y-auto">
             {transactionsLoading ? (

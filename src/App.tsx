@@ -3,6 +3,7 @@ import AdminCleanup from "@/pages/admin/AdminCleanup";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import AdminAccount from "@/pages/admin/AdminAccount";
 import AdminWallets from "@/pages/admin/AdminWallets";
+import AdminTickets from "@/pages/admin/AdminTickets";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -32,7 +33,6 @@ import Settings from "./pages/app/Settings";
 import Notes from "./pages/app/Notes";
 import Support from "./pages/app/Support";
 import Documentation from "./pages/app/Documentation";
-import Templates from "./pages/app/Templates";
 import NotFound from "./pages/NotFound";
 import "./App.css";
 
@@ -61,6 +61,7 @@ function App() {
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="health" element={<AdminHealth />} />
                     <Route path="wallets" element={<AdminWallets />} />
+                    <Route path="tickets" element={<AdminTickets />} />
                     <Route path="cleanup" element={<AdminCleanup />} />
                     <Route path="audit" element={<AdminAuditLogs />} />
                     <Route path="account" element={<AdminAccount />} />
@@ -82,7 +83,6 @@ function App() {
                     <Route path="wallet" element={<Wallet />} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="settings" element={<Settings />} />
-                    <Route path="templates" element={<Templates />} />
                     <Route path="support" element={<Support />} />
                     <Route path="documentation" element={<Documentation />} />
                   </Route>
