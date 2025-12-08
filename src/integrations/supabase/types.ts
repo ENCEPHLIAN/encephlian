@@ -213,6 +213,7 @@ export type Database = {
           created_at: string | null
           custom_domain: string | null
           id: string
+          is_active: boolean | null
           logo_url: string | null
           name: string
           primary_color: string | null
@@ -227,6 +228,7 @@ export type Database = {
           created_at?: string | null
           custom_domain?: string | null
           id?: string
+          is_active?: boolean | null
           logo_url?: string | null
           name: string
           primary_color?: string | null
@@ -241,6 +243,7 @@ export type Database = {
           created_at?: string | null
           custom_domain?: string | null
           id?: string
+          is_active?: boolean | null
           logo_url?: string | null
           name?: string
           primary_color?: string | null
@@ -645,6 +648,39 @@ export type Database = {
           },
         ]
       }
+      service_health_logs: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          id: string
+          last_error_at: string | null
+          last_error_message: string | null
+          last_success_at: string | null
+          service_name: string
+          status: string
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_success_at?: string | null
+          service_name: string
+          status?: string
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          id?: string
+          last_error_at?: string | null
+          last_error_message?: string | null
+          last_success_at?: string | null
+          service_name?: string
+          status?: string
+        }
+        Relationships: []
+      }
       studies: {
         Row: {
           ai_draft_json: Json | null
@@ -659,6 +695,7 @@ export type Database = {
           original_format: string | null
           owner: string
           reference: string | null
+          report_locked: boolean | null
           sample: boolean | null
           sla: string
           srate_hz: number | null
@@ -678,6 +715,7 @@ export type Database = {
           original_format?: string | null
           owner: string
           reference?: string | null
+          report_locked?: boolean | null
           sample?: boolean | null
           sla?: string
           srate_hz?: number | null
@@ -697,6 +735,7 @@ export type Database = {
           original_format?: string | null
           owner?: string
           reference?: string | null
+          report_locked?: boolean | null
           sample?: boolean | null
           sla?: string
           srate_hz?: number | null
@@ -1031,6 +1070,52 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_get_all_clinics: {
+        Args: never
+        Returns: {
+          city: string
+          created_at: string
+          id: string
+          is_active: boolean
+          member_count: number
+          name: string
+          study_count: number
+        }[]
+      }
+      admin_get_all_studies: {
+        Args: never
+        Returns: {
+          ai_draft_json: Json | null
+          ai_draft_text: string | null
+          clinic_id: string
+          created_at: string | null
+          duration_min: number | null
+          id: string
+          indication: string | null
+          meta: Json | null
+          montage: string | null
+          original_format: string | null
+          owner: string
+          reference: string | null
+          report_locked: boolean | null
+          sample: boolean | null
+          sla: string
+          srate_hz: number | null
+          state: string | null
+          uploaded_file_path: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "studies"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      admin_get_dashboard_stats: { Args: never; Returns: Json }
+      admin_log_event: {
+        Args: { p_event: string; p_payload?: Json; p_study_id: string }
+        Returns: Json
+      }
       admin_revoke_role: {
         Args: {
           p_role: Database["public"]["Enums"]["app_role"]
@@ -1038,8 +1123,16 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_update_clinic: {
+        Args: { p_clinic_id: string; p_updates: Json }
+        Returns: Json
+      }
       admin_update_profile: {
         Args: { p_updates: Json; p_user_id: string }
+        Returns: Json
+      }
+      admin_update_study: {
+        Args: { p_study_id: string; p_updates: Json }
         Returns: Json
       }
       admin_update_ticket_status: {
