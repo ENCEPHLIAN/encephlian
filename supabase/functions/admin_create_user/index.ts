@@ -56,16 +56,14 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // STEP 1: Clean up any existing profile with this email (regardless of auth.users state)
+    // STEP 1: Clean up any existing profile with this email
     console.log('Cleaning up existing data for email:', email);
     
-    // Get existing profile by email
     const { data: existingProfiles } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('email', email.toLowerCase());
     
-    // Clean up all profiles with this email
     for (const profile of (existingProfiles || [])) {
       console.log('Cleaning up orphaned profile:', profile.id);
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', profile.id);
@@ -80,14 +78,12 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
     }
 
-    // STEP 2: Find and delete any existing auth user with this email
+    // STEP 2: Delete existing auth user with this email
     const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
     const existingAuthUser = authUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
     if (existingAuthUser) {
       console.log('Found existing auth user, deleting:', existingAuthUser.id);
-      
-      // Clean up any data tied to this auth user ID as well
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('wallets').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', existingAuthUser.id);
@@ -98,14 +94,7 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('user_roles').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('payments').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('profiles').delete().eq('id', existingAuthUser.id);
-      
-      const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
-      
-      if (deleteAuthError) {
-        console.error('Error deleting existing auth user:', deleteAuthError);
-      } else {
-        console.log('Successfully deleted existing auth user:', existingAuthUser.id);
-      }
+      await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
     }
 
     // STEP 3: Create the new user
@@ -124,22 +113,21 @@ Deno.serve(async (req) => {
     const userId = newUser.user.id;
     console.log('Created new user:', userId);
 
-    // Determine profile role - use 'clinician' for PaaS users
+    // The handle_new_user trigger creates the profile automatically
+    // Just update it with the correct role
     const profileRole = ['clinician', 'neurologist'].includes(role) ? 'clinician' : 'neurologist';
 
-    // Create profile
+    // Wait a moment for the trigger to complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Update profile (trigger creates it, we update the role)
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .insert({
-        id: userId,
-        email: email.toLowerCase(),
-        full_name,
-        role: profileRole,
-      });
+      .update({ role: profileRole, full_name })
+      .eq('id', userId);
 
     if (profileError) {
-      console.error('Profile error:', profileError);
-      throw profileError;
+      console.error('Profile update error:', profileError);
     }
 
     // Assign role in user_roles table
@@ -156,28 +144,20 @@ Deno.serve(async (req) => {
       throw roleError;
     }
 
-    // Create wallet
-    const { error: walletError } = await supabaseAdmin
+    // Create wallet (trigger may create it too, use upsert)
+    await supabaseAdmin
       .from('wallets')
-      .insert({ user_id: userId, tokens: 0 });
-
-    if (walletError) {
-      console.error('Wallet error:', walletError);
-    }
+      .upsert({ user_id: userId, tokens: 0 }, { onConflict: 'user_id' });
 
     // Add to clinic membership if clinic specified
     if (clinic_id) {
-      const { error: membershipError } = await supabaseAdmin
+      await supabaseAdmin
         .from('clinic_memberships')
-        .insert({
+        .upsert({
           user_id: userId,
           clinic_id,
           role: 'neurologist'
-        });
-      
-      if (membershipError) {
-        console.error('Membership error:', membershipError);
-      }
+        }, { onConflict: 'clinic_id,user_id' });
     }
 
     // Log audit event
