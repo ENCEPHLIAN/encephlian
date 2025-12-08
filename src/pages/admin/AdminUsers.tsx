@@ -61,6 +61,7 @@ import {
   FileText,
   Trash2,
   ShieldOff,
+  Coins,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -82,11 +83,11 @@ type ClinicOption = {
 };
 
 // Roles that require clinic assignment
-const CLINIC_ROLES = ["clinic_admin", "neurologist", "technician"] as const;
-// Roles that should NOT have clinic assignment
-const SYSTEM_ROLES = ["ops", "super_admin"] as const;
+const CLINIC_ROLES = ["neurologist"] as const;
+// Roles that should NOT have clinic assignment  
+const SYSTEM_ROLES = ["management", "ops", "super_admin"] as const;
 // All assignable roles (super_admin hidden from UI per requirements)
-const ALL_ROLES = [...CLINIC_ROLES, "ops"] as const;
+const ALL_ROLES = ["neurologist", "management"] as const;
 
 export default function AdminUsers() {
   const queryClient = useQueryClient();
@@ -96,8 +97,10 @@ export default function AdminUsers() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [showClinicDialog, setShowClinicDialog] = useState(false);
+  const [showTokenDialog, setShowTokenDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
+  const [tokenAmount, setTokenAmount] = useState("");
 
   const [createForm, setCreateForm] = useState({
     email: "",
@@ -309,6 +312,26 @@ export default function AdminUsers() {
     onError: (error: any) => toast.error(error.message),
   });
 
+  // Adjust tokens mutation
+  const adjustTokensMutation = useMutation({
+    mutationFn: async ({ userId, amount, operation }: { userId: string; amount: number; operation: string }) => {
+      const { data, error } = await supabase.rpc("admin_adjust_tokens", {
+        p_user_id: userId,
+        p_amount: amount,
+        p_operation: operation,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success(`Tokens updated: ${data?.old_balance} → ${data?.new_balance}`);
+      setShowTokenDialog(false);
+      setTokenAmount("");
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
   // Helper to check if user is super_admin
   const isSuperAdmin = (user: UserRow) => {
     return user.app_roles?.some((r) => r.role === "super_admin");
@@ -366,6 +389,12 @@ export default function AdminUsers() {
     setSelectedUser(user);
     setClinicForm({ clinic_id: "", action: "assign", role: "neurologist" });
     setShowClinicDialog(true);
+  };
+
+  const handleOpenTokenDialog = (user: UserRow) => {
+    setSelectedUser(user);
+    setTokenAmount(String(user.tokens));
+    setShowTokenDialog(true);
   };
 
   if (isLoading) {
@@ -567,6 +596,10 @@ export default function AdminUsers() {
                         >
                           <ShieldOff className="h-4 w-4 mr-2" />
                           Reset TFA
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleOpenTokenDialog(user)}>
+                          <Coins className="h-4 w-4 mr-2" />
+                          Adjust Tokens
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {user.is_disabled ? (
@@ -960,8 +993,52 @@ export default function AdminUsers() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Adjust Tokens Dialog */}
+      <Dialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-mono">Adjust Tokens</DialogTitle>
+            <DialogDescription>
+              {selectedUser?.email} — Current: {selectedUser?.tokens} tokens
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div className="space-y-2">
+              <Label>New Token Balance</Label>
+              <Input
+                type="number"
+                min="0"
+                value={tokenAmount}
+                onChange={(e) => setTokenAmount(e.target.value)}
+                className="font-mono"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowTokenDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!selectedUser) return;
+                  const newAmount = parseInt(tokenAmount) || 0;
+                  adjustTokensMutation.mutate({
+                    userId: selectedUser.id,
+                    amount: newAmount,
+                    operation: "set",
+                  });
+                }}
+                disabled={adjustTokensMutation.isPending}
+              >
+                {adjustTokensMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Set Tokens
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
-        <strong>Note:</strong> super_admin role can only be assigned via direct SQL for security.
+        <strong>Note:</strong> super_admin role can only be assigned via direct SQL for security. Management users cannot create other management users.
       </div>
     </div>
   );
