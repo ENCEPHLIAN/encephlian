@@ -1131,15 +1131,6 @@ export type Database = {
         Args: { p_admin_user_id?: string; p_city?: string; p_name: string }
         Returns: Json
       }
-      admin_create_user: {
-        Args: {
-          p_email: string
-          p_full_name: string
-          p_password: string
-          p_role: Database["public"]["Enums"]["app_role"]
-        }
-        Returns: Json
-      }
       admin_delete_clinic: { Args: { p_clinic_id: string }; Returns: Json }
       admin_delete_test_files: { Args: { p_file_ids: string[] }; Returns: Json }
       admin_delete_user: { Args: { p_user_id: string }; Returns: Json }
