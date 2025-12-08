@@ -51,6 +51,23 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
+                {/* Admin Routes - OUTSIDE of ProtectedRoute */}
+                <Route element={<AdminRoute />}>
+                  <Route path="/admin" element={<AdminLayout />}>
+                    <Route index element={<AdminDashboard />} />
+                    <Route path="studies" element={<AdminStudies />} />
+                    <Route path="studies/:id" element={<AdminStudyDetail />} />
+                    <Route path="clinics" element={<AdminClinics />} />
+                    <Route path="users" element={<AdminUsers />} />
+                    <Route path="health" element={<AdminHealth />} />
+                    <Route path="wallets" element={<AdminWallets />} />
+                    <Route path="cleanup" element={<AdminCleanup />} />
+                    <Route path="audit" element={<AdminAuditLogs />} />
+                    <Route path="account" element={<AdminAccount />} />
+                  </Route>
+                </Route>
+
+                {/* PaaS Routes - blocks admin users */}
                 <Route element={<ProtectedRoute />}>
                   <Route path="/app" element={<AppLayout />}>
                     <Route index element={<Navigate to="/app/dashboard" replace />} />
@@ -68,22 +85,6 @@ function App() {
                     <Route path="templates" element={<Templates />} />
                     <Route path="support" element={<Support />} />
                     <Route path="documentation" element={<Documentation />} />
-                  </Route>
-
-                  {/* Admin Routes */}
-                  <Route element={<AdminRoute />}>
-                    <Route path="/admin" element={<AdminLayout />}>
-                      <Route index element={<AdminDashboard />} />
-                      <Route path="studies" element={<AdminStudies />} />
-                      <Route path="studies/:id" element={<AdminStudyDetail />} />
-                      <Route path="clinics" element={<AdminClinics />} />
-                      <Route path="users" element={<AdminUsers />} />
-                      <Route path="health" element={<AdminHealth />} />
-                      <Route path="wallets" element={<AdminWallets />} />
-                      <Route path="cleanup" element={<AdminCleanup />} />
-                      <Route path="audit" element={<AdminAuditLogs />} />
-                      <Route path="account" element={<AdminAccount />} />
-                    </Route>
                   </Route>
                 </Route>
 
