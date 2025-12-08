@@ -9,24 +9,26 @@ import { Loader2, Plus, Minus } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 
+type WalletRow = {
+  user_id: string;
+  email: string;
+  full_name: string | null;
+  tokens: number;
+  updated_at: string | null;
+};
+
 export default function WalletManagement() {
-  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [selectedUser, setSelectedUser] = useState<WalletRow | null>(null);
   const [amount, setAmount] = useState("");
   const queryClient = useQueryClient();
 
   const { data: wallets, isLoading } = useQuery({
     queryKey: ["admin-wallets"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select(`
-          *,
-          profiles!wallets_user_id_fkey(email, full_name)
-        `)
-        .order("updated_at", { ascending: false });
-
+      // Use the admin RPC function that respects super_admin visibility
+      const { data, error } = await supabase.rpc("admin_get_all_wallets");
       if (error) throw error;
-      return data;
+      return data as WalletRow[];
     }
   });
 
@@ -95,9 +97,9 @@ export default function WalletManagement() {
               {wallets?.map((wallet) => (
                 <TableRow key={wallet.user_id}>
                   <TableCell className="font-mono text-xs">
-                    {wallet.profiles?.email}
+                    {wallet.email}
                   </TableCell>
-                  <TableCell>{wallet.profiles?.full_name || "—"}</TableCell>
+                  <TableCell>{wallet.full_name || "—"}</TableCell>
                   <TableCell className="font-bold">{wallet.tokens}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {wallet.updated_at ? new Date(wallet.updated_at).toLocaleString() : "—"}
@@ -120,7 +122,7 @@ export default function WalletManagement() {
                         <div className="space-y-4 py-4">
                           <div>
                             <p className="text-sm text-muted-foreground">User</p>
-                            <p className="font-medium">{wallet.profiles?.email}</p>
+                            <p className="font-medium">{wallet.email}</p>
                           </div>
                           <div>
                             <p className="text-sm text-muted-foreground">Current Balance</p>
@@ -162,6 +164,13 @@ export default function WalletManagement() {
                   </TableCell>
                 </TableRow>
               ))}
+              {wallets?.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    No wallets found
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
