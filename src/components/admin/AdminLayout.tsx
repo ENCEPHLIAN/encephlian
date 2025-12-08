@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -16,22 +17,40 @@ import {
   Settings,
   LogOut,
   Coins,
+  MessageSquare,
 } from "lucide-react";
-
-const adminNav = [
-  { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
-  { name: "Studies", href: "/admin/studies", icon: FileText },
-  { name: "Clinics", href: "/admin/clinics", icon: Building2 },
-  { name: "Users", href: "/admin/users", icon: Users },
-  { name: "Wallets", href: "/admin/wallets", icon: Coins },
-  { name: "Health", href: "/admin/health", icon: Activity },
-  { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
-  { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-  { name: "Account", href: "/admin/account", icon: Settings },
-];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkRole = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+        setIsSuperAdmin(roles?.some(r => r.role === "super_admin") || false);
+      }
+    };
+    checkRole();
+  }, []);
+
+  // Build nav items dynamically - support tickets only for management (not super_admin)
+  const adminNav = [
+    { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
+    { name: "Studies", href: "/admin/studies", icon: FileText },
+    { name: "Clinics", href: "/admin/clinics", icon: Building2 },
+    { name: "Users", href: "/admin/users", icon: Users },
+    { name: "Wallets", href: "/admin/wallets", icon: Coins },
+    ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
+    { name: "Health", href: "/admin/health", icon: Activity },
+    { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
+    { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+    { name: "Account", href: "/admin/account", icon: Settings },
+  ];
 
   const handleLogout = async () => {
     sessionStorage.removeItem("encephlian_admin_tfa");
@@ -46,14 +65,6 @@ export default function AdminLayout() {
       <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/app/dashboard")}
-              className="h-8 w-8"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
               <span className="font-mono text-sm font-semibold tracking-tight">

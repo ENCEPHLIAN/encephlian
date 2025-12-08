@@ -43,7 +43,7 @@ serve(async (req) => {
       );
     }
 
-    // Get user's clinic - fallback to default if not found
+    // Get user's clinic - ONLY use existing clinic, never create new one
     let clinicId: string | null = null;
     
     // First try to get user's clinic via RPC
@@ -55,49 +55,53 @@ serve(async (req) => {
       clinicId = clinicData;
       console.log(`Found user clinic: ${clinicId}`);
     } else {
-      // Fallback: Get default Magna Neurology clinic
-      const { data: defaultClinic } = await supabase
-        .from("clinics")
-        .select("id")
-        .eq("name", "Magna Neurology")
+      // Check clinic_memberships directly
+      const { data: membership } = await supabase
+        .from("clinic_memberships")
+        .select("clinic_id")
+        .eq("user_id", user.id)
+        .limit(1)
         .maybeSingle();
       
-      if (defaultClinic) {
-        clinicId = defaultClinic.id;
-        console.log(`Using default clinic: ${clinicId}`);
-        
-        // Auto-assign user to default clinic
-        await supabase.from("clinic_memberships").insert({
-          user_id: user.id,
-          clinic_id: clinicId,
-          role: "neurologist"
-        });
-        console.log(`Auto-assigned user ${user.id} to default clinic`);
+      if (membership?.clinic_id) {
+        clinicId = membership.clinic_id;
+        console.log(`Found clinic via membership: ${clinicId}`);
       } else {
-        // Create Magna Neurology if it doesn't exist
-        const { data: newClinic, error: clinicError } = await supabase
+        // Get default Magna Neurology clinic - NEVER create a new one
+        const { data: defaultClinic } = await supabase
           .from("clinics")
-          .insert({ name: "Magna Neurology" })
-          .select()
-          .single();
+          .select("id")
+          .eq("name", "Magna Neurology")
+          .maybeSingle();
         
-        if (clinicError) {
-          console.error("Failed to create default clinic:", clinicError);
+        if (defaultClinic) {
+          clinicId = defaultClinic.id;
+          console.log(`Using default clinic: ${clinicId}`);
+          
+          // Auto-assign user to default clinic
+          const { error: membershipError } = await supabase
+            .from("clinic_memberships")
+            .insert({
+              user_id: user.id,
+              clinic_id: clinicId,
+              role: "neurologist"
+            })
+            .select()
+            .maybeSingle();
+          
+          if (membershipError && !membershipError.message.includes('duplicate')) {
+            console.error("Failed to create membership:", membershipError);
+          } else {
+            console.log(`Auto-assigned user ${user.id} to default clinic`);
+          }
+        } else {
+          // No clinic exists - this should be handled by admin
+          console.error("No default clinic found - admin needs to create one");
           return new Response(
-            JSON.stringify({ error: "Failed to set up clinic. Contact support." }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: "No clinic configured. Please contact admin to set up your clinic." }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
-        
-        clinicId = newClinic.id;
-        
-        // Assign user to new clinic
-        await supabase.from("clinic_memberships").insert({
-          user_id: user.id,
-          clinic_id: clinicId,
-          role: "neurologist"
-        });
-        console.log(`Created and assigned user to new clinic: ${clinicId}`);
       }
     }
 

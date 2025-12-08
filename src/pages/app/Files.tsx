@@ -1,14 +1,12 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { 
   Loader2, 
   FolderOpen, 
-  File, 
   Download, 
   Trash2, 
   Upload, 
@@ -66,13 +64,6 @@ const BUCKETS = [
     description: "Private notes and annotations",
     color: "text-purple-600"
   },
-  { 
-    id: "templates", 
-    name: "Templates", 
-    icon: FileText,
-    description: "Report templates",
-    color: "text-orange-600"
-  },
 ];
 
 export default function Files() {
@@ -115,14 +106,11 @@ export default function Files() {
         }));
       }
 
-      // Handle storage buckets
+      // Handle storage buckets - list all files for user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       
-      // For templates bucket (public), don't use user-specific paths
-      const userPath = selectedBucket === 'templates' 
-        ? currentPath || '' 
-        : currentPath ? `${user.id}/${currentPath}` : user.id;
+      const userPath = currentPath ? `${user.id}/${currentPath}` : user.id;
       
       const { data, error } = await supabase.storage
         .from(selectedBucket)
@@ -324,7 +312,7 @@ export default function Files() {
               />
             </div>
             
-            {selectedBucket !== 'notes' && selectedBucket !== 'templates' && (
+            {selectedBucket !== 'notes' && (
               <Button onClick={() => fileInputRef.current?.click()} size="sm" className="h-9">
                 <Upload className="h-4 w-4 mr-2" />
                 Upload
@@ -351,8 +339,8 @@ export default function Files() {
               <FolderOpen className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <p className="text-lg font-medium">No files here</p>
               <p className="text-sm text-muted-foreground mt-1">
-                {selectedBucket === 'notes' || selectedBucket === 'templates' 
-                  ? 'No files available' 
+                {selectedBucket === 'notes' 
+                  ? 'No notes available' 
                   : 'Upload files to get started'}
               </p>
             </div>
@@ -408,15 +396,13 @@ export default function Files() {
                         <Download className="mr-2 h-4 w-4" />
                         Download
                       </DropdownMenuItem>
-                      {selectedBucket !== 'templates' && (
-                        <DropdownMenuItem 
-                          onClick={() => deleteMutation.mutate(file.name)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      )}
+                      <DropdownMenuItem 
+                        onClick={() => deleteMutation.mutate(file.name)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
