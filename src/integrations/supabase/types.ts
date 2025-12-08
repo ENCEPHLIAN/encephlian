@@ -876,6 +876,33 @@ export type Database = {
         }
         Relationships: []
       }
+      tfa_secrets: {
+        Row: {
+          backup_codes: string[] | null
+          created_at: string | null
+          encrypted_secret: string
+          is_enabled: boolean
+          user_id: string
+          verified_at: string | null
+        }
+        Insert: {
+          backup_codes?: string[] | null
+          created_at?: string | null
+          encrypted_secret: string
+          is_enabled?: boolean
+          user_id: string
+          verified_at?: string | null
+        }
+        Update: {
+          backup_codes?: string[] | null
+          created_at?: string | null
+          encrypted_secret?: string
+          is_enabled?: boolean
+          user_id?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           clinic_id: string | null
@@ -1079,6 +1106,7 @@ export type Database = {
       }
       admin_delete_clinic: { Args: { p_clinic_id: string }; Returns: Json }
       admin_delete_test_files: { Args: { p_file_ids: string[] }; Returns: Json }
+      admin_delete_user: { Args: { p_user_id: string }; Returns: Json }
       admin_get_all_clinics: {
         Args: never
         Returns: {
@@ -1167,6 +1195,7 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_reset_user_tfa: { Args: { p_user_id: string }; Returns: Json }
       admin_revoke_role: {
         Args: {
           p_role: Database["public"]["Enums"]["app_role"]
@@ -1185,6 +1214,7 @@ export type Database = {
           study_id: string
         }[]
       }
+      admin_setup_tfa: { Args: { p_secret: string }; Returns: Json }
       admin_suspend_user: {
         Args: { p_suspend?: boolean; p_user_id: string }
         Returns: Json
@@ -1205,10 +1235,12 @@ export type Database = {
         Args: { p_status: string; p_ticket_id: string }
         Returns: Json
       }
+      admin_verify_tfa: { Args: never; Returns: Json }
       calculate_withdrawal_breakdown: {
         Args: { p_requested_amount: number; p_user_id: string }
         Returns: Json
       }
+      check_tfa_status: { Args: never; Returns: Json }
       consume_credit_and_sign: {
         Args: {
           p_content: Json
@@ -1224,6 +1256,7 @@ export type Database = {
       }
       get_current_fy: { Args: never; Returns: string }
       get_current_quarter: { Args: never; Returns: string }
+      get_tfa_secret: { Args: never; Returns: string }
       get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
