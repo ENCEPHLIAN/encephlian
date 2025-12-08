@@ -39,9 +39,14 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Profile fetch error:', error);
+        setProfile(null);
+        return;
+      }
+      
       setProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);

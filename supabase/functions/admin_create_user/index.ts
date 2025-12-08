@@ -56,20 +56,38 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // First, try to find if user exists in auth.users by email
-    const { data: authUsers, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+    // STEP 1: Clean up any existing profile with this email (regardless of auth.users state)
+    console.log('Cleaning up existing data for email:', email);
     
-    if (listError) {
-      console.error('Error listing users:', listError);
+    // Get existing profile by email
+    const { data: existingProfiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase());
+    
+    // Clean up all profiles with this email
+    for (const profile of (existingProfiles || [])) {
+      console.log('Cleaning up orphaned profile:', profile.id);
+      await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('wallets').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('tfa_secrets').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('notes').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('support_tickets').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('clinic_memberships').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('user_roles').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('payments').delete().eq('user_id', profile.id);
+      await supabaseAdmin.from('profiles').delete().eq('id', profile.id);
     }
 
+    // STEP 2: Find and delete any existing auth user with this email
+    const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers();
     const existingAuthUser = authUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
     if (existingAuthUser) {
-      // User exists in auth - delete them completely first
-      console.log('Found existing auth user, deleting completely:', existingAuthUser.id);
+      console.log('Found existing auth user, deleting:', existingAuthUser.id);
       
-      // Clean up ALL related data first (order matters for foreign keys)
+      // Clean up any data tied to this auth user ID as well
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('wallets').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', existingAuthUser.id);
@@ -81,22 +99,16 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('payments').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('profiles').delete().eq('id', existingAuthUser.id);
       
-      // Now delete from auth.users
       const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
       
       if (deleteAuthError) {
         console.error('Error deleting existing auth user:', deleteAuthError);
-        // If we can't delete, return error
-        return new Response(JSON.stringify({ error: 'Failed to remove existing user. Please try again.' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+      } else {
+        console.log('Successfully deleted existing auth user:', existingAuthUser.id);
       }
-      
-      console.log('Successfully deleted existing user:', existingAuthUser.id);
     }
 
-    // Now create the new user
+    // STEP 3: Create the new user
     const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -120,7 +132,7 @@ Deno.serve(async (req) => {
       .from('profiles')
       .insert({
         id: userId,
-        email,
+        email: email.toLowerCase(),
         full_name,
         role: profileRole,
       });
