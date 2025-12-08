@@ -942,6 +942,42 @@ export type Database = {
           },
         ]
       }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at: string | null
+          id: string
+          operation: string
+          performed_by: string | null
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          balance_after: number
+          balance_before: number
+          created_at?: string | null
+          id?: string
+          operation: string
+          performed_by?: string | null
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          balance_after?: number
+          balance_before?: number
+          created_at?: string | null
+          id?: string
+          operation?: string
+          performed_by?: string | null
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       wallets: {
         Row: {
           tokens: number
@@ -1285,6 +1321,7 @@ export type Database = {
         | "ops"
         | "super_admin"
         | "management"
+        | "clinician"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1418,6 +1455,7 @@ export const Constants = {
         "ops",
         "super_admin",
         "management",
+        "clinician",
       ],
     },
   },
