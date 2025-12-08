@@ -58,7 +58,6 @@ const navigation = [
   { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
   { name: "Analytics", href: "/app/analytics", icon: BarChart3, badge: "Soon" },
-  { name: "Templates", href: "/app/templates", icon: FileText },
   { name: "Scheduler", href: "/app/scheduler", icon: Calendar, badge: "Soon" },
   { name: "Integrations", href: "/app/integrations", icon: Plug, badge: "Soon" },
   { name: "Team", href: "/app/team", icon: Users, badge: "Soon" },
