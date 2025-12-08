@@ -2,6 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { supabase } from "@/integrations/supabase/client";
 import {
   LayoutDashboard,
   FileText,
@@ -12,6 +13,8 @@ import {
   Shield,
   Trash2,
   ScrollText,
+  Settings,
+  LogOut,
 } from "lucide-react";
 
 const adminNav = [
@@ -22,10 +25,18 @@ const adminNav = [
   { name: "Health", href: "/admin/health", icon: Activity },
   { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
   { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+  { name: "Account", href: "/admin/account", icon: Settings },
 ];
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    sessionStorage.removeItem("encephlian_admin_tfa");
+    sessionStorage.removeItem("encephlian_admin_tfa_time");
+    await supabase.auth.signOut();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -48,7 +59,12 @@ export default function AdminLayout() {
               </span>
             </div>
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="icon" onClick={handleLogout} className="h-8 w-8">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </header>
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +47,8 @@ import {
   Ban,
   CheckCircle,
   KeyRound,
+  Users,
+  FileText,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -67,11 +69,18 @@ type ClinicOption = {
   name: string;
 };
 
-const ASSIGNABLE_ROLES = ["ops", "clinic_admin", "neurologist"] as const;
+// Roles that require clinic assignment
+const CLINIC_ROLES = ["clinic_admin", "neurologist", "technician"] as const;
+// Roles that should NOT have clinic assignment
+const SYSTEM_ROLES = ["ops", "super_admin"] as const;
+// All assignable roles (super_admin hidden from UI per requirements)
+const ALL_ROLES = [...CLINIC_ROLES, "ops"] as const;
 
 export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [clinicFilter, setClinicFilter] = useState<string>("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [showClinicDialog, setShowClinicDialog] = useState(false);
@@ -120,16 +129,41 @@ export default function AdminUsers() {
     },
   });
 
+  // Calculate stats
+  const stats = useMemo(() => {
+    if (!users) return { total: 0, clinicsCount: 0, activeStudies: 0 };
+    const uniqueClinics = new Set<string>();
+    users.forEach((u) => u.clinics?.forEach((c) => uniqueClinics.add(c.clinic_id)));
+    return {
+      total: users.length,
+      clinicsCount: uniqueClinics.size,
+      activeStudies: 0, // Placeholder
+    };
+  }, [users]);
+
+  // Check if selected role requires clinic
+  const roleRequiresClinic = (role: string) => {
+    return CLINIC_ROLES.includes(role as any);
+  };
+
   // Create user mutation
   const createUserMutation = useMutation({
     mutationFn: async (form: typeof createForm) => {
+      // Validate clinic requirement
+      if (roleRequiresClinic(form.role) && !form.clinic_id) {
+        throw new Error("Clinic assignment is required for this role");
+      }
+      if (!roleRequiresClinic(form.role) && form.clinic_id) {
+        throw new Error("System roles (ops) should not be assigned to a clinic");
+      }
+
       const { data, error } = await supabase.functions.invoke("admin_create_user", {
         body: {
           email: form.email,
           password: form.password,
           full_name: form.full_name,
           role: form.role,
-          clinic_id: form.clinic_id || null,
+          clinic_id: roleRequiresClinic(form.role) ? form.clinic_id : null,
         },
       });
       if (error) throw error;
@@ -142,6 +176,18 @@ export default function AdminUsers() {
       setShowCreateDialog(false);
       setCreateForm({ email: "", full_name: "", password: "", role: "neurologist", clinic_id: "" });
     },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Send password reset mutation
+  const sendResetMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => toast.success("Password reset link sent"),
     onError: (error: any) => toast.error(error.message),
   });
 
@@ -218,14 +264,34 @@ export default function AdminUsers() {
     onError: (error: any) => toast.error(error.message),
   });
 
-  const filteredUsers = users?.filter((user) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      user.email.toLowerCase().includes(query) ||
-      user.full_name?.toLowerCase().includes(query)
-    );
-  });
+  // Filter users
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    return users.filter((user) => {
+      // Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesSearch =
+          user.email.toLowerCase().includes(query) ||
+          user.full_name?.toLowerCase().includes(query);
+        if (!matchesSearch) return false;
+      }
+
+      // Role filter
+      if (roleFilter !== "all") {
+        const hasRole = user.app_roles?.some((r) => r.role === roleFilter);
+        if (!hasRole) return false;
+      }
+
+      // Clinic filter
+      if (clinicFilter !== "all") {
+        const inClinic = user.clinics?.some((c) => c.clinic_id === clinicFilter);
+        if (!inClinic) return false;
+      }
+
+      return true;
+    });
+  }, [users, searchQuery, roleFilter, clinicFilter]);
 
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
@@ -275,15 +341,74 @@ export default function AdminUsers() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search by email, name..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 font-mono"
-        />
+      {/* Quick Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card className="bg-muted/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Users className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-2xl font-mono font-bold">{stats.total}</p>
+              <p className="text-xs text-muted-foreground">Total Users</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-muted/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Building2 className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-2xl font-mono font-bold">{clinics?.length || 0}</p>
+              <p className="text-xs text-muted-foreground">Active Clinics</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="bg-muted/30">
+          <CardContent className="p-4 flex items-center gap-3">
+            <FileText className="h-8 w-8 text-primary" />
+            <div>
+              <p className="text-2xl font-mono font-bold">—</p>
+              <p className="text-xs text-muted-foreground">Active Studies</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by email or name..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 font-mono"
+          />
+        </div>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Filter by role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            {ALL_ROLES.map((role) => (
+              <SelectItem key={role} value={role}>
+                {role}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={clinicFilter} onValueChange={setClinicFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by clinic" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Clinics</SelectItem>
+            {clinics?.map((clinic) => (
+              <SelectItem key={clinic.id} value={clinic.id}>
+                {clinic.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -301,7 +426,7 @@ export default function AdminUsers() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredUsers?.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id} className={user.is_disabled ? "opacity-50" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -379,6 +504,13 @@ export default function AdminUsers() {
                           <Building2 className="h-4 w-4 mr-2" />
                           Manage Clinics
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => sendResetMutation.mutate(user.email)}
+                          disabled={sendResetMutation.isPending}
+                        >
+                          <KeyRound className="h-4 w-4 mr-2" />
+                          Send Password Reset
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {user.is_disabled ? (
                           <DropdownMenuItem
@@ -401,7 +533,7 @@ export default function AdminUsers() {
                   </TableCell>
                 </TableRow>
               ))}
-              {(!filteredUsers || filteredUsers.length === 0) && (
+              {filteredUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No users found
@@ -450,13 +582,13 @@ export default function AdminUsers() {
               <Label>Role</Label>
               <Select
                 value={createForm.role}
-                onValueChange={(v) => setCreateForm((f) => ({ ...f, role: v }))}
+                onValueChange={(v) => setCreateForm((f) => ({ ...f, role: v, clinic_id: "" }))}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSIGNABLE_ROLES.map((role) => (
+                  {ALL_ROLES.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
@@ -464,31 +596,52 @@ export default function AdminUsers() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Clinic (optional)</Label>
-              <Select
-                value={createForm.clinic_id}
-                onValueChange={(v) => setCreateForm((f) => ({ ...f, clinic_id: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select clinic..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clinics?.map((clinic) => (
-                    <SelectItem key={clinic.id} value={clinic.id}>
-                      {clinic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+
+            {/* Only show clinic selection for clinic-bound roles */}
+            {roleRequiresClinic(createForm.role) && (
+              <div className="space-y-2">
+                <Label>
+                  Clinic <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={createForm.clinic_id}
+                  onValueChange={(v) => setCreateForm((f) => ({ ...f, clinic_id: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select clinic..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clinics?.map((clinic) => (
+                      <SelectItem key={clinic.id} value={clinic.id}>
+                        {clinic.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Required for {createForm.role} role
+                </p>
+              </div>
+            )}
+
+            {!roleRequiresClinic(createForm.role) && (
+              <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                System roles (ops) are not assigned to clinics
+              </p>
+            )}
+
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
                 Cancel
               </Button>
               <Button
                 onClick={() => createUserMutation.mutate(createForm)}
-                disabled={createUserMutation.isPending || !createForm.email || !createForm.password}
+                disabled={
+                  createUserMutation.isPending ||
+                  !createForm.email ||
+                  !createForm.password ||
+                  (roleRequiresClinic(createForm.role) && !createForm.clinic_id)
+                }
               >
                 {createUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Create User
@@ -541,12 +694,15 @@ export default function AdminUsers() {
 
             <div className="space-y-2">
               <Label>Add Role</Label>
-              <Select value={roleForm.role} onValueChange={(v) => setRoleForm((f) => ({ ...f, role: v }))}>
+              <Select
+                value={roleForm.role}
+                onValueChange={(v) => setRoleForm((f) => ({ ...f, role: v, clinic_id: "" }))}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ASSIGNABLE_ROLES.map((role) => (
+                  {ALL_ROLES.map((role) => (
                     <SelectItem key={role} value={role}>
                       {role}
                     </SelectItem>
@@ -555,9 +711,11 @@ export default function AdminUsers() {
               </Select>
             </div>
 
-            {(roleForm.role === "clinic_admin" || roleForm.role === "neurologist") && (
+            {roleRequiresClinic(roleForm.role) && (
               <div className="space-y-2">
-                <Label>Associated Clinic</Label>
+                <Label>
+                  Associated Clinic <span className="text-destructive">*</span>
+                </Label>
                 <Select
                   value={roleForm.clinic_id}
                   onValueChange={(v) => setRoleForm((f) => ({ ...f, clinic_id: v }))}
@@ -583,10 +741,14 @@ export default function AdminUsers() {
               <Button
                 onClick={() => {
                   if (!selectedUser) return;
+                  if (roleRequiresClinic(roleForm.role) && !roleForm.clinic_id) {
+                    toast.error("Clinic is required for this role");
+                    return;
+                  }
                   grantRoleMutation.mutate({
                     userId: selectedUser.id,
                     role: roleForm.role,
-                    clinicId: roleForm.clinic_id || undefined,
+                    clinicId: roleRequiresClinic(roleForm.role) ? roleForm.clinic_id : undefined,
                   });
                 }}
                 disabled={grantRoleMutation.isPending}
