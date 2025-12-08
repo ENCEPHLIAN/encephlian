@@ -29,6 +29,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -49,6 +59,8 @@ import {
   KeyRound,
   Users,
   FileText,
+  Trash2,
+  ShieldOff,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -85,6 +97,7 @@ export default function AdminUsers() {
   const [showRoleDialog, setShowRoleDialog] = useState(false);
   const [showClinicDialog, setShowClinicDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
 
   const [createForm, setCreateForm] = useState({
     email: "",
@@ -263,6 +276,43 @@ export default function AdminUsers() {
     },
     onError: (error: any) => toast.error(error.message),
   });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.rpc("admin_delete_user", {
+        p_user_id: userId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success(`User ${data?.deleted_email || ""} deleted`);
+      setDeleteUser(null);
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Reset TFA mutation
+  const resetTFAMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.rpc("admin_reset_user_tfa", {
+        p_user_id: userId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("TFA reset successfully");
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  // Helper to check if user is super_admin
+  const isSuperAdmin = (user: UserRow) => {
+    return user.app_roles?.some((r) => r.role === "super_admin");
+  };
 
   // Filter users
   const filteredUsers = useMemo(() => {
@@ -511,6 +561,13 @@ export default function AdminUsers() {
                           <KeyRound className="h-4 w-4 mr-2" />
                           Send Password Reset
                         </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => resetTFAMutation.mutate(user.id)}
+                          disabled={resetTFAMutation.isPending}
+                        >
+                          <ShieldOff className="h-4 w-4 mr-2" />
+                          Reset TFA
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {user.is_disabled ? (
                           <DropdownMenuItem
@@ -527,6 +584,18 @@ export default function AdminUsers() {
                             <Ban className="h-4 w-4 mr-2" />
                             Suspend User
                           </DropdownMenuItem>
+                        )}
+                        {!isSuperAdmin(user) && (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeleteUser(user)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete User
+                            </DropdownMenuItem>
+                          </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -860,6 +929,36 @@ export default function AdminUsers() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User Permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete <strong>{deleteUser?.email}</strong> and all associated data including:
+              <ul className="list-disc list-inside mt-2 text-sm">
+                <li>Wallet and earnings</li>
+                <li>Notes and support tickets</li>
+                <li>Clinic memberships and roles</li>
+                <li>EEG markers</li>
+              </ul>
+              <span className="block mt-2 font-semibold text-destructive">This action cannot be undone.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.id)}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Delete User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
         <strong>Note:</strong> super_admin role can only be assigned via direct SQL for security.
