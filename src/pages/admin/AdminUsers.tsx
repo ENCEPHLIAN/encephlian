@@ -83,11 +83,12 @@ type ClinicOption = {
 };
 
 // Roles that require clinic assignment
-const CLINIC_ROLES = ["neurologist"] as const;
+const CLINIC_ROLES = ["clinician", "neurologist"] as const;
 // Roles that should NOT have clinic assignment  
 const SYSTEM_ROLES = ["management", "ops", "super_admin"] as const;
 // All assignable roles (super_admin hidden from UI per requirements)
-const ALL_ROLES = ["neurologist", "management"] as const;
+// Management can create clinician but not management/super_admin
+const ALL_ROLES = ["clinician", "management"] as const;
 
 export default function AdminUsers() {
   const queryClient = useQueryClient();

@@ -5,29 +5,32 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { z } from "zod";
 import logo from "@/assets/logo.png";
 
 const emailSchema = z.string().email("Invalid email address");
 
+type Mode = "signin" | "forgot";
+
 export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
-  const mode = "signin"; // locked mode
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
     const checkSessionAndRedirect = async (session: any) => {
       if (!session) return;
       
-      // Check if user is super_admin or management - redirect to admin
+      // Check if user is super_admin, management, or ops - redirect to admin
       const { data: roles } = await supabase
         .from("user_roles")
         .select("role")
@@ -102,6 +105,37 @@ export default function Login() {
     }
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const isEmailValid = validateEmail(email);
+    if (!isEmailValid) return;
+
+    setIsLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+      
+      if (error) throw error;
+
+      setResetSent(true);
+      toast({
+        title: "Reset email sent",
+        description: "Check your inbox for the password reset link.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "An error occurred. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
       {/* Theme Toggle - Top Right */}
@@ -144,7 +178,7 @@ export default function Login() {
         </div>
       )}
 
-      {/* STATE 2: SIGN IN FORM */}
+      {/* STATE 2: SIGN IN / FORGOT PASSWORD FORM */}
       {showForm && (
         <div className="w-full max-w-6xl animate-fade-in">
           {/* Header with logo */}
@@ -179,57 +213,146 @@ export default function Login() {
             </p>
 
             {/* SIGN IN CARD */}
-            <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email-signin">Email</Label>
-                  <Input
-                    id="email-signin"
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      validateEmail(e.target.value);
-                    }}
-                    required
-                  />
-                  {emailError && <p className="text-sm text-destructive">{emailError}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password-signin">Password</Label>
-                  <div className="relative">
+            {mode === "signin" && (
+              <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email-signin">Email</Label>
                     <Input
-                      id="password-signin"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      id="email-signin"
+                      type="email"
+                      placeholder="Enter your email"
+                      value={email}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        validateEmail(e.target.value);
+                      }}
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                    </button>
+                    {emailError && <p className="text-sm text-destructive">{emailError}</p>}
                   </div>
-                </div>
 
-                <Button type="submit" className="w-full mt-6" disabled={isLoading}>
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
-                </Button>
-              </form>
-            </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password-signin">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="password-signin"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full mt-6" disabled={isLoading}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      "Sign In"
+                    )}
+                  </Button>
+                </form>
+
+                <div className="mt-4 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode("forgot");
+                      setResetSent(false);
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground underline"
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* FORGOT PASSWORD CARD */}
+            {mode === "forgot" && (
+              <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => setMode("signin")}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
+                >
+                  <ArrowLeft size={16} />
+                  Back to sign in
+                </button>
+
+                {resetSent ? (
+                  <div className="text-center space-y-4">
+                    <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                      <svg className="h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <h3 className="font-semibold">Check your email</h3>
+                    <p className="text-sm text-muted-foreground">
+                      We've sent a password reset link to <strong>{email}</strong>
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setMode("signin");
+                        setResetSent(false);
+                      }}
+                      className="mt-4"
+                    >
+                      Return to sign in
+                    </Button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleForgotPassword} className="space-y-4">
+                    <div className="text-center mb-4">
+                      <h3 className="font-semibold">Reset your password</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Enter your email and we'll send you a reset link
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="email-reset">Email</Label>
+                      <Input
+                        id="email-reset"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          validateEmail(e.target.value);
+                        }}
+                        required
+                      />
+                      {emailError && <p className="text-sm text-destructive">{emailError}</p>}
+                    </div>
+
+                    <Button type="submit" className="w-full mt-6" disabled={isLoading}>
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        "Send Reset Link"
+                      )}
+                    </Button>
+                  </form>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
