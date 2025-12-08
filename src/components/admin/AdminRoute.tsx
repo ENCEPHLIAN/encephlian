@@ -6,8 +6,7 @@ import AdminTFAGate, { useAdminTFA } from "./AdminTFAGate";
 
 export default function AdminRoute() {
   const navigate = useNavigate();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<"loading" | "unauthenticated" | "admin" | "not-admin">("loading");
   const { isVerified, needsVerification, verify, clearTFA } = useAdminTFA();
 
   const handleLogout = useCallback(async () => {
@@ -22,8 +21,7 @@ export default function AdminRoute() {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
-          setIsAdmin(false);
-          setLoading(false);
+          setAuthState("unauthenticated");
           return;
         }
 
@@ -35,8 +33,7 @@ export default function AdminRoute() {
 
         if (error) {
           console.error("Error checking roles:", error);
-          setIsAdmin(false);
-          setLoading(false);
+          setAuthState("not-admin");
           return;
         }
 
@@ -44,20 +41,18 @@ export default function AdminRoute() {
         const adminRoles = ["super_admin", "ops", "management"];
         const hasAdminRole = roles?.some(r => adminRoles.includes(r.role));
         
-        console.log("User roles:", roles, "Has admin role:", hasAdminRole);
-        setIsAdmin(hasAdminRole);
+        console.log("AdminRoute - User roles:", roles, "Has admin role:", hasAdminRole);
+        setAuthState(hasAdminRole ? "admin" : "not-admin");
       } catch (error) {
         console.error("Admin check error:", error);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
+        setAuthState("unauthenticated");
       }
     };
 
     checkAdminStatus();
   }, []);
 
-  if (loading) {
+  if (authState === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -65,7 +60,13 @@ export default function AdminRoute() {
     );
   }
 
-  if (!isAdmin) {
+  // Not logged in - redirect to login
+  if (authState === "unauthenticated") {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Logged in but not admin - redirect to PaaS
+  if (authState === "not-admin") {
     return <Navigate to="/app/dashboard" replace />;
   }
 
