@@ -65,21 +65,11 @@ Deno.serve(async (req) => {
 
     const existingAuthUser = authUsers?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
 
-    let userId: string;
-
     if (existingAuthUser) {
-      // User exists in auth - delete them first to allow recreation
-      console.log('Found existing auth user, deleting first:', existingAuthUser.id);
+      // User exists in auth - delete them completely first
+      console.log('Found existing auth user, deleting completely:', existingAuthUser.id);
       
-      // Delete from auth.users (this should cascade or we clean up manually)
-      const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
-      
-      if (deleteAuthError) {
-        console.error('Error deleting existing auth user:', deleteAuthError);
-        // Continue anyway - might already be deleted
-      }
-
-      // Also clean up any orphaned profile data
+      // Clean up ALL related data first (order matters for foreign keys)
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('wallets').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', existingAuthUser.id);
@@ -90,6 +80,20 @@ Deno.serve(async (req) => {
       await supabaseAdmin.from('user_roles').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('payments').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('profiles').delete().eq('id', existingAuthUser.id);
+      
+      // Now delete from auth.users
+      const { error: deleteAuthError } = await supabaseAdmin.auth.admin.deleteUser(existingAuthUser.id);
+      
+      if (deleteAuthError) {
+        console.error('Error deleting existing auth user:', deleteAuthError);
+        // If we can't delete, return error
+        return new Response(JSON.stringify({ error: 'Failed to remove existing user. Please try again.' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      
+      console.log('Successfully deleted existing user:', existingAuthUser.id);
     }
 
     // Now create the new user
@@ -105,54 +109,63 @@ Deno.serve(async (req) => {
       throw createError;
     }
 
-    userId = newUser.user.id;
+    const userId = newUser.user.id;
     console.log('Created new user:', userId);
+
+    // Determine profile role - use 'clinician' for PaaS users
+    const profileRole = ['clinician', 'neurologist'].includes(role) ? 'clinician' : 'neurologist';
 
     // Create profile
     const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .upsert({
+      .insert({
         id: userId,
         email,
         full_name,
-        role: role === 'clinician' || role === 'neurologist' ? 'neurologist' : role,
-      }, { onConflict: 'id' });
+        role: profileRole,
+      });
 
     if (profileError) {
       console.error('Profile error:', profileError);
+      throw profileError;
     }
 
-    // Assign role
+    // Assign role in user_roles table
     const { error: roleError } = await supabaseAdmin
       .from('user_roles')
-      .upsert({ 
+      .insert({ 
         user_id: userId, 
         role, 
         clinic_id: clinic_id || null 
-      }, { 
-        onConflict: 'user_id,role' 
       });
 
     if (roleError) {
       console.error('Role error:', roleError);
+      throw roleError;
     }
 
     // Create wallet
-    await supabaseAdmin
+    const { error: walletError } = await supabaseAdmin
       .from('wallets')
-      .upsert({ user_id: userId, tokens: 0 }, { onConflict: 'user_id' });
+      .insert({ user_id: userId, tokens: 0 });
+
+    if (walletError) {
+      console.error('Wallet error:', walletError);
+    }
 
     // Add to clinic membership if clinic specified
     if (clinic_id) {
-      await supabaseAdmin
+      const { error: membershipError } = await supabaseAdmin
         .from('clinic_memberships')
-        .upsert({
+        .insert({
           user_id: userId,
           clinic_id,
           role: 'neurologist'
-        }, {
-          onConflict: 'user_id,clinic_id'
         });
+      
+      if (membershipError) {
+        console.error('Membership error:', membershipError);
+      }
     }
 
     // Log audit event

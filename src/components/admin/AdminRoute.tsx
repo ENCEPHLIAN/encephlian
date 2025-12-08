@@ -40,7 +40,7 @@ export default function AdminRoute() {
           return;
         }
 
-        // Check if any of the roles are admin roles
+        // Check if any of the roles are admin roles - includes management
         const adminRoles = ["super_admin", "ops", "management"];
         const hasAdminRole = roles?.some(r => adminRoles.includes(r.role));
         
@@ -69,7 +69,7 @@ export default function AdminRoute() {
     return <Navigate to="/app/dashboard" replace />;
   }
 
-  // Show TFA gate if not verified
+  // Show TFA gate if not verified - required for all admin users
   if (needsVerification && !isVerified) {
     return <AdminTFAGate onVerified={verify} onLogout={handleLogout} />;
   }
