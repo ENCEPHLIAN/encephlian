@@ -24,14 +24,36 @@ export default function Login() {
   const [emailError, setEmailError] = useState("");
 
   useEffect(() => {
+    const checkSessionAndRedirect = async (session: any) => {
+      if (!session) return;
+      
+      // Check if user is super_admin or management - redirect to admin
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", session.user.id);
+      
+      const isAdmin = roles?.some(r => 
+        r.role === "super_admin" || r.role === "management" || r.role === "ops"
+      );
+      
+      if (isAdmin) {
+        navigate("/admin");
+      } else {
+        navigate("/app/dashboard");
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) navigate("/app/dashboard");
+      checkSessionAndRedirect(session);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) navigate("/app/dashboard");
+      if (event === "SIGNED_IN" && session) {
+        checkSessionAndRedirect(session);
+      }
     });
 
     return () => subscription.unsubscribe();

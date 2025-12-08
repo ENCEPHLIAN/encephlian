@@ -257,7 +257,6 @@ export default function AdminClinics() {
                         size="icon"
                         className="h-8 w-8 text-destructive"
                         onClick={() => setDeleteClinic(clinic)}
-                        disabled={clinic.study_count > 0}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -378,8 +377,8 @@ export default function AdminClinics() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Clinic?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete "{deleteClinic?.name}" and all associated memberships.
-              This action cannot be undone. Storage files will NOT be deleted automatically.
+              This will permanently delete "{deleteClinic?.name}", all studies ({deleteClinic?.study_count}), 
+              and all associated memberships. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

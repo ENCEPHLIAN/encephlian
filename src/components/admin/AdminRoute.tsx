@@ -32,7 +32,7 @@ export default function AdminRoute() {
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
-          .in("role", ["super_admin", "ops"])
+          .in("role", ["super_admin", "ops", "management"])
           .maybeSingle();
 
         if (error || !data) {
