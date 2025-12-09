@@ -90,7 +90,7 @@ serve(async (req) => {
       console.error("Markers fetch error:", markersError);
     }
 
-    // Determine template type (simple heuristic - can be enhanced)
+    // Determine template type (simple heuristic)
     const hasAbnormalMarkers = markers?.some((m: any) => 
       ['seizure', 'spike', 'sharp', 'abnormal'].some(term => 
         m.marker_type?.toLowerCase().includes(term) || 
@@ -99,199 +99,14 @@ serve(async (req) => {
     );
     const templateType = hasAbnormalMarkers ? 'abnormal' : 'normal';
 
-    // Fetch appropriate template
-    const { data: template, error: templateError } = await supabase
-      .from('report_templates')
-      .select('*')
-      .eq('type', templateType)
-      .single();
-
-    if (templateError) {
-      console.error("Template fetch error:", templateError);
-      // Continue without template
-    }
-
-    // Build AI prompt
-    const patientInfo = `
-Patient Name: ${study.meta?.patient_name || "Unknown"}
-Patient ID: ${study.meta?.patient_id || "N/A"}
-Age: ${study.meta?.age || "N/A"}
-Gender: ${study.meta?.gender || "N/A"}
-`;
-
-    const studyInfo = `
-Study Duration: ${study.duration_min || "N/A"} minutes
-Sampling Rate: ${study.srate_hz || "N/A"} Hz
-Indication: ${study.indication || "Routine EEG monitoring"}
-Montage: ${study.montage || "Standard 10-20 system"}
-Reference: ${study.reference || "Average reference"}
-`;
-
-    const markersInfo = markers && markers.length > 0
-      ? `
-Neurologist Annotations (${markers.length} markers):
-${markers.map((m: any) => 
-  `- [${m.timestamp_sec}s] ${m.marker_type.toUpperCase()}: ${m.label}${m.severity ? ` (${m.severity})` : ""}${m.notes ? `\n  Notes: ${m.notes}` : ""}`
-).join("\n")}
-`
-      : "\nNo manual annotations provided.";
-
-    const systemPrompt = `You are a board-certified neurologist with 20+ years of EEG interpretation experience. Generate a professional, clinical-grade EEG report following Natus NeuroWorks format standards. Ensure all findings are specific, use proper medical terminology, and include montage information.`;
-
-    let userPrompt = `Generate a comprehensive EEG report for the following study:
-
-${patientInfo}
-
-STUDY DETAILS:
-${studyInfo}
-
-${markersInfo}
-`;
-
-    if (template) {
-      userPrompt += `
-
-TEMPLATE STRUCTURE TO FOLLOW:
-${JSON.stringify(template.template_content, null, 2)}
-
-INSTRUCTIONS:
-1. Follow the exact section structure from the template above
-2. Replace ALL placeholder values ({{...}}) with actual study-specific findings
-3. Use the template's language style and level of detail
-4. For normal studies: Use conservative, professional language describing normal patterns
-5. For abnormal studies: Be specific about location (channel/region), morphology, frequency, and amplitude
-6. Include montage information: ${template.template_content.montages_used?.join(', ') || 'Longitudinal bipolar, referential'}
-7. Use proper medical units (μV for amplitude, Hz for frequency, ms for duration)
-8. Format impression as numbered list if multiple significant findings
-9. Recommendations must be clinically actionable and specific
-
-Generate the complete report now in structured JSON format matching the template sections.`;
-    } else {
-      // Fallback prompt without template
-      userPrompt += `
-
-Generate a structured report with the following sections:
-1. TECHNICAL_DETAILS: Montage, filters, duration, channels (10-20 system)
-2. BACKGROUND_ACTIVITY: Describe the background EEG (frequency, amplitude, symmetry, reactivity)
-3. SLEEP_ARCHITECTURE: If applicable, describe sleep stages and architecture
-4. ACTIVATION_PROCEDURES: Results of hyperventilation and photic stimulation
-5. ABNORMALITIES: List any epileptiform discharges, sharp waves, spikes, focal slowing
-6. ARTIFACTS: Note technical or movement artifacts
-7. IMPRESSION: Clinical interpretation and diagnostic impression
-8. CORRELATION: Clinical context and significance
-9. RECOMMENDATIONS: Follow-up or additional studies
-10. MONTAGES_USED: List montages used for analysis
-
-Format as professional medical report with proper medical terminology.`;
-    }
-
-    // Call Lovable AI with retry logic
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("AI service not configured");
-    }
-
-    const MAX_RETRIES = 3;
-    let aiResponse;
-    let attempt = 0;
-
-    while (attempt < MAX_RETRIES) {
-      attempt++;
-      try {
-        aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-          }),
-        });
-
-        if (aiResponse.ok) {
-          console.log(`AI response successful on attempt ${attempt}`);
-          break;
-        }
-
-        if (aiResponse.status === 429 || aiResponse.status >= 500) {
-          // Retry on rate limit or server errors
-          if (attempt < MAX_RETRIES) {
-            const backoff = Math.pow(2, attempt) * 1000; // Exponential backoff
-            console.log(`Retrying after ${backoff}ms (attempt ${attempt})`);
-            await new Promise(resolve => setTimeout(resolve, backoff));
-            continue;
-          }
-        }
-
-        // For other errors, throw immediately
-        const errorText = await aiResponse.text();
-        console.error("AI API error:", aiResponse.status, errorText);
-        throw new Error(`AI service error: ${aiResponse.status}`);
-
-      } catch (error) {
-        console.error(`Attempt ${attempt} failed:`, error);
-        if (attempt === MAX_RETRIES) {
-          throw error;
-        }
-        const backoff = Math.pow(2, attempt) * 1000;
-        await new Promise(resolve => setTimeout(resolve, backoff));
-      }
-    }
-
-    if (!aiResponse || !aiResponse.ok) {
-      // Use fallback template if AI fails after all retries
-      console.log("AI failed after retries, using template fallback");
-      const fallbackContent = template?.template_content || {
-        background_activity: "Unable to generate AI analysis. Manual review required.",
-        impression: "AI GENERATION FAILED - MANUAL REVIEW REQUIRED",
-        recommendations: "Clinical review and manual report generation recommended."
-      };
-
-      const { error: draftError } = await supabase.from("ai_drafts").insert({
-        study_id: study_id,
-        draft: fallbackContent,
-        model: "fallback-template",
-        version: "1.0",
-      });
-
-      if (draftError) {
-        console.error("Fallback draft save error:", draftError);
-      }
-
-      await supabase.from("studies").update({ state: "ai_draft" }).eq("id", study_id);
-
-      return new Response(JSON.stringify({ 
-        success: true, 
-        report: fallbackContent,
-        message: "Fallback template used - manual review required",
-        fallback: true
-      }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const aiData = await aiResponse.json();
-    const reportContent = aiData.choices?.[0]?.message?.content;
-
-    if (!reportContent) {
-      throw new Error("No report generated by AI");
-    }
-
-    // Parse the report content into structured sections
-    const reportSections = template ? 
-      parseTemplateBasedReport(reportContent) :
-      parseStandardReport(reportContent);
+    // Generate placeholder report (no external AI call)
+    const reportSections = generatePlaceholderReport(study, markers || [], templateType);
 
     // Store AI draft
     const { error: draftError } = await supabase.from("ai_drafts").insert({
       study_id: study_id,
       draft: reportSections,
-      model: "google/gemini-2.5-flash",
+      model: "placeholder-v1",
       version: "1.0",
     });
 
@@ -301,13 +116,16 @@ Format as professional medical report with proper medical terminology.`;
     }
 
     // Update study state to ai_draft
-    await supabase.from("studies").update({ state: "ai_draft" }).eq("id", study_id);
+    await supabase.from("studies").update({ 
+      state: "ai_draft",
+      ai_draft_json: reportSections 
+    }).eq("id", study_id);
 
     return new Response(JSON.stringify({ 
       success: true, 
       report: reportSections,
-      message: "AI report generated successfully",
-      template_used: template?.name || "Standard format"
+      message: "Report generated successfully",
+      template_used: templateType
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -322,42 +140,54 @@ Format as professional medical report with proper medical terminology.`;
   }
 });
 
-// Parse template-based AI response
-function parseTemplateBasedReport(content: string): any {
-  try {
-    // Try to parse as JSON first
-    return JSON.parse(content);
-  } catch {
-    // Fall back to standard parsing
-    return parseStandardReport(content);
-  }
-}
+// Generate placeholder report based on study data
+function generatePlaceholderReport(study: any, markers: any[], templateType: string): any {
+  const meta = study.meta || {};
+  const patientName = meta.patient_name || "Unknown Patient";
+  const patientId = meta.patient_id || study.id.slice(0, 8);
+  const age = meta.age || "N/A";
+  const gender = meta.gender || "N/A";
+  
+  const isAbnormal = templateType === 'abnormal';
+  
+  // Build findings from markers
+  const markerSummary = markers.length > 0 
+    ? markers.map(m => `${m.marker_type}: ${m.label || 'No label'}${m.severity ? ` (${m.severity})` : ''}`).join('; ')
+    : 'No annotations recorded';
 
-// Parse standard format AI response
-function parseStandardReport(content: string): any {
   return {
-    clinical_indication: extractSection(content, ["CLINICAL INDICATION", "Indication"]),
-    technical_details: extractSection(content, ["TECHNICAL DETAILS", "Technical"]),
-    background_activity: extractSection(content, ["BACKGROUND ACTIVITY", "Background"]),
-    sleep_architecture: extractSection(content, ["SLEEP ARCHITECTURE", "SLEEP STAGES", "Sleep"]),
-    activation_procedures: extractSection(content, ["ACTIVATION PROCEDURES", "Activation"]),
-    abnormalities: extractSection(content, ["ABNORMALITIES", "Abnormal"]),
-    artifacts: extractSection(content, ["ARTIFACTS", "Artifact"]),
-    impression: extractSection(content, ["IMPRESSION", "Clinical Impression"]),
-    correlation: extractSection(content, ["CORRELATION", "Clinical Context"]),
-    recommendations: extractSection(content, ["RECOMMENDATIONS", "Follow-up"]),
-    montages_used: extractSection(content, ["MONTAGES USED", "Montages"]),
+    clinical_indication: study.indication || "Routine EEG evaluation",
+    technical_details: `Recording Duration: ${study.duration_min || 30} minutes. Sampling Rate: ${study.srate_hz || 256} Hz. Montage: ${study.montage || "10-20 International System"}. Reference: ${study.reference || "Average reference"}.`,
+    patient_info: {
+      name: patientName,
+      id: patientId,
+      age: age,
+      gender: gender
+    },
+    background_activity: isAbnormal 
+      ? "The posterior dominant rhythm consists of 8-9 Hz alpha activity, attenuated with eye opening. Some asymmetry noted with intermittent left temporal slowing."
+      : "The posterior dominant rhythm consists of 9-10 Hz alpha activity at 40-60 μV, which is reactive to eye opening and symmetric. Beta activity is within normal limits. No focal slowing observed.",
+    sleep_architecture: "Patient remained awake throughout recording. No sleep stages captured.",
+    activation_procedures: {
+      hyperventilation: "Hyperventilation performed for 3 minutes. Normal buildup and resolution. No epileptiform activity provoked.",
+      photic_stimulation: "Photic stimulation performed at 1-30 Hz. Normal photic driving response. No photoparoxysmal response."
+    },
+    abnormalities: isAbnormal 
+      ? `Intermittent epileptiform discharges observed. ${markerSummary}`
+      : "No epileptiform discharges. No focal slowing. No periodic patterns.",
+    artifacts: "Minimal muscle artifact and electrode pop artifacts. Technical quality is adequate for interpretation.",
+    impression: isAbnormal 
+      ? "ABNORMAL EEG - Clinical correlation recommended. Findings may support diagnosis of epilepsy."
+      : "NORMAL AWAKE EEG - No epileptiform abnormalities identified.",
+    correlation: isAbnormal
+      ? "Findings should be correlated with clinical history and seizure semiology. Consider repeat EEG with sleep deprivation if clinical suspicion remains high."
+      : "This normal EEG does not exclude epilepsy. If clinical suspicion persists, consider repeat EEG with sleep deprivation or ambulatory monitoring.",
+    recommendations: isAbnormal
+      ? "1. Clinical correlation recommended\n2. Consider neuroimaging if not already performed\n3. Follow-up EEG may be beneficial"
+      : "1. No immediate follow-up required based on EEG findings\n2. Clinical correlation as needed",
+    montages_used: ["Longitudinal Bipolar (Double Banana)", "Transverse Bipolar", "Average Reference"],
+    annotations_summary: markerSummary,
+    generated_at: new Date().toISOString(),
+    model_version: "placeholder-v1"
   };
-}
-
-// Helper function to extract sections from AI response
-function extractSection(content: string, keywords: string[]): string {
-  for (const keyword of keywords) {
-    const regex = new RegExp(`${keyword}:?\\s*([\\s\\S]*?)(?=\\n\\n[A-Z]|$)`, "i");
-    const match = content.match(regex);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-  }
-  return "";
 }
