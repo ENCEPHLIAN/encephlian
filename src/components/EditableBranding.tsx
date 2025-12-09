@@ -9,13 +9,14 @@ import logo from "@/assets/logo.png";
 interface EditableBrandingProps {
   companyName: string;
   logoUrl?: string;
+  // This now controls the outer “invisible square” that the glyph sits in
   logoClassName?: string;
 }
 
 export default function EditableBranding({
   companyName,
   logoUrl,
-  logoClassName = "h-7 w-7 md:h-8 md:w-8",
+  logoClassName = "h-12 w-12 md:h-14 md:w-14",
 }: EditableBrandingProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(companyName);
@@ -63,26 +64,38 @@ export default function EditableBranding({
     }
   };
 
+  const glyphSrc = logoUrl || logo;
+
   return (
     <div className="flex items-center gap-2 md:gap-3 group select-none">
-      {/* Fixed, symmetric logo square anchored by the parent layout */}
+      {/* Invisible square; glyph is centered and fills it */}
       <div
-        className="
+        className={`
           relative flex-shrink-0
-          h-10 w-10 md:h-11 md:w-11
-          rounded-xl
-          bg-gradient-to-br from-zinc-600/40 via-zinc-400/10 to-zinc-900/40
-          group-hover:from-zinc-300/70 group-hover:via-zinc-500/30 group-hover:to-zinc-900/80
-          transition-all duration-300 ease-out
-          shadow-sm group-hover:shadow-md
-        "
+          ${logoClassName}
+          flex items-center justify-center
+        `}
       >
-        {/* Inner plate so the logo itself stays clean while the frame animates */}
-        <div className="absolute inset-[2px] rounded-[0.9rem] bg-background/90 backdrop-blur-sm" />
-
-        <div className="relative flex h-full w-full items-center justify-center">
-          <img src={logoUrl || logo} alt="Logo" className={`${logoClassName} object-contain`} />
-        </div>
+        {/* Gradient painted *through* the transparent logo */}
+        <div
+          className="
+            h-[82%] w-[82%]
+            transition-all duration-300 ease-out
+            bg-gradient-to-br
+            from-zinc-200 via-zinc-500 to-zinc-800
+            group-hover:from-zinc-100 group-hover:via-zinc-400 group-hover:to-zinc-900
+          "
+          style={{
+            WebkitMaskImage: `url(${glyphSrc})`,
+            WebkitMaskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskImage: `url(${glyphSrc})`,
+            maskRepeat: "no-repeat",
+            maskPosition: "center",
+            maskSize: "contain",
+          }}
+        />
       </div>
 
       {editing ? (
@@ -98,7 +111,7 @@ export default function EditableBranding({
       ) : (
         <div
           onClick={() => setEditing(true)}
-          className="cursor-pointer flex items-center gap-2 hover:opacity-90 transition-opacity"
+          className="cursor-pointer flex items-center gap-2 hover:opacity-95 transition-opacity"
         >
           <h1 className="text-2xl md:text-3xl font-bold logo-text whitespace-nowrap">{companyName}</h1>
           <Pencil className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground" />
