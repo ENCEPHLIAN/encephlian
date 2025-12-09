@@ -14,6 +14,16 @@ function generateReferenceId(): string {
   return result;
 }
 
+// Escape HTML entities to prevent HTML injection in emails
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -45,6 +55,10 @@ serve(async (req) => {
       );
     }
 
+    // Sanitize inputs
+    const sanitizedSubject = subject.trim();
+    const sanitizedMessage = message.trim();
+
     // Get user profile
     const { data: profile } = await supabase
       .from("profiles")
@@ -55,19 +69,24 @@ serve(async (req) => {
     // Generate memorable reference ID
     const referenceId = generateReferenceId();
 
-    // Insert ticket
+    // Insert ticket (store original, unescaped text in DB)
     const { data: ticket, error: insertError } = await supabase
       .from("support_tickets")
       .insert({
         user_id: user.id,
-        subject: `[${referenceId}] ${subject.trim()}`,
-        message: message.trim(),
+        subject: `[${referenceId}] ${sanitizedSubject}`,
+        message: sanitizedMessage,
         status: "open"
       })
       .select()
       .single();
 
     if (insertError) throw insertError;
+
+    // Escape HTML for email display
+    const escapedSubject = escapeHtml(sanitizedSubject);
+    const escapedMessage = escapeHtml(sanitizedMessage);
+    const escapedFullName = escapeHtml(profile?.full_name || user.email || '');
 
     // Send confirmation email to clinician
     if (RESEND_API_KEY) {
@@ -102,11 +121,11 @@ serve(async (req) => {
                   </div>
                   <div style="margin-bottom: 16px;">
                     <span style="color: #64748b;">Subject</span>
-                    <p style="color: #ffffff; margin: 8px 0 0 0;">${subject}</p>
+                    <p style="color: #ffffff; margin: 8px 0 0 0;">${escapedSubject}</p>
                   </div>
                   <div>
                     <span style="color: #64748b;">Your Message</span>
-                    <p style="color: #94a3b8; margin: 8px 0 0 0; white-space: pre-wrap;">${message}</p>
+                    <p style="color: #94a3b8; margin: 8px 0 0 0; white-space: pre-wrap;">${escapedMessage}</p>
                   </div>
                 </div>
 
@@ -133,7 +152,7 @@ serve(async (req) => {
           body: JSON.stringify({
             from: "ENCEPHLIAN Support <support@encephlian.cloud>",
             to: ["info@encephlian.cloud"],
-            subject: `🎫 New Ticket ${referenceId}: ${subject}`,
+            subject: `🎫 New Ticket ${referenceId}: ${escapedSubject}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #0284c7; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
@@ -141,21 +160,21 @@ serve(async (req) => {
                 </h2>
                 <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
                   <p style="margin: 8px 0;"><strong>Reference:</strong> <code style="background: #0284c7; color: white; padding: 2px 8px; border-radius: 4px;">${referenceId}</code></p>
-                  <p style="margin: 8px 0;"><strong>From:</strong> ${profile?.full_name || user.email}</p>
-                  <p style="margin: 8px 0;"><strong>Email:</strong> ${user.email}</p>
+                  <p style="margin: 8px 0;"><strong>From:</strong> ${escapedFullName}</p>
+                  <p style="margin: 8px 0;"><strong>Email:</strong> ${escapeHtml(user.email || '')}</p>
                   <p style="margin: 8px 0;"><strong>Ticket ID:</strong> <code>${ticket.id}</code></p>
                   <p style="margin: 8px 0;"><strong>Created:</strong> ${new Date().toLocaleString()}</p>
                 </div>
                 <div style="margin: 20px 0;">
                   <h3 style="color: #334155; margin-bottom: 10px;">Subject</h3>
                   <p style="background: #fff; padding: 12px; border-left: 4px solid #0284c7; border-radius: 4px;">
-                    ${subject}
+                    ${escapedSubject}
                   </p>
                 </div>
                 <div style="margin: 20px 0;">
                   <h3 style="color: #334155; margin-bottom: 10px;">Message</h3>
                   <div style="background: #fff; padding: 15px; border: 1px solid #e2e8f0; border-radius: 4px; white-space: pre-wrap;">
-${message}
+${escapedMessage}
                   </div>
                 </div>
                 <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;" />
@@ -179,7 +198,7 @@ ${message}
     await supabase.from("audit_logs").insert({
       user_id: user.id,
       event_type: "support_ticket_created",
-      event_data: { ticket_id: ticket.id, reference_id: referenceId, subject }
+      event_data: { ticket_id: ticket.id, reference_id: referenceId, subject: sanitizedSubject }
     });
 
     console.log("Support ticket created:", ticket.id, "Reference:", referenceId);
