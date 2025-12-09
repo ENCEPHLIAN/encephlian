@@ -4,19 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.png"; // favicon_encephlian.png or your main glyph
 
 interface EditableBrandingProps {
   companyName: string;
   logoUrl?: string;
-  // This now controls the outer “invisible square” that the glyph sits in
+  // Controls the invisible square that the glyph fits into
   logoClassName?: string;
 }
 
 export default function EditableBranding({
   companyName,
   logoUrl,
-  logoClassName = "h-12 w-12 md:h-14 md:w-14",
+  // Big by default so it visually matches the ENCEPHLIAN text height
+  logoClassName = "h-14 w-14 md:h-16 md:w-16",
 }: EditableBrandingProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(companyName);
@@ -68,7 +69,7 @@ export default function EditableBranding({
 
   return (
     <div className="flex items-center gap-2 md:gap-3 group select-none">
-      {/* Invisible square; glyph is centered and fills it */}
+      {/* Invisible square; glyph fills this and stays perfectly centered */}
       <div
         className={`
           relative flex-shrink-0
@@ -76,25 +77,32 @@ export default function EditableBranding({
           flex items-center justify-center
         `}
       >
-        {/* Gradient painted *through* the transparent logo */}
+        {/* Subtle halo / gradient around the glyph – shows on hover, works on light & dark */}
         <div
           className="
-            h-[82%] w-[82%]
-            transition-all duration-300 ease-out
-            bg-gradient-to-br
-            from-zinc-200 via-zinc-500 to-zinc-800
-            group-hover:from-zinc-100 group-hover:via-zinc-400 group-hover:to-zinc-900
+            absolute inset-0
+            rounded-2xl
+            bg-radial from-zinc-300/0 via-zinc-400/18 to-zinc-900/0
+            dark:from-zinc-100/0 dark:via-zinc-500/28 dark:to-zinc-900/0
+            opacity-0 group-hover:opacity-100
+            transition-opacity duration-300 ease-out
           "
-          style={{
-            WebkitMaskImage: `url(${glyphSrc})`,
-            WebkitMaskRepeat: "no-repeat",
-            WebkitMaskPosition: "center",
-            WebkitMaskSize: "contain",
-            maskImage: `url(${glyphSrc})`,
-            maskRepeat: "no-repeat",
-            maskPosition: "center",
-            maskSize: "contain",
-          }}
+        />
+
+        {/* Actual logo – big, tight, high contrast, with silver “breathing” effect */}
+        <img
+          src={glyphSrc}
+          alt="Logo"
+          className="
+            relative
+            h-[92%] w-[92%]
+            object-contain
+            transition-transform duration-300 ease-out
+            group-hover:scale-[1.04]
+            [filter:drop-shadow(0_0_8px_rgba(0,0,0,0.45))]
+            dark:[filter:drop-shadow(0_0_14px_rgba(0,0,0,0.85))]
+            group-hover:[filter:brightness(1.08)_drop-shadow(0_0_14px_rgba(0,0,0,0.9))]
+          "
         />
       </div>
 
