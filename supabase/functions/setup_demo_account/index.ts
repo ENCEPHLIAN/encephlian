@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
     // Add AI draft for Study 2
     await supabaseAdmin.from('ai_drafts').insert({
       study_id: '10000000-0000-0000-0000-000000000002',
-      model: 'gemini-2.5-flash',
+      model: 'placeholder-v1',
       version: '1.0',
       draft: {
         clinical_history: 'Headache evaluation',

@@ -184,11 +184,12 @@ export default function Dashboard() {
   };
 
   const tokenBalance = wallet?.tokens || 0;
+  const hasProcessingStudies = processingStudies.length > 0;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-12" : ""}`}>
       {/* Global Progress Bar for Processing Studies */}
-      {processingStudies.length > 0 && (
+      {hasProcessingStudies && (
         <GlobalTriageProgressBar studies={processingStudies} />
       )}
 

@@ -21,6 +21,7 @@ import AdminStudyDetail from "./pages/admin/AdminStudyDetail";
 import AdminClinics from "./pages/admin/AdminClinics";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminHealth from "./pages/admin/AdminHealth";
+import AdminEegPush from "./pages/admin/AdminEegPush";
 import Dashboard from "./pages/app/Dashboard";
 import Studies from "./pages/app/Studies";
 import StudyDetail from "./pages/app/StudyDetail";
@@ -64,6 +65,7 @@ function App() {
                     <Route path="tickets" element={<AdminTickets />} />
                     <Route path="cleanup" element={<AdminCleanup />} />
                     <Route path="audit" element={<AdminAuditLogs />} />
+                    <Route path="eeg-push" element={<AdminEegPush />} />
                     <Route path="account" element={<AdminAccount />} />
                   </Route>
                 </Route>

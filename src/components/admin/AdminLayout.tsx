@@ -10,7 +10,6 @@ import {
   Building2,
   Users,
   Activity,
-  ArrowLeft,
   Shield,
   Trash2,
   ScrollText,
@@ -18,6 +17,7 @@ import {
   LogOut,
   Coins,
   MessageSquare,
+  SendHorizontal,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -46,6 +46,7 @@ export default function AdminLayout() {
     { name: "Users", href: "/admin/users", icon: Users },
     { name: "Wallets", href: "/admin/wallets", icon: Coins },
     ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
+    { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
     { name: "Health", href: "/admin/health", icon: Activity },
     { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
     { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
