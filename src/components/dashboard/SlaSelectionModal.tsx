@@ -38,7 +38,7 @@ async function simulateTriageProgress(studyId: string) {
   for (const stage of stages) {
     await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
     
-    const updateData: any = {
+    const updateData: Record<string, any> = {
       triage_progress: stage.progress,
     };
     
@@ -52,6 +52,15 @@ async function simulateTriageProgress(studyId: string) {
       .from("studies")
       .update(updateData)
       .eq("id", studyId);
+  }
+  
+  // Send triage completion notification
+  try {
+    await supabase.functions.invoke("send_triage_notification", {
+      body: { study_id: studyId },
+    });
+  } catch (err) {
+    console.error("Failed to send triage notification:", err);
   }
 }
 
