@@ -59,3 +59,6 @@ verify_jwt = true
 
 [functions.admin_create_user]
 verify_jwt = true
+
+[functions.send_triage_notification]
+verify_jwt = true
