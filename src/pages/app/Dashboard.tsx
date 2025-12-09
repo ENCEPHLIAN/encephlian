@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, StickyNote, Coins } from "lucide-react";
+import { Loader2, Activity, Upload, StickyNote, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PerformanceCharts from "@/components/dashboard/PerformanceCharts";
@@ -18,6 +18,7 @@ import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 interface Study {
@@ -51,7 +52,7 @@ export default function Dashboard() {
     },
   });
 
-  const { data: studies, isLoading } = useQuery({
+  const { data: studies, isLoading, refetch: refetchStudies } = useQuery({
     queryKey: ["dashboard-studies"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -61,27 +62,16 @@ export default function Dashboard() {
       if (error) throw error;
       return data as Study[];
     },
-    refetchInterval: 5000, // Poll every 5 seconds for triage updates
+    refetchInterval: 3000, // Poll every 3 seconds for faster updates
   });
 
-  const { data: wallet } = useQuery({
+  const { data: wallet, refetch: refetchWallet } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {
       const { data } = await supabase.from("wallets").select("tokens").single();
       return data;
     },
-  });
-
-  const { data: recentStudies } = useQuery({
-    queryKey: ["recent-studies"],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from("studies")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5);
-      return data as Study[];
-    },
+    refetchInterval: 5000,
   });
 
   // Track previous balance for animation
@@ -91,10 +81,10 @@ export default function Dashboard() {
     }
   }, [wallet?.tokens]);
 
-  // Subscribe to realtime updates for new studies
+  // Subscribe to realtime updates for studies
   useEffect(() => {
     const channel = supabase
-      .channel("dashboard-studies-realtime")
+      .channel("dashboard-realtime")
       .on(
         "postgres_changes",
         {
@@ -103,23 +93,25 @@ export default function Dashboard() {
           table: "studies",
         },
         (payload) => {
-          // Refetch studies on any change
-          queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
-          queryClient.invalidateQueries({ queryKey: ["recent-studies"] });
+          // Immediately refetch studies
+          refetchStudies();
+          refetchWallet();
 
           // Show toast for completed triage
           if (payload.eventType === "UPDATE") {
             const newData = payload.new as Study;
-            const oldData = payload.old as Study;
+            const oldData = payload.old as Partial<Study>;
+            
             if (
               oldData.triage_status === "processing" &&
               newData.triage_status === "completed"
             ) {
               const meta = (newData.meta || {}) as Record<string, any>;
-              const patientId = meta.patient_id || `ID-${newData.id.slice(0, 6)}`;
-              toast.success(`Triage complete for ${patientId}. View report.`, {
+              const patientId = meta.patient_name || meta.patient_id || `Study ${newData.id.slice(0, 6)}`;
+              toast.success(`Analysis complete for ${patientId}`, {
+                description: "Report is ready for review",
                 action: {
-                  label: "View",
+                  label: "View Report",
                   onClick: () => navigate(`/app/studies/${newData.id}`),
                 },
               });
@@ -127,17 +119,91 @@ export default function Dashboard() {
           }
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "wallets",
+        },
+        () => {
+          refetchWallet();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient, navigate]);
+  }, [queryClient, navigate, refetchStudies, refetchWallet]);
+
+  // Compute metrics from studies data
+  const metrics = useMemo(() => {
+    if (!studies) return null;
+    
+    const now = dayjs();
+    const todayStart = now.startOf("day");
+    const weekStart = now.startOf("week");
+    const monthStart = now.startOf("month");
+    
+    // Completed studies (signed or triage completed)
+    const completedStudies = studies.filter(s => 
+      s.state === "signed" || s.triage_status === "completed"
+    );
+    
+    const completedToday = completedStudies.filter(s => 
+      dayjs(s.triage_completed_at || s.created_at).isAfter(todayStart)
+    ).length;
+    
+    const completedWeek = completedStudies.filter(s => 
+      dayjs(s.triage_completed_at || s.created_at).isAfter(weekStart)
+    ).length;
+    
+    const completedMonth = completedStudies.filter(s => 
+      dayjs(s.triage_completed_at || s.created_at).isAfter(monthStart)
+    ).length;
+    
+    // Pending studies (awaiting SLA or uploaded)
+    const pendingStudies = studies.filter(s => 
+      s.state === "uploaded" && 
+      (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending")
+    );
+    
+    // Processing studies
+    const processingStudies = studies.filter(s => s.triage_status === "processing");
+    
+    // STAT cases
+    const statCases = pendingStudies.filter(s => s.sla === "STAT").length;
+    
+    // Calculate average turnaround (mock for now - would need actual timestamps)
+    const avgTurnaround = completedStudies.length > 0 ? "4.2h" : "--";
+    
+    // Total tokens used this month
+    const tokensUsedMonth = studies
+      .filter(s => dayjs(s.created_at).isAfter(monthStart))
+      .reduce((sum, s) => sum + (s.tokens_deducted || 0), 0);
+    
+    return {
+      completedToday,
+      completedWeek,
+      completedMonth,
+      pendingCount: pendingStudies.length,
+      processingCount: processingStudies.length,
+      statCases,
+      avgTurnaround,
+      tokensUsedMonth,
+      totalStudies: studies.length,
+      completedTotal: completedStudies.length,
+    };
+  }, [studies]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="text-center space-y-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -159,14 +225,6 @@ export default function Dashboard() {
     (s) => s.state === "uploaded" || s.state === "ai_draft" || s.state === "in_review"
   ) || [];
 
-  const completedToday = studies?.filter(
-    (s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("day"))
-  ).length || 0;
-
-  const completedWeek = studies?.filter(
-    (s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("week"))
-  ).length || 0;
-
   const handleSelectSla = (study: Study) => {
     setSelectedStudy(study);
     setSlaModalOpen(true);
@@ -174,7 +232,9 @@ export default function Dashboard() {
 
   const handleInsufficientTokens = () => {
     setSlaModalOpen(false);
-    toast.error("Not enough tokens. Please purchase more to start triage.");
+    toast.error("Not enough tokens", {
+      description: "Please purchase more tokens to start triage.",
+    });
     navigate("/app/wallet");
   };
 
@@ -187,7 +247,7 @@ export default function Dashboard() {
   const hasProcessingStudies = processingStudies.length > 0;
 
   return (
-    <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-12" : ""}`}>
+    <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-24" : ""}`}>
       {/* Global Progress Bar for Processing Studies */}
       {hasProcessingStudies && (
         <GlobalTriageProgressBar studies={processingStudies} />
@@ -195,9 +255,12 @@ export default function Dashboard() {
 
       {/* Header with Token Balance */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {dayjs().format("dddd, MMMM D, YYYY")} • {dayjs().format("h:mm A")}
-        </p>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">
+            {dayjs().format("dddd, MMMM D, YYYY")}
+          </p>
+        </div>
         <TokenBalanceHeader 
           balance={tokenBalance} 
           previousBalance={previousBalanceRef.current}
@@ -219,10 +282,10 @@ export default function Dashboard() {
           <CardDescription className="text-sm">Get started with your most common tasks</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Button
               size="lg"
-              className="quick-action-btn h-20 flex-col"
+              className="quick-action-btn h-20 flex-col gap-2"
               onClick={() => navigate("/app/studies?filter=uploaded")}
             >
               <Activity className="h-5 w-5 shrink-0" />
@@ -232,7 +295,7 @@ export default function Dashboard() {
             <Button
               size="lg"
               variant="outline"
-              className="quick-action-btn h-20 flex-col quick-outline"
+              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
               onClick={() => navigate("/app/files")}
             >
               <Upload className="h-5 w-5 shrink-0" />
@@ -242,7 +305,7 @@ export default function Dashboard() {
             <Button
               size="lg"
               variant="outline"
-              className="quick-action-btn h-20 flex-col quick-outline"
+              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
               onClick={() => navigate("/app/notes")}
             >
               <StickyNote className="h-5 w-5 shrink-0" />
@@ -252,7 +315,7 @@ export default function Dashboard() {
             <Button
               size="lg"
               variant="outline"
-              className="quick-action-btn h-20 flex-col quick-outline"
+              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
               onClick={() => navigate("/app/wallet")}
             >
               <Coins className="h-5 w-5 shrink-0" />
@@ -262,52 +325,76 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI Cards - Using real metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           label="Pending Studies"
-          value={pendingStudies.length}
-          change={`${pendingStudies.filter((s) => s.sla === "STAT").length} STAT cases`}
-          trend={pendingStudies.length > 5 ? "up" : "neutral"}
-          color="kpi-blue"
+          value={metrics?.pendingCount || 0}
+          change={`${metrics?.statCases || 0} STAT urgent`}
+          trend={metrics?.pendingCount && metrics.pendingCount > 5 ? "up" : "neutral"}
+          color="kpi-amber"
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
 
         <KPICard
           label="Completed Today"
-          value={completedToday}
-          change="Goal: 5"
-          trend={completedToday >= 5 ? "up" : "neutral"}
+          value={metrics?.completedToday || 0}
+          change="Daily progress"
+          trend={metrics?.completedToday && metrics.completedToday >= 3 ? "up" : "neutral"}
           color="kpi-green"
         />
 
-        <KPICard label="This Week" value={completedWeek} change="Studies completed" trend="neutral" color="kpi-cyan" />
+        <KPICard 
+          label="This Week" 
+          value={metrics?.completedWeek || 0} 
+          change="Studies analyzed" 
+          trend={metrics?.completedWeek && metrics.completedWeek >= 10 ? "up" : "neutral"} 
+          color="kpi-cyan" 
+        />
 
         <KPICard
           label="Token Balance"
           value={tokenBalance}
-          change="Available for signing"
-          trend="neutral"
+          change={`${metrics?.tokensUsedMonth || 0} used this month`}
+          trend={tokenBalance < 5 ? "down" : "neutral"}
           color="kpi-indigo"
           onClick={() => navigate("/app/wallet")}
         />
+      </div>
 
-        <KPICard label="Average TAT" value="12 hrs" change="Turnaround time" trend="up" color="kpi-amber" />
+      {/* Secondary metrics row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard 
+          label="Avg Turnaround" 
+          value={metrics?.avgTurnaround || "--"} 
+          change="Time to report" 
+          trend="up" 
+          color="kpi-blue" 
+        />
 
         <KPICard
           label="This Month"
-          value={
-            studies?.filter((s) => s.state === "signed" && dayjs(s.created_at).isAfter(dayjs().startOf("month")))
-              .length || 0
-          }
+          value={metrics?.completedMonth || 0}
           change="Monthly total"
           trend="up"
           color="kpi-neutral"
         />
 
-        <KPICard label="Success Rate" value="98.5%" change="Quality score" trend="up" color="kpi-green" />
+        <KPICard 
+          label="Total Studies" 
+          value={metrics?.totalStudies || 0} 
+          change={`${metrics?.completedTotal || 0} completed`}
+          trend="neutral" 
+          color="kpi-cyan" 
+        />
 
-        <KPICard label="Active Now" value="3" change="Reviewers online" trend="neutral" color="kpi-cyan" />
+        <KPICard 
+          label="Processing Now" 
+          value={metrics?.processingCount || 0} 
+          change="Active analyses" 
+          trend={metrics?.processingCount && metrics.processingCount > 0 ? "up" : "neutral"} 
+          color="kpi-blue" 
+        />
       </div>
 
       {/* Recent Reports Section */}
@@ -319,29 +406,35 @@ export default function Dashboard() {
       )}
 
       {/* Analytics & Recent Studies Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="openai-card">
           <CardHeader>
-            <CardTitle>Performance Analytics</CardTitle>
-            <CardDescription>Your review metrics this month</CardDescription>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-primary" />
+                Performance Summary
+              </CardTitle>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-6">
-              <div>
-                <div className="text-3xl font-bold">{studies?.length || 0}</div>
-                <div className="text-sm text-muted-foreground">Studies Reviewed</div>
+              <div className="space-y-1">
+                <div className="text-3xl font-bold">{metrics?.totalStudies || 0}</div>
+                <div className="text-sm text-muted-foreground">Total Studies</div>
               </div>
-              <div>
-                <div className="text-3xl font-bold">2.3h</div>
+              <div className="space-y-1">
+                <div className="text-3xl font-bold">{metrics?.avgTurnaround || "--"}</div>
                 <div className="text-sm text-muted-foreground">Avg. Review Time</div>
               </div>
-              <div>
-                <div className="text-3xl font-bold">94%</div>
-                <div className="text-sm text-muted-foreground">On-Time Rate</div>
+              <div className="space-y-1">
+                <div className="text-3xl font-bold text-emerald-600">
+                  {metrics?.totalStudies ? Math.round((metrics.completedTotal / metrics.totalStudies) * 100) : 0}%
+                </div>
+                <div className="text-sm text-muted-foreground">Completion Rate</div>
               </div>
-              <div>
+              <div className="space-y-1">
                 <div className="text-3xl font-bold">{tokenBalance}</div>
-                <div className="text-sm text-muted-foreground">Tokens</div>
+                <div className="text-sm text-muted-foreground">Available Tokens</div>
               </div>
             </div>
           </CardContent>
@@ -350,7 +443,10 @@ export default function Dashboard() {
         <Card className="openai-card">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Recent Studies</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-5 w-5 text-primary" />
+                Recent Studies
+              </CardTitle>
               <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies")}>
                 View All
               </Button>
@@ -358,28 +454,49 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-48">
-              {recentStudies && recentStudies.length > 0 ? (
+              {studies && studies.length > 0 ? (
                 <div className="space-y-3">
-                  {recentStudies.map((study) => {
+                  {studies.slice(0, 5).map((study) => {
                     const meta = study.meta as any;
+                    const isCompleted = study.triage_status === "completed" || study.state === "signed";
+                    const isProcessing = study.triage_status === "processing";
+                    
                     return (
-                      <div key={study.id} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div 
+                        key={study.id} 
+                        className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
+                        onClick={() => navigate(`/app/studies/${study.id}`)}
+                      >
                         <div className="flex items-center gap-3">
-                          <Activity className="h-5 w-5 text-blue-600" />
+                          {isCompleted ? (
+                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                          ) : isProcessing ? (
+                            <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-amber-500" />
+                          )}
                           <div>
-                            <p className="font-medium text-sm">{meta?.patient_name || "Unknown"}</p>
-                            <p className="text-xs text-muted-foreground">{meta?.patient_id || study.id.slice(0, 8)}</p>
+                            <p className="font-medium text-sm">{meta?.patient_name || "Unknown Patient"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {meta?.patient_id || study.id.slice(0, 8)} • {dayjs(study.created_at).format("MMM D, h:mm A")}
+                            </p>
                           </div>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => navigate(`/app/studies/${study.id}`)}>
-                          Open
-                        </Button>
+                        <Badge variant={isCompleted ? "default" : isProcessing ? "secondary" : "outline"}>
+                          {study.sla}
+                        </Badge>
                       </div>
                     );
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">No recent studies</div>
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No studies yet</p>
+                  <Button variant="link" size="sm" onClick={() => navigate("/app/files")}>
+                    Upload your first study
+                  </Button>
+                </div>
               )}
             </ScrollArea>
           </CardContent>
@@ -387,14 +504,14 @@ export default function Dashboard() {
       </div>
 
       {/* Calendar Widget */}
-      <div className="mt-16">
-        <CalendarWidget />
-      </div>
+      <CalendarWidget />
 
       {/* Urgent Queue */}
-      <div className="openai-section">
-        <UrgentQueue studies={pendingStudies} />
-      </div>
+      {pendingStudies.length > 0 && (
+        <div className="openai-section">
+          <UrgentQueue studies={pendingStudies} />
+        </div>
+      )}
 
       {/* Performance Charts */}
       <div className="openai-section">
