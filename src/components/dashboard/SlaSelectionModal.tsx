@@ -45,7 +45,7 @@ async function simulateTriageProgress(studyId: string) {
     if (stage.status === "completed") {
       updateData.triage_status = "completed";
       updateData.triage_completed_at = new Date().toISOString();
-      updateData.state = "draft_ready";
+      updateData.state = "completed"; // Use valid state from constraint
     }
 
     await supabase

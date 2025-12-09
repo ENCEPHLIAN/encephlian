@@ -18,7 +18,8 @@ import {
   FileText,
   StickyNote,
   ArrowLeft,
-  FileIcon
+  FileIcon,
+  Database
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,18 +38,18 @@ dayjs.extend(relativeTime);
 
 const BUCKETS = [
   { 
+    id: "study-files", 
+    name: "My Studies", 
+    icon: Database,
+    description: "All your EEG study files",
+    color: "text-primary"
+  },
+  { 
     id: "eeg-uploads", 
     name: "EEG Uploads", 
     icon: Activity,
     description: "Raw EEG files for processing",
     color: "text-blue-600"
-  },
-  { 
-    id: "eeg-raw", 
-    name: "EEG Studies", 
-    icon: Activity,
-    description: "Processed EEG recordings",
-    color: "text-cyan-600"
   },
   { 
     id: "eeg-reports", 
@@ -66,19 +67,63 @@ const BUCKETS = [
   },
 ];
 
+interface StudyFile {
+  id: string;
+  study_id: string;
+  path: string;
+  kind: string;
+  size_bytes: number | null;
+  created_at: string;
+}
+
 export default function Files() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const [selectedBucket, setSelectedBucket] = useState("eeg-uploads");
+  const [selectedBucket, setSelectedBucket] = useState("study-files");
   const [currentPath, setCurrentPath] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
 
-  const { data: files, isLoading } = useQuery({
+  // Fetch study_files from database for the current user
+  const { data: studyFiles, isLoading: studyFilesLoading } = useQuery({
+    queryKey: ["user-study-files"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      // Get studies owned by this user
+      const { data: studies, error: studiesError } = await supabase
+        .from('studies')
+        .select('id')
+        .eq('owner', user.id);
+      
+      if (studiesError) throw studiesError;
+      
+      if (!studies || studies.length === 0) return [];
+
+      // Get files for these studies
+      const { data: files, error } = await supabase
+        .from('study_files')
+        .select('*')
+        .in('study_id', studies.map(s => s.id))
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return files as StudyFile[];
+    },
+    enabled: selectedBucket === 'study-files'
+  });
+
+  const { data: files, isLoading: storageLoading } = useQuery({
     queryKey: ["storage-files", selectedBucket, currentPath],
     queryFn: async () => {
+      // Handle study-files - use database query
+      if (selectedBucket === 'study-files') {
+        return null; // Handled by studyFiles query
+      }
+
       // Handle notes bucket - fetch from notes table
       if (selectedBucket === 'notes') {
         const { data: { user } } = await supabase.auth.getUser();
@@ -121,7 +166,8 @@ export default function Files() {
         });
       if (error) throw error;
       return data;
-    }
+    },
+    enabled: selectedBucket !== 'study-files'
   });
 
   const uploadMutation = useMutation({
@@ -155,7 +201,7 @@ export default function Files() {
     }
   });
 
-  const handleDownload = async (fileName: string) => {
+  const handleDownload = async (fileName: string, filePath?: string) => {
     // Handle notes download
     const file = files?.find((f: any) => f.name === fileName);
     if (selectedBucket === 'notes' && file?.metadata?.noteContent) {
@@ -172,12 +218,30 @@ export default function Files() {
       return;
     }
 
+    // Handle study files download
+    if (selectedBucket === 'study-files' && filePath) {
+      const { data, error } = await supabase.storage.from('eeg-uploads').download(filePath);
+      if (error) {
+        toast.error("Download failed");
+        return;
+      }
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     // Handle storage file download
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     
-    const filePath = currentPath ? `${user.id}/${currentPath}/${fileName}` : `${user.id}/${fileName}`;
-    const { data, error } = await supabase.storage.from(selectedBucket).download(filePath);
+    const downloadPath = currentPath ? `${user.id}/${currentPath}/${fileName}` : `${user.id}/${fileName}`;
+    const { data, error } = await supabase.storage.from(selectedBucket).download(downloadPath);
     if (error) {
       toast.error("Download failed");
       return;
@@ -192,9 +256,19 @@ export default function Files() {
     URL.revokeObjectURL(url);
   };
 
-  const handlePreview = async (fileName: string) => {
+  const handlePreview = async (fileName: string, studyFile?: StudyFile) => {
     if (selectedBucket === 'notes') {
       navigate('/app/notes');
+      return;
+    }
+
+    if (selectedBucket === 'study-files' && studyFile) {
+      setPreviewFile({
+        name: fileName,
+        path: studyFile.path,
+        bucket: 'eeg-uploads',
+        studyId: studyFile.study_id
+      });
       return;
     }
 
@@ -229,13 +303,28 @@ export default function Files() {
     setCurrentPath(parts.join('/'));
   };
 
-  const formatFileSize = (bytes: number) => {
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return 'Unknown size';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const filteredFiles = files?.filter(file => 
+  const isLoading = selectedBucket === 'study-files' ? studyFilesLoading : storageLoading;
+
+  // Process files based on bucket type
+  let displayFiles: any[] = [];
+  if (selectedBucket === 'study-files' && studyFiles) {
+    displayFiles = studyFiles.map(sf => ({
+      ...sf,
+      name: sf.path.split('/').pop() || sf.path,
+      metadata: { size: sf.size_bytes }
+    }));
+  } else if (files) {
+    displayFiles = files;
+  }
+
+  const filteredFiles = displayFiles?.filter(file => 
     file.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -312,7 +401,7 @@ export default function Files() {
               />
             </div>
             
-            {selectedBucket !== 'notes' && (
+            {selectedBucket !== 'notes' && selectedBucket !== 'study-files' && (
               <Button onClick={() => fileInputRef.current?.click()} size="sm" className="h-9">
                 <Upload className="h-4 w-4 mr-2" />
                 Upload
@@ -334,13 +423,15 @@ export default function Files() {
             <div className="flex justify-center items-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : !files || files.length === 0 ? (
+          ) : !filteredFiles || filteredFiles.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center px-4">
               <FolderOpen className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <p className="text-lg font-medium">No files here</p>
               <p className="text-sm text-muted-foreground mt-1">
                 {selectedBucket === 'notes' 
                   ? 'No notes available' 
+                  : selectedBucket === 'study-files'
+                  ? 'Upload EEG studies to see them here'
                   : 'Upload files to get started'}
               </p>
             </div>
@@ -359,54 +450,68 @@ export default function Files() {
               ))}
               
               {/* Then files */}
-              {regularFiles.map((file) => (
-                <div
-                  key={file.name}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
-                >
-                  <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  
-                  <div 
-                    className="flex-1 min-w-0 cursor-pointer"
-                    onClick={() => handlePreview(file.name)}
+              {regularFiles.map((file) => {
+                const isStudyFile = selectedBucket === 'study-files';
+                const fileName = file.name;
+                
+                return (
+                  <div
+                    key={file.id || file.name}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
                   >
-                    <p className="font-medium text-sm truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {file.metadata?.size && formatFileSize(file.metadata.size)}
-                      {file.updated_at && ` • ${dayjs(file.updated_at).fromNow()}`}
-                    </p>
+                    <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    
+                    <div 
+                      className="flex-1 min-w-0 cursor-pointer"
+                      onClick={() => handlePreview(fileName, isStudyFile ? file : undefined)}
+                    >
+                      <p className="font-medium text-sm truncate">{fileName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {file.metadata?.size ? formatFileSize(file.metadata.size) : formatFileSize(file.size_bytes)}
+                        {(file.updated_at || file.created_at) && ` • ${dayjs(file.updated_at || file.created_at).fromNow()}`}
+                        {isStudyFile && file.kind && ` • ${file.kind.toUpperCase()}`}
+                      </p>
+                    </div>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="opacity-0 group-hover:opacity-100 h-8 w-8 p-0"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handlePreview(fileName, isStudyFile ? file : undefined)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          Preview
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDownload(fileName, isStudyFile ? file.path : undefined)}>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download
+                        </DropdownMenuItem>
+                        {isStudyFile && (
+                          <DropdownMenuItem onClick={() => navigate(`/app/studies/${file.study_id}`)}>
+                            <Activity className="mr-2 h-4 w-4" />
+                            View Study
+                          </DropdownMenuItem>
+                        )}
+                        {!isStudyFile && (
+                          <DropdownMenuItem 
+                            onClick={() => deleteMutation.mutate(fileName)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="opacity-0 group-hover:opacity-100 h-8 w-8 p-0"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handlePreview(file.name)}>
-                        <Eye className="mr-2 h-4 w-4" />
-                        Preview
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDownload(file.name)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        onClick={() => deleteMutation.mutate(file.name)}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
