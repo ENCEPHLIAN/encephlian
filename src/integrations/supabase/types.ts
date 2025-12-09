@@ -698,11 +698,20 @@ export type Database = {
           original_format: string | null
           owner: string
           reference: string | null
+          refund_processed_at: string | null
+          refund_reason: string | null
+          refund_requested: boolean | null
           report_locked: boolean | null
           sample: boolean | null
           sla: string
+          sla_selected_at: string | null
           srate_hz: number | null
           state: string | null
+          tokens_deducted: number | null
+          triage_completed_at: string | null
+          triage_progress: number | null
+          triage_started_at: string | null
+          triage_status: string | null
           uploaded_file_path: string | null
         }
         Insert: {
@@ -718,11 +727,20 @@ export type Database = {
           original_format?: string | null
           owner: string
           reference?: string | null
+          refund_processed_at?: string | null
+          refund_reason?: string | null
+          refund_requested?: boolean | null
           report_locked?: boolean | null
           sample?: boolean | null
           sla?: string
+          sla_selected_at?: string | null
           srate_hz?: number | null
           state?: string | null
+          tokens_deducted?: number | null
+          triage_completed_at?: string | null
+          triage_progress?: number | null
+          triage_started_at?: string | null
+          triage_status?: string | null
           uploaded_file_path?: string | null
         }
         Update: {
@@ -738,11 +756,20 @@ export type Database = {
           original_format?: string | null
           owner?: string
           reference?: string | null
+          refund_processed_at?: string | null
+          refund_reason?: string | null
+          refund_requested?: boolean | null
           report_locked?: boolean | null
           sample?: boolean | null
           sla?: string
+          sla_selected_at?: string | null
           srate_hz?: number | null
           state?: string | null
+          tokens_deducted?: number | null
+          triage_completed_at?: string | null
+          triage_progress?: number | null
+          triage_started_at?: string | null
+          triage_status?: string | null
           uploaded_file_path?: string | null
         }
         Relationships: [
@@ -1161,11 +1188,20 @@ export type Database = {
           original_format: string | null
           owner: string
           reference: string | null
+          refund_processed_at: string | null
+          refund_reason: string | null
+          refund_requested: boolean | null
           report_locked: boolean | null
           sample: boolean | null
           sla: string
+          sla_selected_at: string | null
           srate_hz: number | null
           state: string | null
+          tokens_deducted: number | null
+          triage_completed_at: string | null
+          triage_progress: number | null
+          triage_started_at: string | null
+          triage_status: string | null
           uploaded_file_path: string | null
         }[]
         SetofOptions: {
@@ -1228,6 +1264,15 @@ export type Database = {
           p_action: string
           p_clinic_id: string
           p_role?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      admin_push_eeg_to_user: {
+        Args: {
+          p_clinic_id: string
+          p_file_path: string
+          p_meta?: Json
           p_user_id: string
         }
         Returns: Json
@@ -1308,6 +1353,14 @@ export type Database = {
       }
       process_completed_withdrawal: {
         Args: { p_withdrawal_id: string }
+        Returns: Json
+      }
+      request_token_refund: {
+        Args: { p_reason?: string; p_study_id: string }
+        Returns: Json
+      }
+      select_sla_and_start_triage: {
+        Args: { p_sla: string; p_study_id: string }
         Returns: Json
       }
       unlock_failed_withdrawal: {
