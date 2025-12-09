@@ -4,20 +4,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
-import logo from "@/assets/logo.png"; // favicon_encephlian.png or your main glyph
+import logo from "@/assets/logo.png";
 
 interface EditableBrandingProps {
   companyName: string;
   logoUrl?: string;
-  // Controls the invisible square that the glyph fits into
+  // Controls the invisible square box for the glyph
   logoClassName?: string;
 }
 
 export default function EditableBranding({
   companyName,
   logoUrl,
-  // Big by default so it visually matches the ENCEPHLIAN text height
-  logoClassName = "h-14 w-14 md:h-16 md:w-16",
+  // BIG by default – this will make it taller than the ENCEPHLIAN text
+  logoClassName = "h-20 w-20 md:h-24 md:w-24",
 }: EditableBrandingProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(companyName);
@@ -68,8 +68,8 @@ export default function EditableBranding({
   const glyphSrc = logoUrl || logo;
 
   return (
-    <div className="flex items-center gap-2 md:gap-3 group select-none">
-      {/* Invisible square; glyph fills this and stays perfectly centered */}
+    <div className="flex items-center gap-3 md:gap-4 group select-none">
+      {/* Huge invisible square; glyph fills this and becomes visually dominant */}
       <div
         className={`
           relative flex-shrink-0
@@ -77,31 +77,30 @@ export default function EditableBranding({
           flex items-center justify-center
         `}
       >
-        {/* Subtle halo / gradient around the glyph – shows on hover, works on light & dark */}
+        {/* Hover halo / subtle silver glow */}
         <div
           className="
             absolute inset-0
-            rounded-2xl
-            bg-radial from-zinc-300/0 via-zinc-400/18 to-zinc-900/0
-            dark:from-zinc-100/0 dark:via-zinc-500/28 dark:to-zinc-900/0
+            rounded-3xl
+            bg-radial from-zinc-200/0 via-zinc-400/20 to-zinc-900/0
+            dark:from-zinc-100/0 dark:via-zinc-500/30 dark:to-zinc-900/0
             opacity-0 group-hover:opacity-100
             transition-opacity duration-300 ease-out
           "
         />
 
-        {/* Actual logo – big, tight, high contrast, with silver “breathing” effect */}
         <img
           src={glyphSrc}
           alt="Logo"
           className="
             relative
-            h-[92%] w-[92%]
+            h-[96%] w-[96%]   /* almost edge-to-edge: tall, aggressive */
             object-contain
             transition-transform duration-300 ease-out
-            group-hover:scale-[1.04]
-            [filter:drop-shadow(0_0_8px_rgba(0,0,0,0.45))]
-            dark:[filter:drop-shadow(0_0_14px_rgba(0,0,0,0.85))]
-            group-hover:[filter:brightness(1.08)_drop-shadow(0_0_14px_rgba(0,0,0,0.9))]
+            group-hover:scale-[1.03]
+            [filter:drop-shadow(0_0_10px_rgba(0,0,0,0.6))]
+            dark:[filter:drop-shadow(0_0_16px_rgba(0,0,0,0.95))]
+            group-hover:[filter:brightness(1.08)_drop-shadow(0_0_18px_rgba(0,0,0,1))]
           "
         />
       </div>
@@ -113,7 +112,7 @@ export default function EditableBranding({
           onBlur={handleSave}
           onKeyDown={handleKeyDown}
           autoFocus
-          className="text-2xl font-bold logo-text h-auto py-1 px-2 border-primary"
+          className="text-2xl md:text-3xl font-bold logo-text h-auto py-1 px-2 border-primary"
           disabled={updateMutation.isPending}
         />
       ) : (
