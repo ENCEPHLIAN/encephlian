@@ -517,3 +517,35 @@
     transform: none !important;
   }
 }
+
+/* -------------------------------------------------- */
+/* SHIMMER ANIMATION FOR PROGRESS BARS */
+/* -------------------------------------------------- */
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+/* -------------------------------------------------- */
+/* SUCCESS COLOR TOKEN */
+/* -------------------------------------------------- */
+
+@layer base {
+  :root {
+    --success: 150 60% 45%;
+    --success-foreground: 0 0% 100%;
+  }
+  .dark {
+    --success: 150 50% 40%;
+    --success-foreground: 0 0% 100%;
+  }
+}
