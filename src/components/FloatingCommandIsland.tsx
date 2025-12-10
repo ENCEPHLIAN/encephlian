@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Search, Command } from "lucide-react";
+import { Command } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FloatingCommandIslandProps {
@@ -54,19 +54,26 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
       <button
         onClick={onOpen}
         className={cn(
-          "group flex items-center gap-3 px-5 py-3 rounded-full",
-          "bg-card/90 backdrop-blur-xl border border-border/50",
+          "group flex items-center gap-3 px-5 py-3 rounded-xl",
+          "bg-card/80 backdrop-blur-xl border border-border/30",
           "shadow-lg shadow-background/20",
-          "hover:bg-card hover:border-border hover:shadow-xl",
-          "transition-all duration-200",
-          // Faded RGB gradient glow effect
-          "before:absolute before:inset-0 before:rounded-full before:-z-10",
-          "before:bg-gradient-to-r before:from-rose-500/10 before:via-violet-500/10 before:to-cyan-500/10",
-          "before:blur-xl before:opacity-0 hover:before:opacity-100 before:transition-opacity"
+          "hover:bg-card hover:border-border/50 hover:shadow-xl",
+          "transition-all duration-200"
         )}
       >
-        <div className="flex items-center justify-center h-8 w-8 rounded-full bg-gradient-to-br from-rose-500/20 via-violet-500/20 to-cyan-500/20">
-          <Command className="h-4 w-4 text-foreground" />
+        {/* Logo */}
+        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-rose-500/20 via-violet-500/20 to-cyan-500/20">
+          <img 
+            src="/lovable-uploads/c4bf6e13-33eb-4bb1-96af-dd67a6ad81d0.png" 
+            alt="ENCEPHLIAN" 
+            className="h-5 w-5 object-contain"
+            onError={(e) => {
+              // Fallback to Command icon if logo fails to load
+              e.currentTarget.style.display = 'none';
+              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+            }}
+          />
+          <Command className="h-4 w-4 text-foreground hidden" />
         </div>
         <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors">
           Search or navigate...
