@@ -45,10 +45,10 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         <button
           className={cn(
             "flex items-center justify-center h-12 w-12 rounded-2xl",
-            "bg-background/40 backdrop-blur-2xl",
-            "border border-white/10 dark:border-white/5",
-            "shadow-xl shadow-black/10 dark:shadow-black/30",
-            "hover:bg-background/60 hover:border-white/20",
+            "bg-background/15 backdrop-blur-2xl",
+            "border border-white/8 dark:border-white/5",
+            "shadow-xl shadow-black/10 dark:shadow-black/25",
+            "hover:bg-background/25 hover:border-white/12",
             "transition-all duration-300"
           )}
         >
@@ -89,9 +89,9 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         <div
           className={cn(
             "flex flex-col gap-3 p-4 rounded-2xl",
-            "bg-background/50 backdrop-blur-2xl",
-            "border border-white/10 dark:border-white/5",
-            "shadow-2xl shadow-black/20 dark:shadow-black/40",
+            "bg-background/20 backdrop-blur-2xl",
+            "border border-white/8 dark:border-white/5",
+            "shadow-2xl shadow-black/15 dark:shadow-black/30",
             "min-w-[200px]"
           )}
         >

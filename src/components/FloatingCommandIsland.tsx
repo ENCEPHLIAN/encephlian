@@ -55,27 +55,25 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
         onClick={onOpen}
         className={cn(
           "group flex items-center gap-3 px-5 py-3 rounded-xl",
-          "bg-background/50 backdrop-blur-2xl",
-          "border border-white/10 dark:border-white/5",
-          "shadow-xl shadow-black/10 dark:shadow-black/30",
-          "hover:bg-background/70 hover:border-white/20 hover:shadow-2xl",
+          "bg-background/15 backdrop-blur-2xl",
+          "border border-white/8 dark:border-white/5",
+          "shadow-xl shadow-black/10 dark:shadow-black/20",
+          "hover:bg-background/25 hover:border-white/12 hover:shadow-2xl",
           "transition-all duration-300"
         )}
       >
-        {/* Logo */}
-        <div className="flex items-center justify-center h-8 w-8 rounded-lg overflow-hidden bg-gradient-to-br from-rose-500/10 via-violet-500/10 to-cyan-500/10">
-          <img 
-            src={logoImg} 
-            alt="ENCEPHLIAN" 
-            className="h-6 w-6 object-contain"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-              const fallback = e.currentTarget.nextElementSibling as HTMLElement;
-              if (fallback) fallback.classList.remove('hidden');
-            }}
-          />
-          <Command className="h-4 w-4 text-foreground hidden" />
-        </div>
+        {/* Logo - no background */}
+        <img 
+          src={logoImg} 
+          alt="ENCEPHLIAN" 
+          className="h-6 w-6 object-contain"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+            const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+            if (fallback) fallback.classList.remove('hidden');
+          }}
+        />
+        <Command className="h-4 w-4 text-foreground hidden" />
         <span className="text-sm font-medium text-foreground/70 group-hover:text-foreground transition-colors">
           Search or navigate...
         </span>

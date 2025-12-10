@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -44,11 +52,11 @@ export default function EEGViewer() {
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [isMarkerPanelOpen, setIsMarkerPanelOpen] = useState(false);
 
-  // Playback State - default amplitude to 0
+  // Playback State - default amplitude to 50 for visible waveforms
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [timeWindow, setTimeWindow] = useState(30);
-  const [amplitudeScale, setAmplitudeScale] = useState(0);
+  const [amplitudeScale, setAmplitudeScale] = useState(50);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [montage, setMontage] = useState("referential");
 
@@ -489,31 +497,55 @@ export default function EEGViewer() {
           </Button>
         )}
 
-        {/* Channel Groups Modal Button */}
-        <Dialog open={isChannelModalOpen} onOpenChange={setIsChannelModalOpen}>
-          <DialogTrigger asChild>
+        {/* Channel Groups Dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <Layers className="h-4 w-4" />
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Channel Groups</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <ChannelGroupList
-                channelLabels={eegData?.channelLabels || []}
-                visibleGroups={visibleGroups}
-                onToggleGroup={handleToggleGroup}
-                onSelectAll={handleSelectAllGroups}
-                onDeselectAll={handleDeselectAllGroups}
-              />
-              <div className="pt-3 border-t border-border/50">
-                <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 p-2">
+            <DropdownMenuLabel className="text-xs">Channel Groups</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(["frontal", "central", "temporal", "occipital"] as const).map((group) => (
+              <DropdownMenuItem 
+                key={group}
+                className="flex items-center justify-between cursor-pointer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleToggleGroup(group);
+                }}
+              >
+                <span className="capitalize">{group}</span>
+                <div className={cn(
+                  "h-3 w-3 rounded-full border",
+                  visibleGroups.has(group) 
+                    ? "bg-primary border-primary" 
+                    : "bg-transparent border-muted-foreground/50"
+                )} />
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleSelectAllGroups} className="text-xs">
+              Show All
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleDeselectAllGroups} className="text-xs">
+              Hide All
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs">Montage</DropdownMenuLabel>
+            {["referential", "bipolar-longitudinal", "bipolar-transverse"].map((m) => (
+              <DropdownMenuItem 
+                key={m}
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => setMontage(m)}
+              >
+                <span className="text-xs capitalize">{m.replace(/-/g, " ")}</span>
+                {montage === m && <div className="h-2 w-2 rounded-full bg-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Main Content */}
@@ -708,49 +740,71 @@ export default function EEGViewer() {
         </DialogContent>
       </Dialog>
 
-      {/* Fullscreen Modal Button */}
+      {/* Fullscreen Modal Button - frosted glass */}
       <button
         onClick={() => setIsFullscreenOpen(true)}
         className={cn(
-          "fixed z-40 h-10 w-10 rounded-xl flex items-center justify-center",
-          "bg-card/80 backdrop-blur-xl border border-border/30",
-          "shadow-lg hover:bg-card hover:border-border/50",
-          "transition-all duration-200",
+          "fixed z-40 h-12 w-12 rounded-2xl flex items-center justify-center",
+          "bg-background/20 backdrop-blur-2xl",
+          "border border-white/10 dark:border-white/5",
+          "shadow-2xl shadow-black/20 dark:shadow-black/40",
+          "hover:bg-background/30 hover:scale-105",
+          "transition-all duration-300 ease-out",
           isMobile ? "bottom-4 right-4" : "bottom-6 right-6"
         )}
       >
-        <Maximize2 className="h-4 w-4" />
+        <Maximize2 className="h-5 w-5" />
       </button>
 
-      {/* Fullscreen Modal */}
+      {/* Fullscreen Modal - macOS style slide animation */}
       <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
-        <DialogContent className={cn(
-          "p-0 border-border/50",
-          isMobile 
-            ? "max-w-[95vw] max-h-[90vh] w-[95vw] h-[85vh]" 
-            : "max-w-[90vw] max-h-[85vh] w-[90vw] h-[80vh]"
-        )}>
+        <DialogContent 
+          className={cn(
+            "p-0 rounded-2xl overflow-hidden",
+            "bg-background/95 backdrop-blur-2xl",
+            "border border-white/10 dark:border-white/5",
+            "shadow-2xl shadow-black/30",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
+            "data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4",
+            isMobile 
+              ? "max-w-[98vw] max-h-[95vh] w-[98vw] h-[92vh]" 
+              : "max-w-[94vw] max-h-[90vh] w-[94vw] h-[88vh]"
+          )}
+        >
           <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-              <h2 className="text-sm font-semibold">EEG Viewer - Fullscreen</h2>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-background/50">
+              <h2 className="text-sm font-semibold">EEG Viewer</h2>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 rounded-full"
                 onClick={() => setIsFullscreenOpen(false)}
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
-            <div className="flex-1 relative">
-              <EEGViewerContent isModal />
+            {/* Controls in modal */}
+            <div className="border-b border-border/30 p-2 bg-background/30">
+              <EEGControls
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+                duration={eegData?.duration || 0}
+                timeWindow={timeWindow}
+                amplitudeScale={amplitudeScale}
+                playbackSpeed={playbackSpeed}
+                onPlayPause={handlePlayPause}
+                onSkipBackward={handleSkipBackward}
+                onSkipForward={handleSkipForward}
+                onTimeWindowChange={setTimeWindow}
+                onAmplitudeScaleChange={setAmplitudeScale}
+                onPlaybackSpeedChange={setPlaybackSpeed}
+                onTimeChange={setCurrentTime}
+                onExport={handleExport}
+              />
             </div>
-            <div className="border-t border-border/50 p-2">
-              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                <span>Click left half to go backward</span>
-                <span>•</span>
-                <span>Click right half to go forward</span>
-              </div>
+            <div className="flex-1 relative bg-background/80 backdrop-blur-sm">
+              <EEGViewerContent isModal />
             </div>
           </div>
         </DialogContent>

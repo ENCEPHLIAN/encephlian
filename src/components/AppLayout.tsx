@@ -35,6 +35,8 @@ import {
   Smartphone,
   Cpu,
   Bluetooth,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -97,38 +99,18 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
 // --------------- DESKTOP SIDEBAR ---------------
 
-function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: boolean; onToggle: () => void; onMissionOpen: () => void }) {
+function AppSidebarDesktop({ collapsed, onMissionOpen }: { collapsed: boolean; onMissionOpen: () => void }) {
   return (
     <aside
       className={cn(
         "hidden md:flex flex-col relative",
         "bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60",
         "sticky top-16 h-[calc(100vh-4rem)] z-30",
-        "transition-[width] duration-200",
+        "transition-[width] duration-200 ease-out",
         collapsed ? "w-16" : "w-56",
       )}
     >
-      {/* Click zone for toggling - only in empty regions */}
-      <div 
-        className={cn(
-          "absolute inset-0 z-10",
-          "cursor-[col-resize]",
-        )}
-        onClick={onToggle}
-        style={{ pointerEvents: 'none' }}
-      />
-      
-      {/* Clickable edge strip */}
-      <div 
-        className={cn(
-          "absolute right-0 top-0 bottom-0 w-3 z-20",
-          "cursor-[col-resize] hover:bg-primary/10",
-          "transition-colors duration-150"
-        )}
-        onClick={onToggle}
-      />
-      
-      <div className="flex-1 overflow-y-auto px-3 py-4 relative z-30" style={{ pointerEvents: 'auto' }}>
+      <div className="flex-1 overflow-y-auto px-3 py-4">
         {!collapsed && (
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
             Navigation
@@ -138,13 +120,7 @@ function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: 
       </div>
 
       {/* Mission CTA Button at bottom */}
-      <div
-        className={cn(
-          "flex items-center justify-center relative z-30",
-          collapsed ? "p-3" : "p-4"
-        )}
-        style={{ pointerEvents: 'auto' }}
-      >
+      <div className={cn("flex items-center justify-center", collapsed ? "p-3" : "p-4")}>
         <Button
           variant="ghost"
           size="icon"
@@ -286,8 +262,24 @@ function AppLayoutContent() {
       {/* APP BAR (STICKY, FROSTED) */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
-          {/* LEFT: logo + sidebar toggle */}
-          <div className="flex items-center gap-3">
+          {/* LEFT: sidebar toggle + logo */}
+          <div className="flex items-center gap-2">
+            {/* Sidebar toggle button - desktop only */}
+            {!isMobile && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 hidden md:flex"
+                onClick={() => setSidebarCollapsed((v) => !v)}
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? (
+                  <PanelLeft className="h-4 w-4" />
+                ) : (
+                  <PanelLeftClose className="h-4 w-4" />
+                )}
+              </Button>
+            )}
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
           </div>
 
@@ -393,7 +385,7 @@ function AppLayoutContent() {
       {/* BODY: sidebar pinned; whole page scrolls */}
       <div className="flex flex-1">
         {/* Desktop sidebar (sticky, frosted, pinned left) */}
-        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} onMissionOpen={() => setMissionOpen(true)} />}
+        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} />}
 
         {/* Mobile full-screen nav */}
         {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}
