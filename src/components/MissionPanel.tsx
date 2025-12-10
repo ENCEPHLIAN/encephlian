@@ -81,27 +81,16 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     onOpenChange(false);
   };
 
-  // Handle clicking outside to close
-  const handleBackdropClick = () => {
-    onOpenChange(false);
-  };
-
   if (!open) return null;
 
   return (
     <>
-      {/* Backdrop - click to close */}
-      <div
-        className="fixed inset-0 z-[9998] bg-background/30 backdrop-blur-sm"
-        onClick={handleBackdropClick}
-      />
-      
-      {/* Content panel - stop propagation to prevent closing when clicking inside */}
+      {/* Full panel - clicking empty areas closes it */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
                    bg-background/70 backdrop-blur-lg
                    supports-[backdrop-filter]:bg-background/60"
-        onClick={handleBackdropClick}
+        onClick={() => onOpenChange(false)}
       >
         <div onClick={(e) => e.stopPropagation()} className="flex flex-col h-full">
           {/* Top row: branding + device status + close */}
