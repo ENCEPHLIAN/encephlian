@@ -82,8 +82,11 @@ export default function PendingTriageSection({ studies, onSelectSla }: PendingTr
                     </div>
                   </div>
                 </div>
-                <Button onClick={() => onSelectSla(study)} className="shrink-0">
-                  Select SLA Lane
+                <Button 
+                  onClick={() => onSelectSla(study)} 
+                  className="shrink-0 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20"
+                >
+                  Start Analysis
                 </Button>
               </div>
             );

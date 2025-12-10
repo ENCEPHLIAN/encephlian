@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Trash2, RefreshCw, AlertTriangle, History, Database, HardDrive } from "lucide-react";
+import { Loader2, Trash2, RefreshCw, AlertTriangle, History, Database, HardDrive, CheckCircle2 } from "lucide-react";
 import dayjs from "dayjs";
 
 export default function AdminRestore() {
@@ -56,16 +56,14 @@ export default function AdminRestore() {
   // Storage buckets to clean
   const STORAGE_BUCKETS = ["eeg-uploads", "eeg-raw", "eeg-clean", "eeg-json", "eeg-reports", "eeg-preview"];
 
-  // Handle full reset for a user
+  // Handle full reset for a user using the secure RPC function
   const handleFullReset = async () => {
     if (!selectedUserId) return;
     
     setIsProcessing(true);
     try {
+      // First delete files from storage
       const studies = userStudies || [];
-      const studyIds = studies.map(s => s.id);
-
-      // Delete files from storage for each study
       for (const study of studies) {
         const files = (study.study_files as any[]) || [];
         for (const file of files) {
@@ -79,27 +77,24 @@ export default function AdminRestore() {
         }
       }
 
-      // Delete database records in correct order (foreign key constraints)
-      if (studyIds.length > 0) {
-        // Delete related records first
-        await supabase.from("report_attachments").delete().in("study_id", studyIds);
-        await supabase.from("eeg_markers").delete().in("study_id", studyIds);
-        await supabase.from("review_events").delete().in("study_id", studyIds);
-        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
-        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
-        await supabase.from("reports").delete().in("study_id", studyIds);
-        await supabase.from("study_files").delete().in("study_id", studyIds);
-        await supabase.from("studies").delete().in("id", studyIds);
-      }
+      // Use the secure admin RPC function for database cleanup
+      const { data, error } = await supabase.rpc("admin_full_reset_user", {
+        p_user_id: selectedUserId,
+      });
 
-      // Delete user notes
-      await supabase.from("notes").delete().eq("user_id", selectedUserId);
+      if (error) throw error;
 
-      // Reset wallet (but keep the wallet record)
-      await supabase.from("wallet_transactions").delete().eq("user_id", selectedUserId);
-
-      toast.success("User data has been completely reset");
+      const result = data as { success: boolean; studies_deleted: number; files_deleted: number; notes_deleted: number };
+      
+      toast.success(
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <span>Reset complete: {result.studies_deleted} studies, {result.files_deleted} files deleted</span>
+        </div>
+      );
+      
       queryClient.invalidateQueries({ queryKey: ["user-studies-restore", selectedUserId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
       setShowResetConfirm(false);
       refetchStudies();
     } catch (err: any) {
@@ -110,7 +105,7 @@ export default function AdminRestore() {
     }
   };
 
-  // Handle restore to specific date (delete everything after that date)
+  // Handle restore to specific date using the secure RPC function
   const handleRestoreToDate = async () => {
     if (!selectedUserId || !selectedDate) return;
     
@@ -118,17 +113,15 @@ export default function AdminRestore() {
     try {
       const cutoffDate = dayjs(selectedDate).endOf("day").toISOString();
       
-      // Get studies after the cutoff date
+      // Get studies after the cutoff date to delete their files
       const { data: studiesToDelete } = await supabase
         .from("studies")
         .select("*, study_files(*)")
         .eq("owner", selectedUserId)
         .gt("created_at", cutoffDate);
 
+      // Delete files from storage
       if (studiesToDelete && studiesToDelete.length > 0) {
-        const studyIds = studiesToDelete.map(s => s.id);
-
-        // Delete files from storage
         for (const study of studiesToDelete) {
           const files = (study.study_files as any[]) || [];
           for (const file of files) {
@@ -141,27 +134,27 @@ export default function AdminRestore() {
             }
           }
         }
-
-        // Delete database records in correct order
-        await supabase.from("report_attachments").delete().in("study_id", studyIds);
-        await supabase.from("eeg_markers").delete().in("study_id", studyIds);
-        await supabase.from("review_events").delete().in("study_id", studyIds);
-        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
-        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
-        await supabase.from("reports").delete().in("study_id", studyIds);
-        await supabase.from("study_files").delete().in("study_id", studyIds);
-        await supabase.from("studies").delete().in("id", studyIds);
       }
 
-      // Delete notes after cutoff
-      await supabase
-        .from("notes")
-        .delete()
-        .eq("user_id", selectedUserId)
-        .gt("created_at", cutoffDate);
+      // Use the secure admin RPC function for database cleanup
+      const { data, error } = await supabase.rpc("admin_restore_to_date", {
+        p_user_id: selectedUserId,
+        p_cutoff_date: cutoffDate,
+      });
 
-      toast.success(`Restored to ${selectedDate}. All data after this date has been removed.`);
+      if (error) throw error;
+
+      const result = data as { success: boolean; studies_deleted: number; files_deleted: number; notes_deleted: number };
+
+      toast.success(
+        <div className="flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <span>Restored to {selectedDate}: {result.studies_deleted} studies removed</span>
+        </div>
+      );
+      
       queryClient.invalidateQueries({ queryKey: ["user-studies-restore", selectedUserId] });
+      queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
       setShowRestoreConfirm(false);
       setSelectedDate("");
       refetchStudies();

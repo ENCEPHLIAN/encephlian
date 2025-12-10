@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, Search, ExternalLink } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Loader2, Search, ExternalLink, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 type StudyWithClinic = {
   id: string;
@@ -39,8 +50,10 @@ type StudyWithClinic = {
 
 export default function AdminStudies() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
+  const [deleteStudy, setDeleteStudy] = useState<StudyWithClinic | null>(null);
 
   const { data: studies, isLoading } = useQuery<StudyWithClinic[]>({
     queryKey: ["admin-all-studies"],
@@ -74,6 +87,24 @@ export default function AdminStudies() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async (studyId: string) => {
+      const { data, error } = await supabase.rpc("admin_delete_study", {
+        p_study_id: studyId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Study deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
+      setDeleteStudy(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete study");
+    },
+  });
+
   const filteredStudies = studies?.filter((study) => {
     const matchesSearch =
       !searchQuery ||
@@ -90,8 +121,10 @@ export default function AdminStudies() {
     uploaded: "bg-blue-500/10 text-blue-500",
     parsed: "bg-yellow-500/10 text-yellow-500",
     canonicalized: "bg-purple-500/10 text-purple-500",
+    processing: "bg-cyan-500/10 text-cyan-500",
     ai_draft: "bg-cyan-500/10 text-cyan-500",
     in_review: "bg-orange-500/10 text-orange-500",
+    completed: "bg-green-500/10 text-green-500",
     signed: "bg-green-500/10 text-green-500",
     failed: "bg-red-500/10 text-red-500",
   };
@@ -107,8 +140,8 @@ export default function AdminStudies() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Studies Queue</h1>
-        <p className="text-sm text-muted-foreground font-mono">
+        <h1 className="text-2xl font-bold tracking-tight">Studies Queue</h1>
+        <p className="text-sm text-muted-foreground">
           All studies across all clinics
         </p>
       </div>
@@ -121,20 +154,18 @@ export default function AdminStudies() {
             placeholder="Search by ID, patient, clinic..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 font-mono"
+            className="pl-9"
           />
         </div>
         <Select value={stateFilter} onValueChange={setStateFilter}>
-          <SelectTrigger className="w-40 font-mono">
+          <SelectTrigger className="w-40">
             <SelectValue placeholder="Filter by state" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All States</SelectItem>
             <SelectItem value="uploaded">Uploaded</SelectItem>
-            <SelectItem value="parsed">Parsed</SelectItem>
-            <SelectItem value="canonicalized">Canonicalized</SelectItem>
-            <SelectItem value="ai_draft">AI Draft</SelectItem>
-            <SelectItem value="in_review">In Review</SelectItem>
+            <SelectItem value="processing">Processing</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="signed">Signed</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
           </SelectContent>
@@ -147,27 +178,23 @@ export default function AdminStudies() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="font-mono">ID</TableHead>
-                <TableHead className="font-mono">Clinic</TableHead>
-                <TableHead className="font-mono">Patient ID</TableHead>
-                <TableHead className="font-mono">State</TableHead>
-                <TableHead className="font-mono">SLA</TableHead>
-                <TableHead className="font-mono">Created</TableHead>
-                <TableHead className="font-mono">Last Event</TableHead>
-                <TableHead className="font-mono"></TableHead>
+                <TableHead>ID</TableHead>
+                <TableHead>Clinic</TableHead>
+                <TableHead>Patient ID</TableHead>
+                <TableHead>State</TableHead>
+                <TableHead>SLA</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Last Event</TableHead>
+                <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredStudies?.map((study) => (
-                <TableRow
-                  key={study.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate(`/admin/studies/${study.id}`)}
-                >
+                <TableRow key={study.id} className="group">
                   <TableCell className="font-mono text-xs">
                     {study.id.slice(0, 8)}...
                   </TableCell>
-                  <TableCell className="font-mono text-sm">
+                  <TableCell className="text-sm">
                     {study.clinic_name}
                   </TableCell>
                   <TableCell className="font-mono text-sm">
@@ -176,7 +203,7 @@ export default function AdminStudies() {
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className={`font-mono text-xs ${stateColors[study.state || "uploaded"]}`}
+                      className={`text-xs ${stateColors[study.state || "uploaded"]}`}
                     >
                       {(study.state || "uploaded").toUpperCase()}
                     </Badge>
@@ -184,7 +211,7 @@ export default function AdminStudies() {
                   <TableCell>
                     <Badge
                       variant={study.sla === "STAT" ? "destructive" : "outline"}
-                      className="font-mono text-xs"
+                      className="text-xs"
                     >
                       {study.sla}
                     </Badge>
@@ -198,9 +225,27 @@ export default function AdminStudies() {
                       : "—"}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-8 w-8"
+                        onClick={() => navigate(`/admin/studies/${study.id}`)}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteStudy(study);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -215,6 +260,36 @@ export default function AdminStudies() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteStudy} onOpenChange={() => setDeleteStudy(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Study</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this study and all associated data including files, reports, and markers.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteStudy && deleteMutation.mutate(deleteStudy.id)}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Study"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -1159,8 +1159,10 @@ export type Database = {
         Returns: Json
       }
       admin_delete_clinic: { Args: { p_clinic_id: string }; Returns: Json }
+      admin_delete_study: { Args: { p_study_id: string }; Returns: Json }
       admin_delete_test_files: { Args: { p_file_ids: string[] }; Returns: Json }
       admin_delete_user: { Args: { p_user_id: string }; Returns: Json }
+      admin_full_reset_user: { Args: { p_user_id: string }; Returns: Json }
       admin_get_all_clinics: {
         Args: never
         Returns: {
@@ -1278,6 +1280,10 @@ export type Database = {
         Returns: Json
       }
       admin_reset_user_tfa: { Args: { p_user_id: string }; Returns: Json }
+      admin_restore_to_date: {
+        Args: { p_cutoff_date: string; p_user_id: string }
+        Returns: Json
+      }
       admin_revoke_role: {
         Args: {
           p_role: Database["public"]["Enums"]["app_role"]
