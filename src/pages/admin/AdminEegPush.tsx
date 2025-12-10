@@ -10,7 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, Upload, SendHorizontal, FileText, AlertCircle, CheckCircle2, Clock } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Loader2, Upload, SendHorizontal, AlertCircle, CheckCircle2, Clock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -50,6 +51,7 @@ export default function AdminEegPush() {
   const [notes, setNotes] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [deleteStudy, setDeleteStudy] = useState<PushedStudy | null>(null);
 
   // Fetch clinician users
   const { data: users, isLoading: usersLoading } = useQuery({
@@ -77,16 +79,15 @@ export default function AdminEegPush() {
     },
   });
 
-  // Fetch recently pushed studies
+  // Fetch recently pushed studies (both awaiting_sla and others)
   const { data: recentPushes, isLoading: pushesLoading } = useQuery({
     queryKey: ["admin-recent-pushes"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
         .select("*")
-        .eq("triage_status", "awaiting_sla")
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(50);
       if (error) throw error;
       return data as PushedStudy[];
     },
@@ -120,6 +121,25 @@ export default function AdminEegPush() {
     },
   });
 
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (studyId: string) => {
+      const { data, error } = await supabase.rpc("admin_delete_study", {
+        p_study_id: studyId,
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("Study deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["admin-recent-pushes"] });
+      setDeleteStudy(null);
+    },
+    onError: (err: any) => {
+      toast.error(err.message || "Failed to delete study");
+    },
+  });
+
   const resetForm = () => {
     setSelectedUserId("");
     setSelectedClinicId("");
@@ -137,7 +157,7 @@ export default function AdminEegPush() {
 
     setIsUploading(true);
     try {
-      // Upload file to storage
+      // Upload file to storage under the target user's folder
       const fileName = `${selectedUserId}/${Date.now()}_${uploadFile.name}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("eeg-uploads")
@@ -147,13 +167,13 @@ export default function AdminEegPush() {
 
       const uploadedPath = uploadData.path;
 
-      // Push to user
+      // Push to user - the admin_push_eeg_to_user function sets owner to p_user_id
       await pushMutation.mutateAsync({
         userId: selectedUserId,
         clinicId: selectedClinicId,
         filePath: uploadedPath,
         meta: {
-          patient_id: patientId || `ADMIN-${Date.now()}`,
+          patient_id: patientId || `PAT-${Date.now().toString(36).toUpperCase()}`,
           admin_notes: notes,
           admin_pushed: true,
           pushed_at: new Date().toISOString(),
@@ -177,7 +197,7 @@ export default function AdminEegPush() {
       clinicId: selectedClinicId,
       filePath: filePath,
       meta: {
-        patient_id: patientId || `ADMIN-${Date.now()}`,
+        patient_id: patientId || `PAT-${Date.now().toString(36).toUpperCase()}`,
         admin_notes: notes,
         admin_pushed: true,
         pushed_at: new Date().toISOString(),
@@ -188,19 +208,20 @@ export default function AdminEegPush() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "awaiting_sla":
+      case "pending":
         return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">Awaiting SLA</Badge>;
       case "processing":
         return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/30">Processing</Badge>;
       case "completed":
         return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">Completed</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{status || "pending"}</Badge>;
     }
   };
 
   const getUserEmail = (userId: string) => {
     const user = users?.find((u) => u.id === userId);
-    return user?.email || userId.slice(0, 8);
+    return user?.email || user?.full_name || userId.slice(0, 8);
   };
 
   const getClinicName = (clinicId: string) => {
@@ -216,11 +237,15 @@ export default function AdminEegPush() {
     );
   }
 
+  const awaitingSlaPushes = recentPushes?.filter((p) => !p.triage_status || p.triage_status === "awaiting_sla" || p.triage_status === "pending") || [];
+  const processingPushes = recentPushes?.filter((p) => p.triage_status === "processing") || [];
+  const completedToday = recentPushes?.filter((p) => p.triage_status === "completed" && dayjs(p.created_at).isAfter(dayjs().startOf("day"))) || [];
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">EEG Push Controls</h1>
-        <p className="text-sm text-muted-foreground font-mono">
+        <h1 className="text-2xl font-bold tracking-tight">EEG Push Controls</h1>
+        <p className="text-sm text-muted-foreground">
           Manually push EEG files to clinician dashboards for SLA selection
         </p>
       </div>
@@ -235,8 +260,8 @@ export default function AdminEegPush() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold font-mono">
-              {recentPushes?.filter((p) => p.triage_status === "awaiting_sla").length || 0}
+            <div className="text-3xl font-bold">
+              {awaitingSlaPushes.length}
             </div>
           </CardContent>
         </Card>
@@ -249,8 +274,8 @@ export default function AdminEegPush() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold font-mono">
-              {recentPushes?.filter((p) => p.triage_status === "processing").length || 0}
+            <div className="text-3xl font-bold">
+              {processingPushes.length}
             </div>
           </CardContent>
         </Card>
@@ -263,10 +288,8 @@ export default function AdminEegPush() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold font-mono">
-              {recentPushes?.filter(
-                (p) => p.triage_status === "completed" && dayjs(p.created_at).isAfter(dayjs().startOf("day"))
-              ).length || 0}
+            <div className="text-3xl font-bold">
+              {completedToday.length}
             </div>
           </CardContent>
         </Card>
@@ -277,7 +300,7 @@ export default function AdminEegPush() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base font-mono">Push EEG to User</CardTitle>
+              <CardTitle className="text-base">Push EEG to User</CardTitle>
               <CardDescription>
                 Upload or specify an EEG file path to push to a clinician's dashboard
               </CardDescription>
@@ -434,8 +457,8 @@ export default function AdminEegPush() {
       {/* Recent Pushes Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-mono">Recent Pushes</CardTitle>
-          <CardDescription>EEG files pushed to clinicians awaiting SLA selection</CardDescription>
+          <CardTitle className="text-base">Recent Studies</CardTitle>
+          <CardDescription>EEG files pushed to clinicians and their status</CardDescription>
         </CardHeader>
         <CardContent>
           {pushesLoading ? (
@@ -451,6 +474,7 @@ export default function AdminEegPush() {
                   <TableHead>Clinic</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Pushed</TableHead>
+                  <TableHead className="w-16">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -467,6 +491,16 @@ export default function AdminEegPush() {
                       <TableCell className="text-muted-foreground">
                         {dayjs(push.created_at).fromNow()}
                       </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteStudy(push)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -480,6 +514,35 @@ export default function AdminEegPush() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteStudy} onOpenChange={() => setDeleteStudy(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Study</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this study and all associated data. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteStudy && deleteMutation.mutate(deleteStudy.id)}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Study"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

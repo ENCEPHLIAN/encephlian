@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Clock, Zap, Coins, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, Clock, Zap, Coins, AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -45,7 +45,7 @@ async function simulateTriageProgress(studyId: string) {
     if (stage.status === "completed") {
       updateData.triage_status = "completed";
       updateData.triage_completed_at = new Date().toISOString();
-      updateData.state = "completed"; // Use valid state from constraint
+      updateData.state = "completed";
     }
 
     await supabase
@@ -118,7 +118,7 @@ export default function SlaSelectionModal({
       toast.success(
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-green-500" />
-          <span>Triage started! {result.tokens_deducted} token(s) deducted.</span>
+          <span>Analysis started! {result.tokens_deducted} token(s) deducted.</span>
         </div>
       );
 
@@ -156,11 +156,12 @@ export default function SlaSelectionModal({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isConfirming ? "Confirm SLA Selection" : "Select SLA Lane"}
+            <Sparkles className="h-5 w-5 text-primary" />
+            {isConfirming ? "Confirm Analysis" : "Start AI Analysis"}
           </DialogTitle>
           <DialogDescription>
             {isConfirming 
-              ? "Review your selection before starting triage" 
+              ? "Review your selection before starting" 
               : "Choose the turnaround time for this EEG analysis"}
           </DialogDescription>
         </DialogHeader>
@@ -181,17 +182,17 @@ export default function SlaSelectionModal({
           <div className="grid grid-cols-2 gap-4 mt-2">
             {/* TAT Option */}
             <Card
-              className={`p-4 cursor-pointer transition-all hover:border-primary/50 hover:bg-accent/50 ${
+              className={`p-4 cursor-pointer transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
                 tokenBalance < 1 ? "opacity-50 pointer-events-none" : ""
               }`}
               onClick={() => handleSelectSla("TAT")}
             >
               <div className="flex flex-col items-center text-center space-y-3">
-                <div className="p-3 rounded-full bg-blue-500/10">
+                <div className="p-3 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20">
                   <Clock className="h-6 w-6 text-blue-500" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Routine Review</h3>
+                  <h3 className="font-semibold">Standard</h3>
                   <Badge variant="outline" className="mt-1">1 Token</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -202,21 +203,21 @@ export default function SlaSelectionModal({
 
             {/* STAT Option */}
             <Card
-              className={`p-4 cursor-pointer transition-all hover:border-destructive/50 hover:bg-destructive/5 ${
+              className={`p-4 cursor-pointer transition-all hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/5 ${
                 tokenBalance < 2 ? "opacity-50 pointer-events-none" : ""
               }`}
               onClick={() => handleSelectSla("STAT")}
             >
               <div className="flex flex-col items-center text-center space-y-3">
-                <div className="p-3 rounded-full bg-red-500/10">
+                <div className="p-3 rounded-full bg-gradient-to-br from-red-500/20 to-orange-500/20">
                   <Zap className="h-6 w-6 text-red-500" />
                 </div>
                 <div>
-                  <h3 className="font-semibold">Urgent Review</h3>
+                  <h3 className="font-semibold">Priority</h3>
                   <Badge variant="destructive" className="mt-1">2 Tokens</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Report in 30–90 minutes. For critical or unclear cases.
+                  Report in 30–90 minutes. For critical cases.
                 </p>
               </div>
             </Card>
@@ -227,9 +228,9 @@ export default function SlaSelectionModal({
             <div className="p-4 rounded-lg border bg-muted/30">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">SLA Selected</span>
+                  <span className="text-sm text-muted-foreground">Analysis Type</span>
                   <Badge variant={selectedSla === "STAT" ? "destructive" : "default"}>
-                    {selectedSla === "STAT" ? "Urgent (STAT)" : "Routine (TAT)"}
+                    {selectedSla === "STAT" ? "Priority (STAT)" : "Standard (TAT)"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
@@ -254,14 +255,21 @@ export default function SlaSelectionModal({
               <Button variant="outline" className="flex-1" onClick={handleCancel} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button className="flex-1" onClick={handleConfirm} disabled={isSubmitting}>
+              <Button 
+                className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20" 
+                onClick={handleConfirm} 
+                disabled={isSubmitting}
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Starting...
                   </>
                 ) : (
-                  "Confirm & Start Triage"
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Begin Analysis
+                  </>
                 )}
               </Button>
             </div>
