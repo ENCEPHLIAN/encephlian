@@ -151,51 +151,52 @@
   }
 
   .dark {
-    /* Dark mode: keep feel, just warm the “white” buttons a bit */
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
+    /* Dark mode: warm dark background, no harsh white borders */
+    --background: 220 15% 4%;
+    --foreground: 30 8% 92%;
 
-    --card: 220 15% 8%;
+    --card: 220 15% 7%;
     --card-foreground: 30 8% 92%;
 
-    --popover: 220 15% 8%;
+    --popover: 220 15% 7%;
     --popover-foreground: 30 8% 92%;
 
-    /* slightly warm off-white instead of pure blue-ish white */
-    --primary: 30 10% 90%;
+    /* Faded RGB gradient primary for futuristic look */
+    --primary: 30 10% 88%;
     --primary-foreground: 220 15% 10%;
 
-    --secondary: 220 12% 14%;
+    --secondary: 220 12% 12%;
     --secondary-foreground: 30 8% 92%;
 
-    --muted: 0 0% 15%;
-    --muted-foreground: 0 0% 64.9%;
+    --muted: 220 10% 12%;
+    --muted-foreground: 220 8% 55%;
 
-    --accent: 0 0% 15%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 220 10% 14%;
+    --accent-foreground: 30 8% 92%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 35%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    /* Softer borders - no bright white */
+    --border: 220 10% 14%;
+    --input: 220 10% 14%;
+    --ring: 220 8% 40%;
 
-    --sidebar-background: 0 0% 5%;
-    --sidebar-foreground: 0 0% 85%;
-    --sidebar-primary: 40 8% 92%;
+    --sidebar-background: 220 15% 5%;
+    --sidebar-foreground: 220 8% 75%;
+    --sidebar-primary: 40 8% 88%;
     --sidebar-primary-foreground: 0 0% 9%;
-    --sidebar-accent: 0 0% 10%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 14.9%;
-    --sidebar-ring: 0 0% 83.1%;
+    --sidebar-accent: 220 10% 10%;
+    --sidebar-accent-foreground: 30 8% 92%;
+    --sidebar-border: 220 10% 12%;
+    --sidebar-ring: 220 8% 40%;
 
-    /* DASHBOARD TOKENS (DARK MODE) – same as before */
-    --dashboard-accent-primary: 215 15% 16%;
-    --dashboard-accent-success: 150 20% 18%;
-    --dashboard-accent-warning: 38 30% 20%;
-    --dashboard-accent-info: 200 20% 18%;
-    --dashboard-accent-neutral: 220 10% 17%;
+    /* DASHBOARD TOKENS (DARK MODE) */
+    --dashboard-accent-primary: 215 15% 14%;
+    --dashboard-accent-success: 150 20% 14%;
+    --dashboard-accent-warning: 38 30% 16%;
+    --dashboard-accent-info: 200 20% 14%;
+    --dashboard-accent-neutral: 220 10% 14%;
   }
 }
 /* -------------------------------------------------- */
@@ -506,9 +507,10 @@
 }
 @layer base {
   .quick-outline {
-    @apply bg-secondary border border-border text-foreground hover:bg-secondary/90;
+    @apply bg-secondary border-0 text-foreground hover:bg-secondary/90;
   }
 }
+
 /* Smooth FAQ: disable global data-state animations just for the accordion */
 @layer base {
   .faq-accordion [data-state="open"],
@@ -547,5 +549,67 @@
   .dark {
     --success: 150 50% 40%;
     --success-foreground: 0 0% 100%;
+  }
+}
+
+/* -------------------------------------------------- */
+/* FADED RGB GRADIENT UTILITIES */
+/* -------------------------------------------------- */
+
+@layer utilities {
+  .gradient-rgb-faded {
+    background: linear-gradient(
+      135deg,
+      hsl(350 70% 65% / 0.15) 0%,
+      hsl(280 60% 60% / 0.15) 35%,
+      hsl(200 70% 55% / 0.15) 70%,
+      hsl(170 60% 50% / 0.15) 100%
+    );
+  }
+  
+  .gradient-rgb-border {
+    position: relative;
+  }
+  
+  .gradient-rgb-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      hsl(350 70% 65% / 0.3) 0%,
+      hsl(280 60% 60% / 0.3) 35%,
+      hsl(200 70% 55% / 0.3) 70%,
+      hsl(170 60% 50% / 0.3) 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  
+  .btn-gradient-analysis {
+    background: linear-gradient(
+      135deg,
+      hsl(350 60% 55% / 0.9) 0%,
+      hsl(280 50% 50% / 0.9) 50%,
+      hsl(200 60% 50% / 0.9) 100%
+    );
+    color: white;
+    border: none;
+    transition: all 0.2s ease;
+  }
+  
+  .btn-gradient-analysis:hover {
+    background: linear-gradient(
+      135deg,
+      hsl(350 65% 60% / 1) 0%,
+      hsl(280 55% 55% / 1) 50%,
+      hsl(200 65% 55% / 1) 100%
+    );
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px -4px hsl(280 50% 50% / 0.3);
   }
 }

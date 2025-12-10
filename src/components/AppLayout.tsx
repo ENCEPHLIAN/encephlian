@@ -27,10 +27,13 @@ import {
   StickyNote,
   Settings,
   Search,
-  HelpCircle,
   PanelLeft,
   X,
   Sparkles,
+  ChevronsLeftRight,
+  Shield,
+  CreditCard,
+  HelpCircle,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -42,6 +45,8 @@ import EditableBranding from "@/components/EditableBranding";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 import { MissionPanel } from "@/components/MissionPanel";
+import { FloatingCommandIsland } from "@/components/FloatingCommandIsland";
+import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 
 // --------------- NAV DATA ---------------
 
@@ -89,19 +94,45 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
   );
 }
 
+// --------------- SIDEBAR RESIZE HANDLE ---------------
+
+function SidebarResizeHandle({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "absolute right-0 top-0 bottom-0 w-1 z-40",
+        "cursor-[col-resize] hover:bg-primary/20 active:bg-primary/30",
+        "transition-colors duration-150",
+        "group"
+      )}
+      aria-label="Toggle sidebar"
+    >
+      <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center justify-center h-8 w-4 rounded-l-md bg-primary/10 border-y border-l border-border/50">
+          <ChevronsLeftRight className="h-3 w-3 text-muted-foreground" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // --------------- DESKTOP SIDEBAR (PINNED + STICKY + FROSTED) ---------------
 
-function AppSidebarDesktop({ collapsed, onMissionOpen }: { collapsed: boolean; onMissionOpen: () => void }) {
+function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: boolean; onToggle: () => void; onMissionOpen: () => void }) {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col border-r",
+        "hidden md:flex flex-col relative",
         "bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60",
         "sticky top-16 h-[calc(100vh-4rem)] z-30",
         "transition-[width] duration-200",
         collapsed ? "w-16" : "w-56",
       )}
     >
+      {/* Resize handle */}
+      <SidebarResizeHandle onClick={onToggle} />
+      
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {!collapsed && (
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
@@ -114,7 +145,7 @@ function AppSidebarDesktop({ collapsed, onMissionOpen }: { collapsed: boolean; o
       {/* Mission CTA Button at bottom */}
       <div
         className={cn(
-          "border-t border-border/60 flex items-center justify-center",
+          "flex items-center justify-center",
           collapsed ? "p-3" : "p-4"
         )}
       >
@@ -148,7 +179,7 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
       >
         <div className="h-full flex flex-col">
           {/* Top row: "Navigation" + X */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border/60">
+          <div className="flex items-center justify-between px-4 py-3">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Navigation</span>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
               <X className="h-4 w-4" />
@@ -162,7 +193,7 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
           </div>
 
           {/* Mission CTA Button at bottom */}
-          <div className="border-t border-border/60 p-4 flex items-center justify-center">
+          <div className="p-4 flex items-center justify-center">
             <Button
               variant="ghost"
               size="icon"
@@ -248,7 +279,7 @@ function AppLayoutContent() {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* APP BAR (STICKY, FROSTED) */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* LEFT: logo + sidebar toggle */}
           <div className="flex items-center gap-3">
@@ -263,12 +294,12 @@ function AppLayoutContent() {
             {/* Desktop command palette button */}
             <Button
               variant="outline"
-              className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full"
+              className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full border-border/50"
               onClick={() => setCommandOpen(true)}
             >
               <Search className="mr-2 h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground text-sm truncate">Search studies, patients...</span>
-              <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border px-1.5 text-[10px]">
+              <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-border/50 px-1.5 text-[10px]">
                 <span>⌘</span>K
               </kbd>
             </Button>
@@ -293,20 +324,40 @@ function AppLayoutContent() {
                   <span className="hidden md:inline">{userName}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/app/profile")}>
-                  <User className="mr-2 h-4 w-4" />
-                  Profile
+              <DropdownMenuContent align="end" className="w-64 p-2">
+                <div className="px-2 py-3 border-b border-border/50 mb-2">
+                  <p className="font-medium text-sm">{userName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{profile?.company_name || "Clinician"}</p>
+                </div>
+                
+                <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
+                  <User className="mr-3 h-4 w-4" />
+                  <div>
+                    <p className="text-sm">Profile</p>
+                    <p className="text-xs text-muted-foreground">Manage your account</p>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate("/app/settings")}>
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                
+                <DropdownMenuItem onClick={() => navigate("/app/settings")} className="py-2.5">
+                  <Settings className="mr-3 h-4 w-4" />
+                  <div>
+                    <p className="text-sm">Settings</p>
+                    <p className="text-xs text-muted-foreground">Preferences & security</p>
+                  </div>
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
+                
+                <DropdownMenuItem onClick={() => navigate("/app/wallet")} className="py-2.5">
+                  <CreditCard className="mr-3 h-4 w-4" />
+                  <div>
+                    <p className="text-sm">Billing</p>
+                    <p className="text-xs text-muted-foreground">Tokens & payments</p>
+                  </div>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator className="my-2" />
+                
+                <DropdownMenuItem onClick={handleSignOut} className="py-2.5 text-destructive focus:text-destructive">
+                  <LogOut className="mr-3 h-4 w-4" />
                   Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -318,7 +369,7 @@ function AppLayoutContent() {
       {/* BODY: sidebar pinned; whole page scrolls */}
       <div className="flex flex-1">
         {/* Desktop sidebar (sticky, frosted, pinned left) */}
-        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} />}
+        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onToggle={handleSidebarToggle} onMissionOpen={() => setMissionOpen(true)} />}
 
         {/* Mobile full-screen nav */}
         {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}
@@ -331,9 +382,13 @@ function AppLayoutContent() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-border/60 py-3 px-4 sm:px-6">
+      <footer className="py-3 px-4 sm:px-6">
         <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN©2025</p>
       </footer>
+
+      {/* Floating elements */}
+      <FloatingCommandIsland onOpen={() => setCommandOpen(true)} />
+      <FloatingDeviceStatus />
 
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       <MissionPanel open={missionOpen} onOpenChange={setMissionOpen} />
