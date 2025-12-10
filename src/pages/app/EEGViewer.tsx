@@ -755,53 +755,75 @@ export default function EEGViewer() {
         </DialogContent>
       </Dialog>
 
-      {/* Fullscreen Modal - macOS style slide animation */}
+      {/* Fullscreen Modal - waveforms only, no player */}
       <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
         <DialogContent 
           className={cn(
             "p-0 rounded-2xl overflow-hidden",
             "bg-background/95 backdrop-blur-2xl",
-            "border border-white/10 dark:border-white/5",
+            "border border-border/20",
             "shadow-2xl shadow-black/30",
             "data-[state=open]:animate-in data-[state=closed]:animate-out",
             "data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95",
             "data-[state=open]:slide-in-from-bottom-4 data-[state=closed]:slide-out-to-bottom-4",
             isMobile 
               ? "max-w-[98vw] max-h-[95vh] w-[98vw] h-[92vh]" 
-              : "max-w-[94vw] max-h-[90vh] w-[94vw] h-[88vh]"
+              : "max-w-[94vw] max-h-[90vh] w-[94vw] h-[88vh]",
+            "[&>button]:hidden" // Hide default close button
           )}
+          onClick={(e) => {
+            // Close when clicking outside content
+            if (e.target === e.currentTarget) {
+              setIsFullscreenOpen(false);
+            }
+          }}
         >
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 bg-background/50">
-              <h2 className="text-sm font-semibold">EEG Viewer</h2>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 rounded-full"
+          <div className="flex flex-col h-full" onClick={(e) => e.stopPropagation()}>
+            {/* Header with study info */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/20 bg-background/50">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-sm font-medium truncate">
+                  {activeStudy?.meta && (activeStudy.meta as any).patient_name 
+                    ? (activeStudy.meta as any).patient_name 
+                    : `Study ${activeStudy?.id?.slice(0, 8) || ""}`}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {activeStudy?.created_at 
+                    ? new Date(activeStudy.created_at).toLocaleDateString()
+                    : ""}
+                  {eegData ? ` • ${eegData.channelLabels.length} channels • ${eegData.sampleRate}Hz` : ""}
+                </p>
+              </div>
+              {/* Subtle amplitude controls */}
+              <div className="flex items-center gap-2 mr-3">
+                <button
+                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                  onClick={() => setAmplitudeScale(Math.max(0.001, amplitudeScale - 0.001))}
+                  title="Decrease amplitude"
+                >
+                  <span className="text-xs">−</span>
+                </button>
+                <span className="text-[10px] font-mono text-muted-foreground min-w-[48px] text-center">
+                  {amplitudeScale.toFixed(3)}x
+                </span>
+                <button
+                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
+                  onClick={() => setAmplitudeScale(amplitudeScale + 0.001)}
+                  title="Increase amplitude"
+                >
+                  <span className="text-xs">+</span>
+                </button>
+              </div>
+              {/* Subtle X close button */}
+              <button
                 onClick={() => setIsFullscreenOpen(false)}
+                className="h-7 w-7 rounded-full flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors"
+                title="Close"
               >
                 <X className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
-            {/* Controls in modal */}
-            <div className="border-b border-border/30 p-2 bg-background/30">
-              <EEGControls
-                isPlaying={isPlaying}
-                currentTime={currentTime}
-                duration={eegData?.duration || 0}
-                timeWindow={timeWindow}
-                amplitudeScale={amplitudeScale}
-                playbackSpeed={playbackSpeed}
-                onPlayPause={handlePlayPause}
-                onSkipBackward={handleSkipBackward}
-                onSkipForward={handleSkipForward}
-                onTimeWindowChange={setTimeWindow}
-                onAmplitudeScaleChange={setAmplitudeScale}
-                onPlaybackSpeedChange={setPlaybackSpeed}
-                onTimeChange={setCurrentTime}
-                onExport={handleExport}
-              />
-            </div>
+            {/* Waveforms only - no player controls */}
             <div className="flex-1 relative bg-background/80 backdrop-blur-sm">
               <EEGViewerContent isModal />
             </div>

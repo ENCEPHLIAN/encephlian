@@ -151,45 +151,45 @@
   }
 
   .dark {
-    /* Dark mode: warm dark background, no harsh white borders */
-    --background: 220 15% 4%;
-    --foreground: 30 8% 92%;
+    /* Dark mode: warm dark grey background, no blue tint */
+    --background: 0 0% 6%;
+    --foreground: 30 5% 92%;
 
-    --card: 220 15% 7%;
-    --card-foreground: 30 8% 92%;
+    --card: 0 0% 8%;
+    --card-foreground: 30 5% 92%;
 
-    --popover: 220 15% 7%;
-    --popover-foreground: 30 8% 92%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 30 5% 92%;
 
-    /* Faded RGB gradient primary for futuristic look */
-    --primary: 30 10% 88%;
-    --primary-foreground: 220 15% 10%;
+    /* Warm neutral primary */
+    --primary: 30 8% 88%;
+    --primary-foreground: 0 0% 10%;
 
-    --secondary: 220 12% 12%;
-    --secondary-foreground: 30 8% 92%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 30 5% 92%;
 
-    --muted: 220 10% 12%;
-    --muted-foreground: 220 8% 55%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 55%;
 
-    --accent: 220 10% 14%;
-    --accent-foreground: 30 8% 92%;
+    --accent: 0 0% 16%;
+    --accent-foreground: 30 5% 92%;
 
     --destructive: 0 62.8% 35%;
     --destructive-foreground: 0 0% 98%;
 
-    /* Softer borders - no bright white */
-    --border: 220 10% 14%;
-    --input: 220 10% 14%;
-    --ring: 220 8% 40%;
+    /* Softer borders - warm grey */
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 0 0% 40%;
 
-    --sidebar-background: 220 15% 5%;
-    --sidebar-foreground: 220 8% 75%;
-    --sidebar-primary: 40 8% 88%;
+    --sidebar-background: 0 0% 7%;
+    --sidebar-foreground: 0 0% 70%;
+    --sidebar-primary: 30 8% 88%;
     --sidebar-primary-foreground: 0 0% 9%;
-    --sidebar-accent: 220 10% 10%;
-    --sidebar-accent-foreground: 30 8% 92%;
-    --sidebar-border: 220 10% 12%;
-    --sidebar-ring: 220 8% 40%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 30 5% 92%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 0 0% 40%;
 
     /* DASHBOARD TOKENS (DARK MODE) */
     --dashboard-accent-primary: 215 15% 14%;

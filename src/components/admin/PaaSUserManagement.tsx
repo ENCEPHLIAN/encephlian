@@ -64,15 +64,18 @@ export default function PaaSUserManagement() {
   });
 
   const { data: clinics } = useQuery({
-    queryKey: ["admin-clinics-list"],
+    queryKey: ["admin-clinics-dropdown"],
     queryFn: async () => {
+      // Use direct query - admins should see all clinics
       const { data, error } = await supabase
         .from("clinics")
         .select("id, name")
+        .eq("is_active", true)
         .order("name");
       if (error) throw error;
-      return data;
+      return data || [];
     },
+    staleTime: 60000,
   });
 
   const createPaaSUserMutation = useMutation({

@@ -112,23 +112,39 @@ export function EEGControls({
         <div className="space-y-2">
           <Label className="text-xs">Amplitude Scale</Label>
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => onAmplitudeScaleChange(amplitudeScale / 1.5)}
-              className="h-9 w-9"
+            <button
+              className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-colors"
+              onClick={() => onAmplitudeScaleChange(Math.max(0.001, amplitudeScale - 0.001))}
+              onMouseDown={(e) => {
+                let current = amplitudeScale;
+                const interval = setInterval(() => {
+                  current = Math.max(0.001, current - 0.001);
+                  onAmplitudeScaleChange(current);
+                }, 100);
+                const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
+                window.addEventListener('mouseup', cleanup);
+              }}
+              title="Decrease amplitude"
             >
               <ZoomOut className="h-3 w-3" />
-            </Button>
-            <span className="text-xs font-mono flex-1 text-center">{amplitudeScale.toFixed(1)}x</span>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => onAmplitudeScaleChange(amplitudeScale * 1.5)}
-              className="h-9 w-9"
+            </button>
+            <span className="text-xs font-mono flex-1 text-center">{amplitudeScale.toFixed(3)}x</span>
+            <button
+              className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-colors"
+              onClick={() => onAmplitudeScaleChange(amplitudeScale + 0.001)}
+              onMouseDown={(e) => {
+                let current = amplitudeScale;
+                const interval = setInterval(() => {
+                  current = current + 0.001;
+                  onAmplitudeScaleChange(current);
+                }, 100);
+                const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
+                window.addEventListener('mouseup', cleanup);
+              }}
+              title="Increase amplitude"
             >
               <ZoomIn className="h-3 w-3" />
-            </Button>
+            </button>
           </div>
         </div>
 
