@@ -5,14 +5,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Loader2, UserPlus, Shield, X } from "lucide-react";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
-
-type InternalRole = "ops" | "super_admin";
 
 export default function InternalTeamManagement() {
   const [open, setOpen] = useState(false);
@@ -20,9 +17,22 @@ export default function InternalTeamManagement() {
     email: "",
     password: "",
     full_name: "",
-    role: "ops" as InternalRole,
+    role: "management",
   });
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const queryClient = useQueryClient();
+
+  // Check if current user is super_admin
+  useEffect(() => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
+        setIsSuperAdmin(data?.some(r => r.role === "super_admin") || false);
+      }
+    };
+    check();
+  }, []);
 
   const { data: internalTeam, isLoading } = useQuery({
     queryKey: ["internal-team"],
@@ -30,7 +40,7 @@ export default function InternalTeamManagement() {
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*")
-        .in("role", ["ops", "super_admin"])
+        .in("role", ["management", "super_admin"])
         .order("created_at", { ascending: false });
 
       if (rolesError) throw rolesError;
@@ -62,12 +72,7 @@ export default function InternalTeamManagement() {
       toast.success("Internal team member created");
       queryClient.invalidateQueries({ queryKey: ["internal-team"] });
       setOpen(false);
-      setFormData({
-        email: "",
-        password: "",
-        full_name: "",
-        role: "ops",
-      });
+      setFormData({ email: "", password: "", full_name: "", role: "management" });
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to create team member");
@@ -75,10 +80,10 @@ export default function InternalTeamManagement() {
   });
 
   const revokeRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: InternalRole }) => {
+    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       const { data, error } = await supabase.rpc("admin_revoke_role", {
         p_user_id: userId,
-        p_role: role,
+        p_role: role as any,
       });
       if (error) throw error;
       return data;
@@ -100,6 +105,23 @@ export default function InternalTeamManagement() {
     );
   }
 
+  // Only super_admin can see this component - management cannot create management users
+  if (!isSuperAdmin) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Internal Team (ENCEPHLIAN)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm">Only super_admin can manage internal team members.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -117,7 +139,7 @@ export default function InternalTeamManagement() {
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Add Internal Team Member</DialogTitle>
+                <DialogTitle>Add Management User</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
@@ -146,21 +168,9 @@ export default function InternalTeamManagement() {
                     placeholder="John Doe"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Role *</Label>
-                  <Select
-                    value={formData.role}
-                    onValueChange={(value: InternalRole) => setFormData({ ...formData, role: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ops">Operations</SelectItem>
-                      <SelectItem value="super_admin">Super Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                  New team members will be created with the Management role
+                </p>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setOpen(false)}>
@@ -202,23 +212,20 @@ export default function InternalTeamManagement() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={member.role === "super_admin" ? "destructive" : "default"}>
-                      {member.role === "super_admin" ? "SUPER ADMIN" : "OPERATIONS"}
+                      {member.role === "super_admin" ? "SUPER ADMIN" : "MANAGEMENT"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        revokeRoleMutation.mutate({
-                          userId: member.user_id,
-                          role: member.role as InternalRole,
-                        })
-                      }
-                      disabled={revokeRoleMutation.isPending}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
+                    {member.role !== "super_admin" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => revokeRoleMutation.mutate({ userId: member.user_id, role: member.role })}
+                        disabled={revokeRoleMutation.isPending}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

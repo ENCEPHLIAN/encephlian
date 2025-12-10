@@ -34,7 +34,7 @@ export default function ProtectedRoute() {
         return false;
       }
 
-      const adminRoles = ["super_admin", "ops", "management"];
+      const adminRoles = ["super_admin", "management"];
       const hasAdminRole = roles?.some(r => adminRoles.includes(r.role)) || false;
       
       // Cache the result
