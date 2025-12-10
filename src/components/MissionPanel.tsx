@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Activity, Upload, StickyNote, Wallet } from "lucide-react";
+import { X, Activity, Upload, StickyNote, Wallet, Smartphone, Cpu, Bluetooth } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import EditableBranding from "./EditableBranding";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 interface MissionPanelProps {
   open: boolean;
@@ -53,6 +54,17 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     },
   });
 
+  // Placeholder device status
+  const deviceStatus = {
+    androidApp: { connected: false },
+    eegMachine: { connected: false },
+    bleBridge: { connected: false },
+  };
+
+  const allConnected = deviceStatus.androidApp.connected && 
+                       deviceStatus.eegMachine.connected && 
+                       deviceStatus.bleBridge.connected;
+
   const brandName = profile?.company_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
@@ -86,39 +98,57 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
                    supports-[backdrop-filter]:bg-background/60"
         onClick={(e) => e.stopPropagation()}
       >
-      {/* Top row: branding + close */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border/60">
-        <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
-        <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => onOpenChange(false)}>
-          <X className="h-5 w-5" />
-          <span className="sr-only">Close</span>
-        </Button>
-      </div>
+        {/* Top row: branding + device status + close */}
+        <div className="flex items-center justify-between px-6 py-4">
+          <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
+          
+          {/* Device Status - top right */}
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-full bg-muted/50">
+              <div className="flex items-center gap-1.5">
+                <Smartphone className={cn("h-4 w-4", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                <Cpu className={cn("h-4 w-4", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                <Bluetooth className={cn("h-4 w-4", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+              </div>
+              <span className={cn(
+                "text-xs font-medium",
+                allConnected ? "text-emerald-500" : "text-muted-foreground"
+              )}>
+                {allConnected ? "Online" : "Offline"}
+              </span>
+            </div>
+            
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => onOpenChange(false)}>
+              <X className="h-5 w-5" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </div>
+        </div>
 
-      {/* Body: CTA links */}
-      <div 
-        className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="w-full max-w-md space-y-4">
-          {missionLinks.map((link) => {
-            const Icon = link.icon;
-            return (
-              <button
-                key={link.href}
-                onClick={() => handleNavigation(link.href)}
-                className="w-full flex items-center gap-4 text-lg md:text-xl font-normal
-                           tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50
-                           transition-colors text-left group"
-              >
-                <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>
-              </button>
-            );
-          })}
+        {/* Body: CTA links */}
+        <div 
+          className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-full max-w-md space-y-4">
+            {missionLinks.map((link) => {
+              const Icon = link.icon;
+              return (
+                <button
+                  key={link.href}
+                  onClick={() => handleNavigation(link.href)}
+                  className="w-full flex items-center gap-4 text-lg md:text-xl font-normal
+                             tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50
+                             transition-colors text-left group"
+                >
+                  <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-    </div>
     </>
   );
 }
