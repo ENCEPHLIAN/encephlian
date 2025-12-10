@@ -38,9 +38,10 @@ export default function Studies() {
 
       let query = supabase
         .from("studies")
-        .select("*, clinics(name)")
+        .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
         .or(`owner.eq.${user.id},sample.eq.true`)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(100);
 
       if (stateFilter !== "all") {
         query = query.eq("state", stateFilter as any);
@@ -49,7 +50,9 @@ export default function Studies() {
       const { data, error } = await query;
       if (error) throw error;
       return data;
-    }
+    },
+    staleTime: 30000,
+    gcTime: 60000,
   });
 
   const filteredStudies = studies?.filter((study) => {
