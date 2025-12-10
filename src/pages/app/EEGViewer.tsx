@@ -205,7 +205,7 @@ export default function EEGViewer() {
 
         const studyFiles = (activeStudy.study_files as any[]) || [];
         const edfFile = studyFiles.find((f) =>
-          f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw" ||
+          f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw" || f.kind === "raw" ||
           f.path?.toLowerCase().endsWith('.edf') || f.path?.toLowerCase().endsWith('.bdf')
         );
 
