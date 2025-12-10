@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -90,24 +90,24 @@ export default function EEGViewer() {
     new Set(["frontal", "central", "temporal", "occipital"])
   );
 
-  // Compute visible channels
-  const visibleChannels = eegData
-    ? (() => {
-        const standardIndices = filterStandardChannels(eegData.channelLabels);
-        const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
-        const groups = groupChannels(standardLabels);
+  // Compute visible channels - memoized to prevent unnecessary re-renders
+  const visibleChannels = useMemo(() => {
+    if (!eegData) return new Set<number>();
+    
+    const standardIndices = filterStandardChannels(eegData.channelLabels);
+    const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
+    const groups = groupChannels(standardLabels);
 
-        const visible = new Set<number>();
-        groups.forEach((localIndices, group) => {
-          if (visibleGroups.has(group)) {
-            localIndices.forEach((localIdx) => {
-              visible.add(standardIndices[localIdx]);
-            });
-          }
+    const visible = new Set<number>();
+    groups.forEach((localIndices, group) => {
+      if (visibleGroups.has(group)) {
+        localIndices.forEach((localIdx) => {
+          visible.add(standardIndices[localIdx]);
         });
-        return visible;
-      })()
-    : new Set<number>();
+      }
+    });
+    return visible;
+  }, [eegData?.channelLabels, visibleGroups]);
 
   // Marker input state
   const [newMarkerType, setNewMarkerType] = useState("event");

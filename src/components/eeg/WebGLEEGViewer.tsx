@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, memo, useState } from "react";
+import { useEffect, useRef, useCallback, memo, useState, useMemo } from "react";
 import * as THREE from "three";
 import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
@@ -113,13 +113,18 @@ function WebGLEEGViewerComponent({
   const gridLinesRef = useRef<THREE.Line[]>([]);
   const labelsRef = useRef<HTMLDivElement | null>(null);
   const selectionRef = useRef<HTMLDivElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; time: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
 
-  const colors = theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light;
+  // Memoize colors to prevent infinite re-renders
+  const colors = useMemo(() => 
+    theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light,
+    [theme]
+  );
 
   // Initialize Three.js scene
   useEffect(() => {
@@ -498,9 +503,23 @@ function WebGLEEGViewerComponent({
     rendererRef.current.render(scene, cameraRef.current);
   }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers, colors]);
 
-  // Run update on dependency changes
+  // Run update on dependency changes with requestAnimationFrame
   useEffect(() => {
-    updateWaveforms();
+    // Cancel any pending animation frame
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    // Schedule update on next animation frame
+    animationFrameRef.current = requestAnimationFrame(() => {
+      updateWaveforms();
+    });
+    
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [updateWaveforms]);
 
   return (
