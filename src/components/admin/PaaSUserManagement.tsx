@@ -32,7 +32,7 @@ export default function PaaSUserManagement() {
       const { data: roles, error: rolesError } = await supabase
         .from("user_roles")
         .select("*")
-        .eq("role", "neurologist")
+        .eq("role", "clinician")
         .order("created_at", { ascending: false });
 
       if (rolesError) throw rolesError;
@@ -83,7 +83,7 @@ export default function PaaSUserManagement() {
       const { data, error } = await supabase.functions.invoke("admin_create_user", {
         body: {
           ...userData,
-          role: "neurologist",
+          role: "clinician",
         },
       });
       if (error) throw error;
@@ -124,7 +124,7 @@ export default function PaaSUserManagement() {
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
-            PaaS User Accounts (Neurologists)
+            PaaS User Accounts (Clinicians)
           </CardTitle>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -144,7 +144,7 @@ export default function PaaSUserManagement() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder="neurologist@clinic.com"
+                    placeholder="clinician@clinic.com"
                   />
                 </div>
                 <div className="space-y-2">

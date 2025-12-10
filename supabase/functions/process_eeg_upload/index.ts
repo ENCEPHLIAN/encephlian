@@ -77,7 +77,7 @@ serve(async (req) => {
       const { error: membershipError } = await supabase.from("clinic_memberships").insert({
         user_id: user.id,
         clinic_id: clinicId,
-        role: "neurologist"
+        role: "clinician"
       });
 
       if (membershipError && !membershipError.message.includes('duplicate')) {
