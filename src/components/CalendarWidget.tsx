@@ -1,7 +1,6 @@
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState, useMemo } from "react";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +21,11 @@ interface Study {
 
 export function CalendarWidget() {
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const isMobile = useIsMobile();
   const navigate = useNavigate();
+  
+  // Track container width to determine single or double calendar
+  const [containerWidth, setContainerWidth] = useState(0);
+  const showTwoMonths = containerWidth >= 700;
 
   // Fetch all studies for calendar markers
   const { data: studies } = useQuery({
@@ -71,6 +73,9 @@ export function CalendarWidget() {
     return "bg-muted text-muted-foreground";
   };
 
+  // Previous month for second calendar
+  const previousMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1);
+
   return (
     <Card className="openai-card border-2">
       <CardHeader className="pb-4">
@@ -79,35 +84,50 @@ export function CalendarWidget() {
           <CardTitle className="text-lg">Study Calendar</CardTitle>
         </div>
       </CardHeader>
-      <CardContent className="p-4 pt-0">
-        <div className={`grid gap-6 ${isMobile ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-3"}`}>
+      <CardContent 
+        className="p-4 pt-0"
+        ref={(el) => {
+          if (el) {
+            const observer = new ResizeObserver((entries) => {
+              setContainerWidth(entries[0].contentRect.width);
+            });
+            observer.observe(el);
+            return () => observer.disconnect();
+          }
+        }}
+      >
+        <div className="flex flex-col lg:flex-row gap-6">
           {/* Calendar Section */}
-          <div className={isMobile ? "flex justify-center" : "lg:col-span-2"}>
-            {isMobile ? (
-              <Calendar
-                mode="single"
-                selected={date}
-                onSelect={setDate}
-                className="rounded-lg border"
-                modifiers={modifiers}
-                modifiersStyles={modifiersStyles}
-              />
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
+          <div className="flex-1">
+            {showTwoMonths ? (
+              <div className="flex gap-4 justify-center">
+                {/* Previous month */}
                 <Calendar
                   mode="single"
                   selected={date}
                   onSelect={setDate}
-                  className="rounded-lg border"
+                  className="rounded-lg border pointer-events-auto"
+                  modifiers={modifiers}
+                  modifiersStyles={modifiersStyles}
+                  month={previousMonth}
+                />
+                {/* Current month */}
+                <Calendar
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  className="rounded-lg border pointer-events-auto"
                   modifiers={modifiers}
                   modifiersStyles={modifiersStyles}
                 />
+              </div>
+            ) : (
+              <div className="flex justify-center">
                 <Calendar
                   mode="single"
                   selected={date}
                   onSelect={setDate}
-                  className="rounded-lg border"
-                  month={new Date(new Date().getFullYear(), new Date().getMonth() + 1)}
+                  className="rounded-lg border pointer-events-auto"
                   modifiers={modifiers}
                   modifiersStyles={modifiersStyles}
                 />
@@ -116,7 +136,7 @@ export function CalendarWidget() {
           </div>
 
           {/* Selected Date Studies Panel */}
-          <div className="lg:col-span-1">
+          <div className="w-full lg:w-64 shrink-0">
             <div className="rounded-lg border bg-muted/30 p-4 h-full">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-4 w-4 text-muted-foreground" />

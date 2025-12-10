@@ -81,6 +81,11 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     onOpenChange(false);
   };
 
+  // Handle clicking outside to close
+  const handleBackdropClick = () => {
+    onOpenChange(false);
+  };
+
   if (!open) return null;
 
   return (
@@ -88,64 +93,67 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
       {/* Backdrop - click to close */}
       <div
         className="fixed inset-0 z-[9998] bg-background/30 backdrop-blur-sm"
-        onClick={() => onOpenChange(false)}
+        onClick={handleBackdropClick}
       />
       
-      {/* Content panel */}
+      {/* Content panel - stop propagation to prevent closing when clicking inside */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
                    bg-background/70 backdrop-blur-lg
                    supports-[backdrop-filter]:bg-background/60"
-        onClick={(e) => e.stopPropagation()}
+        onClick={handleBackdropClick}
       >
-        {/* Top row: branding + device status + close */}
-        <div className="flex items-center justify-between px-6 py-4">
-          <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
-          
-          {/* Device Status - top right */}
-          <div className="flex items-center gap-4">
-            <div className="hidden sm:flex items-center gap-3 px-3 py-1.5 rounded-full bg-muted/50">
-              <div className="flex items-center gap-1.5">
-                <Smartphone className={cn("h-4 w-4", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                <Cpu className={cn("h-4 w-4", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                <Bluetooth className={cn("h-4 w-4", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-              </div>
-              <span className={cn(
-                "text-xs font-medium",
-                allConnected ? "text-emerald-500" : "text-muted-foreground"
-              )}>
-                {allConnected ? "Online" : "Offline"}
-              </span>
-            </div>
+        <div onClick={(e) => e.stopPropagation()} className="flex flex-col h-full">
+          {/* Top row: branding + device status + close */}
+          <div className="flex items-center justify-between px-6 py-4">
+            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
             
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => onOpenChange(false)}>
-              <X className="h-5 w-5" />
-              <span className="sr-only">Close</span>
-            </Button>
+            {/* Device Status - top right with frosted glass look */}
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl bg-card/50 backdrop-blur-xl border border-border/20 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <Smartphone className={cn("h-4 w-4", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                  <Cpu className={cn("h-4 w-4", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                  <Bluetooth className={cn("h-4 w-4", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                </div>
+                <div className={cn(
+                  "h-2 w-2 rounded-full",
+                  allConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                )} />
+                <span className={cn(
+                  "text-xs font-medium",
+                  allConnected ? "text-emerald-500" : "text-muted-foreground"
+                )}>
+                  {allConnected ? "Online" : "Offline"}
+                </span>
+              </div>
+              
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={() => onOpenChange(false)}>
+                <X className="h-5 w-5" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </div>
           </div>
-        </div>
 
-        {/* Body: CTA links */}
-        <div 
-          className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="w-full max-w-md space-y-4">
-            {missionLinks.map((link) => {
-              const Icon = link.icon;
-              return (
-                <button
-                  key={link.href}
-                  onClick={() => handleNavigation(link.href)}
-                  className="w-full flex items-center gap-4 text-lg md:text-xl font-normal
-                             tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50
-                             transition-colors text-left group"
-                >
-                  <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>
-                </button>
-              );
-            })}
+          {/* Body: CTA links */}
+          <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto">
+            <div className="w-full max-w-md space-y-4">
+              {missionLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <button
+                    key={link.href}
+                    onClick={() => handleNavigation(link.href)}
+                    className="w-full flex items-center gap-4 text-lg md:text-xl font-normal
+                               tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50
+                               transition-colors text-left group"
+                  >
+                    <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                    <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

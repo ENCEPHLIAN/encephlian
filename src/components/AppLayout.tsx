@@ -27,13 +27,14 @@ import {
   StickyNote,
   Settings,
   Search,
-  PanelLeft,
   X,
   Sparkles,
-  ChevronsLeftRight,
-  Shield,
   CreditCard,
   HelpCircle,
+  Menu,
+  Smartphone,
+  Cpu,
+  Bluetooth,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -94,30 +95,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
   );
 }
 
-// --------------- SIDEBAR RESIZE HANDLE ---------------
-
-function SidebarResizeHandle({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "absolute right-0 top-0 bottom-0 w-1 z-40",
-        "cursor-[col-resize] hover:bg-primary/20 active:bg-primary/30",
-        "transition-colors duration-150",
-        "group"
-      )}
-      aria-label="Toggle sidebar"
-    >
-      <div className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <div className="flex items-center justify-center h-8 w-4 rounded-l-md bg-primary/10 border-y border-l border-border/50">
-          <ChevronsLeftRight className="h-3 w-3 text-muted-foreground" />
-        </div>
-      </div>
-    </button>
-  );
-}
-
-// --------------- DESKTOP SIDEBAR (PINNED + STICKY + FROSTED) ---------------
+// --------------- DESKTOP SIDEBAR ---------------
 
 function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: boolean; onToggle: () => void; onMissionOpen: () => void }) {
   return (
@@ -130,10 +108,27 @@ function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: 
         collapsed ? "w-16" : "w-56",
       )}
     >
-      {/* Resize handle */}
-      <SidebarResizeHandle onClick={onToggle} />
+      {/* Click zone for toggling - only in empty regions */}
+      <div 
+        className={cn(
+          "absolute inset-0 z-10",
+          "cursor-[col-resize]",
+        )}
+        onClick={onToggle}
+        style={{ pointerEvents: 'none' }}
+      />
       
-      <div className="flex-1 overflow-y-auto px-3 py-4">
+      {/* Clickable edge strip */}
+      <div 
+        className={cn(
+          "absolute right-0 top-0 bottom-0 w-3 z-20",
+          "cursor-[col-resize] hover:bg-primary/10",
+          "transition-colors duration-150"
+        )}
+        onClick={onToggle}
+      />
+      
+      <div className="flex-1 overflow-y-auto px-3 py-4 relative z-30" style={{ pointerEvents: 'auto' }}>
         {!collapsed && (
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
             Navigation
@@ -145,9 +140,10 @@ function AppSidebarDesktop({ collapsed, onToggle, onMissionOpen }: { collapsed: 
       {/* Mission CTA Button at bottom */}
       <div
         className={cn(
-          "flex items-center justify-center",
+          "flex items-center justify-center relative z-30",
           collapsed ? "p-3" : "p-4"
         )}
+        style={{ pointerEvents: 'auto' }}
       >
         <Button
           variant="ghost"
@@ -173,7 +169,6 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
         className={cn(
           "w-full max-w-none p-0 border-none",
           "bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/70",
-          // Hide shadcn's built-in close button so we only show our own X
           "[&>button]:hidden",
         )}
       >
@@ -228,6 +223,16 @@ function AppLayoutContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // mobile: full-screen nav open/close
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Placeholder device status for dropdown
+  const deviceStatus = {
+    androidApp: { connected: false },
+    eegMachine: { connected: false },
+    bleBridge: { connected: false },
+  };
+  const allConnected = deviceStatus.androidApp.connected && 
+                       deviceStatus.eegMachine.connected && 
+                       deviceStatus.bleBridge.connected;
 
   // profile
   const { data: profile } = useQuery({
@@ -284,9 +289,6 @@ function AppLayoutContent() {
           {/* LEFT: logo + sidebar toggle */}
           <div className="flex items-center gap-3">
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
-
-            {/* Sidebar toggle – desktop collapses, mobile opens sheet */}
-            <IconButton icon={PanelLeft} onClick={handleSidebarToggle} aria-label="Toggle navigation" />
           </div>
 
           {/* RIGHT: search + actions */}
@@ -317,6 +319,15 @@ function AppLayoutContent() {
 
             <ThemeToggle />
 
+            {/* Mobile hamburger menu */}
+            {isMobile && (
+              <IconButton
+                icon={Menu}
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open menu"
+              />
+            )}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center gap-2 rounded-full">
@@ -328,6 +339,19 @@ function AppLayoutContent() {
                 <div className="px-2 py-3 border-b border-border/50 mb-2">
                   <p className="font-medium text-sm">{userName}</p>
                   <p className="text-xs text-muted-foreground truncate">{profile?.company_name || "Clinician"}</p>
+                </div>
+
+                {/* Device Status in dropdown */}
+                <div className="px-2 py-2 mb-2 rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Device Status</span>
+                    <div className="flex items-center gap-1.5">
+                      <Smartphone className={cn("h-3.5 w-3.5", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                      <Cpu className={cn("h-3.5 w-3.5", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                      <Bluetooth className={cn("h-3.5 w-3.5", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                      <div className={cn("h-2 w-2 rounded-full ml-1", allConnected ? "bg-emerald-500" : "bg-amber-500")} />
+                    </div>
+                  </div>
                 </div>
                 
                 <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
@@ -381,8 +405,8 @@ function AppLayoutContent() {
         </main>
       </div>
 
-      {/* Footer */}
-      <footer className="py-3 px-4 sm:px-6">
+      {/* Footer - positioned independently */}
+      <footer className="py-3 px-4 sm:px-6 mt-auto">
         <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN©2025</p>
       </footer>
 
