@@ -5,7 +5,6 @@ interface Profile {
   id: string;
   full_name: string | null;
   email: string;
-  company_name: string | null;
   phone_number: string | null;
   medical_license_number: string | null;
   specialization: string | null;

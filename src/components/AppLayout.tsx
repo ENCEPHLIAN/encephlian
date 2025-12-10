@@ -236,7 +236,7 @@ function AppLayoutContent() {
                        deviceStatus.eegMachine.connected && 
                        deviceStatus.bleBridge.connected;
 
-  // profile
+  // profile - only fetch full_name, no company_name
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
@@ -244,14 +244,16 @@ function AppLayoutContent() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase.from("profiles").select("full_name, company_name").eq("id", user.id).single();
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
       return data;
     },
   });
 
   useEffect(() => {
-    if (profile) {
-      setUserName(profile.full_name || profile.company_name || "Clinician");
+    if (profile?.full_name) {
+      setUserName(profile.full_name);
+    } else {
+      setUserName("Clinician");
     }
   }, [profile]);
 
@@ -264,7 +266,7 @@ function AppLayoutContent() {
     },
   });
 
-  const brandName = profile?.company_name || "ENCEPHLIAN";
+  const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
   const handleSignOut = async () => {
@@ -397,7 +399,7 @@ function AppLayoutContent() {
               <DropdownMenuContent align="end" className="w-64 p-2">
                 <div className="px-2 py-3 border-b border-border/50 mb-2">
                   <p className="font-medium text-sm">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{profile?.company_name || "Clinician"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Account"}</p>
                 </div>
 
                 {/* Device Status in dropdown */}
