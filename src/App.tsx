@@ -40,6 +40,7 @@ import Settings from "./pages/app/Settings";
 import Notes from "./pages/app/Notes";
 import Support from "./pages/app/Support";
 import Documentation from "./pages/app/Documentation";
+import ComingSoon from "./pages/app/ComingSoon";
 import NotFound from "./pages/NotFound";
 import "./App.css";
 
@@ -99,6 +100,10 @@ function App() {
                     <Route path="settings" element={<Settings />} />
                     <Route path="support" element={<Support />} />
                     <Route path="documentation" element={<Documentation />} />
+                    <Route path="analytics" element={<ComingSoon />} />
+                    <Route path="scheduler" element={<ComingSoon />} />
+                    <Route path="integrations" element={<ComingSoon />} />
+                    <Route path="team" element={<ComingSoon />} />
                   </Route>
                 </Route>
 

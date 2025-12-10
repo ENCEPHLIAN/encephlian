@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -8,6 +8,7 @@ export default function AdminRoute() {
   const navigate = useNavigate();
   const [authState, setAuthState] = useState<"loading" | "unauthenticated" | "admin" | "not-admin">("loading");
   const { isVerified, needsVerification, verify, clearTFA } = useAdminTFA();
+  const initialized = useRef(false);
 
   const handleLogout = useCallback(async () => {
     clearTFA();
@@ -16,6 +17,10 @@ export default function AdminRoute() {
   }, [clearTFA, navigate]);
 
   useEffect(() => {
+    // Prevent double initialization
+    if (initialized.current) return;
+    initialized.current = true;
+
     const checkAdminStatus = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
@@ -41,7 +46,6 @@ export default function AdminRoute() {
         const adminRoles = ["super_admin", "ops", "management"];
         const hasAdminRole = roles?.some(r => adminRoles.includes(r.role));
         
-        console.log("AdminRoute - User roles:", roles, "Has admin role:", hasAdminRole);
         setAuthState(hasAdminRole ? "admin" : "not-admin");
       } catch (error) {
         console.error("Admin check error:", error);
