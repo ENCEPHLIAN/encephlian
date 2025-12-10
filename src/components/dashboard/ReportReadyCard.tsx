@@ -22,9 +22,10 @@ interface Study {
 interface ReportReadyCardProps {
   study: Study;
   onRequestRefund: (study: Study) => void;
+  hideRefundButton?: boolean;
 }
 
-export default function ReportReadyCard({ study, onRequestRefund }: ReportReadyCardProps) {
+export default function ReportReadyCard({ study, onRequestRefund, hideRefundButton = false }: ReportReadyCardProps) {
   const navigate = useNavigate();
   const meta = (study.meta || {}) as Record<string, any>;
   const patientId = meta.patient_id || meta.patientId || `ID-${study.id.slice(0, 6).toUpperCase()}`;
@@ -76,7 +77,7 @@ export default function ReportReadyCard({ study, onRequestRefund }: ReportReadyC
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {canRefund && (
+            {canRefund && !hideRefundButton && (
               <Button
                 variant="ghost"
                 size="sm"

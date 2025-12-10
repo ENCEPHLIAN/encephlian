@@ -85,16 +85,17 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
 
   return (
     <>
-      {/* Full panel - clicking empty areas closes it */}
+      {/* Full panel - clicking anywhere closes it except buttons */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
                    bg-background/70 backdrop-blur-lg
-                   supports-[backdrop-filter]:bg-background/60"
+                   supports-[backdrop-filter]:bg-background/60
+                   transition-all duration-300 ease-out animate-fade-in"
         onClick={() => onOpenChange(false)}
       >
-        <div onClick={(e) => e.stopPropagation()} className="flex flex-col h-full">
+        <div className="flex flex-col h-full">
           {/* Top row: branding + device status + close */}
-          <div className="flex items-center justify-between px-6 py-4">
+          <div className="flex items-center justify-between px-6 py-4" onClick={(e) => e.stopPropagation()}>
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
             
             {/* Device Status - top right with frosted glass look */}
@@ -124,9 +125,9 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
             </div>
           </div>
 
-          {/* Body: CTA links */}
+          {/* Body: CTA links - clicking stops propagation so only buttons work */}
           <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto">
-            <div className="w-full max-w-md space-y-4">
+            <div className="w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
               {missionLinks.map((link) => {
                 const Icon = link.icon;
                 return (
@@ -135,7 +136,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
                     onClick={() => handleNavigation(link.href)}
                     className="w-full flex items-center gap-4 text-lg md:text-xl font-normal
                                tracking-tight py-3 px-4 rounded-lg hover:bg-secondary/50
-                               transition-colors text-left group"
+                               transition-all duration-200 text-left group"
                   >
                     <Icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
                     <span className="group-hover:opacity-80 transition-opacity">{link.label}</span>

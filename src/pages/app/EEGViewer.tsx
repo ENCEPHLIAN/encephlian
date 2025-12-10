@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "next-themes";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -325,12 +326,12 @@ export default function EEGViewer() {
     onError: (error: any) => toast.error(`Failed to delete marker: ${error.message}`),
   });
 
-  // Controls handlers
+  // Controls handlers - skip in seconds (10s), not minutes
   const handlePlayPause = () => setIsPlaying((prev) => !prev);
-  const handleSkipBackward = () => setCurrentTime((prev) => Math.max(0, prev - timeWindow));
+  const handleSkipBackward = () => setCurrentTime((prev) => Math.max(0, prev - 10)); // 10 seconds
   const handleSkipForward = () => {
     if (!eegData) return;
-    setCurrentTime((prev) => Math.min(eegData.duration - timeWindow, prev + timeWindow));
+    setCurrentTime((prev) => Math.min(eegData.duration - timeWindow, prev + 10)); // 10 seconds
   };
 
   const handleTimeClick = useCallback((time: number) => {
@@ -492,11 +493,16 @@ export default function EEGViewer() {
 
         {/* Channel Groups Dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <Layers className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Layers className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Channel groups & montage</TooltipContent>
+          </Tooltip>
           <DropdownMenuContent align="end" className="w-56 p-2">
             <DropdownMenuLabel className="text-xs">Channel Groups</DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -782,7 +788,7 @@ export default function EEGViewer() {
                 </h2>
                 <p className="text-xs text-muted-foreground">
                   {activeStudy?.created_at 
-                    ? new Date(activeStudy.created_at).toLocaleDateString()
+                    ? new Date(activeStudy.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })
                     : ""}
                   {eegData ? ` • ${eegData.channelLabels.length} channels • ${eegData.sampleRate}Hz` : ""}
                 </p>
