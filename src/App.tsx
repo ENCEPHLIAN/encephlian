@@ -4,6 +4,12 @@ import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import AdminAccount from "@/pages/admin/AdminAccount";
 import AdminWallets from "@/pages/admin/AdminWallets";
 import AdminTickets from "@/pages/admin/AdminTickets";
+import AdminSettings from "@/pages/admin/AdminSettings";
+import AdminAnalytics from "@/pages/admin/AdminAnalytics";
+import AdminScheduler from "@/pages/admin/AdminScheduler";
+import AdminIntegrations from "@/pages/admin/AdminIntegrations";
+import AdminTeam from "@/pages/admin/AdminTeam";
+import AdminRestore from "@/pages/admin/AdminRestore";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -64,7 +70,13 @@ function App() {
                     <Route path="wallets" element={<AdminWallets />} />
                     <Route path="tickets" element={<AdminTickets />} />
                     <Route path="cleanup" element={<AdminCleanup />} />
+                    <Route path="restore" element={<AdminRestore />} />
                     <Route path="audit" element={<AdminAuditLogs />} />
+                    <Route path="analytics" element={<AdminAnalytics />} />
+                    <Route path="scheduler" element={<AdminScheduler />} />
+                    <Route path="integrations" element={<AdminIntegrations />} />
+                    <Route path="team" element={<AdminTeam />} />
+                    <Route path="settings" element={<AdminSettings />} />
                     <Route path="eeg-push" element={<AdminEegPush />} />
                     <Route path="account" element={<AdminAccount />} />
                   </Route>

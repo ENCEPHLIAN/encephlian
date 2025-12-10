@@ -18,6 +18,11 @@ import {
   Coins,
   MessageSquare,
   SendHorizontal,
+  BarChart3,
+  Calendar,
+  Plug,
+  UserCog,
+  RotateCcw,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -38,7 +43,7 @@ export default function AdminLayout() {
     checkRole();
   }, []);
 
-  // Build nav items dynamically - support tickets only for management (not super_admin)
+  // Build nav items dynamically
   const adminNav = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
     { name: "Studies", href: "/admin/studies", icon: FileText },
@@ -49,8 +54,14 @@ export default function AdminLayout() {
     { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
     { name: "Health", href: "/admin/health", icon: Activity },
     { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
+    { name: "Restore", href: "/admin/restore", icon: RotateCcw },
     { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-    { name: "Account", href: "/admin/account", icon: Settings },
+    { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+    { name: "Scheduler", href: "/admin/scheduler", icon: Calendar },
+    { name: "Integrations", href: "/admin/integrations", icon: Plug },
+    { name: "Team", href: "/admin/team", icon: UserCog },
+    { name: "Settings", href: "/admin/settings", icon: Settings },
+    { name: "Account", href: "/admin/account", icon: Shield },
   ];
 
   const handleLogout = async () => {
@@ -68,7 +79,7 @@ export default function AdminLayout() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              <span className="font-mono text-sm font-semibold tracking-tight">
+              <span className="font-montserrat text-sm font-semibold tracking-tight">
                 OPERATIONS CONTROL
               </span>
             </div>
@@ -85,7 +96,7 @@ export default function AdminLayout() {
       {/* Body */}
       <div className="flex flex-1">
         {/* Sidebar */}
-        <aside className="w-48 border-r bg-sidebar/50 p-3 space-y-1">
+        <aside className="w-52 border-r bg-sidebar/50 p-3 space-y-1 overflow-y-auto">
           {adminNav.map((item) => {
             const Icon = item.icon;
             return (
@@ -101,8 +112,8 @@ export default function AdminLayout() {
                   )
                 }
               >
-                <Icon className="h-4 w-4" />
-                {item.name}
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{item.name}</span>
               </NavLink>
             );
           })}
@@ -116,7 +127,7 @@ export default function AdminLayout() {
 
       {/* Footer */}
       <footer className="border-t py-2 px-4">
-        <p className="text-[10px] text-muted-foreground/50 text-center font-mono">
+        <p className="text-[10px] text-muted-foreground/50 text-center font-montserrat">
           ENCEPHLIAN OPS • INTERNAL USE ONLY
         </p>
       </footer>
