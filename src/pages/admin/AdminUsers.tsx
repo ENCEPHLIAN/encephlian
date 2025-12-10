@@ -158,17 +158,13 @@ export default function AdminUsers() {
     },
   });
 
-  // Fetch clinics for dropdowns
+  // Fetch clinics for dropdowns using admin RPC to bypass RLS
   const { data: clinics } = useQuery<ClinicOption[]>({
     queryKey: ["admin-clinics-list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("clinics")
-        .select("id, name")
-        .eq("is_active", true)
-        .order("name");
+      const { data, error } = await supabase.rpc("admin_get_clinics_for_dropdown");
       if (error) throw error;
-      return data;
+      return data as ClinicOption[];
     },
   });
 

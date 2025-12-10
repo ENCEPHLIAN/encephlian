@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
       }
     );
 
-    // Verify admin
+    // Verify admin using service role to bypass RLS
     const { data: { user } } = await supabaseClient.auth.getUser();
     if (!user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -26,7 +26,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: roleCheck } = await supabaseClient
+    // Create admin client with service role for role check
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    const { data: roleCheck } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -50,11 +56,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Create admin client with service role
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+    // supabaseAdmin already created above, reuse it
 
     // STEP 1: Clean up any existing profile with this email
     console.log('Cleaning up existing data for email:', email);

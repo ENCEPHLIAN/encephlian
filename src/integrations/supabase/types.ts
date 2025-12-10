@@ -1237,6 +1237,13 @@ export type Database = {
           user_id: string
         }[]
       }
+      admin_get_clinics_for_dropdown: {
+        Args: never
+        Returns: {
+          id: string
+          name: string
+        }[]
+      }
       admin_get_dashboard_stats: { Args: never; Returns: Json }
       admin_get_recent_audit_logs: {
         Args: { p_limit?: number }
