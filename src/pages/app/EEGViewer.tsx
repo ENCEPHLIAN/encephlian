@@ -204,25 +204,36 @@ export default function EEGViewer() {
           f.path?.toLowerCase().endsWith('.edf') || f.path?.toLowerCase().endsWith('.bdf')
         );
 
-        if (!edfFile) {
+        // Also check if there's an uploaded_file_path on the study itself
+        const filePath = edfFile?.path || activeStudy.uploaded_file_path;
+
+        if (!filePath) {
           throw new Error("No EDF/BDF file found for this study");
         }
 
         toast.info("Loading EEG file...");
 
-        // Download the raw EDF file
-        const { data: fileBlob, error: downloadError } = await supabase
-          .storage
-          .from("eeg-raw")
-          .download(edfFile.path);
+        // Try multiple buckets in order of likelihood
+        const bucketsToTry = ["eeg-uploads", "eeg-raw"];
+        let fileBlob: Blob | null = null;
+        let lastError: string | null = null;
 
-        if (downloadError || !fileBlob) {
-          throw new Error(`Failed to download EDF file: ${downloadError?.message || "Unknown error"}`);
+        for (const bucket of bucketsToTry) {
+          const { data, error } = await supabase.storage.from(bucket).download(filePath);
+          if (data && !error) {
+            fileBlob = data;
+            break;
+          }
+          lastError = error?.message || "Unknown error";
+        }
+
+        if (!fileBlob) {
+          throw new Error(`Failed to download EDF file: ${lastError}`);
         }
 
         // Parse EDF/BDF in browser
         const buffer = await fileBlob.arrayBuffer();
-        const isBDF = edfFile.path?.toLowerCase().endsWith('.bdf') || edfFile.kind === 'bdf';
+        const isBDF = filePath?.toLowerCase().endsWith('.bdf') || edfFile?.kind === 'bdf';
         
         toast.info("Parsing EEG signals...");
         

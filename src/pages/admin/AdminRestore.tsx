@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2, Trash2, RefreshCw, AlertTriangle, History, Database, HardDrive } from "lucide-react";
@@ -36,7 +34,7 @@ export default function AdminRestore() {
   });
 
   // Fetch studies for selected user
-  const { data: userStudies } = useQuery({
+  const { data: userStudies, refetch: refetchStudies } = useQuery({
     queryKey: ["user-studies-restore", selectedUserId],
     enabled: !!selectedUserId,
     queryFn: async () => {
@@ -55,33 +53,42 @@ export default function AdminRestore() {
     ? [...new Set(userStudies.map(s => dayjs(s.created_at).format("YYYY-MM-DD")))]
     : [];
 
+  // Storage buckets to clean
+  const STORAGE_BUCKETS = ["eeg-uploads", "eeg-raw", "eeg-clean", "eeg-json", "eeg-reports", "eeg-preview"];
+
   // Handle full reset for a user
   const handleFullReset = async () => {
     if (!selectedUserId) return;
     
     setIsProcessing(true);
     try {
-      // Delete all study files from storage
       const studies = userStudies || [];
+      const studyIds = studies.map(s => s.id);
+
+      // Delete files from storage for each study
       for (const study of studies) {
         const files = (study.study_files as any[]) || [];
         for (const file of files) {
-          // Try to delete from various buckets
-          for (const bucket of ["eeg-uploads", "eeg-raw", "eeg-clean", "eeg-json", "eeg-reports"]) {
-            await supabase.storage.from(bucket).remove([file.path]);
+          for (const bucket of STORAGE_BUCKETS) {
+            try {
+              await supabase.storage.from(bucket).remove([file.path]);
+            } catch {
+              // Ignore errors for missing files
+            }
           }
         }
       }
 
-      // Delete study files records
-      const studyIds = studies.map(s => s.id);
+      // Delete database records in correct order (foreign key constraints)
       if (studyIds.length > 0) {
-        await supabase.from("study_files").delete().in("study_id", studyIds);
-        await supabase.from("reports").delete().in("study_id", studyIds);
-        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
-        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
+        // Delete related records first
+        await supabase.from("report_attachments").delete().in("study_id", studyIds);
         await supabase.from("eeg_markers").delete().in("study_id", studyIds);
         await supabase.from("review_events").delete().in("study_id", studyIds);
+        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
+        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
+        await supabase.from("reports").delete().in("study_id", studyIds);
+        await supabase.from("study_files").delete().in("study_id", studyIds);
         await supabase.from("studies").delete().in("id", studyIds);
       }
 
@@ -92,9 +99,11 @@ export default function AdminRestore() {
       await supabase.from("wallet_transactions").delete().eq("user_id", selectedUserId);
 
       toast.success("User data has been completely reset");
-      queryClient.invalidateQueries({ queryKey: ["user-studies-restore"] });
+      queryClient.invalidateQueries({ queryKey: ["user-studies-restore", selectedUserId] });
       setShowResetConfirm(false);
+      refetchStudies();
     } catch (err: any) {
+      console.error("Reset failed:", err);
       toast.error(`Reset failed: ${err.message}`);
     } finally {
       setIsProcessing(false);
@@ -117,24 +126,30 @@ export default function AdminRestore() {
         .gt("created_at", cutoffDate);
 
       if (studiesToDelete && studiesToDelete.length > 0) {
+        const studyIds = studiesToDelete.map(s => s.id);
+
         // Delete files from storage
         for (const study of studiesToDelete) {
           const files = (study.study_files as any[]) || [];
           for (const file of files) {
-            for (const bucket of ["eeg-uploads", "eeg-raw", "eeg-clean", "eeg-json", "eeg-reports"]) {
-              await supabase.storage.from(bucket).remove([file.path]);
+            for (const bucket of STORAGE_BUCKETS) {
+              try {
+                await supabase.storage.from(bucket).remove([file.path]);
+              } catch {
+                // Ignore errors for missing files
+              }
             }
           }
         }
 
-        // Delete database records
-        const studyIds = studiesToDelete.map(s => s.id);
-        await supabase.from("study_files").delete().in("study_id", studyIds);
-        await supabase.from("reports").delete().in("study_id", studyIds);
-        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
-        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
+        // Delete database records in correct order
+        await supabase.from("report_attachments").delete().in("study_id", studyIds);
         await supabase.from("eeg_markers").delete().in("study_id", studyIds);
         await supabase.from("review_events").delete().in("study_id", studyIds);
+        await supabase.from("canonical_eeg_records").delete().in("study_id", studyIds);
+        await supabase.from("ai_drafts").delete().in("study_id", studyIds);
+        await supabase.from("reports").delete().in("study_id", studyIds);
+        await supabase.from("study_files").delete().in("study_id", studyIds);
         await supabase.from("studies").delete().in("id", studyIds);
       }
 
@@ -146,9 +161,12 @@ export default function AdminRestore() {
         .gt("created_at", cutoffDate);
 
       toast.success(`Restored to ${selectedDate}. All data after this date has been removed.`);
-      queryClient.invalidateQueries({ queryKey: ["user-studies-restore"] });
+      queryClient.invalidateQueries({ queryKey: ["user-studies-restore", selectedUserId] });
       setShowRestoreConfirm(false);
+      setSelectedDate("");
+      refetchStudies();
     } catch (err: any) {
+      console.error("Restore failed:", err);
       toast.error(`Restore failed: ${err.message}`);
     } finally {
       setIsProcessing(false);
@@ -166,8 +184,8 @@ export default function AdminRestore() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Backup & Restore</h1>
-        <p className="text-sm text-muted-foreground font-mono">
+        <h1 className="text-2xl font-bold tracking-tight">Backup & Restore</h1>
+        <p className="text-sm text-muted-foreground">
           Account-level data management and restoration
         </p>
       </div>
@@ -175,7 +193,7 @@ export default function AdminRestore() {
       {/* User Selection */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base font-mono">Select Account</CardTitle>
+          <CardTitle className="text-base">Select Account</CardTitle>
           <CardDescription>
             Choose a clinician account to manage
           </CardDescription>
@@ -183,7 +201,10 @@ export default function AdminRestore() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Clinician Account</Label>
-            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+            <Select value={selectedUserId} onValueChange={(v) => {
+              setSelectedUserId(v);
+              setSelectedDate("");
+            }}>
               <SelectTrigger className="w-full max-w-md">
                 <SelectValue placeholder="Select a clinician..." />
               </SelectTrigger>
@@ -192,8 +213,7 @@ export default function AdminRestore() {
                   <SelectItem key={user.id} value={user.id}>
                     {user.full_name || user.email}
                   </SelectItem>
-                ))
-                }
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -221,7 +241,7 @@ export default function AdminRestore() {
               <div className="flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
                 <div>
-                  <CardTitle className="text-base font-mono">Restore to Date</CardTitle>
+                  <CardTitle className="text-base">Restore to Date</CardTitle>
                   <CardDescription>
                     Keep data up to a specific date, remove everything after
                   </CardDescription>
@@ -271,7 +291,7 @@ export default function AdminRestore() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
                 <div>
-                  <CardTitle className="text-base font-mono text-destructive">Full Reset</CardTitle>
+                  <CardTitle className="text-base text-destructive">Full Reset</CardTitle>
                   <CardDescription>
                     Completely wipe all data for this account
                   </CardDescription>
@@ -289,7 +309,7 @@ export default function AdminRestore() {
               <Button
                 variant="destructive"
                 onClick={() => setShowResetConfirm(true)}
-                disabled={isProcessing}
+                disabled={isProcessing || !userStudies?.length}
               >
                 <Trash2 className="h-4 w-4 mr-2" />
                 Full Account Reset
@@ -305,8 +325,8 @@ export default function AdminRestore() {
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Full Reset</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all data for this account including studies, 
-              files, notes, and transaction history. This action cannot be undone.
+              This will permanently delete all data for this account including {userStudies?.length || 0} studies, 
+              all files, notes, and transaction history. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

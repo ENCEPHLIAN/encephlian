@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, RefreshCw, Mail, CreditCard, Cpu, AlertCircle } from "lucide-react";
+import { CheckCircle2, XCircle, RefreshCw, AlertCircle, ExternalLink } from "lucide-react";
 
 // Email notifications stored in localStorage for testing
 const EMAIL_ENABLED_KEY = "encephlian_emails_enabled";
@@ -57,12 +57,16 @@ export default function AdminIntegrations() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center">
-                <Mail className="h-5 w-5 text-violet-500" />
+              {/* Resend Logo */}
+              <div className="h-10 w-10 rounded-lg bg-black flex items-center justify-center">
+                <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none">
+                  <path d="M2 6C2 4.89543 2.89543 4 4 4H20C21.1046 4 22 4.89543 22 6V18C22 19.1046 21.1046 20 20 20H4C2.89543 20 2 19.1046 2 18V6Z" fill="white"/>
+                  <path d="M2 8L10.1649 13.7154C11.2293 14.4283 12.7707 14.4283 13.8351 13.7154L22 8" stroke="black" strokeWidth="2"/>
+                </svg>
               </div>
               <div>
-                <CardTitle className="text-base">Email Notifications (Resend)</CardTitle>
-                <CardDescription>Control Resend API email delivery</CardDescription>
+                <CardTitle className="text-base">Resend</CardTitle>
+                <CardDescription>Email delivery service</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -102,7 +106,7 @@ export default function AdminIntegrations() {
         </CardContent>
       </Card>
 
-      {/* External Services */}
+      {/* Payment Processing */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Payment Processing</CardTitle>
@@ -111,8 +115,11 @@ export default function AdminIntegrations() {
         <CardContent>
           <div className="flex items-center justify-between p-4 rounded-lg border">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
-                <CreditCard className="h-6 w-6 text-blue-500" />
+              {/* Razorpay Logo */}
+              <div className="h-12 w-12 rounded-lg bg-[#072654] flex items-center justify-center">
+                <svg viewBox="0 0 200 200" className="h-8 w-8">
+                  <path fill="#3395FF" d="M146.4 51.8l-18.5 4.9 53.5 100.6 21.8-5.8zM65.8 96.3l-19.8 5.3 35.7 67 20.5-5.4zM120.8 64.4L91 72.3l42.9 80.5 29.8-7.9z"/>
+                </svg>
               </div>
               <div>
                 <p className="font-medium">Razorpay</p>
@@ -136,8 +143,11 @@ export default function AdminIntegrations() {
         <CardContent>
           <div className="flex items-center justify-between p-4 rounded-lg border border-dashed">
             <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center">
-                <Cpu className="h-6 w-6 text-muted-foreground" />
+              {/* Azure Logo */}
+              <div className="h-12 w-12 rounded-lg bg-[#0078D4] flex items-center justify-center">
+                <svg viewBox="0 0 96 96" className="h-7 w-7" fill="white">
+                  <path d="M35.7 9h21L22 78.3c-.5 1.4-1.8 2.3-3.3 2.3H5.3c-2.4 0-3.9-2.5-2.8-4.6L35.7 9zM63.3 58.9h24.9c2 0 3.3 2.1 2.4 3.9L77 87.3c-.5 1-1.5 1.6-2.5 1.6H48.7L63.3 58.9zM53.3 38.5L70.8 9h18.7c2.4 0 3.9 2.5 2.8 4.6L42.7 96h26.6L53.3 38.5z"/>
+                </svg>
               </div>
               <div>
                 <p className="font-medium">Azure ML Service</p>
