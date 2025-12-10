@@ -99,17 +99,22 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
 // --------------- DESKTOP SIDEBAR ---------------
 
-function AppSidebarDesktop({ collapsed, onMissionOpen }: { collapsed: boolean; onMissionOpen: () => void }) {
+function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: boolean; onMissionOpen: () => void; onToggle: () => void }) {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col relative",
+        "hidden md:flex flex-col relative group/sidebar",
         "bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60",
         "sticky top-16 h-[calc(100vh-4rem)] z-30",
         "transition-[width] duration-200 ease-out",
         collapsed ? "w-16" : "w-56",
       )}
     >
+      {/* Invisible hover zone on right edge for cursor change - only on empty areas */}
+      <div 
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-40"
+        onClick={onToggle}
+      />
       <div className="flex-1 overflow-y-auto px-3 py-4">
         {!collapsed && (
           <div className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
@@ -286,39 +291,75 @@ function AppLayoutContent() {
           {/* RIGHT: search + actions */}
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Desktop command palette button */}
-            <Button
-              variant="outline"
-              className="hidden md:flex h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full border-border/50"
-              onClick={() => setCommandOpen(true)}
-            >
-              <Search className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground text-sm truncate">Search studies, patients...</span>
-              <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-border/50 px-1.5 text-[10px]">
-                <span>⌘</span>K
-              </kbd>
-            </Button>
-
-            {/* Mobile search icon */}
-            <IconButton
-              icon={Search}
-              className="flex md:hidden"
-              onClick={() => setCommandOpen(true)}
-              aria-label="Open search"
-            />
+            {!isMobile && (
+              <Button
+                variant="outline"
+                className="h-9 px-3 min-w-[260px] max-w-sm items-center justify-start rounded-full border-border/50"
+                onClick={() => setCommandOpen(true)}
+              >
+                <Search className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground text-sm truncate">Search studies, patients...</span>
+                <kbd className="ml-auto hidden lg:inline-flex h-5 select-none items-center gap-1 rounded border border-border/50 px-1.5 text-[10px]">
+                  <span>⌘</span>K
+                </kbd>
+              </Button>
+            )}
 
             {/* QuickTips only on desktop */}
             {!isMobile && <QuickTipsDialog />}
 
-            <ThemeToggle />
+            {/* Theme toggle only on desktop */}
+            {!isMobile && <ThemeToggle />}
 
-            {/* Mobile hamburger menu */}
+            {/* Mobile: only sidebar icon and hamburger menu */}
             {isMobile && (
-              <IconButton
-                icon={Menu}
-                onClick={() => setMobileNavOpen(true)}
-                aria-label="Open menu"
-              />
+              <>
+                <IconButton
+                  icon={PanelLeft}
+                  onClick={() => setMobileNavOpen(true)}
+                  aria-label="Open sidebar"
+                />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton
+                      icon={Menu}
+                      aria-label="Open menu"
+                    />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56 p-2">
+                    <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
+                      <User className="mr-3 h-4 w-4" />
+                      Profile
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate("/app/settings")} className="py-2.5">
+                      <Settings className="mr-3 h-4 w-4" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="py-2.5 flex items-center justify-between">
+                      <span className="flex items-center gap-3">
+                        <Settings className="h-4 w-4" />
+                        Theme
+                      </span>
+                      <ThemeToggle />
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setCommandOpen(true)} className="py-2.5">
+                      <Search className="mr-3 h-4 w-4" />
+                      Search
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleSignOut} className="py-2.5 text-destructive focus:text-destructive">
+                      <LogOut className="mr-3 h-4 w-4" />
+                      Sign out
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             )}
+
+            {/* Account dropdown - only on desktop */}
+            {!isMobile && (
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -378,6 +419,7 @@ function AppLayoutContent() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
         </div>
       </header>
@@ -385,7 +427,7 @@ function AppLayoutContent() {
       {/* BODY: sidebar pinned; whole page scrolls */}
       <div className="flex flex-1">
         {/* Desktop sidebar (sticky, frosted, pinned left) */}
-        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} />}
+        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} onToggle={() => setSidebarCollapsed(v => !v)} />}
 
         {/* Mobile full-screen nav */}
         {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}

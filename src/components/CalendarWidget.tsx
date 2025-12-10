@@ -77,7 +77,7 @@ export function CalendarWidget() {
   const previousMonth = new Date(new Date().getFullYear(), new Date().getMonth() - 1);
 
   return (
-    <Card className="openai-card border-2">
+    <Card className="openai-card border-2 h-full">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary" />
@@ -85,7 +85,7 @@ export function CalendarWidget() {
         </div>
       </CardHeader>
       <CardContent 
-        className="p-4 pt-0"
+        className="p-4 pt-0 flex-1"
         ref={(el) => {
           if (el) {
             const observer = new ResizeObserver((entries) => {
@@ -96,11 +96,11 @@ export function CalendarWidget() {
           }
         }}
       >
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Calendar Section */}
-          <div className="flex-1">
+        <div className="flex flex-col lg:flex-row gap-6 h-full">
+          {/* Calendar Section - expanded to fill space */}
+          <div className="flex-1 flex items-start justify-center">
             {showTwoMonths ? (
-              <div className="flex gap-4 justify-center">
+              <div className="flex gap-6 justify-center flex-wrap">
                 {/* Previous month */}
                 <Calendar
                   mode="single"
@@ -122,12 +122,12 @@ export function CalendarWidget() {
                 />
               </div>
             ) : (
-              <div className="flex justify-center">
+              <div className="flex justify-center w-full">
                 <Calendar
                   mode="single"
                   selected={date}
                   onSelect={setDate}
-                  className="rounded-lg border pointer-events-auto"
+                  className="rounded-lg border pointer-events-auto w-full max-w-xs"
                   modifiers={modifiers}
                   modifiersStyles={modifiersStyles}
                 />
@@ -136,8 +136,8 @@ export function CalendarWidget() {
           </div>
 
           {/* Selected Date Studies Panel */}
-          <div className="w-full lg:w-64 shrink-0">
-            <div className="rounded-lg border bg-muted/30 p-4 h-full">
+          <div className="w-full lg:w-72 shrink-0">
+            <div className="rounded-lg border bg-muted/30 p-4 h-full min-h-[280px]">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold text-sm">
@@ -146,7 +146,7 @@ export function CalendarWidget() {
               </div>
 
               {selectedDateStudies.length > 0 ? (
-                <ScrollArea className="h-[200px]">
+                <ScrollArea className="h-[220px]">
                   <div className="space-y-2">
                     {selectedDateStudies.map((study) => {
                       const meta = study.meta as any;
@@ -183,7 +183,7 @@ export function CalendarWidget() {
                   </div>
                 </ScrollArea>
               ) : (
-                <div className="flex flex-col items-center justify-center h-[200px] text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground">
                   <FileText className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">No studies on this date</p>
                   {date && (
