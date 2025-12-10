@@ -14,6 +14,7 @@ import RecentReportsSection from "@/components/dashboard/RecentReportsSection";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import TokenBalanceHeader from "@/components/dashboard/TokenBalanceHeader";
 import { CalendarWidget } from "@/components/CalendarWidget";
+import { DeviceStatusIndicator } from "@/components/dashboard/DeviceStatusIndicator";
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -503,8 +504,11 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Calendar Widget */}
-      <CalendarWidget />
+      {/* Device Status & Calendar Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DeviceStatusIndicator />
+        <CalendarWidget />
+      </div>
 
       {/* Urgent Queue */}
       {pendingStudies.length > 0 && (

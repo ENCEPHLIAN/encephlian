@@ -1,14 +1,23 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Rocket } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
-interface ComingSoonProps {
-  feature: string;
-}
+const featureNames: Record<string, string> = {
+  analytics: "Analytics",
+  scheduler: "Scheduler",
+  integrations: "Integrations",
+  team: "Team",
+};
 
-export default function ComingSoon({ feature }: ComingSoonProps) {
+export default function ComingSoon() {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Extract feature name from path
+  const pathParts = location.pathname.split("/");
+  const pageName = pathParts[pathParts.length - 1];
+  const feature = featureNames[pageName] || "Feature";
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">

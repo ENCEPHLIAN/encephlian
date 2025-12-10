@@ -6,7 +6,6 @@ import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { PillToggle } from "@/components/ui/pill-toggle";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,12 +25,8 @@ import {
   Activity,
   FolderOpen,
   StickyNote,
-  BarChart3,
-  Users,
   Settings,
   Search,
-  Calendar,
-  Plug,
   HelpCircle,
   PanelLeft,
   X,
@@ -57,10 +52,6 @@ const navigation = [
   { name: "Files", href: "/app/files", icon: FolderOpen },
   { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
-  { name: "Analytics", href: "/app/analytics", icon: BarChart3, badge: "Soon" },
-  { name: "Scheduler", href: "/app/scheduler", icon: Calendar, badge: "Soon" },
-  { name: "Integrations", href: "/app/integrations", icon: Plug, badge: "Soon" },
-  { name: "Team", href: "/app/team", icon: Users, badge: "Soon" },
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
@@ -89,14 +80,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
           >
             {Icon && <Icon className={cn("h-4 w-4", !collapsed && "mr-2")} />}
             {!collapsed && (
-              <div className="flex-1 flex items-center justify-between gap-2">
-                <span>{item.name}</span>
-                {item.badge && (
-                  <span className="ml-2 rounded-full bg-background px-2 py-0.5 text-[11px] leading-none">
-                    {item.badge}
-                  </span>
-                )}
-              </div>
+              <span>{item.name}</span>
             )}
           </NavLink>
         );
