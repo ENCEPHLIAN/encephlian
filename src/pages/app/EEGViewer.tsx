@@ -113,7 +113,7 @@ export default function EEGViewer() {
   const [newMarkerLabel, setNewMarkerLabel] = useState("");
   const [newMarkerNotes, setNewMarkerNotes] = useState("");
 
-  // Fetch most recent study if no studyId provided
+  // Fetch most recent study if no studyId provided - only user's own studies
   const { data: recentStudy, isLoading: recentLoading } = useQuery({
     queryKey: ["recent-study"],
     enabled: !studyId,
@@ -121,7 +121,8 @@ export default function EEGViewer() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
-      const { data: userStudy } = await supabase
+      // Only fetch user's own studies, no sample fallback
+      const { data: userStudy, error } = await supabase
         .from("studies")
         .select("*, study_files(*)")
         .eq("owner", user.id)
@@ -129,18 +130,10 @@ export default function EEGViewer() {
         .limit(1)
         .maybeSingle();
       
-      if (userStudy) return userStudy;
-      
-      const { data: sampleStudy, error: sampleError } = await supabase
-        .from("studies")
-        .select("*, study_files(*)")
-        .eq("sample", true)
-        .limit(1)
-        .maybeSingle();
-      
-      if (sampleError) throw sampleError;
-      return sampleStudy;
+      if (error) throw error;
+      return userStudy;
     },
+    staleTime: 30000,
   });
 
   // Fetch selected study
@@ -794,12 +787,19 @@ export default function EEGViewer() {
                   {eegData ? ` • ${eegData.channelLabels.length} channels • ${eegData.sampleRate}Hz` : ""}
                 </p>
               </div>
-              {/* Subtle amplitude controls */}
-              <div className="flex items-center gap-2 mr-3">
+              {/* Subtle amplitude controls with click+hold */}
+              <div className="flex items-center gap-1.5 mr-3">
                 <button
-                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-                  onClick={() => setAmplitudeScale(Math.max(0.001, amplitudeScale - 0.001))}
-                  title="Decrease amplitude"
+                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-all duration-150 text-muted-foreground hover:text-foreground hover:scale-105 active:scale-95"
+                  onMouseDown={() => {
+                    setAmplitudeScale(Math.max(0.001, amplitudeScale - 0.001));
+                    const interval = setInterval(() => {
+                      setAmplitudeScale(prev => Math.max(0.001, prev - 0.001));
+                    }, 80);
+                    const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
+                    window.addEventListener('mouseup', cleanup);
+                  }}
+                  title="Decrease amplitude (hold for continuous)"
                 >
                   <span className="text-xs">−</span>
                 </button>
@@ -807,9 +807,16 @@ export default function EEGViewer() {
                   {amplitudeScale.toFixed(3)}x
                 </span>
                 <button
-                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-                  onClick={() => setAmplitudeScale(amplitudeScale + 0.001)}
-                  title="Increase amplitude"
+                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-all duration-150 text-muted-foreground hover:text-foreground hover:scale-105 active:scale-95"
+                  onMouseDown={() => {
+                    setAmplitudeScale(amplitudeScale + 0.001);
+                    const interval = setInterval(() => {
+                      setAmplitudeScale(prev => prev + 0.001);
+                    }, 80);
+                    const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
+                    window.addEventListener('mouseup', cleanup);
+                  }}
+                  title="Increase amplitude (hold for continuous)"
                 >
                   <span className="text-xs">+</span>
                 </button>

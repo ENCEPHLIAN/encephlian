@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Study {
   id: string;
@@ -57,12 +58,15 @@ export default function Dashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min")
+        .order("created_at", { ascending: false })
+        .limit(100);
       if (error) throw error;
       return data as Study[];
     },
-    refetchInterval: 3000, // Poll every 3 seconds for faster updates
+    staleTime: 5000,
+    gcTime: 30000,
+    refetchInterval: 5000,
   });
 
   const { data: wallet, refetch: refetchWallet } = useQuery({
@@ -283,44 +287,64 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Button
-              size="lg"
-              className="quick-action-btn h-20 flex-col gap-2"
-              onClick={() => navigate("/app/studies?filter=uploaded")}
-            >
-              <Activity className="h-5 w-5 shrink-0" />
-              <span className="text-sm">Start Review</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="lg"
+                  className="quick-action-btn h-20 flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  onClick={() => navigate("/app/studies?filter=uploaded")}
+                >
+                  <Activity className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">Start Review</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Review pending EEG studies</TooltipContent>
+            </Tooltip>
 
-            <Button
-              size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
-              onClick={() => navigate("/app/files")}
-            >
-              <Upload className="h-5 w-5 shrink-0" />
-              <span className="text-sm">Upload Study</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  onClick={() => navigate("/app/files")}
+                >
+                  <Upload className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">Upload Study</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload new EEG files</TooltipContent>
+            </Tooltip>
 
-            <Button
-              size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
-              onClick={() => navigate("/app/notes")}
-            >
-              <StickyNote className="h-5 w-5 shrink-0" />
-              <span className="text-sm">My Notes</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  onClick={() => navigate("/app/notes")}
+                >
+                  <StickyNote className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">My Notes</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>View and edit your notes</TooltipContent>
+            </Tooltip>
 
-            <Button
-              size="lg"
-              variant="outline"
-              className="quick-action-btn h-20 flex-col gap-2 quick-outline"
-              onClick={() => navigate("/app/wallet")}
-            >
-              <Coins className="h-5 w-5 shrink-0" />
-              <span className="text-sm">Buy Tokens</span>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                  onClick={() => navigate("/app/wallet")}
+                >
+                  <Coins className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">Buy Tokens</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Purchase analysis tokens</TooltipContent>
+            </Tooltip>
           </div>
         </CardContent>
       </Card>

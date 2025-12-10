@@ -1,7 +1,9 @@
+import { useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Play, 
   Pause, 
@@ -45,35 +47,133 @@ export function EEGControls({
   onSkipForward,
   onExport,
 }: EEGControlsProps) {
+  const skipBackwardIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const skipForwardIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const holdStartTimeRef = useRef<number>(0);
+
+  // Click and hold for skip buttons with speed acceleration
+  const handleSkipBackwardMouseDown = useCallback(() => {
+    holdStartTimeRef.current = Date.now();
+    onSkipBackward();
+    
+    skipBackwardIntervalRef.current = setInterval(() => {
+      const holdDuration = (Date.now() - holdStartTimeRef.current) / 1000;
+      const speed = holdDuration > 3 ? 3 : holdDuration > 1 ? 2 : 1;
+      for (let i = 0; i < speed; i++) {
+        onSkipBackward();
+      }
+    }, 150);
+  }, [onSkipBackward]);
+
+  const handleSkipForwardMouseDown = useCallback(() => {
+    holdStartTimeRef.current = Date.now();
+    onSkipForward();
+    
+    skipForwardIntervalRef.current = setInterval(() => {
+      const holdDuration = (Date.now() - holdStartTimeRef.current) / 1000;
+      const speed = holdDuration > 3 ? 3 : holdDuration > 1 ? 2 : 1;
+      for (let i = 0; i < speed; i++) {
+        onSkipForward();
+      }
+    }, 150);
+  }, [onSkipForward]);
+
+  const handleMouseUp = useCallback(() => {
+    if (skipBackwardIntervalRef.current) {
+      clearInterval(skipBackwardIntervalRef.current);
+      skipBackwardIntervalRef.current = null;
+    }
+    if (skipForwardIntervalRef.current) {
+      clearInterval(skipForwardIntervalRef.current);
+      skipForwardIntervalRef.current = null;
+    }
+  }, []);
+
+  // Amplitude controls with click and hold
+  const amplitudeDecreaseRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const amplitudeIncreaseRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const currentAmplitudeRef = useRef(amplitudeScale);
+  currentAmplitudeRef.current = amplitudeScale;
+
+  const handleAmplitudeDecreaseDown = useCallback(() => {
+    onAmplitudeScaleChange(Math.max(0.001, currentAmplitudeRef.current - 0.001));
+    amplitudeDecreaseRef.current = setInterval(() => {
+      currentAmplitudeRef.current = Math.max(0.001, currentAmplitudeRef.current - 0.001);
+      onAmplitudeScaleChange(currentAmplitudeRef.current);
+    }, 80);
+  }, [onAmplitudeScaleChange]);
+
+  const handleAmplitudeIncreaseDown = useCallback(() => {
+    onAmplitudeScaleChange(currentAmplitudeRef.current + 0.001);
+    amplitudeIncreaseRef.current = setInterval(() => {
+      currentAmplitudeRef.current = currentAmplitudeRef.current + 0.001;
+      onAmplitudeScaleChange(currentAmplitudeRef.current);
+    }, 80);
+  }, [onAmplitudeScaleChange]);
+
+  const handleAmplitudeMouseUp = useCallback(() => {
+    if (amplitudeDecreaseRef.current) {
+      clearInterval(amplitudeDecreaseRef.current);
+      amplitudeDecreaseRef.current = null;
+    }
+    if (amplitudeIncreaseRef.current) {
+      clearInterval(amplitudeIncreaseRef.current);
+      amplitudeIncreaseRef.current = null;
+    }
+  }, []);
+
   return (
-    <div className="space-y-4 bg-card border border-border rounded-lg p-4">
+    <div className="space-y-4 bg-card border border-border rounded-lg p-4 transition-all duration-200">
       {/* Playback Controls */}
       <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onSkipBackward}
-          disabled={currentTime <= 0}
-        >
-          <SkipBack className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onMouseDown={handleSkipBackwardMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              disabled={currentTime <= 0}
+              className="transition-all duration-150 hover:scale-105 active:scale-95"
+            >
+              <SkipBack className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Skip backward (hold for fast)</TooltipContent>
+        </Tooltip>
         
-        <Button
-          variant="default"
-          size="icon"
-          onClick={onPlayPause}
-        >
-          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="default"
+              size="icon"
+              onClick={onPlayPause}
+              className="transition-all duration-150 hover:scale-105 active:scale-95"
+            >
+              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{isPlaying ? "Pause" : "Play"}</TooltipContent>
+        </Tooltip>
         
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={onSkipForward}
-          disabled={currentTime >= duration - timeWindow}
-        >
-          <SkipForward className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onMouseDown={handleSkipForwardMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              disabled={currentTime >= duration - timeWindow}
+              className="transition-all duration-150 hover:scale-105 active:scale-95"
+            >
+              <SkipForward className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Skip forward (hold for fast)</TooltipContent>
+        </Tooltip>
 
         <div className="flex-1 px-4">
           <Slider
@@ -112,39 +212,33 @@ export function EEGControls({
         <div className="space-y-2">
           <Label className="text-xs">Amplitude Scale</Label>
           <div className="flex items-center gap-2">
-            <button
-              className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-colors"
-              onClick={() => onAmplitudeScaleChange(Math.max(0.001, amplitudeScale - 0.001))}
-              onMouseDown={(e) => {
-                let current = amplitudeScale;
-                const interval = setInterval(() => {
-                  current = Math.max(0.001, current - 0.001);
-                  onAmplitudeScaleChange(current);
-                }, 100);
-                const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
-                window.addEventListener('mouseup', cleanup);
-              }}
-              title="Decrease amplitude"
-            >
-              <ZoomOut className="h-3 w-3" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
+                  onMouseDown={handleAmplitudeDecreaseDown}
+                  onMouseUp={handleAmplitudeMouseUp}
+                  onMouseLeave={handleAmplitudeMouseUp}
+                >
+                  <ZoomOut className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Decrease amplitude (hold for continuous)</TooltipContent>
+            </Tooltip>
             <span className="text-xs font-mono flex-1 text-center">{amplitudeScale.toFixed(3)}x</span>
-            <button
-              className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-colors"
-              onClick={() => onAmplitudeScaleChange(amplitudeScale + 0.001)}
-              onMouseDown={(e) => {
-                let current = amplitudeScale;
-                const interval = setInterval(() => {
-                  current = current + 0.001;
-                  onAmplitudeScaleChange(current);
-                }, 100);
-                const cleanup = () => { clearInterval(interval); window.removeEventListener('mouseup', cleanup); };
-                window.addEventListener('mouseup', cleanup);
-              }}
-              title="Increase amplitude"
-            >
-              <ZoomIn className="h-3 w-3" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
+                  onMouseDown={handleAmplitudeIncreaseDown}
+                  onMouseUp={handleAmplitudeMouseUp}
+                  onMouseLeave={handleAmplitudeMouseUp}
+                >
+                  <ZoomIn className="h-3 w-3" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Increase amplitude (hold for continuous)</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
@@ -167,10 +261,15 @@ export function EEGControls({
         {/* Export */}
         <div className="space-y-2">
           <Label className="text-xs">Actions</Label>
-          <Button variant="outline" onClick={onExport} className="w-full">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" onClick={onExport} className="w-full transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Export annotations as JSON</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </div>

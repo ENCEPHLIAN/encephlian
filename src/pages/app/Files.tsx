@@ -86,34 +86,38 @@ export default function Files() {
   const [searchQuery, setSearchQuery] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
 
-  // Fetch study_files from database for the current user
+  // Fetch study_files from database for the current user - optimized
   const { data: studyFiles, isLoading: studyFilesLoading } = useQuery({
     queryKey: ["user-study-files"],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get studies owned by this user
+      // Get studies owned by this user with files in a single query
       const { data: studies, error: studiesError } = await supabase
         .from('studies')
-        .select('id')
-        .eq('owner', user.id);
+        .select('id, study_files(*)')
+        .eq('owner', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
       
       if (studiesError) throw studiesError;
-      
       if (!studies || studies.length === 0) return [];
 
-      // Get files for these studies
-      const { data: files, error } = await supabase
-        .from('study_files')
-        .select('*')
-        .in('study_id', studies.map(s => s.id))
-        .order('created_at', { ascending: false });
+      // Flatten files from studies
+      const allFiles: StudyFile[] = [];
+      studies.forEach(study => {
+        const files = (study.study_files || []) as StudyFile[];
+        allFiles.push(...files);
+      });
 
-      if (error) throw error;
-      return files as StudyFile[];
+      return allFiles.sort((a, b) => 
+        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+      );
     },
-    enabled: selectedBucket === 'study-files'
+    enabled: selectedBucket === 'study-files',
+    staleTime: 30000,
+    gcTime: 60000,
   });
 
   const { data: files, isLoading: storageLoading } = useQuery({
