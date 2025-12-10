@@ -83,20 +83,8 @@ export function CalendarWidget() {
       </CardHeader>
       <CardContent className="p-4 pt-0 flex-1 flex flex-col min-h-0">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
-          {/* Calendar Section - wider */}
-          <div className="lg:col-span-2 flex items-start justify-center">
-            <Calendar
-              mode="single"
-              selected={date}
-              onSelect={setDate}
-              className="rounded-lg border pointer-events-auto w-full"
-              modifiers={modifiers}
-              modifiersStyles={modifiersStyles}
-            />
-          </div>
-
-          {/* Selected Date Studies Panel */}
-          <div className="min-w-0">
+          {/* Studies List Panel - 2/3 on left */}
+          <div className="lg:col-span-2 min-w-0">
             <div className="rounded-lg border bg-muted/30 p-3 h-full flex flex-col">
               <div className="flex items-center gap-2 mb-3 shrink-0">
                 <Clock className="h-4 w-4 text-muted-foreground" />
@@ -111,7 +99,7 @@ export function CalendarWidget() {
               </div>
 
               {selectedDateStudies.length > 0 ? (
-                <ScrollArea className="flex-1 min-h-[150px]">
+                <ScrollArea className="flex-1 min-h-[200px]">
                   <div className="space-y-2 pr-2">
                     {selectedDateStudies.map((study) => {
                       const meta = study.meta as any;
@@ -140,21 +128,21 @@ export function CalendarWidget() {
                               </Badge>
                             </div>
                           </TooltipTrigger>
-                          <TooltipContent side="left">View study details</TooltipContent>
+                          <TooltipContent side="right">View study details</TooltipContent>
                         </Tooltip>
                       );
                     })}
                   </div>
                 </ScrollArea>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground min-h-[150px]">
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground min-h-[200px]">
                   <FileText className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">No studies on this date</p>
                   {date && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="mt-2 text-xs"
+                      className="mt-2 text-xs transition-all duration-200"
                       onClick={() => navigate("/app/files")}
                     >
                       Upload Study
@@ -163,6 +151,18 @@ export function CalendarWidget() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Calendar Section - 1/3 on right, fills space */}
+          <div className="flex items-stretch justify-center">
+            <Calendar
+              mode="single"
+              selected={date}
+              onSelect={setDate}
+              className="rounded-lg border pointer-events-auto w-full h-full [&>div]:h-full [&_table]:h-full"
+              modifiers={modifiers}
+              modifiersStyles={modifiersStyles}
+            />
           </div>
         </div>
       </CardContent>
