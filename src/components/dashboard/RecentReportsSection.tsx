@@ -43,11 +43,11 @@ export default function RecentReportsSection({ studies, onRequestRefund }: Recen
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/app/files?tab=reports")}>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/app/files")} className="transition-all duration-200 hover:scale-[1.02]">
                 View All <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>View all reports in Files</TooltipContent>
+            <TooltipContent>View all files including reports</TooltipContent>
           </Tooltip>
         </div>
       </CardHeader>

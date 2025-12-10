@@ -171,10 +171,11 @@ export default function Dashboard() {
       dayjs(s.triage_completed_at || s.created_at).isAfter(monthStart)
     ).length;
     
-    // Pending studies (awaiting SLA or uploaded)
+    // Pending studies (awaiting SLA or uploaded without triage)
     const pendingStudies = studies.filter(s => 
-      s.state === "uploaded" && 
-      (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending")
+      s.state === "awaiting_sla" ||
+      (s.state === "uploaded" && 
+       (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending"))
     );
     
     // Processing studies
@@ -218,7 +219,7 @@ export default function Dashboard() {
 
   // Filter studies by status
   const pendingTriageStudies = studies?.filter(
-    (s) => s.state === "uploaded" && (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending")
+    (s) => s.state === "awaiting_sla" || (s.state === "uploaded" && (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending"))
   ) || [];
 
   const processingStudies = studies?.filter(

@@ -93,11 +93,14 @@ export default function Files() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Get studies owned by this user with files in a single query
+      // Get studies owned by this user with files - exclude awaiting_sla studies
+      // These haven't been processed yet and shouldn't appear in Files
       const { data: studies, error: studiesError } = await supabase
         .from('studies')
-        .select('id, study_files(*)')
+        .select('id, state, study_files(*)')
         .eq('owner', user.id)
+        .not('state', 'eq', 'awaiting_sla') // Exclude studies awaiting SLA selection
+        .not('sla', 'eq', 'pending') // Also exclude pending SLA
         .order('created_at', { ascending: false })
         .limit(50);
       
