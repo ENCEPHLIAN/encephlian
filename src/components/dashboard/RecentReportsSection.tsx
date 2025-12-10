@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ReportReadyCard from "./ReportReadyCard";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Study {
   id: string;
@@ -31,13 +32,23 @@ export default function RecentReportsSection({ studies, onRequestRefund }: Recen
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            <CardTitle>Recent Reports</CardTitle>
-          </div>
-          <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies?filter=signed")}>
-            View All <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-2 cursor-help">
+                <FileText className="h-5 w-5 text-primary" />
+                <CardTitle>Recent Reports</CardTitle>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Recently completed analysis reports</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" onClick={() => navigate("/app/files?tab=reports")}>
+                View All <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>View all reports in Files</TooltipContent>
+          </Tooltip>
         </div>
       </CardHeader>
       <CardContent>
@@ -47,6 +58,7 @@ export default function RecentReportsSection({ studies, onRequestRefund }: Recen
               key={study.id} 
               study={study} 
               onRequestRefund={onRequestRefund}
+              hideRefundButton={true}
             />
           ))}
         </div>

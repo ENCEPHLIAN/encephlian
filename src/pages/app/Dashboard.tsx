@@ -537,16 +537,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Performance Charts */}
-      <div className="openai-section">
-        <PerformanceCharts studies={studies || []} />
-      </div>
-
-      {/* Activity Feed */}
-      <div className="openai-section">
-        <ActivityFeed studies={studies || []} />
-      </div>
-
       {/* SLA Selection Modal */}
       <SlaSelectionModal
         open={slaModalOpen}

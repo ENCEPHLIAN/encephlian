@@ -251,7 +251,7 @@ function AppLayoutContent() {
 
   useEffect(() => {
     if (profile) {
-      setUserName(profile.full_name || "User");
+      setUserName(profile.full_name || profile.company_name || "Clinician");
     }
   }, [profile]);
 
