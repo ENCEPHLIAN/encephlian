@@ -83,9 +83,9 @@ type ClinicOption = {
 };
 
 // Roles that require clinic assignment
-const CLINIC_ROLES = ["clinician", "neurologist"] as const;
+const CLINIC_ROLES = ["clinician"] as const;
 // Roles that should NOT have clinic assignment  
-const SYSTEM_ROLES = ["management", "ops", "super_admin"] as const;
+const SYSTEM_ROLES = ["management", "super_admin"] as const;
 
 
 export default function AdminUsers() {
@@ -190,10 +190,10 @@ export default function AdminUsers() {
     mutationFn: async (form: typeof createForm) => {
       // Validate clinic requirement
       if (roleRequiresClinic(form.role) && !form.clinic_id) {
-        throw new Error("Clinic assignment is required for this role");
+        throw new Error("Clinic assignment is required for clinician role");
       }
       if (!roleRequiresClinic(form.role) && form.clinic_id) {
-        throw new Error("System roles (ops) should not be assigned to a clinic");
+        throw new Error("Management roles should not be assigned to a clinic");
       }
 
       const { data, error } = await supabase.functions.invoke("admin_create_user", {
@@ -235,7 +235,7 @@ export default function AdminUsers() {
     mutationFn: async ({ userId, role, clinicId }: { userId: string; role: string; clinicId?: string }) => {
       const { data, error } = await supabase.rpc("admin_grant_role", {
         p_user_id: userId,
-        p_role: role as "clinic_admin" | "neurologist" | "ops" | "super_admin",
+        p_role: role as "clinician" | "neurologist" | "management" | "super_admin",
         p_clinic_id: clinicId || null,
       });
       if (error) throw error;
@@ -254,7 +254,7 @@ export default function AdminUsers() {
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       const { data, error } = await supabase.rpc("admin_revoke_role", {
         p_user_id: userId,
-        p_role: role as "clinic_admin" | "neurologist" | "ops" | "super_admin",
+        p_role: role as "clinician" | "neurologist" | "management" | "super_admin",
       });
       if (error) throw error;
       return data;
@@ -362,7 +362,7 @@ export default function AdminUsers() {
 
   // Helper to check if user is management or super_admin (system role)
   const isSystemRole = (user: UserRow) => {
-    return user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management" || r.role === "ops");
+    return user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
   };
 
   // Helper to check if user is clinician only
@@ -403,9 +403,9 @@ export default function AdminUsers() {
     switch (role) {
       case "super_admin":
         return "destructive";
-      case "ops":
+      case "management":
         return "default";
-      case "clinic_admin":
+      case "clinician":
         return "secondary";
       default:
         return "outline";
@@ -770,7 +770,7 @@ export default function AdminUsers() {
 
             {!roleRequiresClinic(createForm.role) && (
               <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                System roles (ops) are not assigned to clinics
+                Management roles are not assigned to clinics
               </p>
             )}
 

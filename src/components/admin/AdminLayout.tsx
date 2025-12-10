@@ -128,7 +128,7 @@ export default function AdminLayout() {
       {/* Footer */}
       <footer className="border-t py-2 px-4">
         <p className="text-[10px] text-muted-foreground/50 text-center font-montserrat">
-          ENCEPHLIAN OPS • INTERNAL USE ONLY
+          ENCEPHLIAN ADMIN • INTERNAL USE ONLY
         </p>
       </footer>
     </div>

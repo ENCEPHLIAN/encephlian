@@ -27,7 +27,7 @@ export default function AdminRestore() {
       return (data as any[]).filter((u) => {
         const roles = u.app_roles || [];
         return !roles.some((r: any) => 
-          r.role === "super_admin" || r.role === "management" || r.role === "ops"
+          r.role === "super_admin" || r.role === "management"
         );
       });
     },

@@ -63,7 +63,7 @@ export default function AdminEegPush() {
       return (data as User[]).filter((u: any) => {
         const roles = u.app_roles || [];
         return !roles.some((r: any) => 
-          r.role === "super_admin" || r.role === "management" || r.role === "ops"
+          r.role === "super_admin" || r.role === "management"
         );
       });
     },
