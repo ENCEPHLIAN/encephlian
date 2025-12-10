@@ -338,18 +338,18 @@ export default function AdminClinics() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Clinic Admin (optional)</Label>
+              <Label>Assign Clinician (optional)</Label>
               <Select
                 value={createForm.admin_user_id}
                 onValueChange={(v) => setCreateForm((f) => ({ ...f, admin_user_id: v }))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select admin user..." />
+                  <SelectValue placeholder="Select clinician..." />
                 </SelectTrigger>
                 <SelectContent>
                   {users?.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
-                      {user.email} {user.full_name && `(${user.full_name})`}
+                      {user.full_name || user.email}
                     </SelectItem>
                   ))}
                 </SelectContent>

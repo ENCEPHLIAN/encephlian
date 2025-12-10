@@ -117,7 +117,7 @@ Deno.serve(async (req) => {
 
     // The handle_new_user trigger creates the profile automatically
     // Just update it with the correct role
-    const profileRole = ['clinician', 'neurologist'].includes(role) ? 'clinician' : 'neurologist';
+    const profileRole = 'clinician';
 
     // Wait a moment for the trigger to complete
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -158,7 +158,7 @@ Deno.serve(async (req) => {
         .upsert({
           user_id: userId,
           clinic_id,
-          role: 'neurologist'
+          role: 'clinician'
         }, { onConflict: 'clinic_id,user_id' });
     }
 

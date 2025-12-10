@@ -145,7 +145,7 @@ export default function AdminUsers() {
   const [clinicForm, setClinicForm] = useState({
     clinic_id: "",
     action: "assign" as "assign" | "unassign",
-    role: "neurologist",
+    role: "clinician",
   });
 
   // Fetch users
@@ -213,7 +213,7 @@ export default function AdminUsers() {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
       toast.success("User created successfully");
       setShowCreateDialog(false);
-      setCreateForm({ email: "", full_name: "", password: "", role: "neurologist", clinic_id: "" });
+      setCreateForm({ email: "", full_name: "", password: "", role: "clinician", clinic_id: "" });
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -235,7 +235,7 @@ export default function AdminUsers() {
     mutationFn: async ({ userId, role, clinicId }: { userId: string; role: string; clinicId?: string }) => {
       const { data, error } = await supabase.rpc("admin_grant_role", {
         p_user_id: userId,
-        p_role: role as "clinician" | "neurologist" | "management" | "super_admin",
+        p_role: role as "clinician" | "management" | "super_admin",
         p_clinic_id: clinicId || null,
       });
       if (error) throw error;
@@ -254,7 +254,7 @@ export default function AdminUsers() {
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
       const { data, error } = await supabase.rpc("admin_revoke_role", {
         p_user_id: userId,
-        p_role: role as "clinician" | "neurologist" | "management" | "super_admin",
+        p_role: role as "clinician" | "management" | "super_admin",
       });
       if (error) throw error;
       return data;
@@ -414,13 +414,13 @@ export default function AdminUsers() {
 
   const handleOpenRoleDialog = (user: UserRow) => {
     setSelectedUser(user);
-    setRoleForm({ role: "neurologist", clinic_id: "" });
+    setRoleForm({ role: "clinician", clinic_id: "" });
     setShowRoleDialog(true);
   };
 
   const handleOpenClinicDialog = (user: UserRow) => {
     setSelectedUser(user);
-    setClinicForm({ clinic_id: "", action: "assign", role: "neurologist" });
+    setClinicForm({ clinic_id: "", action: "assign", role: "clinician" });
     setShowClinicDialog(true);
   };
 
@@ -974,9 +974,8 @@ export default function AdminUsers() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="clinician">Clinician</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="neurologist">Neurologist</SelectItem>
-                  <SelectItem value="technician">Technician</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -84,7 +84,7 @@ serve(async (req) => {
             .insert({
               user_id: user.id,
               clinic_id: clinicId,
-              role: "neurologist"
+              role: "clinician"
             })
             .select()
             .maybeSingle();
