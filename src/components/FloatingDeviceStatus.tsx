@@ -35,7 +35,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Collapsed state - just an icon */}
+      {/* Collapsed state - frosted glass button */}
       <div
         className={cn(
           "absolute right-0 bottom-0 transition-all duration-300",
@@ -44,11 +44,12 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
       >
         <button
           className={cn(
-            "flex items-center justify-center h-12 w-12 rounded-full",
-            "bg-card/90 backdrop-blur-xl border border-border/50",
-            "shadow-lg shadow-background/20",
-            "hover:bg-card hover:border-border",
-            "transition-all duration-200"
+            "flex items-center justify-center h-12 w-12 rounded-2xl",
+            "bg-background/40 backdrop-blur-2xl",
+            "border border-white/10 dark:border-white/5",
+            "shadow-xl shadow-black/10 dark:shadow-black/30",
+            "hover:bg-background/60 hover:border-white/20",
+            "transition-all duration-300"
           )}
         >
           <Radio
@@ -58,24 +59,25 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
                 ? "text-emerald-500"
                 : anyConnected
                 ? "text-amber-500"
-                : "text-muted-foreground"
+                : "text-muted-foreground/70"
             )}
           />
           {/* Status dot */}
           <span
             className={cn(
               "absolute top-2 right-2 h-2.5 w-2.5 rounded-full",
+              "ring-2 ring-background/50",
               allConnected
                 ? "bg-emerald-500 animate-pulse"
                 : anyConnected
                 ? "bg-amber-500"
-                : "bg-muted-foreground/40"
+                : "bg-muted-foreground/30"
             )}
           />
         </button>
       </div>
 
-      {/* Expanded state */}
+      {/* Expanded state - frosted glass panel */}
       <div
         className={cn(
           "transition-all duration-300 origin-bottom-right",
@@ -87,74 +89,112 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         <div
           className={cn(
             "flex flex-col gap-3 p-4 rounded-2xl",
-            "bg-card/95 backdrop-blur-xl border border-border/50",
-            "shadow-xl shadow-background/30",
-            "min-w-[180px]"
+            "bg-background/50 backdrop-blur-2xl",
+            "border border-white/10 dark:border-white/5",
+            "shadow-2xl shadow-black/20 dark:shadow-black/40",
+            "min-w-[200px]"
           )}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
               Devices
             </span>
             <span
               className={cn(
-                "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                "text-[10px] px-2.5 py-1 rounded-full font-medium",
+                "backdrop-blur-sm",
                 allConnected
-                  ? "bg-emerald-500/10 text-emerald-500"
+                  ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
                   : anyConnected
-                  ? "bg-amber-500/10 text-amber-500"
-                  : "bg-muted text-muted-foreground"
+                  ? "bg-amber-500/15 text-amber-500 border border-amber-500/20"
+                  : "bg-muted/50 text-muted-foreground border border-border/30"
               )}
             >
               {allConnected ? "All Online" : anyConnected ? "Partial" : "Offline"}
             </span>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             {/* Android App */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Smartphone className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  "p-1.5 rounded-lg",
+                  deviceStatus.androidApp.connected 
+                    ? "bg-emerald-500/10" 
+                    : "bg-muted/30"
+                )}>
+                  <Smartphone className={cn(
+                    "h-4 w-4",
+                    deviceStatus.androidApp.connected 
+                      ? "text-emerald-500" 
+                      : "text-muted-foreground/60"
+                  )} />
+                </div>
                 <span className="text-sm">Android App</span>
               </div>
               <span
                 className={cn(
-                  "h-2 w-2 rounded-full",
+                  "h-2.5 w-2.5 rounded-full transition-colors",
                   deviceStatus.androidApp.connected
-                    ? "bg-emerald-500 animate-pulse"
-                    : "bg-muted-foreground/30"
+                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                    : "bg-muted-foreground/20"
                 )}
               />
             </div>
 
             {/* EEG Machine */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  "p-1.5 rounded-lg",
+                  deviceStatus.eegMachine.connected 
+                    ? "bg-emerald-500/10" 
+                    : "bg-muted/30"
+                )}>
+                  <Cpu className={cn(
+                    "h-4 w-4",
+                    deviceStatus.eegMachine.connected 
+                      ? "text-emerald-500" 
+                      : "text-muted-foreground/60"
+                  )} />
+                </div>
                 <span className="text-sm">EEG Machine</span>
               </div>
               <span
                 className={cn(
-                  "h-2 w-2 rounded-full",
+                  "h-2.5 w-2.5 rounded-full transition-colors",
                   deviceStatus.eegMachine.connected
-                    ? "bg-emerald-500 animate-pulse"
-                    : "bg-muted-foreground/30"
+                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                    : "bg-muted-foreground/20"
                 )}
               />
             </div>
 
             {/* BLE Bridge */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bluetooth className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center justify-between py-1">
+              <div className="flex items-center gap-2.5">
+                <div className={cn(
+                  "p-1.5 rounded-lg",
+                  deviceStatus.bleBridge.connected 
+                    ? "bg-emerald-500/10" 
+                    : "bg-muted/30"
+                )}>
+                  <Bluetooth className={cn(
+                    "h-4 w-4",
+                    deviceStatus.bleBridge.connected 
+                      ? "text-emerald-500" 
+                      : "text-muted-foreground/60"
+                  )} />
+                </div>
                 <span className="text-sm">BLE Bridge</span>
               </div>
               <span
                 className={cn(
-                  "h-2 w-2 rounded-full",
+                  "h-2.5 w-2.5 rounded-full transition-colors",
                   deviceStatus.bleBridge.connected
-                    ? "bg-emerald-500 animate-pulse"
-                    : "bg-muted-foreground/30"
+                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
+                    : "bg-muted-foreground/20"
                 )}
               />
             </div>

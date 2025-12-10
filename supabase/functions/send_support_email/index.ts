@@ -26,7 +26,16 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    const { subject, message } = await req.json();
+    const { subject, message, check_email_enabled } = await req.json();
+
+    // Check if emails are enabled (passed from frontend based on localStorage)
+    if (check_email_enabled === false) {
+      console.log("Email notifications disabled by admin setting");
+      return new Response(
+        JSON.stringify({ success: true, message: "Email skipped (disabled)" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!subject?.trim() || !message?.trim()) {
       return new Response(
@@ -56,8 +65,8 @@ serve(async (req) => {
 
     if (insertError) throw insertError;
 
-    // Send email to support team via Resend API
-    if (RESEND_API_KEY) {
+    // Only send email if Resend API key is configured and emails are enabled
+    if (RESEND_API_KEY && check_email_enabled !== false) {
       try {
         const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
@@ -104,17 +113,14 @@ ${message}
         if (!emailRes.ok) {
           const errorText = await emailRes.text();
           console.error("Resend API error:", errorText);
-          throw new Error(`Resend API responded with status ${emailRes.status}`);
+        } else {
+          console.log("Support email sent successfully");
         }
-
-        const emailData = await emailRes.json();
-        console.log("Support email sent successfully:", emailData);
       } catch (emailError) {
         console.error("Email sending error:", emailError);
-        // Don't fail the ticket creation if email fails
       }
     } else {
-      console.warn("RESEND_API_KEY not configured - email not sent");
+      console.log("Email skipped - RESEND_API_KEY not configured or emails disabled");
     }
 
     // Log audit event

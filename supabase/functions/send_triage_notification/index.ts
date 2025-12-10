@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -20,12 +19,21 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { study_id } = await req.json();
+    const { study_id, check_email_enabled } = await req.json();
     
     if (!study_id) {
       return new Response(
         JSON.stringify({ error: "study_id required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check if emails are enabled
+    if (check_email_enabled === false) {
+      console.log("Email notifications disabled by admin setting");
+      return new Response(
+        JSON.stringify({ success: true, message: "Email skipped (disabled)" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
     

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Command } from "lucide-react";
 import { cn } from "@/lib/utils";
+import logoImg from "@/assets/logo.png";
 
 interface FloatingCommandIslandProps {
   onOpen: () => void;
@@ -26,7 +27,6 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
         setIsVisible(true);
         clearTimeout(timeout);
       } else {
-        // Hide after a delay when scrolling away
         timeout = setTimeout(() => {
           setIsVisible(false);
         }, 300);
@@ -34,7 +34,7 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll(); // Check initial state
+    handleScroll();
 
     return () => {
       window.removeEventListener("scroll", handleScroll);
@@ -55,30 +55,31 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
         onClick={onOpen}
         className={cn(
           "group flex items-center gap-3 px-5 py-3 rounded-xl",
-          "bg-card/80 backdrop-blur-xl border border-border/30",
-          "shadow-lg shadow-background/20",
-          "hover:bg-card hover:border-border/50 hover:shadow-xl",
-          "transition-all duration-200"
+          "bg-background/50 backdrop-blur-2xl",
+          "border border-white/10 dark:border-white/5",
+          "shadow-xl shadow-black/10 dark:shadow-black/30",
+          "hover:bg-background/70 hover:border-white/20 hover:shadow-2xl",
+          "transition-all duration-300"
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-center h-8 w-8 rounded-lg bg-gradient-to-br from-rose-500/20 via-violet-500/20 to-cyan-500/20">
+        <div className="flex items-center justify-center h-8 w-8 rounded-lg overflow-hidden bg-gradient-to-br from-rose-500/10 via-violet-500/10 to-cyan-500/10">
           <img 
-            src="/lovable-uploads/c4bf6e13-33eb-4bb1-96af-dd67a6ad81d0.png" 
+            src={logoImg} 
             alt="ENCEPHLIAN" 
-            className="h-5 w-5 object-contain"
+            className="h-6 w-6 object-contain"
             onError={(e) => {
-              // Fallback to Command icon if logo fails to load
               e.currentTarget.style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement;
+              if (fallback) fallback.classList.remove('hidden');
             }}
           />
           <Command className="h-4 w-4 text-foreground hidden" />
         </div>
-        <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors">
+        <span className="text-sm font-medium text-foreground/70 group-hover:text-foreground transition-colors">
           Search or navigate...
         </span>
-        <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border/60 bg-muted/50 px-1.5 text-[10px] text-muted-foreground">
+        <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border/40 bg-muted/30 px-1.5 text-[10px] text-muted-foreground">
           <span>⌘</span>K
         </kbd>
       </button>
