@@ -55,7 +55,6 @@ export default function Profile() {
           department: formData.department,
           hospital_affiliation: formData.hospital_affiliation,
           phone_number: formData.phone_number,
-          company_name: formData.company_name,
         })
         .eq('id', user.id);
       
@@ -185,16 +184,6 @@ export default function Profile() {
                   value={formData?.phone_number || ''}
                   onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
                   placeholder="+1 (555) 123-4567"
-                  className="h-9 sm:h-10 text-sm"
-                />
-              </div>
-              <div className="space-y-1.5 sm:space-y-2">
-                <Label htmlFor="company_name" className="text-xs sm:text-sm">Company/Organization</Label>
-                <Input 
-                  id="company_name"
-                  value={formData?.company_name || ''}
-                  onChange={(e) => setFormData({...formData, company_name: e.target.value})}
-                  placeholder="ENCEPHLIAN"
                   className="h-9 sm:h-10 text-sm"
                 />
               </div>

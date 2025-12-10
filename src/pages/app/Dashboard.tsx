@@ -61,10 +61,11 @@ export default function Dashboard() {
         .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min")
         .order("created_at", { ascending: false })
         .limit(100);
-      if (error) throw error;
+      // Return empty array if error or no data - never fail
+      if (error || !data) return [] as Study[];
       return data as Study[];
     },
-    staleTime: 5000,
+    staleTime: 3000,
     gcTime: 30000,
     refetchInterval: 5000,
   });
@@ -72,10 +73,13 @@ export default function Dashboard() {
   const { data: wallet, refetch: refetchWallet } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {
-      const { data } = await supabase.from("wallets").select("tokens").single();
+      const { data, error } = await supabase.from("wallets").select("tokens").single();
+      // If no wallet exists, return 0 tokens instead of failing
+      if (error || !data) return { tokens: 0 };
       return data;
     },
     refetchInterval: 5000,
+    staleTime: 3000,
   });
 
   // Track previous balance for animation
@@ -247,8 +251,10 @@ export default function Dashboard() {
     setRefundDialogOpen(true);
   };
 
-  const tokenBalance = wallet?.tokens || 0;
+  // Ensure tokenBalance always has a valid number
+  const tokenBalance = typeof wallet?.tokens === 'number' ? wallet.tokens : 0;
   const hasProcessingStudies = processingStudies.length > 0;
+  const studyCount = studies?.length ?? 0;
 
   return (
     <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-24" : ""}`}>
