@@ -52,11 +52,11 @@ export default function EEGViewer() {
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [isMarkerPanelOpen, setIsMarkerPanelOpen] = useState(false);
 
-  // Playback State - default amplitude to 50 for visible waveforms
+  // Playback State - default amplitude to 0.05 for typical EEG waveforms (usually 0.01x to 0.1x range)
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [timeWindow, setTimeWindow] = useState(30);
-  const [amplitudeScale, setAmplitudeScale] = useState(50);
+  const [amplitudeScale, setAmplitudeScale] = useState(0.05);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [montage, setMontage] = useState("referential");
 

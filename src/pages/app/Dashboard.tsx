@@ -503,10 +503,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Calendar Widget */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CalendarWidget />
-      </div>
+      {/* Calendar Widget - Full width to match Activity card height */}
+      <CalendarWidget />
 
       {/* Urgent Queue */}
       {pendingStudies.length > 0 && (

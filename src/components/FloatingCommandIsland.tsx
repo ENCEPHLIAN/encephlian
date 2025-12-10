@@ -55,11 +55,12 @@ export function FloatingCommandIsland({ onOpen }: FloatingCommandIslandProps) {
         onClick={onOpen}
         className={cn(
           "group flex items-center gap-3 px-5 py-3 rounded-xl",
-          "bg-background/15 backdrop-blur-2xl",
-          "border border-white/8 dark:border-white/5",
-          "shadow-xl shadow-black/10 dark:shadow-black/20",
-          "hover:bg-background/25 hover:border-white/12 hover:shadow-2xl",
-          "transition-all duration-300"
+          "bg-background/60 backdrop-blur-lg",
+          "border border-border/30",
+          "shadow-lg shadow-black/5 dark:shadow-black/15",
+          "hover:bg-background/70 hover:border-border/40 hover:shadow-xl",
+          "transition-all duration-300",
+          "supports-[backdrop-filter]:bg-background/50"
         )}
       >
         {/* Logo - no background */}
