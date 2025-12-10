@@ -8,9 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Trash2, AlertCircle } from "lucide-react";
+import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
@@ -20,6 +22,7 @@ import { applyMontage } from "@/lib/eeg/montage-transforms";
 import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
 import { filterStandardChannels } from "@/lib/eeg/standard-channels";
 import { parseEDF, parseBDF } from "@/lib/eeg/edf-parser";
+import { cn } from "@/lib/utils";
 
 type Marker = {
   id: string;
@@ -34,12 +37,18 @@ export default function EEGViewer() {
   const studyId = searchParams.get("studyId");
   const queryClient = useQueryClient();
   const { theme } = useTheme();
+  const isMobile = useIsMobile();
 
-  // Playback State
+  // UI State
+  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
+  const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
+  const [isMarkerPanelOpen, setIsMarkerPanelOpen] = useState(false);
+
+  // Playback State - default amplitude to 0
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [timeWindow, setTimeWindow] = useState(30);
-  const [amplitudeScale, setAmplitudeScale] = useState(2);
+  const [amplitudeScale, setAmplitudeScale] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [montage, setMontage] = useState("referential");
 
@@ -104,8 +113,7 @@ export default function EEGViewer() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
       
-      // First try to get user's most recent study
-      const { data: userStudy, error: userError } = await supabase
+      const { data: userStudy } = await supabase
         .from("studies")
         .select("*, study_files(*)")
         .eq("owner", user.id)
@@ -115,7 +123,6 @@ export default function EEGViewer() {
       
       if (userStudy) return userStudy;
       
-      // Fallback to sample study
       const { data: sampleStudy, error: sampleError } = await supabase
         .from("studies")
         .select("*, study_files(*)")
@@ -163,7 +170,7 @@ export default function EEGViewer() {
     },
   });
 
-  // ---------- EEG loading logic ----------
+  // EEG loading logic
   useEffect(() => {
     if (!activeStudy) return;
 
@@ -172,7 +179,6 @@ export default function EEGViewer() {
       setLoadError(null);
 
       try {
-        // SAMPLE STUDY: local JSON
         if (activeStudy.sample) {
           const jsonPath = "/sample-eeg/S094R10.json";
           const response = await fetch(jsonPath);
@@ -195,16 +201,12 @@ export default function EEGViewer() {
           return;
         }
 
-        // USER STUDY: Parse EDF directly in browser
         const studyFiles = (activeStudy.study_files as any[]) || [];
-        
-        // Find the EDF/BDF file
         const edfFile = studyFiles.find((f) =>
           f.kind === "edf" || f.kind === "bdf" || f.kind === "eeg_raw" ||
           f.path?.toLowerCase().endsWith('.edf') || f.path?.toLowerCase().endsWith('.bdf')
         );
 
-        // Also check if there's an uploaded_file_path on the study itself
         const filePath = edfFile?.path || activeStudy.uploaded_file_path;
 
         if (!filePath) {
@@ -213,7 +215,6 @@ export default function EEGViewer() {
 
         toast.info("Loading EEG file...");
 
-        // Try multiple buckets in order of likelihood
         const bucketsToTry = ["eeg-uploads", "eeg-raw"];
         let fileBlob: Blob | null = null;
         let lastError: string | null = null;
@@ -231,7 +232,6 @@ export default function EEGViewer() {
           throw new Error(`Failed to download EDF file: ${lastError}`);
         }
 
-        // Parse EDF/BDF in browser
         const buffer = await fileBlob.arrayBuffer();
         const isBDF = filePath?.toLowerCase().endsWith('.bdf') || edfFile?.kind === 'bdf';
         
@@ -239,8 +239,7 @@ export default function EEGViewer() {
         
         const parsed = isBDF ? parseBDF(buffer) : parseEDF(buffer);
 
-        // Limit to first 10 minutes for performance
-        const maxDuration = 600; // 10 minutes
+        const maxDuration = 600;
         const maxSamples = Math.floor(maxDuration * parsed.sampleRate);
         
         const limitedSignals = parsed.signals.map(signal => 
@@ -269,7 +268,7 @@ export default function EEGViewer() {
     loadEEGData();
   }, [activeStudy]);
 
-  // ---------- Playback loop ----------
+  // Playback loop
   useEffect(() => {
     if (!isPlaying || !eegData) return;
 
@@ -287,7 +286,7 @@ export default function EEGViewer() {
     return () => clearInterval(interval);
   }, [isPlaying, eegData, timeWindow, playbackSpeed]);
 
-  // ---------- Marker mutations ----------
+  // Marker mutations
   const addMarkerMutation = useMutation({
     mutationFn: async (payload: { timestamp_sec: number; marker_type: string; label?: string; notes?: string }) => {
       if (!activeStudy?.id || isSampleStudy) throw new Error("Cannot add markers to sample study");
@@ -325,7 +324,7 @@ export default function EEGViewer() {
     onError: (error: any) => toast.error(`Failed to delete marker: ${error.message}`),
   });
 
-  // ---------- Controls handlers ----------
+  // Controls handlers
   const handlePlayPause = () => setIsPlaying((prev) => !prev);
   const handleSkipBackward = () => setCurrentTime((prev) => Math.max(0, prev - timeWindow));
   const handleSkipForward = () => {
@@ -376,7 +375,7 @@ export default function EEGViewer() {
   const handleSelectAllGroups = () => setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
   const handleDeselectAllGroups = () => setVisibleGroups(new Set());
 
-  // ---------- Loading / fallback views ----------
+  // Loading views
   if (studyLoading || recentLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -406,51 +405,123 @@ export default function EEGViewer() {
     );
   }
 
+  const EEGViewerContent = ({ isModal = false }: { isModal?: boolean }) => (
+    <div className={cn("relative w-full h-full", isModal ? "min-h-[60vh]" : "")}>
+      {isLoadingEEG ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-background">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">Parsing EEG file...</p>
+          </div>
+        </div>
+      ) : loadError ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-background p-4">
+          <Card className="max-w-md w-full">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <AlertCircle className="h-5 w-5" />
+                Failed to Load EEG
+              </CardTitle>
+              <CardDescription>{loadError}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button variant="outline" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : eegData ? (
+        <WebGLEEGViewer
+          signals={eegData.signals}
+          channelLabels={eegData.channelLabels}
+          sampleRate={eegData.sampleRate}
+          currentTime={currentTime}
+          timeWindow={timeWindow}
+          amplitudeScale={amplitudeScale}
+          visibleChannels={visibleChannels}
+          theme={theme || "dark"}
+          markers={markers}
+          onTimeClick={handleTimeClick}
+        />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <p className="text-muted-foreground">No EEG data available</p>
+        </div>
+      )}
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-[calc(100vh-4rem)] bg-background flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b px-4 py-3 flex items-center gap-4">
+      <div className="border-b border-border/50 px-3 py-2 flex items-center gap-2 shrink-0">
         <Link to="/app/studies">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="h-8 w-8">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <div className="flex-1">
-          <h1 className="text-lg font-semibold">EEG Viewer</h1>
-          <p className="text-sm text-muted-foreground">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-sm font-semibold truncate">EEG Viewer</h1>
+          <p className="text-xs text-muted-foreground truncate">
             {isSampleStudy ? "Sample Study" : `Study: ${activeStudy.id?.slice(0, 8)}...`}
           </p>
         </div>
+        
+        {/* Header badges - hidden on very small screens */}
         {eegData && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Badge variant="outline">{eegData.channelLabels.length} Ch</Badge>
-            <Badge variant="outline">{eegData.sampleRate} Hz</Badge>
-            <Badge variant="outline">{Math.round(eegData.duration)}s</Badge>
+          <div className="hidden sm:flex items-center gap-1">
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{eegData.channelLabels.length} Ch</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{eegData.sampleRate} Hz</Badge>
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 hidden md:inline-flex">{Math.round(eegData.duration)}s</Badge>
           </div>
         )}
+
+        {/* Mobile menu button */}
+        {isMobile && (
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-8 w-8"
+            onClick={() => setIsMarkerPanelOpen(true)}
+          >
+            <Menu className="h-4 w-4" />
+          </Button>
+        )}
+
+        {/* Channel Groups Modal Button */}
+        <Dialog open={isChannelModalOpen} onOpenChange={setIsChannelModalOpen}>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Layers className="h-4 w-4" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Channel Groups</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <ChannelGroupList
+                channelLabels={eegData?.channelLabels || []}
+                visibleGroups={visibleGroups}
+                onToggleGroup={handleToggleGroup}
+                onSelectAll={handleSelectAllGroups}
+                onDeselectAll={handleDeselectAllGroups}
+              />
+              <div className="pt-3 border-t border-border/50">
+                <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex">
-        {/* Left Sidebar - Channel Groups */}
-        <div className="w-48 border-r p-3 space-y-3 overflow-y-auto">
-          <ChannelGroupList
-            channelLabels={eegData?.channelLabels || []}
-            visibleGroups={visibleGroups}
-            onToggleGroup={handleToggleGroup}
-            onSelectAll={handleSelectAllGroups}
-            onDeselectAll={handleDeselectAllGroups}
-          />
-          
-          <div className="pt-3 border-t">
-            <MontageSelector currentMontage={montage} onMontageChange={setMontage} />
-          </div>
-        </div>
-
-        {/* Center - EEG Canvas */}
-        <div className="flex-1 flex flex-col">
-          {/* Controls */}
-          <div className="border-b p-2">
+      <div className="flex-1 flex overflow-hidden">
+        {/* EEG Canvas Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Controls - responsive */}
+          <div className="border-b border-border/50 p-2 shrink-0 overflow-x-auto">
             <EEGControls
               isPlaying={isPlaying}
               currentTime={currentTime}
@@ -471,58 +542,109 @@ export default function EEGViewer() {
 
           {/* Viewer */}
           <div className="flex-1 relative">
-            {isLoadingEEG ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-background">
-                <div className="text-center space-y-3">
-                  <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-                  <p className="text-sm text-muted-foreground">Parsing EEG file...</p>
-                  <p className="text-xs text-muted-foreground">This may take a moment for large files</p>
-                </div>
-              </div>
-            ) : loadError ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-background">
-                <Card className="max-w-md">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-destructive">
-                      <AlertCircle className="h-5 w-5" />
-                      Failed to Load EEG
-                    </CardTitle>
-                    <CardDescription>{loadError}</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <Button variant="outline" onClick={() => window.location.reload()}>
-                      Retry
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            ) : eegData ? (
-              <WebGLEEGViewer
-                signals={eegData.signals}
-                channelLabels={eegData.channelLabels}
-                sampleRate={eegData.sampleRate}
-                currentTime={currentTime}
-                timeWindow={timeWindow}
-                amplitudeScale={amplitudeScale}
-                visibleChannels={visibleChannels}
-                theme={theme || "dark"}
-                markers={markers}
-                onTimeClick={handleTimeClick}
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <p className="text-muted-foreground">No EEG data available</p>
-              </div>
-            )}
+            <EEGViewerContent />
           </div>
         </div>
 
-        {/* Right Sidebar - Markers */}
-        <div className="w-64 border-l p-3 overflow-y-auto">
-          <h3 className="font-semibold text-sm mb-3">Markers</h3>
-          
+        {/* Right Sidebar - Markers (hidden on mobile, use modal instead) */}
+        {!isMobile && (
+          <div className="w-56 lg:w-64 border-l border-border/50 p-3 overflow-y-auto shrink-0">
+            <h3 className="font-semibold text-sm mb-3">Markers</h3>
+            
+            {!isSampleStudy && (
+              <div className="space-y-2 mb-4 p-3 bg-muted/30 rounded-lg">
+                <Select value={newMarkerType} onValueChange={setNewMarkerType}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="event">Event</SelectItem>
+                    <SelectItem value="spike">Spike</SelectItem>
+                    <SelectItem value="seizure">Seizure</SelectItem>
+                    <SelectItem value="artifact">Artifact</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Label..."
+                  value={newMarkerLabel}
+                  onChange={(e) => setNewMarkerLabel(e.target.value)}
+                  className="h-8 text-xs"
+                />
+                <Textarea
+                  placeholder="Notes..."
+                  value={newMarkerNotes}
+                  onChange={(e) => setNewMarkerNotes(e.target.value)}
+                  className="text-xs min-h-[50px]"
+                />
+                <Button
+                  size="sm"
+                  className="w-full h-8 text-xs"
+                  onClick={() =>
+                    addMarkerMutation.mutate({
+                      timestamp_sec: currentTime,
+                      marker_type: newMarkerType,
+                      label: newMarkerLabel || undefined,
+                      notes: newMarkerNotes || undefined,
+                    })
+                  }
+                  disabled={addMarkerMutation.isPending}
+                >
+                  Add at {currentTime.toFixed(1)}s
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {markers.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-4">No markers</p>
+              ) : (
+                markers.map((m) => (
+                  <div
+                    key={m.id}
+                    className="p-2 bg-muted/30 rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => handleTimeClick(m.timestamp_sec)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="text-[10px]">
+                        {m.marker_type}
+                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          {m.timestamp_sec.toFixed(1)}s
+                        </span>
+                        {!isSampleStudy && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteMarkerMutation.mutate(m.id);
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {m.label && <p className="text-xs font-medium mt-1">{m.label}</p>}
+                    {m.notes && <p className="text-[10px] text-muted-foreground mt-0.5">{m.notes}</p>}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Markers Modal */}
+      <Dialog open={isMarkerPanelOpen} onOpenChange={setIsMarkerPanelOpen}>
+        <DialogContent className="max-w-sm max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Markers</DialogTitle>
+          </DialogHeader>
           {!isSampleStudy && (
-            <div className="space-y-2 mb-4 p-3 bg-muted/50 rounded-lg">
+            <div className="space-y-2 mb-4 p-3 bg-muted/30 rounded-lg">
               <Select value={newMarkerType} onValueChange={setNewMarkerType}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -539,12 +661,6 @@ export default function EEGViewer() {
                 value={newMarkerLabel}
                 onChange={(e) => setNewMarkerLabel(e.target.value)}
                 className="h-8 text-xs"
-              />
-              <Textarea
-                placeholder="Notes..."
-                value={newMarkerNotes}
-                onChange={(e) => setNewMarkerNotes(e.target.value)}
-                className="text-xs min-h-[60px]"
               />
               <Button
                 size="sm"
@@ -563,7 +679,6 @@ export default function EEGViewer() {
               </Button>
             </div>
           )}
-
           <div className="space-y-2">
             {markers.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-4">No markers</p>
@@ -571,40 +686,75 @@ export default function EEGViewer() {
               markers.map((m) => (
                 <div
                   key={m.id}
-                  className="p-2 bg-muted/50 rounded cursor-pointer hover:bg-muted transition-colors"
-                  onClick={() => handleTimeClick(m.timestamp_sec)}
+                  className="p-2 bg-muted/30 rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => {
+                    handleTimeClick(m.timestamp_sec);
+                    setIsMarkerPanelOpen(false);
+                  }}
                 >
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="text-[10px]">
                       {m.marker_type}
                     </Badge>
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-muted-foreground">
-                        {m.timestamp_sec.toFixed(1)}s
-                      </span>
-                      {!isSampleStudy && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteMarkerMutation.mutate(m.id);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
+                    <span className="text-[10px] text-muted-foreground">
+                      {m.timestamp_sec.toFixed(1)}s
+                    </span>
                   </div>
                   {m.label && <p className="text-xs font-medium mt-1">{m.label}</p>}
-                  {m.notes && <p className="text-[10px] text-muted-foreground mt-0.5">{m.notes}</p>}
                 </div>
               ))
             )}
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Fullscreen Modal Button */}
+      <button
+        onClick={() => setIsFullscreenOpen(true)}
+        className={cn(
+          "fixed z-40 h-10 w-10 rounded-xl flex items-center justify-center",
+          "bg-card/80 backdrop-blur-xl border border-border/30",
+          "shadow-lg hover:bg-card hover:border-border/50",
+          "transition-all duration-200",
+          isMobile ? "bottom-4 right-4" : "bottom-6 right-6"
+        )}
+      >
+        <Maximize2 className="h-4 w-4" />
+      </button>
+
+      {/* Fullscreen Modal */}
+      <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
+        <DialogContent className={cn(
+          "p-0 border-border/50",
+          isMobile 
+            ? "max-w-[95vw] max-h-[90vh] w-[95vw] h-[85vh]" 
+            : "max-w-[90vw] max-h-[85vh] w-[90vw] h-[80vh]"
+        )}>
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
+              <h2 className="text-sm font-semibold">EEG Viewer - Fullscreen</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsFullscreenOpen(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 relative">
+              <EEGViewerContent isModal />
+            </div>
+            <div className="border-t border-border/50 p-2">
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <span>Click left half to go backward</span>
+                <span>•</span>
+                <span>Click right half to go forward</span>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

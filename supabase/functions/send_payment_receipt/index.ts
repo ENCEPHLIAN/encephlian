@@ -26,10 +26,19 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    const { payment_id, order_id, amount_inr, tokens } = await req.json();
+    const { payment_id, order_id, amount_inr, tokens, check_email_enabled } = await req.json();
 
     if (!payment_id || !order_id || !amount_inr || !tokens) {
       throw new Error("Missing required fields");
+    }
+
+    // Check if emails are enabled
+    if (check_email_enabled === false) {
+      console.log("Email notifications disabled by admin setting");
+      return new Response(
+        JSON.stringify({ success: true, message: "Email skipped (disabled)" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     // Get user profile
