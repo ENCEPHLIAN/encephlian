@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { profile: contextProfile, refreshProfile } = useProfile();
   const [profile, setProfile] = useState<any>(null);
@@ -265,7 +267,13 @@ export default function Settings() {
                   </AlertDialogContent>
                 </AlertDialog>
               ) : (
-                <Badge variant="outline">Not Enabled</Badge>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => navigate("/app/settings/tfa-setup")}
+                >
+                  Enable
+                </Button>
               )}
             </div>
           </CardContent>
