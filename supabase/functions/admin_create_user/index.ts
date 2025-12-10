@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .in('role', ['super_admin', 'ops', 'management']);
+      .in('role', ['super_admin', 'management']);
 
     if (!roleCheck || roleCheck.length === 0) {
       return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), {
@@ -48,8 +48,8 @@ Deno.serve(async (req) => {
     const callerRole = roleCheck[0].role;
     const { email, password, full_name, role, clinic_id } = await req.json();
 
-    // Management cannot create management/super_admin/ops users
-    if (callerRole === 'management' && ['management', 'super_admin', 'ops'].includes(role)) {
+    // Management cannot create management/super_admin users
+    if (callerRole === 'management' && ['management', 'super_admin'].includes(role)) {
       return new Response(JSON.stringify({ error: 'Management users cannot create system-level roles' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

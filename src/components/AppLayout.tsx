@@ -252,18 +252,13 @@ function AppLayoutContent() {
   // Also fetch clinic context for clinic name as fallback
   useEffect(() => {
     const fetchUserName = async () => {
+      // Always prioritize full_name
       if (profile?.full_name && profile.full_name.trim()) {
         setUserName(profile.full_name);
-      } else {
-        // Try to get email as fallback
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.email) {
-          // Use first part of email before @
-          setUserName(user.email.split('@')[0]);
-        } else {
-          setUserName("Account");
-        }
+        return;
       }
+      // Fallback to "Account" - don't use email
+      setUserName("Account");
     };
     fetchUserName();
   }, [profile]);
