@@ -10,11 +10,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 import {
   LayoutDashboard,
@@ -74,7 +74,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
         const active = location.pathname.startsWith(item.href);
         const Icon = item.icon;
 
-        return (
+        const navLink = (
           <NavLink
             key={item.name}
             to={item.href}
@@ -87,11 +87,20 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
             )}
           >
             {Icon && <Icon className={cn("h-4 w-4", !collapsed && "mr-2")} />}
-            {!collapsed && (
-              <span>{item.name}</span>
-            )}
+            {!collapsed && <span>{item.name}</span>}
           </NavLink>
         );
+
+        if (collapsed) {
+          return (
+            <Tooltip key={item.name}>
+              <TooltipTrigger asChild>{navLink}</TooltipTrigger>
+              <TooltipContent side="right">{item.name}</TooltipContent>
+            </Tooltip>
+          );
+        }
+
+        return navLink;
       })}
     </div>
   );
@@ -133,15 +142,20 @@ function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: 
 
       {/* Mission CTA Button at bottom */}
       <div className={cn("flex items-center justify-center", collapsed ? "p-3" : "p-4")}>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full hover:bg-secondary"
-          onClick={onMissionOpen}
-          aria-label="Open mission panel"
-        >
-          <Sparkles className="h-5 w-5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 rounded-full hover:bg-secondary"
+              onClick={onMissionOpen}
+              aria-label="Open mission panel"
+            >
+              <Sparkles className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Quick Actions</TooltipContent>
+        </Tooltip>
       </div>
     </aside>
   );
@@ -270,28 +284,34 @@ function AppLayoutContent() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* APP BAR (STICKY, FROSTED) */}
-      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+    <TooltipProvider>
+      <div className="min-h-screen flex flex-col bg-background text-foreground">
+        {/* APP BAR (STICKY, FROSTED) */}
+        <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* LEFT: sidebar toggle + logo */}
           <div className="flex items-center gap-2">
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
             {/* Sidebar toggle button - after branding, desktop only */}
             {!isMobile && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 hidden md:flex ml-2"
-                onClick={() => setSidebarCollapsed((v) => !v)}
-                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              >
-                {sidebarCollapsed ? (
-                  <PanelLeft className="h-4 w-4" />
-                ) : (
-                  <PanelLeftClose className="h-4 w-4" />
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 hidden md:flex ml-2"
+                    onClick={() => setSidebarCollapsed((v) => !v)}
+                    aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  >
+                    {sidebarCollapsed ? (
+                      <PanelLeft className="h-4 w-4" />
+                    ) : (
+                      <PanelLeftClose className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}</TooltipContent>
+              </Tooltip>
             )}
           </div>
 
@@ -465,6 +485,7 @@ function AppLayoutContent() {
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       <MissionPanel open={missionOpen} onOpenChange={setMissionOpen} />
     </div>
+    </TooltipProvider>
   );
 }
 
