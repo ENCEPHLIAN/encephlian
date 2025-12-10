@@ -1,40 +1,55 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
+import { Navigate, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
 import AdminTFAGate, { useAdminTFA } from "./AdminTFAGate";
 
+// Global cache to prevent re-checking on every route change
+let cachedAdminCheck: { userId: string; isAdmin: boolean; timestamp: number } | null = null;
+const CACHE_DURATION = 60000; // 1 minute
+
 export default function AdminRoute() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [authState, setAuthState] = useState<"loading" | "unauthenticated" | "admin" | "not-admin">("loading");
   const { isVerified, needsVerification, verify, clearTFA } = useAdminTFA();
-  const initialized = useRef(false);
 
   const handleLogout = useCallback(async () => {
     clearTFA();
+    cachedAdminCheck = null; // Clear cache on logout
     await supabase.auth.signOut();
     navigate("/login", { replace: true });
   }, [clearTFA, navigate]);
 
   useEffect(() => {
-    // Prevent double initialization
-    if (initialized.current) return;
-    initialized.current = true;
+    let mounted = true;
 
     const checkAdminStatus = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!mounted) return;
         
         if (!user) {
           setAuthState("unauthenticated");
           return;
         }
 
-        // Check if user has admin role - fetch ALL roles for this user
+        // Check cache first
+        if (cachedAdminCheck && 
+            cachedAdminCheck.userId === user.id && 
+            Date.now() - cachedAdminCheck.timestamp < CACHE_DURATION) {
+          setAuthState(cachedAdminCheck.isAdmin ? "admin" : "not-admin");
+          return;
+        }
+
+        // Check if user has admin role
         const { data: roles, error } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id);
+
+        if (!mounted) return;
 
         if (error) {
           console.error("Error checking roles:", error);
@@ -42,18 +57,32 @@ export default function AdminRoute() {
           return;
         }
 
-        // Check if any of the roles are admin roles - includes management
         const adminRoles = ["super_admin", "ops", "management"];
-        const hasAdminRole = roles?.some(r => adminRoles.includes(r.role));
+        const hasAdminRole = roles?.some(r => adminRoles.includes(r.role)) || false;
+        
+        // Cache the result
+        cachedAdminCheck = { userId: user.id, isAdmin: hasAdminRole, timestamp: Date.now() };
         
         setAuthState(hasAdminRole ? "admin" : "not-admin");
       } catch (error) {
         console.error("Admin check error:", error);
-        setAuthState("unauthenticated");
+        if (mounted) setAuthState("unauthenticated");
       }
     };
 
     checkAdminStatus();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        cachedAdminCheck = null;
+        if (mounted) setAuthState("unauthenticated");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   if (authState === "loading") {
@@ -66,7 +95,7 @@ export default function AdminRoute() {
 
   // Not logged in - redirect to login
   if (authState === "unauthenticated") {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   // Logged in but not admin - redirect to PaaS
