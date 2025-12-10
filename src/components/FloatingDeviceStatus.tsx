@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Smartphone, Cpu, Bluetooth, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,7 +12,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isMobile = useIsMobile();
 
-  // Placeholder device status - will be connected to real BLE/app status later
+  // Placeholder device status
   const deviceStatus = {
     androidApp: { connected: false },
     eegMachine: { connected: false },
@@ -29,40 +29,37 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
     deviceStatus.eegMachine.connected ||
     deviceStatus.bleBridge.connected;
 
-  // Show on hover near bottom right area
+  // Show only when mouse is near the actual icon position (bottom right corner)
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (isMobile || isHovered) return;
+    
+    const { clientX, clientY } = e;
+    const { innerWidth, innerHeight } = window;
+
+    // Only show if mouse is very close to the icon (within ~60px)
+    const isNearIcon =
+      clientY > innerHeight - 60 && clientX > innerWidth - 60;
+
+    setIsVisible(isNearIcon);
+  }, [isMobile, isHovered]);
+
   useEffect(() => {
     if (isMobile) {
       setIsVisible(false);
       return;
     }
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const { clientX, clientY } = e;
-      const { innerWidth, innerHeight } = window;
-
-      // Check if mouse is near bottom right (bottom 100px, right 100px)
-      const isNearBottomRight =
-        clientY > innerHeight - 100 && clientX > innerWidth - 100;
-
-      if (isNearBottomRight || isHovered) {
-        setIsVisible(true);
-      } else {
-        setIsVisible(false);
-      }
-    };
-
     window.addEventListener("mousemove", handleMouseMove, { passive: true });
     return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [isMobile, isHovered]);
+  }, [isMobile, handleMouseMove]);
 
-  // Don't render on mobile
   if (isMobile) return null;
 
   return (
     <div
       className={cn(
         "fixed bottom-6 right-6 z-50 transition-all duration-300 ease-out",
-        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
+        isVisible || isHovered ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
         className
       )}
       onMouseEnter={() => {
@@ -74,7 +71,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         setIsVisible(false);
       }}
     >
-      {/* Collapsed state - very transparent frosted glass button */}
+      {/* Collapsed state */}
       <div
         className={cn(
           "absolute right-0 bottom-0 transition-all duration-300",
@@ -83,29 +80,28 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
       >
         <button
           className={cn(
-            "flex items-center justify-center h-12 w-12 rounded-2xl",
-            "bg-background/10 backdrop-blur-md",
-            "border border-white/8 dark:border-white/5",
-            "shadow-xl shadow-black/5 dark:shadow-black/15",
-            "hover:bg-background/15 hover:border-white/10",
+            "flex items-center justify-center h-10 w-10 rounded-xl",
+            "bg-foreground/5 backdrop-blur-lg",
+            "border border-foreground/5",
+            "shadow-lg shadow-black/5 dark:shadow-black/10",
+            "hover:bg-foreground/8",
             "transition-all duration-300"
           )}
+          title="Device Status"
         >
           <Radio
             className={cn(
-              "h-5 w-5",
+              "h-4 w-4",
               allConnected
                 ? "text-emerald-500"
                 : anyConnected
                 ? "text-amber-500"
-                : "text-muted-foreground/70"
+                : "text-muted-foreground/50"
             )}
           />
-          {/* Status dot */}
           <span
             className={cn(
-              "absolute top-2 right-2 h-2.5 w-2.5 rounded-full",
-              "ring-2 ring-background/50",
+              "absolute top-1.5 right-1.5 h-2 w-2 rounded-full",
               allConnected
                 ? "bg-emerald-500 animate-pulse"
                 : anyConnected
@@ -116,7 +112,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         </button>
       </div>
 
-      {/* Expanded state - very transparent frosted glass panel */}
+      {/* Expanded state */}
       <div
         className={cn(
           "transition-all duration-300 origin-bottom-right",
@@ -127,128 +123,45 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
       >
         <div
           className={cn(
-            "flex flex-col gap-3 p-4 rounded-2xl",
-            "bg-background/10 backdrop-blur-md",
-            "border border-white/8 dark:border-white/5",
-            "shadow-2xl shadow-black/10 dark:shadow-black/20",
-            "min-w-[200px]"
+            "flex flex-col gap-2.5 p-3 rounded-xl",
+            "bg-foreground/5 backdrop-blur-lg",
+            "border border-foreground/5",
+            "shadow-xl shadow-black/5 dark:shadow-black/10",
+            "min-w-[180px]"
           )}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
+            <span className="text-[10px] font-light uppercase tracking-wider text-muted-foreground/60">
               Devices
             </span>
             <span
               className={cn(
-                "text-[10px] px-2.5 py-1 rounded-full font-medium",
-                "backdrop-blur-sm",
+                "text-[10px] px-2 py-0.5 rounded-full font-light",
                 allConnected
-                  ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
+                  ? "bg-emerald-500/10 text-emerald-500"
                   : anyConnected
-                  ? "bg-amber-500/15 text-amber-500 border border-amber-500/20"
-                  : "bg-muted/50 text-muted-foreground border border-border/30"
+                  ? "bg-amber-500/10 text-amber-500"
+                  : "bg-muted/30 text-muted-foreground/60"
               )}
             >
               {allConnected ? "All Online" : anyConnected ? "Partial" : "Offline"}
             </span>
           </div>
 
-          <div className="space-y-2.5">
-            {/* Android App */}
-            <div className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "p-1.5 rounded-lg",
-                    deviceStatus.androidApp.connected
-                      ? "bg-emerald-500/10"
-                      : "bg-muted/30"
-                  )}
-                >
-                  <Smartphone
-                    className={cn(
-                      "h-4 w-4",
-                      deviceStatus.androidApp.connected
-                        ? "text-emerald-500"
-                        : "text-muted-foreground/60"
-                    )}
-                  />
+          <div className="space-y-2">
+            {[
+              { icon: Smartphone, label: "Android App", connected: deviceStatus.androidApp.connected },
+              { icon: Cpu, label: "EEG Machine", connected: deviceStatus.eegMachine.connected },
+              { icon: Bluetooth, label: "BLE Bridge", connected: deviceStatus.bleBridge.connected },
+            ].map(({ icon: Icon, label, connected }) => (
+              <div key={label} className="flex items-center justify-between py-0.5">
+                <div className="flex items-center gap-2">
+                  <Icon className={cn("h-3.5 w-3.5", connected ? "text-emerald-500" : "text-muted-foreground/40")} />
+                  <span className="text-xs font-light text-foreground/70">{label}</span>
                 </div>
-                <span className="text-sm">Android App</span>
+                <span className={cn("h-2 w-2 rounded-full", connected ? "bg-emerald-500" : "bg-muted-foreground/20")} />
               </div>
-              <span
-                className={cn(
-                  "h-2.5 w-2.5 rounded-full transition-colors",
-                  deviceStatus.androidApp.connected
-                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
-                    : "bg-muted-foreground/20"
-                )}
-              />
-            </div>
-
-            {/* EEG Machine */}
-            <div className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "p-1.5 rounded-lg",
-                    deviceStatus.eegMachine.connected
-                      ? "bg-emerald-500/10"
-                      : "bg-muted/30"
-                  )}
-                >
-                  <Cpu
-                    className={cn(
-                      "h-4 w-4",
-                      deviceStatus.eegMachine.connected
-                        ? "text-emerald-500"
-                        : "text-muted-foreground/60"
-                    )}
-                  />
-                </div>
-                <span className="text-sm">EEG Machine</span>
-              </div>
-              <span
-                className={cn(
-                  "h-2.5 w-2.5 rounded-full transition-colors",
-                  deviceStatus.eegMachine.connected
-                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
-                    : "bg-muted-foreground/20"
-                )}
-              />
-            </div>
-
-            {/* BLE Bridge */}
-            <div className="flex items-center justify-between py-1">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className={cn(
-                    "p-1.5 rounded-lg",
-                    deviceStatus.bleBridge.connected
-                      ? "bg-emerald-500/10"
-                      : "bg-muted/30"
-                  )}
-                >
-                  <Bluetooth
-                    className={cn(
-                      "h-4 w-4",
-                      deviceStatus.bleBridge.connected
-                        ? "text-emerald-500"
-                        : "text-muted-foreground/60"
-                    )}
-                  />
-                </div>
-                <span className="text-sm">BLE Bridge</span>
-              </div>
-              <span
-                className={cn(
-                  "h-2.5 w-2.5 rounded-full transition-colors",
-                  deviceStatus.bleBridge.connected
-                    ? "bg-emerald-500 shadow-sm shadow-emerald-500/50"
-                    : "bg-muted-foreground/20"
-                )}
-              />
-            </div>
+            ))}
           </div>
         </div>
       </div>

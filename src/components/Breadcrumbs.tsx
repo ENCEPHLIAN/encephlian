@@ -44,7 +44,16 @@ export default function Breadcrumbs() {
         </Button>
       )}
       
-      {/* Collapsed breadcrumb - click to expand */}
+      {/* Always show home icon */}
+      <Link 
+        to="/app/dashboard" 
+        className="hover:text-foreground transition-colors flex items-center gap-1"
+        title="Home"
+      >
+        <Home className="h-4 w-4" />
+      </Link>
+      
+      {/* Show rest of breadcrumb if more than just app */}
       {pathnames.length > 1 && (
         <>
           <ChevronRight className="h-4 w-4" />
@@ -52,13 +61,6 @@ export default function Breadcrumbs() {
           {isExpanded ? (
             // Expanded view - full breadcrumb trail
             <div className="flex items-center gap-2">
-              <Link 
-                to="/app/dashboard" 
-                className="hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                <Home className="h-4 w-4" />
-              </Link>
-              
               {pathnames.slice(1).map((pathname, index) => {
                 const routeTo = `/${pathnames.slice(0, index + 2).join("/")}`;
                 const isLast = index === pathnames.length - 2;
@@ -66,7 +68,7 @@ export default function Breadcrumbs() {
 
                 return (
                   <div key={routeTo} className="flex items-center gap-2">
-                    <ChevronRight className="h-4 w-4" />
+                    {index > 0 && <ChevronRight className="h-4 w-4" />}
                     {isLast ? (
                       <span className="font-medium text-foreground">{displayName}</span>
                     ) : (
