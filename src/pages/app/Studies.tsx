@@ -15,12 +15,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useRef } from "react";
 
 const stateColors: Record<string, string> = {
+  awaiting_sla: "bg-amber-500",
   uploaded: "bg-blue-500",
   preprocessing: "bg-yellow-500",
   canonicalized: "bg-cyan-500",
   ai_draft: "bg-purple-500",
   in_review: "bg-orange-500",
   signed: "bg-green-500",
+  completed: "bg-green-500",
   failed: "bg-red-500",
 };
 
@@ -292,9 +294,15 @@ export default function Studies() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"} className="text-[10px]">
-                          {study.sla}
-                        </Badge>
+                        {study.sla === "pending" || study.state === "awaiting_sla" ? (
+                          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
+                            Pending
+                          </Badge>
+                        ) : (
+                          <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"} className="text-[10px]">
+                            {study.sla}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1.5">

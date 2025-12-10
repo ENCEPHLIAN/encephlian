@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Activity, Upload, StickyNote, Wallet, Smartphone, Cpu, Bluetooth } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import EditableBranding from "./EditableBranding";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -65,7 +66,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
                        deviceStatus.eegMachine.connected && 
                        deviceStatus.bleBridge.connected;
 
-  const brandName = profile?.company_name || "ENCEPHLIAN";
+  const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
   const missionLinks = [

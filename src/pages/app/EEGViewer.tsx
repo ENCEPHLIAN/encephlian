@@ -326,13 +326,37 @@ export default function EEGViewer() {
     onError: (error: any) => toast.error(`Failed to delete marker: ${error.message}`),
   });
 
-  // Controls handlers - skip in seconds (10s), not minutes
+  // Controls handlers - smooth animated skip in seconds (10s)
   const handlePlayPause = () => setIsPlaying((prev) => !prev);
-  const handleSkipBackward = () => setCurrentTime((prev) => Math.max(0, prev - 10)); // 10 seconds
-  const handleSkipForward = () => {
+  
+  // Smooth animated time transition
+  const animateToTime = useCallback((targetTime: number) => {
     if (!eegData) return;
-    setCurrentTime((prev) => Math.min(eegData.duration - timeWindow, prev + 10)); // 10 seconds
-  };
+    const clampedTarget = Math.max(0, Math.min(eegData.duration - timeWindow, targetTime));
+    
+    // Smooth animation over 300ms
+    const startTime = currentTime;
+    const startTimestamp = performance.now();
+    const duration = 300;
+    
+    const animate = (timestamp: number) => {
+      const elapsed = timestamp - startTimestamp;
+      const progress = Math.min(elapsed / duration, 1);
+      // Ease out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const newTime = startTime + (clampedTarget - startTime) * eased;
+      setCurrentTime(newTime);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, [eegData, timeWindow, currentTime]);
+  
+  const handleSkipBackward = () => animateToTime(currentTime - 10); // 10 seconds smooth
+  const handleSkipForward = () => animateToTime(currentTime + 10); // 10 seconds smooth
 
   const handleTimeClick = useCallback((time: number) => {
     if (!eegData) return;

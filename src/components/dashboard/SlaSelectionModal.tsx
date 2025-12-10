@@ -256,7 +256,7 @@ export default function SlaSelectionModal({
                 Cancel
               </Button>
               <Button 
-                className="flex-1 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/20" 
+                className="flex-1 btn-gradient-analysis rounded-full" 
                 onClick={handleConfirm} 
                 disabled={isSubmitting}
               >

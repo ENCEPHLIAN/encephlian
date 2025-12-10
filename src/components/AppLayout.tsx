@@ -249,12 +249,23 @@ function AppLayoutContent() {
     },
   });
 
+  // Also fetch clinic context for clinic name as fallback
   useEffect(() => {
-    if (profile?.full_name) {
-      setUserName(profile.full_name);
-    } else {
-      setUserName("Clinician");
-    }
+    const fetchUserName = async () => {
+      if (profile?.full_name && profile.full_name.trim()) {
+        setUserName(profile.full_name);
+      } else {
+        // Try to get email as fallback
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.email) {
+          // Use first part of email before @
+          setUserName(user.email.split('@')[0]);
+        } else {
+          setUserName("Account");
+        }
+      }
+    };
+    fetchUserName();
   }, [profile]);
 
   // clinic / logo
@@ -399,7 +410,7 @@ function AppLayoutContent() {
               <DropdownMenuContent align="end" className="w-64 p-2">
                 <div className="px-2 py-3 border-b border-border/50 mb-2">
                   <p className="font-medium text-sm">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Account"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Portal"}</p>
                 </div>
 
                 {/* Device Status in dropdown */}
