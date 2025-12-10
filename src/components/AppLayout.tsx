@@ -100,19 +100,26 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 // --------------- DESKTOP SIDEBAR ---------------
 
 function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: boolean; onMissionOpen: () => void; onToggle: () => void }) {
+  const [isHoveringEdge, setIsHoveringEdge] = useState(false);
+
   return (
     <aside
       className={cn(
         "hidden md:flex flex-col relative group/sidebar",
         "bg-sidebar/80 backdrop-blur supports-[backdrop-filter]:bg-sidebar/60",
-        "sticky top-16 h-[calc(100vh-4rem)] z-30",
+        "fixed top-16 left-0 h-[calc(100vh-4rem)] z-30",
         "transition-[width] duration-200 ease-out",
         collapsed ? "w-16" : "w-56",
       )}
     >
-      {/* Invisible hover zone on right edge for cursor change - only on empty areas */}
+      {/* Invisible hover zone on right edge for cursor change */}
       <div 
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize z-40"
+        className={cn(
+          "absolute right-0 top-0 bottom-0 w-3 z-40",
+          isHoveringEdge ? "cursor-ew-resize" : "cursor-default"
+        )}
+        onMouseEnter={() => setIsHoveringEdge(true)}
+        onMouseLeave={() => setIsHoveringEdge(false)}
         onClick={onToggle}
       />
       <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -269,12 +276,13 @@ function AppLayoutContent() {
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* LEFT: sidebar toggle + logo */}
           <div className="flex items-center gap-2">
-            {/* Sidebar toggle button - desktop only */}
+            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
+            {/* Sidebar toggle button - after branding, desktop only */}
             {!isMobile && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 hidden md:flex"
+                className="h-9 w-9 hidden md:flex ml-2"
                 onClick={() => setSidebarCollapsed((v) => !v)}
                 aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
@@ -285,7 +293,6 @@ function AppLayoutContent() {
                 )}
               </Button>
             )}
-            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
           </div>
 
           {/* RIGHT: search + actions */}
@@ -343,7 +350,6 @@ function AppLayoutContent() {
                       </span>
                       <ThemeToggle />
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setCommandOpen(true)} className="py-2.5">
                       <Search className="mr-3 h-4 w-4" />
                       Search
@@ -424,23 +430,31 @@ function AppLayoutContent() {
         </div>
       </header>
 
-      {/* BODY: sidebar pinned; whole page scrolls */}
-      <div className="flex flex-1">
-        {/* Desktop sidebar (sticky, frosted, pinned left) */}
+      {/* BODY: sidebar fixed; main content scrolls */}
+      <div className="flex flex-1 relative">
+        {/* Desktop sidebar (fixed, frosted, pinned left) */}
         {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} onToggle={() => setSidebarCollapsed(v => !v)} />}
 
         {/* Mobile full-screen nav */}
         {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}
 
-        {/* Main content; no custom scroll container so sticky works */}
-        <main className="flex-1 px-4 sm:px-6 py-6">
+        {/* Main content with margin for fixed sidebar */}
+        <main className={cn(
+          "flex-1 px-4 sm:px-6 py-6 min-h-[calc(100vh-4rem)]",
+          !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
+          "transition-[margin] duration-200 ease-out"
+        )}>
           <Breadcrumbs />
           <Outlet />
         </main>
       </div>
 
-      {/* Footer - positioned independently */}
-      <footer className="py-3 px-4 sm:px-6 mt-auto">
+      {/* Footer - positioned after main content, doesn't affect sidebar */}
+      <footer className={cn(
+        "py-3 px-4 sm:px-6",
+        !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
+        "transition-[margin] duration-200 ease-out"
+      )}>
         <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN©2025</p>
       </footer>
 

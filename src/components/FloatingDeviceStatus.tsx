@@ -1,13 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Smartphone, Cpu, Bluetooth, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface FloatingDeviceStatusProps {
   className?: string;
 }
 
 export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
+  const [isVisible, setIsVisible] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const isMobile = useIsMobile();
 
   // Placeholder device status - will be connected to real BLE/app status later
   const deviceStatus = {
@@ -26,16 +29,52 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
     deviceStatus.eegMachine.connected ||
     deviceStatus.bleBridge.connected;
 
+  // Show on hover near bottom right area
+  useEffect(() => {
+    if (isMobile) {
+      setIsVisible(false);
+      return;
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const { clientX, clientY } = e;
+      const { innerWidth, innerHeight } = window;
+
+      // Check if mouse is near bottom right (bottom 100px, right 100px)
+      const isNearBottomRight =
+        clientY > innerHeight - 100 && clientX > innerWidth - 100;
+
+      if (isNearBottomRight || isHovered) {
+        setIsVisible(true);
+      } else {
+        setIsVisible(false);
+      }
+    };
+
+    window.addEventListener("mousemove", handleMouseMove, { passive: true });
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [isMobile, isHovered]);
+
+  // Don't render on mobile
+  if (isMobile) return null;
+
   return (
     <div
       className={cn(
         "fixed bottom-6 right-6 z-50 transition-all duration-300 ease-out",
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none",
         className
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => {
+        setIsHovered(true);
+        setIsVisible(true);
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setIsVisible(false);
+      }}
     >
-      {/* Collapsed state - frosted glass button */}
+      {/* Collapsed state - very transparent frosted glass button */}
       <div
         className={cn(
           "absolute right-0 bottom-0 transition-all duration-300",
@@ -45,10 +84,10 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         <button
           className={cn(
             "flex items-center justify-center h-12 w-12 rounded-2xl",
-            "bg-background/15 backdrop-blur-2xl",
+            "bg-background/10 backdrop-blur-md",
             "border border-white/8 dark:border-white/5",
-            "shadow-xl shadow-black/10 dark:shadow-black/25",
-            "hover:bg-background/25 hover:border-white/12",
+            "shadow-xl shadow-black/5 dark:shadow-black/15",
+            "hover:bg-background/15 hover:border-white/10",
             "transition-all duration-300"
           )}
         >
@@ -77,7 +116,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         </button>
       </div>
 
-      {/* Expanded state - frosted glass panel */}
+      {/* Expanded state - very transparent frosted glass panel */}
       <div
         className={cn(
           "transition-all duration-300 origin-bottom-right",
@@ -89,9 +128,9 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         <div
           className={cn(
             "flex flex-col gap-3 p-4 rounded-2xl",
-            "bg-background/20 backdrop-blur-2xl",
+            "bg-background/10 backdrop-blur-md",
             "border border-white/8 dark:border-white/5",
-            "shadow-2xl shadow-black/15 dark:shadow-black/30",
+            "shadow-2xl shadow-black/10 dark:shadow-black/20",
             "min-w-[200px]"
           )}
         >
@@ -118,18 +157,22 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
             {/* Android App */}
             <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  "p-1.5 rounded-lg",
-                  deviceStatus.androidApp.connected 
-                    ? "bg-emerald-500/10" 
-                    : "bg-muted/30"
-                )}>
-                  <Smartphone className={cn(
-                    "h-4 w-4",
-                    deviceStatus.androidApp.connected 
-                      ? "text-emerald-500" 
-                      : "text-muted-foreground/60"
-                  )} />
+                <div
+                  className={cn(
+                    "p-1.5 rounded-lg",
+                    deviceStatus.androidApp.connected
+                      ? "bg-emerald-500/10"
+                      : "bg-muted/30"
+                  )}
+                >
+                  <Smartphone
+                    className={cn(
+                      "h-4 w-4",
+                      deviceStatus.androidApp.connected
+                        ? "text-emerald-500"
+                        : "text-muted-foreground/60"
+                    )}
+                  />
                 </div>
                 <span className="text-sm">Android App</span>
               </div>
@@ -146,18 +189,22 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
             {/* EEG Machine */}
             <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  "p-1.5 rounded-lg",
-                  deviceStatus.eegMachine.connected 
-                    ? "bg-emerald-500/10" 
-                    : "bg-muted/30"
-                )}>
-                  <Cpu className={cn(
-                    "h-4 w-4",
-                    deviceStatus.eegMachine.connected 
-                      ? "text-emerald-500" 
-                      : "text-muted-foreground/60"
-                  )} />
+                <div
+                  className={cn(
+                    "p-1.5 rounded-lg",
+                    deviceStatus.eegMachine.connected
+                      ? "bg-emerald-500/10"
+                      : "bg-muted/30"
+                  )}
+                >
+                  <Cpu
+                    className={cn(
+                      "h-4 w-4",
+                      deviceStatus.eegMachine.connected
+                        ? "text-emerald-500"
+                        : "text-muted-foreground/60"
+                    )}
+                  />
                 </div>
                 <span className="text-sm">EEG Machine</span>
               </div>
@@ -174,18 +221,22 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
             {/* BLE Bridge */}
             <div className="flex items-center justify-between py-1">
               <div className="flex items-center gap-2.5">
-                <div className={cn(
-                  "p-1.5 rounded-lg",
-                  deviceStatus.bleBridge.connected 
-                    ? "bg-emerald-500/10" 
-                    : "bg-muted/30"
-                )}>
-                  <Bluetooth className={cn(
-                    "h-4 w-4",
-                    deviceStatus.bleBridge.connected 
-                      ? "text-emerald-500" 
-                      : "text-muted-foreground/60"
-                  )} />
+                <div
+                  className={cn(
+                    "p-1.5 rounded-lg",
+                    deviceStatus.bleBridge.connected
+                      ? "bg-emerald-500/10"
+                      : "bg-muted/30"
+                  )}
+                >
+                  <Bluetooth
+                    className={cn(
+                      "h-4 w-4",
+                      deviceStatus.bleBridge.connected
+                        ? "text-emerald-500"
+                        : "text-muted-foreground/60"
+                    )}
+                  />
                 </div>
                 <span className="text-sm">BLE Bridge</span>
               </div>

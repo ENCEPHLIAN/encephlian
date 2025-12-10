@@ -52,12 +52,12 @@ export default function EEGViewer() {
   const [isChannelModalOpen, setIsChannelModalOpen] = useState(false);
   const [isMarkerPanelOpen, setIsMarkerPanelOpen] = useState(false);
 
-  // Playback State - default amplitude to 0.05 for typical EEG waveforms (usually 0.01x to 0.1x range)
+  // Playback State - default amplitude to 0.1 (displayed as 1.0x), 60s window, 2x speed
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [timeWindow, setTimeWindow] = useState(30);
-  const [amplitudeScale, setAmplitudeScale] = useState(0.05);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [timeWindow, setTimeWindow] = useState(60);
+  const [amplitudeScale, setAmplitudeScale] = useState(0.1);
+  const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
 
   // Loading state
@@ -572,9 +572,24 @@ export default function EEGViewer() {
             />
           </div>
 
-          {/* Viewer */}
+          {/* Viewer - with fullscreen button inside */}
           <div className="flex-1 relative">
             <EEGViewerContent />
+            {/* Fullscreen Modal Button - inside the EEG canvas area, bottom right */}
+            <button
+              onClick={() => setIsFullscreenOpen(true)}
+              className={cn(
+                "absolute z-30 h-10 w-10 rounded-xl flex items-center justify-center",
+                "bg-background/30 backdrop-blur-md",
+                "border border-white/10 dark:border-white/5",
+                "shadow-lg shadow-black/10 dark:shadow-black/20",
+                "hover:bg-background/50 hover:scale-105",
+                "transition-all duration-300 ease-out",
+                isMobile ? "bottom-2 right-2" : "bottom-3 right-3"
+              )}
+            >
+              <Maximize2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
@@ -739,22 +754,6 @@ export default function EEGViewer() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Fullscreen Modal Button - frosted glass */}
-      <button
-        onClick={() => setIsFullscreenOpen(true)}
-        className={cn(
-          "fixed z-40 h-12 w-12 rounded-2xl flex items-center justify-center",
-          "bg-background/20 backdrop-blur-2xl",
-          "border border-white/10 dark:border-white/5",
-          "shadow-2xl shadow-black/20 dark:shadow-black/40",
-          "hover:bg-background/30 hover:scale-105",
-          "transition-all duration-300 ease-out",
-          isMobile ? "bottom-4 right-4" : "bottom-6 right-6"
-        )}
-      >
-        <Maximize2 className="h-5 w-5" />
-      </button>
 
       {/* Fullscreen Modal - macOS style slide animation */}
       <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
