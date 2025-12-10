@@ -7,13 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Shield, Building2, Stethoscope, Phone, Mail, BadgeCheck } from "lucide-react";
+import { Loader2, Building2, Stethoscope, Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useProfile } from "@/contexts/ProfileContext";
 
 export default function Profile() {
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+  const [formData, setFormData] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const { refreshProfile } = useProfile();
   
   useEffect(() => {
     loadProfile();
@@ -31,29 +33,36 @@ export default function Profile() {
       .eq('id', user.id)
       .single();
     
-    setProfile(data || {});
+    setFormData(data || {});
   };
   
   const handleSave = async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        toast.error("Not authenticated");
+        return;
+      }
       
       const { error } = await supabase
         .from('profiles')
         .update({
-          full_name: profile.full_name,
-          credentials: profile.credentials,
-          medical_license_number: profile.medical_license_number,
-          specialization: profile.specialization,
-          department: profile.department,
-          hospital_affiliation: profile.hospital_affiliation,
-          phone_number: profile.phone_number,
+          full_name: formData.full_name,
+          credentials: formData.credentials,
+          medical_license_number: formData.medical_license_number,
+          specialization: formData.specialization,
+          department: formData.department,
+          hospital_affiliation: formData.hospital_affiliation,
+          phone_number: formData.phone_number,
+          company_name: formData.company_name,
         })
         .eq('id', user.id);
       
       if (error) throw error;
+      
+      // Refresh global profile context
+      await refreshProfile();
       
       toast.success("Profile updated successfully");
     } catch (error: any) {
@@ -63,7 +72,7 @@ export default function Profile() {
     }
   };
   
-  const initials = profile?.full_name
+  const initials = formData?.full_name
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
@@ -81,18 +90,18 @@ export default function Profile() {
         <Card className="bg-card border-border">
           <CardContent className="pt-6">
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarFallback className="text-xl bg-primary/10 text-primary">{initials}</AvatarFallback>
+              <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
+                <AvatarFallback className="text-lg sm:text-xl bg-primary/10 text-primary">{initials}</AvatarFallback>
               </Avatar>
               <div className="text-center sm:text-left flex-1">
-                <h2 className="text-xl font-semibold">{profile?.full_name || "Clinician"}</h2>
-                <p className="text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1 mt-1">
-                  <Mail className="h-3.5 w-3.5" />
+                <h2 className="text-lg sm:text-xl font-semibold">{formData?.full_name || "Clinician"}</h2>
+                <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1 mt-1">
+                  <Mail className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                   {user?.email}
                 </p>
-                {profile?.role && (
-                  <Badge variant="secondary" className="mt-2">
-                    {profile.role}
+                {formData?.role && (
+                  <Badge variant="secondary" className="mt-2 text-xs">
+                    {formData.role}
                   </Badge>
                 )}
               </div>
@@ -102,49 +111,52 @@ export default function Profile() {
         
         {/* Professional Information */}
         <Card className="bg-card border-border">
-          <CardHeader>
+          <CardHeader className="pb-3 sm:pb-6">
             <div className="flex items-center gap-2">
-              <Stethoscope className="h-5 w-5 text-primary" />
-              <CardTitle>Professional Information</CardTitle>
+              <Stethoscope className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              <CardTitle className="text-base sm:text-lg">Professional Information</CardTitle>
             </div>
-            <CardDescription>Your medical credentials and contact details</CardDescription>
+            <CardDescription className="text-xs sm:text-sm">Your medical credentials and contact details</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="full_name">Full Name</Label>
+          <CardContent className="space-y-3 sm:space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="full_name" className="text-xs sm:text-sm">Full Name</Label>
                 <Input 
                   id="full_name"
-                  value={profile?.full_name || ''}
-                  onChange={(e) => setProfile({...profile, full_name: e.target.value})}
+                  value={formData?.full_name || ''}
+                  onChange={(e) => setFormData({...formData, full_name: e.target.value})}
                   placeholder="Dr. John Smith"
+                  className="h-9 sm:h-10 text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="credentials">Credentials</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="credentials" className="text-xs sm:text-sm">Credentials</Label>
                 <Input 
                   id="credentials"
-                  value={profile?.credentials || ''}
-                  onChange={(e) => setProfile({...profile, credentials: e.target.value})}
+                  value={formData?.credentials || ''}
+                  onChange={(e) => setFormData({...formData, credentials: e.target.value})}
                   placeholder="MD, PhD, FAES"
+                  className="h-9 sm:h-10 text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="medical_license_number">Medical License Number</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="medical_license_number" className="text-xs sm:text-sm">Medical License Number</Label>
                 <Input 
                   id="medical_license_number"
-                  value={profile?.medical_license_number || ''}
-                  onChange={(e) => setProfile({...profile, medical_license_number: e.target.value})}
+                  value={formData?.medical_license_number || ''}
+                  onChange={(e) => setFormData({...formData, medical_license_number: e.target.value})}
                   placeholder="Enter license number"
+                  className="h-9 sm:h-10 text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="specialization">Specialization</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="specialization" className="text-xs sm:text-sm">Specialization</Label>
                 <Select 
-                  value={profile?.specialization || ''} 
-                  onValueChange={(value) => setProfile({...profile, specialization: value})}
+                  value={formData?.specialization || ''} 
+                  onValueChange={(value) => setFormData({...formData, specialization: value})}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-9 sm:h-10 text-sm">
                     <SelectValue placeholder="Select specialization" />
                   </SelectTrigger>
                   <SelectContent>
@@ -156,22 +168,34 @@ export default function Profile() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="department">Department</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="department" className="text-xs sm:text-sm">Department</Label>
                 <Input 
                   id="department"
-                  value={profile?.department || ''}
-                  onChange={(e) => setProfile({...profile, department: e.target.value})}
+                  value={formData?.department || ''}
+                  onChange={(e) => setFormData({...formData, department: e.target.value})}
                   placeholder="Department of Neurology"
+                  className="h-9 sm:h-10 text-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone_number">Phone Number</Label>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="phone_number" className="text-xs sm:text-sm">Phone Number</Label>
                 <Input 
                   id="phone_number"
-                  value={profile?.phone_number || ''}
-                  onChange={(e) => setProfile({...profile, phone_number: e.target.value})}
+                  value={formData?.phone_number || ''}
+                  onChange={(e) => setFormData({...formData, phone_number: e.target.value})}
                   placeholder="+1 (555) 123-4567"
+                  className="h-9 sm:h-10 text-sm"
+                />
+              </div>
+              <div className="space-y-1.5 sm:space-y-2">
+                <Label htmlFor="company_name" className="text-xs sm:text-sm">Company/Organization</Label>
+                <Input 
+                  id="company_name"
+                  value={formData?.company_name || ''}
+                  onChange={(e) => setFormData({...formData, company_name: e.target.value})}
+                  placeholder="ENCEPHLIAN"
+                  className="h-9 sm:h-10 text-sm"
                 />
               </div>
             </div>
@@ -180,30 +204,31 @@ export default function Profile() {
 
         {/* Hospital Affiliation */}
         <Card className="bg-card border-border">
-          <CardHeader>
+          <CardHeader className="pb-3 sm:pb-6">
             <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-primary" />
-              <CardTitle>Hospital Affiliation</CardTitle>
+              <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+              <CardTitle className="text-base sm:text-lg">Hospital Affiliation</CardTitle>
             </div>
-            <CardDescription>Your primary hospital or clinic</CardDescription>
+            <CardDescription className="text-xs sm:text-sm">Your primary hospital or clinic</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2">
-              <Label htmlFor="hospital_affiliation">Hospital/Clinic Name</Label>
+            <div className="space-y-1.5 sm:space-y-2">
+              <Label htmlFor="hospital_affiliation" className="text-xs sm:text-sm">Hospital/Clinic Name</Label>
               <Input 
                 id="hospital_affiliation"
-                value={profile?.hospital_affiliation || ''}
-                onChange={(e) => setProfile({...profile, hospital_affiliation: e.target.value})}
+                value={formData?.hospital_affiliation || ''}
+                onChange={(e) => setFormData({...formData, hospital_affiliation: e.target.value})}
                 placeholder="City General Hospital"
+                className="h-9 sm:h-10 text-sm"
               />
             </div>
           </CardContent>
         </Card>
         
         {/* Save Button */}
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={loading} className="min-w-[120px]">
-            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <div className="flex justify-end pb-6">
+          <Button onClick={handleSave} disabled={loading} className="min-w-[100px] sm:min-w-[120px] h-9 sm:h-10 text-sm">
+            {loading && <Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />}
             Save Changes
           </Button>
         </div>

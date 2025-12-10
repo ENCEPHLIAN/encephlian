@@ -78,14 +78,14 @@ export function CalendarWidget() {
 
   return (
     <Card className="openai-card border-2 h-full">
-      <CardHeader className="pb-4">
+      <CardHeader className="pb-2 sm:pb-4">
         <div className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <CardTitle className="text-lg">Study Calendar</CardTitle>
+          <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+          <CardTitle className="text-base sm:text-lg">Study Calendar</CardTitle>
         </div>
       </CardHeader>
       <CardContent 
-        className="p-4 pt-0 flex-1"
+        className="p-2 sm:p-4 pt-0 flex-1"
         ref={(el) => {
           if (el) {
             const observer = new ResizeObserver((entries) => {
@@ -96,12 +96,11 @@ export function CalendarWidget() {
           }
         }}
       >
-        <div className="flex flex-col lg:flex-row gap-6 h-full">
-          {/* Calendar Section - expanded to fill space */}
+        <div className="flex flex-col xl:flex-row gap-3 sm:gap-6 h-full">
+          {/* Calendar Section - responsive */}
           <div className="flex-1 flex items-start justify-center">
             {showTwoMonths ? (
-              <div className="flex gap-6 justify-center flex-wrap">
-                {/* Previous month */}
+              <div className="flex gap-4 sm:gap-6 justify-center flex-wrap">
                 <Calendar
                   mode="single"
                   selected={date}
@@ -111,7 +110,6 @@ export function CalendarWidget() {
                   modifiersStyles={modifiersStyles}
                   month={previousMonth}
                 />
-                {/* Current month */}
                 <Calendar
                   mode="single"
                   selected={date}
@@ -122,59 +120,54 @@ export function CalendarWidget() {
                 />
               </div>
             ) : (
-              <div className="flex justify-center w-full">
-                <Calendar
-                  mode="single"
-                  selected={date}
-                  onSelect={setDate}
-                  className="rounded-lg border pointer-events-auto w-full max-w-xs"
-                  modifiers={modifiers}
-                  modifiersStyles={modifiersStyles}
-                />
-              </div>
+              <Calendar
+                mode="single"
+                selected={date}
+                onSelect={setDate}
+                className="rounded-lg border pointer-events-auto mx-auto"
+                modifiers={modifiers}
+                modifiersStyles={modifiersStyles}
+              />
             )}
           </div>
 
           {/* Selected Date Studies Panel */}
-          <div className="w-full lg:w-72 shrink-0">
-            <div className="rounded-lg border bg-muted/30 p-4 h-full min-h-[280px]">
-              <div className="flex items-center gap-2 mb-4">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-semibold text-sm">
-                  {date ? dayjs(date).format("MMMM D, YYYY") : "Select a date"}
+          <div className="w-full xl:w-64 shrink-0">
+            <div className="rounded-lg border bg-muted/30 p-2 sm:p-3 h-full min-h-[180px] sm:min-h-[240px]">
+              <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
+                <h3 className="font-semibold text-xs sm:text-sm">
+                  {date ? dayjs(date).format("MMM D, YYYY") : "Select a date"}
                 </h3>
               </div>
 
               {selectedDateStudies.length > 0 ? (
-                <ScrollArea className="h-[220px]">
-                  <div className="space-y-2">
+                <ScrollArea className="h-[140px] sm:h-[180px]">
+                  <div className="space-y-1.5 sm:space-y-2">
                     {selectedDateStudies.map((study) => {
                       const meta = study.meta as any;
                       return (
                         <div
                           key={study.id}
-                          className="flex items-center justify-between p-3 rounded-lg bg-background hover:bg-muted/50 transition-colors cursor-pointer border"
+                          className="flex items-center justify-between p-2 sm:p-2.5 rounded-lg bg-background hover:bg-muted/50 transition-colors cursor-pointer border"
                           onClick={() => navigate(`/app/studies/${study.id}`)}
                         >
-                          <div className="flex items-center gap-3">
-                            <Activity className="h-4 w-4 text-primary shrink-0" />
-                            <div className="min-w-0">
-                              <p className="font-medium text-sm truncate">
-                                {meta?.patient_name || meta?.patient_id || study.id.slice(0, 8)}
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-primary shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-xs sm:text-sm truncate">
+                                {meta?.patient_name || meta?.patient_id || study.id.slice(0, 6)}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-[10px] sm:text-xs text-muted-foreground">
                                 {dayjs(study.created_at).format("h:mm A")}
                               </p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className={`text-xs ${getStatusColor(study.state, study.triage_status)}`}>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Badge variant="outline" className={`text-[10px] sm:text-xs px-1.5 ${getStatusColor(study.state, study.triage_status)}`}>
                               {study.triage_status === "completed" || study.state === "signed" ? "Done" :
-                               study.triage_status === "processing" ? "Processing" :
-                               study.state === "uploaded" ? "Pending" : study.state}
-                            </Badge>
-                            <Badge variant="secondary" className="text-xs">
-                              {study.sla}
+                               study.triage_status === "processing" ? "Run" :
+                               study.state === "uploaded" ? "New" : study.state?.slice(0, 4)}
                             </Badge>
                           </div>
                         </div>
@@ -183,17 +176,17 @@ export function CalendarWidget() {
                   </div>
                 </ScrollArea>
               ) : (
-                <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground">
-                  <FileText className="h-8 w-8 mb-2 opacity-50" />
-                  <p className="text-sm">No studies on this date</p>
+                <div className="flex flex-col items-center justify-center h-[140px] sm:h-[180px] text-muted-foreground">
+                  <FileText className="h-6 w-6 sm:h-8 sm:w-8 mb-1.5 sm:mb-2 opacity-50" />
+                  <p className="text-xs sm:text-sm">No studies</p>
                   {date && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="mt-2"
+                      className="mt-1 sm:mt-2 text-xs h-7"
                       onClick={() => navigate("/app/files")}
                     >
-                      Upload Study
+                      Upload
                     </Button>
                   )}
                 </div>

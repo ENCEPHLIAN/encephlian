@@ -19,16 +19,16 @@ export default function TFASetup() {
   const generateSecret = async () => {
     setLoading(true);
     try {
-      const totp = new OTPAuth.TOTP({
-        issuer: "ENCEPHLIAN",
-        label: "Clinician",
-        algorithm: "SHA1",
-        digits: 6,
-        period: 30,
-        secret: OTPAuth.Secret.fromBase32(OTPAuth.Secret.generate(20, true)),
-      });
+      // Generate a random 20-byte secret
+      const randomBytes = new Uint8Array(20);
+      crypto.getRandomValues(randomBytes);
+      const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+      let base32Secret = '';
+      for (let i = 0; i < randomBytes.length; i++) {
+        base32Secret += base32Chars[randomBytes[i] % 32];
+      }
       
-      setSecret(totp.secret.base32);
+      setSecret(base32Secret);
       setStep("verify");
     } catch (error: any) {
       toast.error("Failed to generate secret");

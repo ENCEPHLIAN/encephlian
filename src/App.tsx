@@ -37,6 +37,7 @@ import Files from "./pages/app/Files";
 import Wallet from "./pages/app/Wallet";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
+import TFASetup from "./pages/app/TFASetup";
 import Notes from "./pages/app/Notes";
 import Support from "./pages/app/Support";
 import Documentation from "./pages/app/Documentation";
@@ -98,6 +99,7 @@ function App() {
                     <Route path="wallet" element={<Wallet />} />
                     <Route path="profile" element={<Profile />} />
                     <Route path="settings" element={<Settings />} />
+                    <Route path="tfa-setup" element={<TFASetup />} />
                     <Route path="support" element={<Support />} />
                     <Route path="documentation" element={<Documentation />} />
                     <Route path="analytics" element={<ComingSoon />} />
