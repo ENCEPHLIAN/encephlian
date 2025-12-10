@@ -15,7 +15,7 @@ export default function AdminTeam() {
       return (data as any[]).filter((u) => {
         const roles = u.app_roles || [];
         return roles.some((r: any) => 
-          r.role === "super_admin" || r.role === "management" || r.role === "ops"
+          r.role === "super_admin" || r.role === "management"
         );
       });
     },
@@ -27,9 +27,6 @@ export default function AdminTeam() {
     }
     if (roles.some(r => r.role === "management")) {
       return <Badge className="bg-purple-500/10 text-purple-600 border-purple-500/30">Management</Badge>;
-    }
-    if (roles.some(r => r.role === "ops")) {
-      return <Badge className="bg-blue-500/10 text-blue-600 border-blue-500/30">Operations</Badge>;
     }
     return <Badge variant="secondary">Unknown</Badge>;
   };
