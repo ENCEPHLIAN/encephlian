@@ -1,5 +1,16 @@
+/**
+ * FloatingDeviceStatus.tsx
+ * 
+ * Quick-glance system status indicator for clinicians.
+ * Shows connection status for Windows uploader and cloud sync.
+ * Appears on hover near bottom-right corner (desktop only).
+ * 
+ * MVP: Static placeholder status - will integrate with real device APIs
+ * when Windows uploader software is ready.
+ */
+
 import { useState, useEffect, useCallback } from "react";
-import { Smartphone, Cpu, Bluetooth, Radio } from "lucide-react";
+import { Monitor, Cloud, Wifi } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -12,34 +23,25 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isMobile = useIsMobile();
 
-  // Placeholder device status
-  const deviceStatus = {
-    androidApp: { connected: false },
-    eegMachine: { connected: false },
-    bleBridge: { connected: false },
+  // System status - placeholder for Windows uploader integration
+  // TODO: Connect to real uploader status via WebSocket/polling
+  const systemStatus = {
+    windowsUploader: { connected: false, lastSync: null as string | null },
+    cloudSync: { connected: true, status: "idle" as "idle" | "syncing" | "error" },
   };
 
-  const allConnected =
-    deviceStatus.androidApp.connected &&
-    deviceStatus.eegMachine.connected &&
-    deviceStatus.bleBridge.connected;
+  const allOnline = systemStatus.windowsUploader.connected && systemStatus.cloudSync.connected;
+  const partialOnline = systemStatus.windowsUploader.connected || systemStatus.cloudSync.connected;
 
-  const anyConnected =
-    deviceStatus.androidApp.connected ||
-    deviceStatus.eegMachine.connected ||
-    deviceStatus.bleBridge.connected;
-
-  // Show only when mouse is near the actual icon position (bottom right corner)
+  // Show only when mouse is near the icon position (bottom right corner)
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (isMobile || isHovered) return;
     
     const { clientX, clientY } = e;
     const { innerWidth, innerHeight } = window;
 
-    // Only show if mouse is very close to the icon (within ~60px)
-    const isNearIcon =
-      clientY > innerHeight - 60 && clientX > innerWidth - 60;
-
+    // Trigger zone: within 60px of bottom-right corner
+    const isNearIcon = clientY > innerHeight - 60 && clientX > innerWidth - 60;
     setIsVisible(isNearIcon);
   }, [isMobile, isHovered]);
 
@@ -53,6 +55,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [isMobile, handleMouseMove]);
 
+  // Hide on mobile devices
   if (isMobile) return null;
 
   return (
@@ -71,7 +74,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         setIsVisible(false);
       }}
     >
-      {/* Collapsed state */}
+      {/* Collapsed state - minimal indicator */}
       <div
         className={cn(
           "absolute right-0 bottom-0 transition-all duration-300",
@@ -87,24 +90,25 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
             "hover:bg-foreground/8",
             "transition-all duration-300"
           )}
-          title="Device Status"
+          title="System Status"
         >
-          <Radio
+          <Wifi
             className={cn(
               "h-4 w-4",
-              allConnected
+              allOnline
                 ? "text-emerald-500"
-                : anyConnected
+                : partialOnline
                 ? "text-amber-500"
                 : "text-muted-foreground/50"
             )}
           />
+          {/* Status indicator dot */}
           <span
             className={cn(
               "absolute top-1.5 right-1.5 h-2 w-2 rounded-full",
-              allConnected
+              allOnline
                 ? "bg-emerald-500 animate-pulse"
-                : anyConnected
+                : partialOnline
                 ? "bg-amber-500"
                 : "bg-muted-foreground/30"
             )}
@@ -112,7 +116,7 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
         </button>
       </div>
 
-      {/* Expanded state */}
+      {/* Expanded state - detailed status panel */}
       <div
         className={cn(
           "transition-all duration-300 origin-bottom-right",
@@ -130,38 +134,86 @@ export function FloatingDeviceStatus({ className }: FloatingDeviceStatusProps) {
             "min-w-[180px]"
           )}
         >
+          {/* Header */}
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-light uppercase tracking-wider text-muted-foreground/60">
-              Devices
+              System
             </span>
             <span
               className={cn(
                 "text-[10px] px-2 py-0.5 rounded-full font-light",
-                allConnected
+                allOnline
                   ? "bg-emerald-500/10 text-emerald-500"
-                  : anyConnected
+                  : partialOnline
                   ? "bg-amber-500/10 text-amber-500"
                   : "bg-muted/30 text-muted-foreground/60"
               )}
             >
-              {allConnected ? "All Online" : anyConnected ? "Partial" : "Offline"}
+              {allOnline ? "All Online" : partialOnline ? "Partial" : "Offline"}
             </span>
           </div>
 
+          {/* Status items */}
           <div className="space-y-2">
-            {[
-              { icon: Smartphone, label: "Android App", connected: deviceStatus.androidApp.connected },
-              { icon: Cpu, label: "EEG Machine", connected: deviceStatus.eegMachine.connected },
-              { icon: Bluetooth, label: "BLE Bridge", connected: deviceStatus.bleBridge.connected },
-            ].map(({ icon: Icon, label, connected }) => (
-              <div key={label} className="flex items-center justify-between py-0.5">
-                <div className="flex items-center gap-2">
-                  <Icon className={cn("h-3.5 w-3.5", connected ? "text-emerald-500" : "text-muted-foreground/40")} />
-                  <span className="text-xs font-light text-foreground/70">{label}</span>
+            {/* Windows Uploader Status */}
+            <div className="flex items-center justify-between py-0.5">
+              <div className="flex items-center gap-2">
+                <Monitor 
+                  className={cn(
+                    "h-3.5 w-3.5", 
+                    systemStatus.windowsUploader.connected 
+                      ? "text-emerald-500" 
+                      : "text-muted-foreground/40"
+                  )} 
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-light text-foreground/70">Windows Uploader</span>
+                  {systemStatus.windowsUploader.lastSync && (
+                    <span className="text-[10px] text-muted-foreground/50">
+                      Last: {systemStatus.windowsUploader.lastSync}
+                    </span>
+                  )}
                 </div>
-                <span className={cn("h-2 w-2 rounded-full", connected ? "bg-emerald-500" : "bg-muted-foreground/20")} />
               </div>
-            ))}
+              <span 
+                className={cn(
+                  "h-2 w-2 rounded-full", 
+                  systemStatus.windowsUploader.connected 
+                    ? "bg-emerald-500" 
+                    : "bg-muted-foreground/20"
+                )} 
+              />
+            </div>
+
+            {/* Cloud Sync Status */}
+            <div className="flex items-center justify-between py-0.5">
+              <div className="flex items-center gap-2">
+                <Cloud 
+                  className={cn(
+                    "h-3.5 w-3.5", 
+                    systemStatus.cloudSync.connected 
+                      ? "text-emerald-500" 
+                      : "text-muted-foreground/40"
+                  )} 
+                />
+                <div className="flex flex-col">
+                  <span className="text-xs font-light text-foreground/70">Cloud Sync</span>
+                  <span className="text-[10px] text-muted-foreground/50 capitalize">
+                    {systemStatus.cloudSync.status}
+                  </span>
+                </div>
+              </div>
+              <span 
+                className={cn(
+                  "h-2 w-2 rounded-full", 
+                  systemStatus.cloudSync.connected 
+                    ? systemStatus.cloudSync.status === "syncing"
+                      ? "bg-blue-500 animate-pulse"
+                      : "bg-emerald-500"
+                    : "bg-muted-foreground/20"
+                )} 
+              />
+            </div>
           </div>
         </div>
       </div>

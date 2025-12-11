@@ -1,8 +1,19 @@
+/**
+ * MissionPanel.tsx
+ * 
+ * Full-screen command center overlay for clinicians.
+ * Provides quick access to primary workflows and system status at a glance.
+ * 
+ * Displays:
+ * - Clinic branding (customizable per tenant)
+ * - System status (Windows Uploader + Cloud Sync)
+ * - Primary action links (Review, Upload, Viewer, Wallet, Notes)
+ */
+
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Activity, Upload, StickyNote, Wallet, Smartphone, Cpu, Bluetooth } from "lucide-react";
+import { X, Activity, Upload, StickyNote, Wallet, Monitor, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import EditableBranding from "./EditableBranding";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +27,7 @@ interface MissionPanelProps {
 export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   const navigate = useNavigate();
 
+  // Handle escape key and body scroll lock
   useEffect(() => {
     if (!open) return;
     
@@ -35,6 +47,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     };
   }, [open, onOpenChange]);
 
+  // Fetch clinic branding context
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
@@ -46,29 +59,26 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   const { data: profile } = useQuery({
     queryKey: ["user-profile"],
     queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
       const { data } = await supabase.from("profiles").select("company_name").eq("id", user.id).single();
       return data;
     },
   });
 
-  // Placeholder device status
-  const deviceStatus = {
-    androidApp: { connected: false },
-    eegMachine: { connected: false },
-    bleBridge: { connected: false },
+  // System status - placeholder for Windows uploader integration
+  // TODO: Connect to real uploader status via WebSocket/polling when ready
+  const systemStatus = {
+    windowsUploader: { connected: false },
+    cloudSync: { connected: true },
   };
 
-  const allConnected = deviceStatus.androidApp.connected && 
-                       deviceStatus.eegMachine.connected && 
-                       deviceStatus.bleBridge.connected;
+  const allOnline = systemStatus.windowsUploader.connected && systemStatus.cloudSync.connected;
 
   const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
+  // Primary workflow actions
   const missionLinks = [
     { label: "Start Review", href: "/app/studies?filter=uploaded", icon: Activity },
     { label: "Upload Study", href: "/app/files", icon: Upload },
@@ -86,7 +96,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
 
   return (
     <>
-      {/* Full panel - clicking anywhere closes it except buttons */}
+      {/* Full panel overlay - clicking backdrop closes it */}
       <div
         className="fixed inset-0 z-[9999] flex flex-col
                    bg-background/70 backdrop-blur-lg
@@ -95,27 +105,43 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
         onClick={() => onOpenChange(false)}
       >
         <div className="flex flex-col h-full">
-          {/* Top row: branding + device status + close */}
+          {/* Header: Branding + System Status + Close */}
           <div className="flex items-center justify-between px-6 py-4" onClick={(e) => e.stopPropagation()}>
             <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
             
-            {/* Device Status - top right with frosted glass look */}
+            {/* System Status - frosted glass panel */}
             <div className="flex items-center gap-4">
               <div className="hidden sm:flex items-center gap-3 px-4 py-2 rounded-xl bg-card/50 backdrop-blur-xl border border-border/20 shadow-lg">
-                <div className="flex items-center gap-2">
-                  <Smartphone className={cn("h-4 w-4", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                  <Cpu className={cn("h-4 w-4", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                  <Bluetooth className={cn("h-4 w-4", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                <div className="flex items-center gap-3">
+                  {/* Windows Uploader */}
+                  <div className="flex items-center gap-1.5">
+                    <Monitor className={cn(
+                      "h-4 w-4", 
+                      systemStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50"
+                    )} />
+                    <span className="text-[10px] text-muted-foreground">Uploader</span>
+                  </div>
+                  
+                  {/* Cloud Sync */}
+                  <div className="flex items-center gap-1.5">
+                    <Cloud className={cn(
+                      "h-4 w-4", 
+                      systemStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50"
+                    )} />
+                    <span className="text-[10px] text-muted-foreground">Cloud</span>
+                  </div>
                 </div>
+                
+                {/* Status indicator */}
                 <div className={cn(
                   "h-2 w-2 rounded-full",
-                  allConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
+                  allOnline ? "bg-emerald-500 animate-pulse" : "bg-amber-500"
                 )} />
                 <span className={cn(
                   "text-xs font-medium",
-                  allConnected ? "text-emerald-500" : "text-muted-foreground"
+                  allOnline ? "text-emerald-500" : "text-muted-foreground"
                 )}>
-                  {allConnected ? "Online" : "Offline"}
+                  {allOnline ? "Online" : "Partial"}
                 </span>
               </div>
               
@@ -126,7 +152,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
             </div>
           </div>
 
-          {/* Body: CTA links - clicking stops propagation so only buttons work */}
+          {/* Body: Primary action links */}
           <div className="flex-1 flex items-center justify-center px-6 py-8 overflow-y-auto">
             <div className="w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
               {missionLinks.map((link) => {
