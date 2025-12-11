@@ -6,7 +6,7 @@ export default function ProtectedRoute() {
   const { isLoading, isAuthenticated, isAdmin } = useUserSession();
   const location = useLocation();
 
-  // Still loading session
+  // Still loading - show spinner, don't redirect yet
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -20,8 +20,9 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  // Block admin users from PaaS - redirect them to admin
-  if (isAdmin) {
+  // Admin users should not access PaaS routes - redirect to admin
+  // Only redirect if NOT already coming from admin (prevents loops)
+  if (isAdmin && !location.pathname.startsWith('/admin')) {
     return <Navigate to="/admin" replace />;
   }
 
