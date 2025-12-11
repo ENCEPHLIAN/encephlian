@@ -28,6 +28,7 @@ interface UserSession {
     secondary_color: string | null;
     role: string | null;
   } | null;
+  roles: string[];
   isAdmin: boolean;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -51,6 +52,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
     userId: null,
     profile: null,
     clinicContext: null,
+    roles: [],
     isAdmin: false,
     isLoading: true,
     isAuthenticated: false,
@@ -92,14 +94,14 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
 
       const profile = profileResult.data;
       const clinicContext = clinicResult.data;
-      const roles = rolesResult.data || [];
+      const rolesArray = (rolesResult.data || []).map(r => r.role);
       const adminRoles = ['super_admin', 'management'];
-      const isAdmin = roles.some(r => adminRoles.includes(r.role));
+      const isAdmin = rolesArray.some(r => adminRoles.includes(r));
 
       // Cache the result
       sessionCache = {
         userId: user.id,
-        data: { profile, clinicContext, isAdmin },
+        data: { profile, clinicContext, roles: rolesArray, isAdmin },
         timestamp: Date.now(),
       };
 
@@ -109,6 +111,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         userId: user.id,
         profile,
         clinicContext,
+        roles: rolesArray,
         isAdmin,
         isLoading: false,
         isAuthenticated: true,
@@ -131,6 +134,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       userId: null,
       profile: null,
       clinicContext: null,
+      roles: [],
       isAdmin: false,
       isLoading: false,
       isAuthenticated: false,
