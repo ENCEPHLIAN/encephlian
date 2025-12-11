@@ -62,5 +62,5 @@ verify_jwt = true
 verify_jwt = true
 
 # --- Development & Testing ---
-[functions.seed_demo_data]
+[functions.setup_demo_account]
 verify_jwt = false
