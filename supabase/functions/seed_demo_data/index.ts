@@ -1,6 +1,23 @@
+/**
+ * seed_demo_data - Edge Function
+ * 
+ * Creates a demo clinician account with sample studies for testing/onboarding.
+ * Used by internal team to quickly provision demo environments.
+ * 
+ * Creates:
+ * - Demo user with clinician role (demo@encephlian.com)
+ * - 5 sample studies at various pipeline stages
+ * - Wallet with 200 tokens
+ * - Earnings wallet with sample balance
+ * - Payment history records
+ * 
+ * This function is idempotent - returns existing credentials if demo exists.
+ */
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 import { corsHeaders } from '../_shared/cors.ts';
 
+// Demo account constants
 const DEMO_EMAIL = 'demo@encephlian.com';
 const DEMO_PASSWORD = 'Demo@2024!Secure';
 const DEMO_USER_ID = '20000000-0000-0000-0000-000000000001';

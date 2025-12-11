@@ -26,6 +26,10 @@ const stateColors: Record<string, string> = {
 };
 
 // Memoized table row component
+/**
+ * StudyRow - Memoized table row for study list
+ * Displays patient info with anonymized demographics (age/gender)
+ */
 const StudyRow = memo(({ study, onDownload, onNavigate }: { 
   study: any; 
   onDownload: (study: any) => void;
@@ -33,11 +37,26 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
 }) => {
   const meta = study.meta as any;
   
+  // Build anonymized patient demographics string
+  const patientAge = meta?.patient_age;
+  const patientGender = meta?.patient_gender;
+  const demographicsStr = [
+    patientAge ? `${patientAge}y` : null,
+    patientGender ? patientGender.charAt(0).toUpperCase() : null
+  ].filter(Boolean).join("/");
+  
   return (
     <TableRow>
       <TableCell>
         <div>
-          <div className="font-medium text-sm">{meta?.patient_name || "Unknown"}</div>
+          <div className="font-medium text-sm">
+            {meta?.patient_name || "Unknown"}
+            {demographicsStr && (
+              <span className="text-muted-foreground font-normal ml-1.5 text-xs">
+                ({demographicsStr})
+              </span>
+            )}
+          </div>
           <div className="text-xs text-muted-foreground">
             {meta?.patient_id || "N/A"}
             {study.sample && <Badge variant="outline" className="ml-1 text-[10px]">Sample</Badge>}

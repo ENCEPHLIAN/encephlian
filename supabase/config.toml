@@ -1,5 +1,11 @@
 project_id = "vxlrqfrisowqfuscodzt"
 
+# ============================================
+# ENCEPHLIAN Edge Functions Configuration
+# ============================================
+# Organized by domain for clarity
+
+# --- Payment Processing (Razorpay) ---
 [functions.create_order]
 verify_jwt = true
 
@@ -15,50 +21,46 @@ verify_jwt = true
 [functions.razorpay_payout_webhook]
 verify_jwt = false
 
+[functions.send_payment_receipt]
+verify_jwt = true
+
+# --- EEG Processing Pipeline ---
 [functions.parse_eeg_study]
 verify_jwt = true
 
-[functions.generate_ai_report]
+[functions.create_study_from_upload]
 verify_jwt = true
 
-[functions.setup_demo_account]
-verify_jwt = false
-
-[functions.create_study_from_upload]
+# --- Report Generation ---
+[functions.generate_ai_report]
 verify_jwt = true
 
 [functions.generate_report_pdf]
 verify_jwt = true
 
-[functions.convert_e_to_edf]
-verify_jwt = true
-
-[functions.submit_support_ticket]
-verify_jwt = true
-
-[functions.delete_account]
-verify_jwt = true
-
 [functions.sign_report]
+verify_jwt = true
+
+# --- Support & Communication ---
+[functions.submit_support_ticket]
 verify_jwt = true
 
 [functions.send_support_email]
 verify_jwt = true
 
-[functions.send_payment_receipt]
-verify_jwt = true
-
-[functions.process_eeg_upload]
-verify_jwt = true
-
-[functions.generate_placeholder_report]
+[functions.send_triage_notification]
 verify_jwt = true
 
 [functions.join_waitlist]
 verify_jwt = true
 
+# --- Account Management ---
 [functions.admin_create_user]
 verify_jwt = true
 
-[functions.send_triage_notification]
+[functions.delete_account]
 verify_jwt = true
+
+# --- Development & Testing ---
+[functions.seed_demo_data]
+verify_jwt = false

@@ -312,6 +312,14 @@ export default function Dashboard() {
                     const isCompleted = study.triage_status === "completed" || study.state === "signed";
                     const isProcessing = study.triage_status === "processing";
                     
+                    // Build patient info string with age/gender
+                    const patientAge = meta?.patient_age;
+                    const patientGender = meta?.patient_gender;
+                    const ageGenderStr = [
+                      patientAge ? `${patientAge}y` : null,
+                      patientGender ? patientGender.charAt(0).toUpperCase() : null
+                    ].filter(Boolean).join("/");
+                    
                     return (
                       <div 
                         key={study.id} 
@@ -327,7 +335,14 @@ export default function Dashboard() {
                             <AlertCircle className="h-5 w-5 text-amber-500" />
                           )}
                           <div>
-                            <p className="font-medium text-sm">{meta?.patient_name || "Unknown Patient"}</p>
+                            <p className="font-medium text-sm">
+                              {meta?.patient_name || "Unknown Patient"}
+                              {ageGenderStr && (
+                                <span className="text-muted-foreground font-normal ml-1.5">
+                                  ({ageGenderStr})
+                                </span>
+                              )}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               {meta?.patient_id || study.id.slice(0, 8)} • {dayjs(study.created_at).format("MMM D, h:mm A")}
                             </p>
