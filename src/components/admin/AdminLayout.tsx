@@ -1,9 +1,9 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { supabase } from "@/integrations/supabase/client";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import {
   LayoutDashboard,
   FileText,
@@ -27,24 +27,15 @@ import {
 
 export default function AdminLayout() {
   const navigate = useNavigate();
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-
-  useEffect(() => {
-    const checkRole = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-        setIsSuperAdmin(roles?.some(r => r.role === "super_admin") || false);
-      }
-    };
-    checkRole();
-  }, []);
+  const { roles, signOut } = useUserSession();
+  
+  const isSuperAdmin = useMemo(() => 
+    roles.includes("super_admin"), 
+    [roles]
+  );
 
   // Build nav items dynamically
-  const adminNav = [
+  const adminNav = useMemo(() => [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
     { name: "Studies", href: "/admin/studies", icon: FileText },
     { name: "Clinics", href: "/admin/clinics", icon: Building2 },
@@ -63,12 +54,12 @@ export default function AdminLayout() {
     { name: "Team", href: "/admin/team", icon: UserCog },
     { name: "Settings", href: "/admin/settings", icon: Settings },
     { name: "Account", href: "/admin/account", icon: Shield },
-  ];
+  ], [isSuperAdmin]);
 
   const handleLogout = async () => {
     sessionStorage.removeItem("encephlian_admin_tfa");
     sessionStorage.removeItem("encephlian_admin_tfa_time");
-    await supabase.auth.signOut();
+    await signOut();
     navigate("/login", { replace: true });
   };
 
