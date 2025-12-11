@@ -29,17 +29,13 @@ export default function Login() {
   const [emailError, setEmailError] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
-  // Redirect authenticated users
+  // Redirect authenticated users - only run once when session is ready
   useEffect(() => {
-    if (sessionLoading) return;
+    if (sessionLoading || !isAuthenticated) return;
     
-    if (isAuthenticated) {
-      if (isAdmin) {
-        navigate("/admin", { replace: true });
-      } else {
-        navigate("/app/dashboard", { replace: true });
-      }
-    }
+    // Use replace to prevent back button loops
+    const destination = isAdmin ? "/admin" : "/app/dashboard";
+    navigate(destination, { replace: true });
   }, [sessionLoading, isAuthenticated, isAdmin, navigate]);
 
   const validateEmail = (value: string) => {
@@ -74,7 +70,7 @@ export default function Login() {
         title: "Welcome back!",
         description: "You have successfully signed in.",
       });
-      // Redirect will happen via useEffect when session updates
+      // Redirect happens via useEffect when context updates
     } catch (error: any) {
       toast({
         title: "Error",
@@ -116,8 +112,17 @@ export default function Login() {
     }
   };
 
-  // Show loading while checking session
+  // Show loading only during initial session check
   if (sessionLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Don't render login form if authenticated (will redirect)
+  if (isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
