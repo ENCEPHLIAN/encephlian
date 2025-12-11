@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useState, useRef, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
 
-// Unified user session - loads ONCE on auth, used by all pages
+// Simple user session - one source of truth
 interface UserSession {
   user: User | null;
   session: Session | null;
@@ -41,9 +41,7 @@ interface UserSessionContextType extends UserSession {
 
 const UserSessionContext = createContext<UserSessionContextType | undefined>(undefined);
 
-// Cache to prevent duplicate loads - persists across renders
-let sessionCache: { userId: string; data: Partial<UserSession>; timestamp: number } | null = null;
-const CACHE_DURATION = 60000; // 1 minute
+const ADMIN_ROLES = ['super_admin', 'management'];
 
 export function UserSessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<UserSession>({
@@ -58,52 +56,19 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
   });
 
-  const mountedRef = useRef(true);
-  const loadingRef = useRef(false);
-  const initializedRef = useRef(false);
-
-  const loadUserData = useCallback(async (user: User): Promise<boolean> => {
-    // Check cache first
-    if (sessionCache && sessionCache.userId === user.id && Date.now() - sessionCache.timestamp < CACHE_DURATION) {
-      if (mountedRef.current) {
-        setState(prev => ({
-          ...prev,
-          ...sessionCache!.data,
-          user,
-          userId: user.id,
-          isLoading: false,
-          isAuthenticated: true,
-        }));
-      }
-      return true;
-    }
-
-    // Prevent concurrent loads
-    if (loadingRef.current) return false;
-    loadingRef.current = true;
-
+  const loadUserData = useCallback(async (user: User) => {
     try {
-      // Parallel fetch all user data in ONE go
+      // Parallel fetch all user data
       const [profileResult, clinicResult, rolesResult] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
         supabase.from('user_clinic_context').select('*').maybeSingle(),
         supabase.from('user_roles').select('role').eq('user_id', user.id),
       ]);
 
-      if (!mountedRef.current) return false;
-
       const profile = profileResult.data;
       const clinicContext = clinicResult.data;
       const rolesArray = (rolesResult.data || []).map(r => r.role);
-      const adminRoles = ['super_admin', 'management'];
-      const isAdmin = rolesArray.some(r => adminRoles.includes(r));
-
-      // Cache the result
-      sessionCache = {
-        userId: user.id,
-        data: { profile, clinicContext, roles: rolesArray, isAdmin },
-        timestamp: Date.now(),
-      };
+      const isAdmin = rolesArray.some(r => ADMIN_ROLES.includes(r));
 
       setState({
         user,
@@ -116,21 +81,13 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         isLoading: false,
         isAuthenticated: true,
       });
-      
-      return true;
     } catch (error) {
       console.error('Failed to load user data:', error);
-      if (mountedRef.current) {
-        setState(prev => ({ ...prev, isLoading: false }));
-      }
-      return false;
-    } finally {
-      loadingRef.current = false;
+      setState(prev => ({ ...prev, isLoading: false }));
     }
   }, []);
 
   const clearSession = useCallback(() => {
-    sessionCache = null;
     setState({
       user: null,
       session: null,
@@ -145,66 +102,47 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    mountedRef.current = true;
+    let mounted = true;
 
-    // Prevent double initialization
-    if (initializedRef.current) return;
-    initializedRef.current = true;
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      
+      if (session?.user) {
+        loadUserData(session.user);
+      } else {
+        setState(prev => ({ ...prev, isLoading: false }));
+      }
+    });
 
-    // Set up auth listener - handles all auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mountedRef.current) return;
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
 
-      // Handle sign out
       if (event === 'SIGNED_OUT') {
         clearSession();
         return;
       }
 
-      // Handle token refresh - just update session, don't reload data
-      if (event === 'TOKEN_REFRESHED' && session?.user) {
+      if (event === 'SIGNED_IN' && session?.user) {
+        loadUserData(session.user);
+        return;
+      }
+
+      if (event === 'TOKEN_REFRESHED' && session) {
         setState(prev => ({ ...prev, session }));
-        return;
-      }
-
-      // Handle initial session and sign in
-      if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
-        // Use cache if available
-        if (sessionCache && sessionCache.userId === session.user.id && Date.now() - sessionCache.timestamp < CACHE_DURATION) {
-          setState(prev => ({
-            ...prev,
-            ...sessionCache!.data,
-            session,
-            user: session.user,
-            userId: session.user.id,
-            isLoading: false,
-            isAuthenticated: true,
-          }));
-          return;
-        }
-
-        // Load fresh data
-        await loadUserData(session.user);
-        return;
-      }
-
-      // No session - clear everything
-      if (!session) {
-        setState(prev => ({ ...prev, isLoading: false }));
       }
     });
 
     return () => {
-      mountedRef.current = false;
+      mounted = false;
       subscription.unsubscribe();
     };
   }, [loadUserData, clearSession]);
 
   const refreshSession = useCallback(async () => {
-    sessionCache = null;
-    loadingRef.current = false;
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user && mountedRef.current) {
+    if (session?.user) {
       await loadUserData(session.user);
     }
   }, [loadUserData]);

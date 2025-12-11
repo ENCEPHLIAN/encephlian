@@ -3,6 +3,14 @@ import { Loader2 } from "lucide-react";
 import AdminTFAGate, { useAdminTFA } from "./AdminTFAGate";
 import { useUserSession } from "@/contexts/UserSessionContext";
 
+/**
+ * AdminRoute - Guards /admin routes (management & super_admin only)
+ * 
+ * - Not authenticated -> /login
+ * - Not admin (clinician) -> /app/dashboard
+ * - Admin without TFA -> show TFA gate
+ * - Admin with TFA verified -> allow access
+ */
 export default function AdminRoute() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -23,17 +31,16 @@ export default function AdminRoute() {
     );
   }
 
-  // Not logged in - redirect to login
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  // Logged in but not admin - redirect to PaaS
+  // Clinicians go to PaaS, not admin
   if (!isAdmin) {
     return <Navigate to="/app/dashboard" replace />;
   }
 
-  // Show TFA gate if not verified - required for all admin users
+  // TFA gate for admin users
   if (needsVerification && !isVerified) {
     return <AdminTFAGate onVerified={verify} onLogout={handleLogout} />;
   }
