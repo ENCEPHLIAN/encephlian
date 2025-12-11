@@ -134,18 +134,18 @@ const Index = () => {
               <div className="h-14 w-14 bg-primary/10 rounded-xl flex items-center justify-center mb-6 glow-cyan">
                 <Shield className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="text-2xl font-bold mb-3">Earn Commissions</h3>
+              <h3 className="text-2xl font-bold mb-3">Secure & Compliant</h3>
               <p className="text-muted-foreground mb-6">
-                Neurologists earn commission for every report signed off, paid directly to your earnings wallet.
+                Enterprise-grade security with HIPAA-compliant data handling and audit trails.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
                   <CheckCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>TAT reports: 3% commission</span>
+                  <span>End-to-end encryption</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <CheckCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
-                  <span>STAT reports: 5% commission</span>
+                  <span>Full audit logging</span>
                 </li>
               </ul>
             </div>

@@ -69,8 +69,6 @@ export default function StudyReview() {
   const meta = study?.meta as any;
   const tokenCost = study?.sla === 'STAT' ? 2 : 1;
   const costInr = tokenCost * 200;
-  const commissionRate = study?.sla === 'STAT' ? 5 : 3;
-  const commissionInr = Math.floor((costInr * commissionRate) / 100);
 
   const currentDraft = editedDraft || draft?.draft;
 
@@ -98,12 +96,11 @@ export default function StudyReview() {
       const result = data as any;
       toast({
         title: "Report signed successfully!",
-        description: `You earned ₹${result.commission_earned} commission. ${result.tokens_remaining} tokens remaining.`
+        description: `${result.tokens_remaining} tokens remaining.`
       });
 
       // Refresh data
       queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
-      queryClient.invalidateQueries({ queryKey: ['earnings-balance'] });
       queryClient.invalidateQueries({ queryKey: ['study', id] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-studies'] });
 
@@ -219,12 +216,8 @@ export default function StudyReview() {
                 <span className="text-sm text-muted-foreground">Token Cost ({study.sla}):</span>
                 <span className="font-semibold">{tokenCost} tokens (₹{costInr})</span>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Your Commission ({commissionRate}%):</span>
-                <span className="font-semibold text-green-600">₹{commissionInr}</span>
-              </div>
               <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-sm text-muted-foreground">Clinic Wallet Balance:</span>
+                <span className="text-sm text-muted-foreground">Your Wallet Balance:</span>
                 <span className="font-semibold flex items-center gap-1">
                   <Coins className="h-4 w-4" />
                   {wallet?.tokens || 0} tokens
@@ -232,7 +225,7 @@ export default function StudyReview() {
               </div>
               {wallet && wallet.tokens < tokenCost && (
                 <p className="text-sm text-destructive">
-                  ⚠️ Insufficient tokens. Clinic needs to purchase more tokens.
+                  ⚠️ Insufficient tokens. Please purchase more tokens.
                 </p>
               )}
             </CardContent>
@@ -257,8 +250,7 @@ export default function StudyReview() {
             <AlertDialogDescription className="space-y-2">
               <p>This action will:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Deduct {tokenCost} tokens (₹{costInr}) from clinic wallet</li>
-                <li>Credit ₹{commissionInr} to your earnings wallet</li>
+                <li>Deduct {tokenCost} tokens (₹{costInr}) from your wallet</li>
                 <li>Mark the report as signed and complete</li>
               </ul>
               <p className="font-medium pt-2">Are you sure you want to proceed?</p>
