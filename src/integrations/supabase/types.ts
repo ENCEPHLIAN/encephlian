@@ -190,13 +190,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "clinic_memberships_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "user_clinic_context"
-            referencedColumns: ["clinic_id"]
-          },
-          {
             foreignKeyName: "clinic_memberships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -781,13 +774,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "studies_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "user_clinic_context"
-            referencedColumns: ["clinic_id"]
-          },
-          {
             foreignKeyName: "studies_owner_fkey"
             columns: ["owner"]
             isOneToOne: false
@@ -960,13 +946,6 @@ export type Database = {
             referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "user_roles_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "user_clinic_context"
-            referencedColumns: ["clinic_id"]
-          },
         ]
       }
       wallet_transactions: {
@@ -1126,13 +1105,6 @@ export type Database = {
             referencedRelation: "clinics"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "clinic_memberships_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "user_clinic_context"
-            referencedColumns: ["clinic_id"]
-          },
         ]
       }
       user_clinic_context: {
@@ -1146,7 +1118,15 @@ export type Database = {
           secondary_color: string | null
           user_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Functions: {

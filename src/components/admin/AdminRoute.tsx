@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Navigate, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
@@ -13,18 +13,28 @@ export default function AdminRoute() {
   const location = useLocation();
   const [authState, setAuthState] = useState<"loading" | "unauthenticated" | "admin" | "not-admin">("loading");
   const { isVerified, needsVerification, verify, clearTFA } = useAdminTFA();
+  const initializedRef = useRef(false);
+  const checkingRef = useRef(false);
 
   const handleLogout = useCallback(async () => {
     clearTFA();
-    cachedAdminCheck = null; // Clear cache on logout
+    cachedAdminCheck = null;
     await supabase.auth.signOut();
     navigate("/login", { replace: true });
   }, [clearTFA, navigate]);
 
   useEffect(() => {
+    // Prevent multiple initializations
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     let mounted = true;
 
     const checkAdminStatus = async () => {
+      // Prevent concurrent checks
+      if (checkingRef.current) return;
+      checkingRef.current = true;
+
       try {
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -67,16 +77,22 @@ export default function AdminRoute() {
       } catch (error) {
         console.error("Admin check error:", error);
         if (mounted) setAuthState("unauthenticated");
+      } finally {
+        checkingRef.current = false;
       }
     };
 
     checkAdminStatus();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (!mounted) return;
+      
+      // Only respond to SIGNED_OUT
       if (event === "SIGNED_OUT") {
         cachedAdminCheck = null;
-        if (mounted) setAuthState("unauthenticated");
+        setAuthState("unauthenticated");
       }
+      // Ignore other events to prevent loops
     });
 
     return () => {
