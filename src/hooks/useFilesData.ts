@@ -72,13 +72,10 @@ export function useStudyFiles(enabled: boolean = true) {
   return useQuery({
     queryKey: ["user-study-files"],
     queryFn: () => deduplicatedFetch("files-study-files", async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
+      // RLS handles user filtering automatically
       const { data: studies, error } = await supabase
         .from('studies')
         .select('id, state, study_files(*)')
-        .eq('owner', user.id)
         .not('state', 'eq', 'awaiting_sla')
         .not('sla', 'eq', 'pending')
         .order('created_at', { ascending: false })
@@ -98,8 +95,8 @@ export function useStudyFiles(enabled: boolean = true) {
       );
     }),
     enabled,
-    staleTime: 30000, // 30 seconds
-    gcTime: 120000, // 2 minutes
+    staleTime: 30000,
+    gcTime: 120000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
@@ -111,14 +108,10 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
     queryFn: () => deduplicatedFetch(`files-storage-${bucket}-${path}`, async () => {
       if (bucket === 'study-files') return null;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
       if (bucket === 'notes') {
         const { data, error } = await supabase
           .from('notes')
           .select('*')
-          .eq('user_id', user.id)
           .order('updated_at', { ascending: false });
 
         if (error) throw error;
@@ -137,15 +130,15 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         }));
       }
 
+      // Storage bucket - RLS handles user isolation
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+      
       const userPath = path ? `${user.id}/${path}` : user.id;
       
       const { data, error } = await supabase.storage
         .from(bucket)
-        .list(userPath, { 
-          limit: 100, 
-          offset: 0, 
-          sortBy: { column: "name", order: "asc" } 
-        });
+        .list(userPath, { limit: 100, offset: 0, sortBy: { column: "name", order: "asc" } });
       if (error) throw error;
       return data;
     }),
