@@ -70,26 +70,14 @@ function deduplicatedFetch<T>(key: string, fetcher: () => Promise<T>): Promise<T
 }
 
 export function useStudiesData(stateFilter: string) {
-  const lastFilterRef = useRef(stateFilter);
-  const initialLoadRef = useRef(true);
-
-  // Track filter changes to avoid unnecessary refetches
-  useEffect(() => {
-    if (lastFilterRef.current !== stateFilter) {
-      lastFilterRef.current = stateFilter;
-    }
-  }, [stateFilter]);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const { data: studies, isLoading, refetch } = useQuery({
     queryKey: ["studies-list", stateFilter],
     queryFn: () => deduplicatedFetch(`studies-${stateFilter}`, async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
       let query = supabase
         .from("studies")
         .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
-        .or(`owner.eq.${user.id},sample.eq.true`)
         .order("created_at", { ascending: false })
         .limit(100);
 
@@ -101,51 +89,38 @@ export function useStudiesData(stateFilter: string) {
       if (error) throw error;
       return data as StudyListItem[];
     }),
-    staleTime: 15000, // 15 seconds
-    gcTime: 120000, // 2 minutes garbage collection
+    staleTime: 15000,
+    gcTime: 120000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    refetchInterval: false, // Disable auto-refetch - rely on realtime
+    refetchInterval: false,
   });
 
-  // Debounced refetch
-  const debouncedRefetch = useCallback(() => {
-    const timeout = setTimeout(() => {
-      refetch();
-    }, 500);
-    return () => clearTimeout(timeout);
-  }, [refetch]);
-
-  // Subscribe to realtime updates only once after initial load
+  // Single realtime subscription
   useEffect(() => {
-    if (!initialLoadRef.current) return;
-    initialLoadRef.current = false;
+    if (channelRef.current) return; // Already subscribed
 
-    const channel = supabase
-      .channel("studies-realtime")
+    channelRef.current = supabase
+      .channel("studies-realtime-v3")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "studies",
-        },
+        { event: "*", schema: "public", table: "studies" },
         () => {
-          debouncedRefetch();
+          // Debounced refetch via setTimeout
+          setTimeout(() => refetch(), 500);
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
-  }, [debouncedRefetch]);
+  }, [refetch]);
 
-  return {
-    studies: studies || [],
-    isLoading,
-    refetch,
-  };
+  return { studies: studies || [], isLoading, refetch };
 }
 
 export function useFilteredStudies(studies: StudyListItem[], search: string) {
