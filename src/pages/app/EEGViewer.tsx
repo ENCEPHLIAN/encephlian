@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ export default function EEGViewer() {
   const queryClient = useQueryClient();
   const { theme } = useTheme();
   const isMobile = useIsMobile();
+  const { userId, isAuthenticated } = useUserSession();
 
   // UI State
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -116,17 +118,14 @@ export default function EEGViewer() {
 
   // Fetch most recent study if no studyId provided - only user's own studies
   const { data: recentStudy, isLoading: recentLoading } = useQuery({
-    queryKey: ["recent-study"],
-    enabled: !studyId,
+    queryKey: ["recent-study", userId],
+    enabled: !studyId && isAuthenticated && !!userId,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      
-      // Only fetch user's own studies, no sample fallback
+      // Only fetch user's own studies, no sample fallback - RLS handles filtering
       const { data: userStudy, error } = await supabase
         .from("studies")
         .select("*, study_files(*)")
-        .eq("owner", user.id)
+        .eq("owner", userId!)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -292,12 +291,11 @@ export default function EEGViewer() {
   const addMarkerMutation = useMutation({
     mutationFn: async (payload: { timestamp_sec: number; marker_type: string; label?: string; notes?: string }) => {
       if (!activeStudy?.id || isSampleStudy) throw new Error("Cannot add markers to sample study");
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      if (!userId) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("eeg_markers").insert({
         study_id: activeStudy.id,
-        user_id: user.id,
+        user_id: userId,
         timestamp_sec: payload.timestamp_sec,
         marker_type: payload.marker_type,
         label: payload.label ?? null,
