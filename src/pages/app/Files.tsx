@@ -1,6 +1,4 @@
-import { useState, useRef } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useRef, useCallback, memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -33,6 +31,15 @@ import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { FilePreviewDialog } from "@/components/FilePreviewDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { 
+  useStudyFiles, 
+  useStorageFiles, 
+  useFileUpload, 
+  useFileDelete, 
+  useFilteredFiles,
+  type StudyFile 
+} from "@/hooks/useFilesData";
 
 dayjs.extend(relativeTime);
 
@@ -67,18 +74,78 @@ const BUCKETS = [
   },
 ];
 
-interface StudyFile {
-  id: string;
-  study_id: string;
-  path: string;
-  kind: string;
-  size_bytes: number | null;
-  created_at: string;
-}
+// Memoized file row component
+const FileRow = memo(({ 
+  file, 
+  isStudyFile, 
+  onPreview, 
+  onDownload, 
+  onDelete,
+  formatFileSize 
+}: {
+  file: any;
+  isStudyFile: boolean;
+  onPreview: (fileName: string, studyFile?: StudyFile) => void;
+  onDownload: (fileName: string, filePath?: string) => void;
+  onDelete: (fileName: string) => void;
+  formatFileSize: (bytes: number | null) => string;
+}) => {
+  const fileName = file.name;
+  
+  return (
+    <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group">
+      <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+      
+      <div 
+        className="flex-1 min-w-0 cursor-pointer"
+        onClick={() => onPreview(fileName, isStudyFile ? file : undefined)}
+      >
+        <p className="font-medium text-sm truncate">{fileName}</p>
+        <p className="text-xs text-muted-foreground">
+          {file.metadata?.size ? formatFileSize(file.metadata.size) : formatFileSize(file.size_bytes)}
+          {(file.updated_at || file.created_at) && ` • ${dayjs(file.updated_at || file.created_at).fromNow()}`}
+          {isStudyFile && file.kind && ` • ${file.kind.toUpperCase()}`}
+        </p>
+      </div>
+      
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="opacity-0 group-hover:opacity-100 h-8 w-8 p-0"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onPreview(fileName, isStudyFile ? file : undefined)}>
+            <Eye className="h-4 w-4 mr-2" />
+            Preview
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onDownload(fileName, isStudyFile ? file.path : undefined)}>
+            <Download className="h-4 w-4 mr-2" />
+            Download
+          </DropdownMenuItem>
+          {!isStudyFile && (
+            <DropdownMenuItem 
+              onClick={() => onDelete(fileName)}
+              className="text-destructive focus:text-destructive"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+});
+
+FileRow.displayName = "FileRow";
 
 export default function Files() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [selectedBucket, setSelectedBucket] = useState("study-files");
@@ -86,131 +153,23 @@ export default function Files() {
   const [searchQuery, setSearchQuery] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
 
-  // Fetch study_files from database for the current user - optimized
-  const { data: studyFiles, isLoading: studyFilesLoading } = useQuery({
-    queryKey: ["user-study-files"],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+  // Use optimized hooks
+  const { data: studyFiles, isLoading: studyFilesLoading } = useStudyFiles(selectedBucket === 'study-files');
+  const { data: storageFiles, isLoading: storageLoading } = useStorageFiles(selectedBucket, currentPath, selectedBucket !== 'study-files');
+  const uploadMutation = useFileUpload(selectedBucket, currentPath);
+  const deleteMutation = useFileDelete(selectedBucket, currentPath);
 
-      // Get studies owned by this user with files - exclude awaiting_sla studies
-      // These haven't been processed yet and shouldn't appear in Files
-      const { data: studies, error: studiesError } = await supabase
-        .from('studies')
-        .select('id, state, study_files(*)')
-        .eq('owner', user.id)
-        .not('state', 'eq', 'awaiting_sla') // Exclude studies awaiting SLA selection
-        .not('sla', 'eq', 'pending') // Also exclude pending SLA
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      if (studiesError) throw studiesError;
-      if (!studies || studies.length === 0) return [];
+  // Memoized filtered files
+  const { folders, files: regularFiles, total } = useFilteredFiles(
+    studyFiles,
+    storageFiles,
+    selectedBucket,
+    searchQuery
+  );
 
-      // Flatten files from studies
-      const allFiles: StudyFile[] = [];
-      studies.forEach(study => {
-        const files = (study.study_files || []) as StudyFile[];
-        allFiles.push(...files);
-      });
-
-      return allFiles.sort((a, b) => 
-        new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-      );
-    },
-    enabled: selectedBucket === 'study-files',
-    staleTime: 30000,
-    gcTime: 60000,
-  });
-
-  const { data: files, isLoading: storageLoading } = useQuery({
-    queryKey: ["storage-files", selectedBucket, currentPath],
-    queryFn: async () => {
-      // Handle study-files - use database query
-      if (selectedBucket === 'study-files') {
-        return null; // Handled by studyFiles query
-      }
-
-      // Handle notes bucket - fetch from notes table
-      if (selectedBucket === 'notes') {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
-
-        const { data, error } = await supabase
-          .from('notes')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('updated_at', { ascending: false });
-
-        if (error) throw error;
-
-        return (data || []).map(note => ({
-          name: note.title + '.txt',
-          id: note.id,
-          created_at: note.created_at,
-          updated_at: note.updated_at,
-          metadata: { 
-            size: new Blob([note.content]).size,
-            mimetype: 'text/plain',
-            noteContent: note.content,
-            isPinned: note.is_pinned
-          }
-        }));
-      }
-
-      // Handle storage buckets - list all files for user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      
-      const userPath = currentPath ? `${user.id}/${currentPath}` : user.id;
-      
-      const { data, error } = await supabase.storage
-        .from(selectedBucket)
-        .list(userPath, { 
-          limit: 100, 
-          offset: 0, 
-          sortBy: { column: "name", order: "asc" } 
-        });
-      if (error) throw error;
-      return data;
-    },
-    enabled: selectedBucket !== 'study-files'
-  });
-
-  const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      
-      const userFilePath = `${user.id}/${currentPath ? `${currentPath}/` : ''}${file.name}`;
-      const { error } = await supabase.storage.from(selectedBucket).upload(userFilePath, file);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("File uploaded successfully");
-      queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] });
-    },
-    onError: (error: any) => toast.error(error.message || "Upload failed")
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async (fileName: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-      
-      const filePath = currentPath ? `${user.id}/${currentPath}/${fileName}` : `${user.id}/${fileName}`;
-      const { error } = await supabase.storage.from(selectedBucket).remove([filePath]);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("File deleted");
-      queryClient.invalidateQueries({ queryKey: ["storage-files", selectedBucket, currentPath] });
-    }
-  });
-
-  const handleDownload = async (fileName: string, filePath?: string) => {
+  const handleDownload = useCallback(async (fileName: string, filePath?: string) => {
     // Handle notes download
-    const file = files?.find((f: any) => f.name === fileName);
+    const file = storageFiles?.find((f: any) => f.name === fileName);
     if (selectedBucket === 'notes' && file?.metadata?.noteContent) {
       const blob = new Blob([file.metadata.noteContent], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -261,9 +220,9 @@ export default function Files() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
+  }, [storageFiles, selectedBucket, currentPath]);
 
-  const handlePreview = async (fileName: string, studyFile?: StudyFile) => {
+  const handlePreview = useCallback(async (fileName: string, studyFile?: StudyFile) => {
     if (selectedBucket === 'notes') {
       navigate('/app/notes');
       return;
@@ -289,54 +248,39 @@ export default function Files() {
       path: filePath,
       bucket: selectedBucket
     });
-  };
+  }, [selectedBucket, currentPath, navigate]);
 
-  const handleFileUpload = (uploadedFiles: FileList | null) => {
+  const handleFileUpload = useCallback((uploadedFiles: FileList | null) => {
     if (!uploadedFiles) return;
     Array.from(uploadedFiles).forEach(file => {
       uploadMutation.mutate(file);
     });
-  };
+  }, [uploadMutation]);
 
-  const handleFolderClick = (folderName: string) => {
+  const handleFolderClick = useCallback((folderName: string) => {
     const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
     setCurrentPath(newPath);
-  };
+  }, [currentPath]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (!currentPath) return;
     const parts = currentPath.split('/');
     parts.pop();
     setCurrentPath(parts.join('/'));
-  };
+  }, [currentPath]);
 
-  const formatFileSize = (bytes: number | null) => {
+  const formatFileSize = useCallback((bytes: number | null) => {
     if (!bytes) return 'Unknown size';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
+  }, []);
+
+  const handleDelete = useCallback((fileName: string) => {
+    deleteMutation.mutate(fileName);
+  }, [deleteMutation]);
 
   const isLoading = selectedBucket === 'study-files' ? studyFilesLoading : storageLoading;
-
-  // Process files based on bucket type
-  let displayFiles: any[] = [];
-  if (selectedBucket === 'study-files' && studyFiles) {
-    displayFiles = studyFiles.map(sf => ({
-      ...sf,
-      name: sf.path.split('/').pop() || sf.path,
-      metadata: { size: sf.size_bytes }
-    }));
-  } else if (files) {
-    displayFiles = files;
-  }
-
-  const filteredFiles = displayFiles?.filter(file => 
-    file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const folders = filteredFiles?.filter(f => !f.name.includes('.')) || [];
-  const regularFiles = filteredFiles?.filter(f => f.name.includes('.')) || [];
 
   return (
     <div className="h-[calc(100vh-12rem)] flex gap-0 rounded-lg overflow-hidden border border-border">
@@ -430,7 +374,7 @@ export default function Files() {
             <div className="flex justify-center items-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : !filteredFiles || filteredFiles.length === 0 ? (
+          ) : total === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center px-4">
               <FolderOpen className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <p className="text-lg font-medium">No files here</p>
