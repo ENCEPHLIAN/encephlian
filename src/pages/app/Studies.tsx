@@ -1,6 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback, useRef, memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +11,7 @@ import { Loader2, Search, FileText, Eye, FolderOpen, Download, Upload } from "lu
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
-import { useRef } from "react";
+import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 
 const stateColors: Record<string, string> = {
   awaiting_sla: "bg-amber-500",
@@ -26,6 +25,97 @@ const stateColors: Record<string, string> = {
   failed: "bg-red-500",
 };
 
+// Memoized table row component
+const StudyRow = memo(({ study, onDownload, onNavigate }: { 
+  study: any; 
+  onDownload: (study: any) => void;
+  onNavigate: (path: string) => void;
+}) => {
+  const meta = study.meta as any;
+  
+  return (
+    <TableRow>
+      <TableCell>
+        <div>
+          <div className="font-medium text-sm">{meta?.patient_name || "Unknown"}</div>
+          <div className="text-xs text-muted-foreground">
+            {meta?.patient_id || "N/A"}
+            {study.sample && <Badge variant="outline" className="ml-1 text-[10px]">Sample</Badge>}
+          </div>
+        </div>
+      </TableCell>
+      <TableCell className="hidden sm:table-cell text-sm">{(study.clinics as any)?.name || "—"}</TableCell>
+      <TableCell className="hidden md:table-cell">
+        <div className="text-xs max-w-[150px] truncate" title={meta?.indication}>
+          {meta?.indication || "—"}
+        </div>
+      </TableCell>
+      <TableCell>
+        {study.sla === "pending" || study.state === "awaiting_sla" ? (
+          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
+            Pending
+          </Badge>
+        ) : (
+          <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"} className="text-[10px]">
+            {study.sla}
+          </Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1.5">
+          <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
+          <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
+        </div>
+      </TableCell>
+      <TableCell className="hidden sm:table-cell text-xs">{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
+      <TableCell>
+        <div className="flex gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link to={`/app/studies/${study.id}`}>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <FileText className="h-4 w-4" />
+                </Button>
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>View Details</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => onNavigate(`/app/viewer?studyId=${study.id}`)}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open in Viewer</TooltipContent>
+          </Tooltip>
+          {study.state === 'signed' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => onDownload(study)}
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download Report</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
+
+StudyRow.displayName = "StudyRow";
+
 export default function Studies() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -33,45 +123,13 @@ export default function Studies() {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
 
-  const { data: studies, isLoading } = useQuery({
-    queryKey: ["studies", stateFilter],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+  // Use optimized hook with request deduplication
+  const { studies, isLoading } = useStudiesData(stateFilter);
+  const filteredStudies = useFilteredStudies(studies, search);
 
-      let query = supabase
-        .from("studies")
-        .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
-        .or(`owner.eq.${user.id},sample.eq.true`)
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (stateFilter !== "all") {
-        query = query.eq("state", stateFilter as any);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
-    staleTime: 30000,
-    gcTime: 60000,
-  });
-
-  const filteredStudies = useMemo(() => {
-    if (!studies) return [];
-    if (!search.trim()) return studies;
-    const lowerSearch = search.toLowerCase();
-    return studies.filter((study) => {
-      const meta = study.meta as any;
-      const patientName = meta?.patient_name || "";
-      const patientId = meta?.patient_id || "";
-      return (
-        patientName.toLowerCase().includes(lowerSearch) ||
-        patientId.toLowerCase().includes(lowerSearch)
-      );
-    });
-  }, [studies, search]);
+  const handleNavigate = useCallback((path: string) => {
+    navigate(path);
+  }, [navigate]);
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
@@ -274,88 +332,14 @@ export default function Studies() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudies.map((study) => {
-                  const meta = study.meta as any;
-                  return (
-                    <TableRow key={study.id}>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium text-sm">{meta?.patient_name || "Unknown"}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {meta?.patient_id || "N/A"}
-                            {study.sample && <Badge variant="outline" className="ml-1 text-[10px]">Sample</Badge>}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-sm">{(study.clinics as any)?.name || "—"}</TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="text-xs max-w-[150px] truncate" title={meta?.indication}>
-                          {meta?.indication || "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {study.sla === "pending" || study.state === "awaiting_sla" ? (
-                          <Badge variant="outline" className="text-[10px] border-amber-500/50 text-amber-600 dark:text-amber-400">
-                            Pending
-                          </Badge>
-                        ) : (
-                          <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"} className="text-[10px]">
-                            {study.sla}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
-                          <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-xs">{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
-                      <TableCell>
-                        <div className="flex gap-0.5">
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Link to={`/app/studies/${study.id}`}>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <FileText className="h-4 w-4" />
-                                </Button>
-                              </Link>
-                            </TooltipTrigger>
-                            <TooltipContent>View Details</TooltipContent>
-                          </Tooltip>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => navigate(`/app/viewer?studyId=${study.id}`)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Open in Viewer</TooltipContent>
-                          </Tooltip>
-                          {study.state === 'signed' && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => handleDownloadReport(study)}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Download Report</TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {filteredStudies.map((study) => (
+                  <StudyRow 
+                    key={study.id} 
+                    study={study} 
+                    onDownload={handleDownloadReport}
+                    onNavigate={handleNavigate}
+                  />
+                ))}
               </TableBody>
             </Table>
             {filteredStudies.length === 0 && (
