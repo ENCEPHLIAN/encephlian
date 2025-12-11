@@ -9,6 +9,7 @@ import { Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { z } from "zod";
 import logo from "@/assets/logo.png";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 const emailSchema = z.string().email("Invalid email address");
 
@@ -17,6 +18,8 @@ type Mode = "signin" | "forgot";
 export default function Login() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isLoading: sessionLoading, isAuthenticated, isAdmin } = useUserSession();
+  
   const [showForm, setShowForm] = useState(false);
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -26,55 +29,18 @@ export default function Login() {
   const [emailError, setEmailError] = useState("");
   const [resetSent, setResetSent] = useState(false);
 
+  // Redirect authenticated users
   useEffect(() => {
-    let mounted = true;
-    let checkingSession = false;
-
-    const checkSessionAndRedirect = async (session: any) => {
-      if (!session || checkingSession) return;
-      checkingSession = true;
-      
-      try {
-        // Check if user is super_admin or management - redirect to admin
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id);
-        
-        if (!mounted) return;
-        
-        const isAdmin = roles?.some(r => 
-          r.role === "super_admin" || r.role === "management"
-        );
-        
-        if (isAdmin) {
-          navigate("/admin", { replace: true });
-        } else {
-          navigate("/app/dashboard", { replace: true });
-        }
-      } catch (error) {
-        console.error("Session check error:", error);
-      } finally {
-        checkingSession = false;
+    if (sessionLoading) return;
+    
+    if (isAuthenticated) {
+      if (isAdmin) {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/app/dashboard", { replace: true });
       }
-    };
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) checkSessionAndRedirect(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
-      if (event === "SIGNED_IN" && session) {
-        checkSessionAndRedirect(session);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [navigate]);
+    }
+  }, [sessionLoading, isAuthenticated, isAdmin, navigate]);
 
   const validateEmail = (value: string) => {
     try {
@@ -108,13 +74,13 @@ export default function Login() {
         title: "Welcome back!",
         description: "You have successfully signed in.",
       });
+      // Redirect will happen via useEffect when session updates
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "An error occurred. Please try again.",
         variant: "destructive",
       });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -149,6 +115,15 @@ export default function Login() {
       setIsLoading(false);
     }
   };
+
+  // Show loading while checking session
+  if (sessionLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
