@@ -9,42 +9,27 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Building2, Stethoscope, Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useProfile } from "@/contexts/ProfileContext";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 export default function Profile() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
-  const { refreshProfile } = useProfile();
+  const { userId, profile: sessionProfile, refreshSession } = useUserSession();
   
   useEffect(() => {
-    loadProfile();
-  }, []);
-  
-  const loadProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    setUser(user);
-    
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    
-    setFormData(data || {});
-  };
+    if (sessionProfile) {
+      setFormData(sessionProfile);
+    }
+  }, [sessionProfile]);
   
   const handleSave = async () => {
+    if (!userId) {
+      toast.error("Not authenticated");
+      return;
+    }
+    
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Not authenticated");
-        return;
-      }
-      
       const { error } = await supabase
         .from('profiles')
         .update({
@@ -56,12 +41,12 @@ export default function Profile() {
           hospital_affiliation: formData.hospital_affiliation,
           phone_number: formData.phone_number,
         })
-        .eq('id', user.id);
+        .eq('id', userId);
       
       if (error) throw error;
       
-      // Refresh global profile context
-      await refreshProfile();
+      // Refresh global session
+      await refreshSession();
       
       toast.success("Profile updated successfully");
     } catch (error: any) {
@@ -75,7 +60,7 @@ export default function Profile() {
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
-    .toUpperCase() || user?.email?.substring(0, 2).toUpperCase() || '??';
+    .toUpperCase() || formData?.email?.substring(0, 2).toUpperCase() || '??';
   
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
@@ -96,7 +81,7 @@ export default function Profile() {
                 <h2 className="text-lg sm:text-xl font-semibold">{formData?.full_name || "Clinician"}</h2>
                 <p className="text-xs sm:text-sm text-muted-foreground flex items-center justify-center sm:justify-start gap-1 mt-1">
                   <Mail className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  {user?.email}
+                  {formData?.email}
                 </p>
                 {formData?.role && (
                   <Badge variant="secondary" className="mt-2 text-xs">

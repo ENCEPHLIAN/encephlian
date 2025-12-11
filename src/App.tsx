@@ -16,7 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
-import { ProfileProvider } from "@/contexts/ProfileContext";
+import { UserSessionProvider } from "@/contexts/UserSessionContext";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
@@ -46,13 +46,23 @@ import ComingSoon from "./pages/app/ComingSoon";
 import NotFound from "./pages/NotFound";
 import "./App.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30000,
+      gcTime: 120000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+    },
+  },
+});
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-        <ProfileProvider>
+        <UserSessionProvider>
           <TooltipProvider>
             <Toaster />
             <Sonner />
@@ -115,7 +125,7 @@ function App() {
               </Routes>
             </BrowserRouter>
           </TooltipProvider>
-        </ProfileProvider>
+        </UserSessionProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

@@ -9,16 +9,15 @@ import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2, Eye, EyeOff, Shield, ShieldCheck, ShieldOff, Palette, Lock } from "lucide-react";
-import { useProfile } from "@/contexts/ProfileContext";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 
 export default function Settings() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
-  const { profile: contextProfile, refreshProfile } = useProfile();
+  const { userId, profile: contextProfile, refreshSession } = useUserSession();
   const [profile, setProfile] = useState<any>(null);
-  const [user, setUser] = useState<any>(null);
   
   // Password change state
   const [showPasswordSection, setShowPasswordSection] = useState(false);
@@ -37,24 +36,11 @@ export default function Settings() {
   const [tfaLoading, setTfaLoading] = useState(false);
   
   useEffect(() => {
-    loadProfile();
+    if (contextProfile) {
+      setProfile(contextProfile);
+    }
     loadTFAStatus();
   }, [contextProfile]);
-  
-  const loadProfile = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    
-    setUser(user);
-    
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-    
-    setProfile(data || {});
-  };
 
   const loadTFAStatus = async () => {
     try {
@@ -104,7 +90,7 @@ export default function Settings() {
       const { error } = await supabase
         .from("tfa_secrets")
         .delete()
-        .eq("user_id", user?.id);
+        .eq("user_id", userId);
 
       if (error) throw error;
 

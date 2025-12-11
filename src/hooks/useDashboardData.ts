@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect, useRef, useCallback, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import dayjs from "dayjs";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 export interface Study {
   id: string;
@@ -20,14 +21,14 @@ export interface Study {
 }
 
 export function useDashboardData() {
+  const { userId, isAuthenticated } = useUserSession();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const previousBalanceRef = useRef<number | undefined>(undefined);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Simple studies query - no deduplication wrapper
+  // Studies query - RLS handles user filtering
   const { data: studies, isLoading: studiesLoading, refetch: refetchStudies } = useQuery({
-    queryKey: ["dashboard-studies"],
+    queryKey: ["dashboard-studies", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
@@ -41,15 +42,14 @@ export function useDashboardData() {
       }
       return (data || []) as Study[];
     },
+    enabled: isAuthenticated && !!userId,
     staleTime: 30000,
     gcTime: 120000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 
-  // Simple wallet query
+  // Wallet query - RLS handles user filtering
   const { data: wallet, refetch: refetchWallet } = useQuery({
-    queryKey: ["wallet-balance"],
+    queryKey: ["wallet-balance", userId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("wallets")
@@ -62,10 +62,9 @@ export function useDashboardData() {
       }
       return data || { tokens: 0 };
     },
+    enabled: isAuthenticated && !!userId,
     staleTime: 30000,
     gcTime: 120000,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 
   // Track previous balance for animation
@@ -75,17 +74,17 @@ export function useDashboardData() {
     }
   }, [wallet?.tokens]);
 
-  // Simple realtime subscription
+  // Single realtime subscription
   useEffect(() => {
-    if (realtimeChannelRef.current) return;
+    if (realtimeChannelRef.current || !isAuthenticated) return;
 
     const channel = supabase
-      .channel("dashboard-realtime-simple")
+      .channel("dashboard-realtime-unified")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "studies" },
         (payload) => {
-          // Simple debounced refetch
+          // Debounced refetch
           setTimeout(() => refetchStudies(), 1000);
 
           // Toast for completed triage
@@ -126,7 +125,7 @@ export function useDashboardData() {
         realtimeChannelRef.current = null;
       }
     };
-  }, [navigate, refetchStudies, refetchWallet]);
+  }, [isAuthenticated, navigate, refetchStudies, refetchWallet]);
 
   // Memoized metrics
   const metrics = useMemo(() => {

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo, useRef, useEffect } from "react";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 export interface StudyListItem {
   id: string;
@@ -14,11 +15,13 @@ export interface StudyListItem {
 }
 
 export function useStudiesData(stateFilter: string) {
+  const { userId, isAuthenticated } = useUserSession();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const { data: studies, isLoading, refetch } = useQuery({
-    queryKey: ["studies-list", stateFilter],
+    queryKey: ["studies-list", stateFilter, userId],
     queryFn: async () => {
+      // RLS handles user filtering automatically
       let query = supabase
         .from("studies")
         .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
@@ -33,21 +36,22 @@ export function useStudiesData(stateFilter: string) {
       if (error) throw error;
       return data as StudyListItem[];
     },
+    enabled: isAuthenticated && !!userId,
     staleTime: 15000,
     gcTime: 120000,
-    refetchOnWindowFocus: false,
   });
 
-  // Single realtime subscription
+  // Single realtime subscription - only set up once
   useEffect(() => {
-    if (channelRef.current) return;
+    if (channelRef.current || !isAuthenticated) return;
 
     channelRef.current = supabase
-      .channel("studies-realtime-v3")
+      .channel("studies-realtime-unified")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "studies" },
         () => {
+          // Debounced refetch
           setTimeout(() => refetch(), 500);
         }
       )
@@ -59,7 +63,7 @@ export function useStudiesData(stateFilter: string) {
         channelRef.current = null;
       }
     };
-  }, [refetch]);
+  }, [isAuthenticated, refetch]);
 
   return { studies: studies || [], isLoading, refetch };
 }

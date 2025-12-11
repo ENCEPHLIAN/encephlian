@@ -1,8 +1,5 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
@@ -50,6 +47,7 @@ import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 import { MissionPanel } from "@/components/MissionPanel";
 import { FloatingCommandIsland } from "@/components/FloatingCommandIsland";
 import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 // --------------- NAV DATA ---------------
 
@@ -216,8 +214,10 @@ function AppLayoutContent() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  
+  // Use unified session context - no more individual queries
+  const { profile, clinicContext, signOut } = useUserSession();
 
-  const [userName, setUserName] = useState<string>("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [missionOpen, setMissionOpen] = useState(false);
 
@@ -236,47 +236,13 @@ function AppLayoutContent() {
                        deviceStatus.eegMachine.connected && 
                        deviceStatus.bleBridge.connected;
 
-  // profile - only fetch full_name, no company_name
-  const { data: profile } = useQuery({
-    queryKey: ["user-profile"],
-    queryFn: async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data } = await supabase.from("profiles").select("full_name").eq("id", user.id).single();
-      return data;
-    },
-  });
-
-  // Also fetch clinic context for clinic name as fallback
-  useEffect(() => {
-    const fetchUserName = async () => {
-      // Always prioritize full_name
-      if (profile?.full_name && profile.full_name.trim()) {
-        setUserName(profile.full_name);
-        return;
-      }
-      // Fallback to "Account" - don't use email
-      setUserName("Account");
-    };
-    fetchUserName();
-  }, [profile]);
-
-  // clinic / logo
-  const { data: clinicContext } = useQuery({
-    queryKey: ["clinic-context"],
-    queryFn: async () => {
-      const { data } = await supabase.from("user_clinic_context").select("*").single();
-      return data;
-    },
-  });
-
+  // Use cached profile from context
+  const userName = profile?.full_name?.trim() || "Account";
   const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await signOut();
     toast({
       title: "Signed out",
       description: "You have been successfully signed out.",
