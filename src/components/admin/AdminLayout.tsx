@@ -23,6 +23,7 @@ import {
   Plug,
   UserCog,
   RotateCcw,
+  Gauge,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -53,6 +54,7 @@ export default function AdminLayout() {
     ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
     { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
     { name: "Health", href: "/admin/health", icon: Activity },
+    { name: "Performance", href: "/admin/performance", icon: Gauge },
     { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
     { name: "Restore", href: "/admin/restore", icon: RotateCcw },
     { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },

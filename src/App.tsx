@@ -10,6 +10,7 @@ import AdminScheduler from "@/pages/admin/AdminScheduler";
 import AdminIntegrations from "@/pages/admin/AdminIntegrations";
 import AdminTeam from "@/pages/admin/AdminTeam";
 import AdminRestore from "@/pages/admin/AdminRestore";
+import AdminPerformance from "@/pages/admin/AdminPerformance";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -80,6 +81,7 @@ function App() {
                     <Route path="team" element={<AdminTeam />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="eeg-push" element={<AdminEegPush />} />
+                    <Route path="performance" element={<AdminPerformance />} />
                     <Route path="account" element={<AdminAccount />} />
                   </Route>
                 </Route>
