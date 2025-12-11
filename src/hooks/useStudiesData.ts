@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useMemo, useRef, useEffect, useCallback } from "react";
-import { recordApiCall } from "./usePerformanceMonitor";
+import { useMemo, useRef, useEffect } from "react";
 
 export interface StudyListItem {
   id: string;
@@ -14,67 +13,12 @@ export interface StudyListItem {
   clinics: { name: string } | null;
 }
 
-// Request deduplication cache
-const requestCache = new Map<string, { promise: Promise<any>; timestamp: number }>();
-const CACHE_TTL = 10000; // 10 second deduplication window
-
-function deduplicatedFetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const cached = requestCache.get(key);
-  
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    // Record cached hit
-    recordApiCall({
-      endpoint: key,
-      duration: 0,
-      timestamp: now,
-      success: true,
-      cached: true,
-    });
-    return cached.promise as Promise<T>;
-  }
-  
-  const startTime = Date.now();
-  const promise = fetcher().then(result => {
-    recordApiCall({
-      endpoint: key,
-      duration: Date.now() - startTime,
-      timestamp: Date.now(),
-      success: true,
-      cached: false,
-    });
-    return result;
-  }).catch(error => {
-    recordApiCall({
-      endpoint: key,
-      duration: Date.now() - startTime,
-      timestamp: Date.now(),
-      success: false,
-      cached: false,
-    });
-    throw error;
-  });
-  
-  requestCache.set(key, { promise, timestamp: now });
-  
-  promise.finally(() => {
-    setTimeout(() => {
-      const current = requestCache.get(key);
-      if (current?.promise === promise) {
-        requestCache.delete(key);
-      }
-    }, CACHE_TTL);
-  });
-  
-  return promise;
-}
-
 export function useStudiesData(stateFilter: string) {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const { data: studies, isLoading, refetch } = useQuery({
     queryKey: ["studies-list", stateFilter],
-    queryFn: () => deduplicatedFetch(`studies-${stateFilter}`, async () => {
+    queryFn: async () => {
       let query = supabase
         .from("studies")
         .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
@@ -88,17 +32,15 @@ export function useStudiesData(stateFilter: string) {
       const { data, error } = await query;
       if (error) throw error;
       return data as StudyListItem[];
-    }),
+    },
     staleTime: 15000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
   });
 
   // Single realtime subscription
   useEffect(() => {
-    if (channelRef.current) return; // Already subscribed
+    if (channelRef.current) return;
 
     channelRef.current = supabase
       .channel("studies-realtime-v3")
@@ -106,7 +48,6 @@ export function useStudiesData(stateFilter: string) {
         "postgres_changes",
         { event: "*", schema: "public", table: "studies" },
         () => {
-          // Debounced refetch via setTimeout
           setTimeout(() => refetch(), 500);
         }
       )

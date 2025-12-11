@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo, useCallback } from "react";
 import { toast } from "sonner";
-import { recordApiCall } from "./usePerformanceMonitor";
 
 export interface StudyFile {
   id: string;
@@ -13,66 +12,10 @@ export interface StudyFile {
   created_at: string;
 }
 
-// Deduplication cache
-const requestCache = new Map<string, { promise: Promise<any>; timestamp: number }>();
-const CACHE_TTL = 10000; // 10 seconds
-
-function deduplicatedFetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const cached = requestCache.get(key);
-  
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    // Record cache hit
-    recordApiCall({
-      endpoint: key,
-      duration: 0,
-      timestamp: now,
-      success: true,
-      cached: true,
-    });
-    return cached.promise as Promise<T>;
-  }
-  
-  const startTime = now;
-  const promise = fetcher().then((result) => {
-    recordApiCall({
-      endpoint: key,
-      duration: Date.now() - startTime,
-      timestamp: startTime,
-      success: true,
-      cached: false,
-    });
-    return result;
-  }).catch((error) => {
-    recordApiCall({
-      endpoint: key,
-      duration: Date.now() - startTime,
-      timestamp: startTime,
-      success: false,
-      cached: false,
-    });
-    throw error;
-  });
-  
-  requestCache.set(key, { promise, timestamp: now });
-  
-  promise.finally(() => {
-    setTimeout(() => {
-      const current = requestCache.get(key);
-      if (current?.promise === promise) {
-        requestCache.delete(key);
-      }
-    }, CACHE_TTL);
-  });
-  
-  return promise;
-}
-
 export function useStudyFiles(enabled: boolean = true) {
   return useQuery({
     queryKey: ["user-study-files"],
-    queryFn: () => deduplicatedFetch("files-study-files", async () => {
-      // RLS handles user filtering automatically
+    queryFn: async () => {
       const { data: studies, error } = await supabase
         .from('studies')
         .select('id, state, study_files(*)')
@@ -93,19 +36,18 @@ export function useStudyFiles(enabled: boolean = true) {
       return allFiles.sort((a, b) => 
         new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       );
-    }),
+    },
     enabled,
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 }
 
 export function useStorageFiles(bucket: string, path: string, enabled: boolean = true) {
   return useQuery({
     queryKey: ["storage-files", bucket, path],
-    queryFn: () => deduplicatedFetch(`files-storage-${bucket}-${path}`, async () => {
+    queryFn: async () => {
       if (bucket === 'study-files') return null;
 
       if (bucket === 'notes') {
@@ -130,23 +72,23 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         }));
       }
 
-      // Storage bucket - RLS handles user isolation
+      // Storage bucket
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) return [];
       
       const userPath = path ? `${user.id}/${path}` : user.id;
       
       const { data, error } = await supabase.storage
         .from(bucket)
-        .list(userPath, { limit: 100, offset: 0, sortBy: { column: "name", order: "asc" } });
-      if (error) throw error;
-      return data;
-    }),
+        .list(userPath, { limit: 100, sortBy: { column: "name", order: "asc" } });
+      
+      if (error) return [];
+      return data || [];
+    },
     enabled: enabled && bucket !== 'study-files',
     staleTime: 30000,
     gcTime: 120000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 }
 
@@ -155,21 +97,11 @@ export function useFileUpload(bucket: string, path: string) {
   
   return useMutation({
     mutationFn: async (file: File) => {
-      const startTime = Date.now();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       
       const userFilePath = `${user.id}/${path ? `${path}/` : ''}${file.name}`;
       const { error } = await supabase.storage.from(bucket).upload(userFilePath, file);
-      
-      recordApiCall({
-        endpoint: `files-upload-${bucket}`,
-        duration: Date.now() - startTime,
-        timestamp: startTime,
-        success: !error,
-        cached: false,
-      });
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -185,21 +117,11 @@ export function useFileDelete(bucket: string, path: string) {
   
   return useMutation({
     mutationFn: async (fileName: string) => {
-      const startTime = Date.now();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       
       const filePath = path ? `${user.id}/${path}/${fileName}` : `${user.id}/${fileName}`;
       const { error } = await supabase.storage.from(bucket).remove([filePath]);
-      
-      recordApiCall({
-        endpoint: `files-delete-${bucket}`,
-        duration: Date.now() - startTime,
-        timestamp: startTime,
-        success: !error,
-        cached: false,
-      });
-      
       if (error) throw error;
     },
     onSuccess: () => {
@@ -229,12 +151,12 @@ export function useFilteredFiles(
     }
 
     const filtered = displayFiles.filter(file => 
-      file.name.toLowerCase().includes(searchQuery.toLowerCase())
+      file.name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return {
-      folders: filtered.filter(f => !f.name.includes('.')),
-      files: filtered.filter(f => f.name.includes('.')),
+      folders: filtered.filter(f => !f.name?.includes('.')),
+      files: filtered.filter(f => f.name?.includes('.')),
       total: filtered.length,
     };
   }, [studyFiles, storageFiles, bucket, searchQuery]);
