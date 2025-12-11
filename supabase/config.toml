@@ -3,7 +3,6 @@ project_id = "vxlrqfrisowqfuscodzt"
 # ============================================
 # ENCEPHLIAN Edge Functions Configuration
 # ============================================
-# Organized by domain for clarity
 
 # --- Payment Processing (Razorpay) ---
 [functions.create_order]
@@ -13,12 +12,6 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.razorpay_webhook]
-verify_jwt = false
-
-[functions.initiate_withdrawal]
-verify_jwt = true
-
-[functions.razorpay_payout_webhook]
 verify_jwt = false
 
 [functions.send_payment_receipt]
@@ -60,7 +53,3 @@ verify_jwt = true
 
 [functions.delete_account]
 verify_jwt = true
-
-# --- Development & Testing ---
-[functions.setup_demo_account]
-verify_jwt = false
