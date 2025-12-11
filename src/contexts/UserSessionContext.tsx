@@ -138,20 +138,31 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+
+    // Prevent double initialization in strict mode
     if (initRef.current) return;
     initRef.current = true;
-    mountedRef.current = true;
 
     const initSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
+        if (error) {
+          console.error('Session error:', error);
+          if (mountedRef.current) {
+            setState(prev => ({ ...prev, isLoading: false }));
+          }
+          return;
+        }
+
         if (!mountedRef.current) return;
 
         if (session?.user) {
           setState(prev => ({ ...prev, session }));
           await loadUserData(session.user);
         } else {
+          // No session - done loading
           setState(prev => ({ ...prev, isLoading: false }));
         }
       } catch (error) {
@@ -162,23 +173,38 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    initSession();
-
-    // Listen ONLY for sign in/out - ignore token refresh
+    // Set up auth listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mountedRef.current) return;
 
       if (event === 'SIGNED_OUT') {
         clearSession();
       } else if (event === 'SIGNED_IN' && session?.user) {
-        setState(prev => ({ ...prev, session }));
-        // Only reload if different user
+        setState(prev => ({ ...prev, session, isLoading: true }));
+        // Only reload if different user or no cache
         if (!sessionCache || sessionCache.userId !== session.user.id) {
           loadUserData(session.user);
+        } else {
+          // Use cached data
+          setState(prev => ({
+            ...prev,
+            ...sessionCache!.data,
+            user: session.user,
+            userId: session.user.id,
+            isLoading: false,
+            isAuthenticated: true,
+          }));
         }
+      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+        // Just update the session, don't reload data
+        setState(prev => ({ ...prev, session }));
+      } else if (event === 'INITIAL_SESSION') {
+        // Handled by initSession
       }
-      // Explicitly ignore TOKEN_REFRESHED to prevent loops
     });
+
+    // THEN check for existing session
+    initSession();
 
     return () => {
       mountedRef.current = false;
