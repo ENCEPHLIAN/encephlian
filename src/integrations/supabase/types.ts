@@ -79,51 +79,6 @@ export type Database = {
         }
         Relationships: []
       }
-      bank_accounts: {
-        Row: {
-          account_holder_name: string
-          account_number_encrypted: string
-          bank_name: string | null
-          created_at: string | null
-          id: string
-          ifsc: string
-          is_primary: boolean | null
-          is_verified: boolean | null
-          last_used_at: string | null
-          penny_drop_reference: string | null
-          user_id: string
-          verified_at: string | null
-        }
-        Insert: {
-          account_holder_name: string
-          account_number_encrypted: string
-          bank_name?: string | null
-          created_at?: string | null
-          id?: string
-          ifsc: string
-          is_primary?: boolean | null
-          is_verified?: boolean | null
-          last_used_at?: string | null
-          penny_drop_reference?: string | null
-          user_id: string
-          verified_at?: string | null
-        }
-        Update: {
-          account_holder_name?: string
-          account_number_encrypted?: string
-          bank_name?: string | null
-          created_at?: string | null
-          id?: string
-          ifsc?: string
-          is_primary?: boolean | null
-          is_verified?: boolean | null
-          last_used_at?: string | null
-          penny_drop_reference?: string | null
-          user_id?: string
-          verified_at?: string | null
-        }
-        Relationships: []
-      }
       canonical_eeg_records: {
         Row: {
           canonical_json: Json
@@ -243,68 +198,6 @@ export type Database = {
           secondary_color?: string | null
           state?: string | null
           tz?: string | null
-        }
-        Relationships: []
-      }
-      commissions: {
-        Row: {
-          amount_inr: number
-          commission_rate: number
-          created_at: string | null
-          id: string
-          neurologist_id: string
-          report_id: string
-          sla: string
-        }
-        Insert: {
-          amount_inr: number
-          commission_rate: number
-          created_at?: string | null
-          id?: string
-          neurologist_id: string
-          report_id: string
-          sla: string
-        }
-        Update: {
-          amount_inr?: number
-          commission_rate?: number
-          created_at?: string | null
-          id?: string
-          neurologist_id?: string
-          report_id?: string
-          sla?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "commissions_report_id_fkey"
-            columns: ["report_id"]
-            isOneToOne: false
-            referencedRelation: "reports"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      earnings_wallets: {
-        Row: {
-          balance_inr: number
-          locked_amount_inr: number
-          total_earned_inr: number
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          balance_inr?: number
-          locked_amount_inr?: number
-          total_earned_inr?: number
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          balance_inr?: number
-          locked_amount_inr?: number
-          total_earned_inr?: number
-          updated_at?: string | null
-          user_id?: string
         }
         Relationships: []
       }
@@ -850,45 +743,6 @@ export type Database = {
         }
         Relationships: []
       }
-      tds_records: {
-        Row: {
-          created_at: string | null
-          financial_year: string
-          form_16a_url: string | null
-          form_26q_filed: boolean | null
-          id: string
-          quarter: string
-          total_earnings_inr: number
-          total_tds_deducted_inr: number
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          financial_year: string
-          form_16a_url?: string | null
-          form_26q_filed?: boolean | null
-          id?: string
-          quarter: string
-          total_earnings_inr?: number
-          total_tds_deducted_inr?: number
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          financial_year?: string
-          form_16a_url?: string | null
-          form_26q_filed?: boolean | null
-          id?: string
-          quarter?: string
-          total_earnings_inr?: number
-          total_tds_deducted_inr?: number
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       tfa_secrets: {
         Row: {
           backup_codes: string[] | null
@@ -1009,78 +863,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      withdrawal_requests: {
-        Row: {
-          admin_notes: string | null
-          amount_inr: number
-          bank_account_holder: string
-          bank_account_number: string
-          bank_ifsc: string
-          bank_name: string | null
-          created_at: string | null
-          failed_reason: string | null
-          form_16a_issued: boolean | null
-          gross_amount_inr: number
-          id: string
-          net_amount_inr: number
-          platform_fee_inr: number
-          processed_at: string | null
-          razorpay_payout_id: string | null
-          status: string
-          tds_amount_inr: number
-          tds_deducted: boolean | null
-          tds_quarter: string | null
-          tier: string
-          user_id: string
-        }
-        Insert: {
-          admin_notes?: string | null
-          amount_inr: number
-          bank_account_holder: string
-          bank_account_number: string
-          bank_ifsc: string
-          bank_name?: string | null
-          created_at?: string | null
-          failed_reason?: string | null
-          form_16a_issued?: boolean | null
-          gross_amount_inr: number
-          id?: string
-          net_amount_inr: number
-          platform_fee_inr?: number
-          processed_at?: string | null
-          razorpay_payout_id?: string | null
-          status?: string
-          tds_amount_inr?: number
-          tds_deducted?: boolean | null
-          tds_quarter?: string | null
-          tier: string
-          user_id: string
-        }
-        Update: {
-          admin_notes?: string | null
-          amount_inr?: number
-          bank_account_holder?: string
-          bank_account_number?: string
-          bank_ifsc?: string
-          bank_name?: string | null
-          created_at?: string | null
-          failed_reason?: string | null
-          form_16a_issued?: boolean | null
-          gross_amount_inr?: number
-          id?: string
-          net_amount_inr?: number
-          platform_fee_inr?: number
-          processed_at?: string | null
-          razorpay_payout_id?: string | null
-          status?: string
-          tds_amount_inr?: number
-          tds_deducted?: boolean | null
-          tds_quarter?: string | null
-          tier?: string
-          user_id?: string
-        }
-        Relationships: []
       }
     }
     Views: {
