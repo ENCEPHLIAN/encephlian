@@ -19,101 +19,54 @@ export interface Study {
   duration_min?: number;
 }
 
-// Deduplication cache to prevent duplicate requests
-const requestCache = new Map<string, { promise: Promise<any>; timestamp: number }>();
-const CACHE_TTL = 5000; // 5 seconds deduplication window
-
-function deduplicatedFetch<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-  const now = Date.now();
-  const cached = requestCache.get(key);
-  
-  // Return cached promise if within TTL
-  if (cached && now - cached.timestamp < CACHE_TTL) {
-    return cached.promise as Promise<T>;
-  }
-  
-  // Create new request and cache it
-  const promise = fetcher();
-  requestCache.set(key, { promise, timestamp: now });
-  
-  // Clean up after TTL
-  promise.finally(() => {
-    setTimeout(() => {
-      const current = requestCache.get(key);
-      if (current?.promise === promise) {
-        requestCache.delete(key);
-      }
-    }, CACHE_TTL);
-  });
-  
-  return promise;
-}
-
 export function useDashboardData() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const previousBalanceRef = useRef<number | undefined>(undefined);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const lastRefetchRef = useRef<number>(0);
-  const refetchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Combined data fetch - single query for studies with deduplication
+  // Simple studies query - no deduplication wrapper
   const { data: studies, isLoading: studiesLoading, refetch: refetchStudies } = useQuery({
     queryKey: ["dashboard-studies"],
-    queryFn: () => deduplicatedFetch("dashboard-studies", async () => {
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
         .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min")
         .order("created_at", { ascending: false })
         .limit(100);
-      if (error || !data) return [] as Study[];
-      return data as Study[];
-    }),
-    staleTime: 10000, // 10 seconds - increased from 3s
-    gcTime: 60000, // 1 minute garbage collection
-    refetchInterval: 15000, // 15 seconds - reduced frequency from 5s
-    refetchOnWindowFocus: false, // Disable refetch on window focus
-    refetchOnReconnect: false, // Disable refetch on reconnect
-  });
-
-  // Wallet fetch with deduplication
-  const { data: wallet, refetch: refetchWallet } = useQuery({
-    queryKey: ["wallet-balance"],
-    queryFn: () => deduplicatedFetch("wallet-balance", async () => {
-      const { data, error } = await supabase
-        .from("wallets")
-        .select("tokens")
-        .single();
-      if (error || !data) return { tokens: 0 };
-      return data;
-    }),
-    staleTime: 10000, // 10 seconds
-    gcTime: 60000, // 1 minute
-    refetchInterval: 30000, // 30 seconds - wallet doesn't change often
+      
+      if (error) {
+        console.error("Studies fetch error:", error);
+        return [] as Study[];
+      }
+      return (data || []) as Study[];
+    },
+    staleTime: 30000,
+    gcTime: 120000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
 
-  // Debounced refetch function to prevent rapid successive calls
-  const debouncedRefetch = useCallback(() => {
-    const now = Date.now();
-    
-    // Skip if last refetch was within 2 seconds
-    if (now - lastRefetchRef.current < 2000) {
-      return;
-    }
-    
-    // Clear any pending debounce
-    if (refetchDebounceRef.current) {
-      clearTimeout(refetchDebounceRef.current);
-    }
-    
-    // Debounce refetch by 500ms
-    refetchDebounceRef.current = setTimeout(() => {
-      lastRefetchRef.current = Date.now();
-      refetchStudies();
-    }, 500);
-  }, [refetchStudies]);
+  // Simple wallet query
+  const { data: wallet, refetch: refetchWallet } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("tokens")
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Wallet fetch error:", error);
+        return { tokens: 0 };
+      }
+      return data || { tokens: 0 };
+    },
+    staleTime: 30000,
+    gcTime: 120000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
   // Track previous balance for animation
   useEffect(() => {
@@ -122,27 +75,20 @@ export function useDashboardData() {
     }
   }, [wallet?.tokens]);
 
-  // Optimized realtime subscription - single channel, batched updates
+  // Simple realtime subscription
   useEffect(() => {
-    // Clean up existing channel
-    if (realtimeChannelRef.current) {
-      supabase.removeChannel(realtimeChannelRef.current);
-    }
+    if (realtimeChannelRef.current) return;
 
     const channel = supabase
-      .channel("dashboard-realtime-v2")
+      .channel("dashboard-realtime-simple")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "studies",
-        },
+        { event: "*", schema: "public", table: "studies" },
         (payload) => {
-          // Use debounced refetch instead of immediate
-          debouncedRefetch();
+          // Simple debounced refetch
+          setTimeout(() => refetchStudies(), 1000);
 
-          // Show toast for completed triage only
+          // Toast for completed triage
           if (payload.eventType === "UPDATE") {
             const newData = payload.new as Study;
             const oldData = payload.old as Partial<Study>;
@@ -160,7 +106,6 @@ export function useDashboardData() {
                   onClick: () => navigate(`/app/studies/${newData.id}`),
                 },
               });
-              // Refetch wallet immediately after completion (token change likely)
               refetchWallet();
             }
           }
@@ -168,34 +113,37 @@ export function useDashboardData() {
       )
       .on(
         "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "wallets",
-        },
-        () => {
-          // Only refetch wallet on updates, not all events
-          refetchWallet();
-        }
+        { event: "UPDATE", schema: "public", table: "wallets" },
+        () => refetchWallet()
       )
       .subscribe();
 
     realtimeChannelRef.current = channel;
 
     return () => {
-      if (refetchDebounceRef.current) {
-        clearTimeout(refetchDebounceRef.current);
-      }
       if (realtimeChannelRef.current) {
         supabase.removeChannel(realtimeChannelRef.current);
         realtimeChannelRef.current = null;
       }
     };
-  }, [navigate, debouncedRefetch, refetchWallet]);
+  }, [navigate, refetchStudies, refetchWallet]);
 
-  // Memoized metrics computation
+  // Memoized metrics
   const metrics = useMemo(() => {
-    if (!studies) return null;
+    if (!studies || studies.length === 0) {
+      return {
+        completedToday: 0,
+        completedWeek: 0,
+        completedMonth: 0,
+        pendingCount: 0,
+        processingCount: 0,
+        statCases: 0,
+        avgTurnaround: "--",
+        tokensUsedMonth: 0,
+        totalStudies: 0,
+        completedTotal: 0,
+      };
+    }
     
     const now = dayjs();
     const todayStart = now.startOf("day");
@@ -226,7 +174,6 @@ export function useDashboardData() {
     
     const processingStudies = studies.filter(s => s.triage_status === "processing");
     const statCases = pendingStudies.filter(s => s.sla === "STAT").length;
-    const avgTurnaround = completedStudies.length > 0 ? "4.2h" : "--";
     
     const tokensUsedMonth = studies
       .filter(s => dayjs(s.created_at).isAfter(monthStart))
@@ -239,7 +186,7 @@ export function useDashboardData() {
       pendingCount: pendingStudies.length,
       processingCount: processingStudies.length,
       statCases,
-      avgTurnaround,
+      avgTurnaround: completedStudies.length > 0 ? "4.2h" : "--",
       tokensUsedMonth,
       totalStudies: studies.length,
       completedTotal: completedStudies.length,
@@ -248,7 +195,7 @@ export function useDashboardData() {
 
   // Memoized filtered study lists
   const filteredStudies = useMemo(() => {
-    if (!studies) {
+    if (!studies || studies.length === 0) {
       return {
         pendingTriageStudies: [],
         processingStudies: [],
@@ -273,7 +220,7 @@ export function useDashboardData() {
   }, [studies]);
 
   return {
-    studies,
+    studies: studies || [],
     wallet,
     metrics,
     filteredStudies,
