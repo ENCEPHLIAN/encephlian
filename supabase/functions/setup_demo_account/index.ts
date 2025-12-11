@@ -53,10 +53,10 @@ Deno.serve(async (req) => {
 
     const userId = newUser.user.id;
 
-    // Create user role
+    // Create user role - use clinician (not neurologist)
     await supabaseAdmin.from('user_roles').insert({
       user_id: userId,
-      role: 'neurologist',
+      role: 'clinician',
       clinic_id: CLINIC_ID
     });
 
@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     await supabaseAdmin.from('clinic_memberships').insert({
       user_id: userId,
       clinic_id: CLINIC_ID,
-      role: 'neurologist'
+      role: 'clinician'
     });
 
     // Create wallets

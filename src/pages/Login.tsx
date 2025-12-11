@@ -27,39 +27,53 @@ export default function Login() {
   const [resetSent, setResetSent] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
+    let checkingSession = false;
+
     const checkSessionAndRedirect = async (session: any) => {
-      if (!session) return;
+      if (!session || checkingSession) return;
+      checkingSession = true;
       
-      // Check if user is super_admin, management, or ops - redirect to admin
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", session.user.id);
-      
-      const isAdmin = roles?.some(r => 
-        r.role === "super_admin" || r.role === "management" || r.role === "ops"
-      );
-      
-      if (isAdmin) {
-        navigate("/admin");
-      } else {
-        navigate("/app/dashboard");
+      try {
+        // Check if user is super_admin or management - redirect to admin
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id);
+        
+        if (!mounted) return;
+        
+        const isAdmin = roles?.some(r => 
+          r.role === "super_admin" || r.role === "management"
+        );
+        
+        if (isAdmin) {
+          navigate("/admin", { replace: true });
+        } else {
+          navigate("/app/dashboard", { replace: true });
+        }
+      } catch (error) {
+        console.error("Session check error:", error);
+      } finally {
+        checkingSession = false;
       }
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      checkSessionAndRedirect(session);
+      if (mounted) checkSessionAndRedirect(session);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
       if (event === "SIGNED_IN" && session) {
         checkSessionAndRedirect(session);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [navigate]);
 
   const validateEmail = (value: string) => {

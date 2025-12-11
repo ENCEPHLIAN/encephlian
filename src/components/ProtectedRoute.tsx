@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -14,14 +14,27 @@ export default function ProtectedRoute() {
   const [loading, setLoading] = useState(true);
   const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null);
   const location = useLocation();
+  const initializedRef = useRef(false);
+  const checkingRoleRef = useRef(false);
 
   const checkUserRole = useCallback(async (userId: string): Promise<boolean> => {
+    // Prevent concurrent role checks
+    if (checkingRoleRef.current) {
+      // If already checking, wait for cache to be populated
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (cachedRoleCheck?.userId === userId) {
+        return cachedRoleCheck.isAdmin;
+      }
+    }
+
     // Check cache first
     if (cachedRoleCheck && 
         cachedRoleCheck.userId === userId && 
         Date.now() - cachedRoleCheck.timestamp < CACHE_DURATION) {
       return cachedRoleCheck.isAdmin;
     }
+
+    checkingRoleRef.current = true;
 
     try {
       const { data: roles, error } = await supabase
@@ -44,10 +57,16 @@ export default function ProtectedRoute() {
     } catch (err) {
       console.error("Role check failed:", err);
       return false;
+    } finally {
+      checkingRoleRef.current = false;
     }
   }, []);
 
   useEffect(() => {
+    // Prevent multiple initializations
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
     let mounted = true;
 
     const initializeAuth = async () => {
@@ -78,21 +97,23 @@ export default function ProtectedRoute() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
-      setSession(session);
-      setUser(session?.user ?? null);
-      
+      // Only respond to actual sign out events
       if (event === "SIGNED_OUT") {
-        cachedRoleCheck = null; // Clear cache on sign out
+        cachedRoleCheck = null;
+        setSession(null);
+        setUser(null);
         setIsAdminUser(false);
         return;
       }
       
-      if (session?.user) {
+      // For SIGNED_IN, update state but use cache for role
+      if (event === "SIGNED_IN" && session?.user) {
+        setSession(session);
+        setUser(session.user);
         const isAdmin = await checkUserRole(session.user.id);
         if (mounted) setIsAdminUser(isAdmin);
-      } else {
-        if (mounted) setIsAdminUser(false);
       }
+      // Ignore TOKEN_REFRESHED and other events to prevent loops
     });
 
     return () => {
