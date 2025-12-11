@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { useUserSession } from "@/contexts/UserSessionContext";
 
 export interface StudyFile {
   id: string;
@@ -13,9 +14,12 @@ export interface StudyFile {
 }
 
 export function useStudyFiles(enabled: boolean = true) {
+  const { userId, isAuthenticated } = useUserSession();
+  
   return useQuery({
-    queryKey: ["user-study-files"],
+    queryKey: ["user-study-files", userId],
     queryFn: async () => {
+      // RLS handles user filtering automatically
       const { data: studies, error } = await supabase
         .from('studies')
         .select('id, state, study_files(*)')
@@ -37,20 +41,23 @@ export function useStudyFiles(enabled: boolean = true) {
         new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       );
     },
-    enabled,
+    enabled: enabled && isAuthenticated && !!userId,
     staleTime: 30000,
     gcTime: 120000,
-    refetchOnWindowFocus: false,
   });
 }
 
 export function useStorageFiles(bucket: string, path: string, enabled: boolean = true) {
+  const { userId, isAuthenticated } = useUserSession();
+  
   return useQuery({
-    queryKey: ["storage-files", bucket, path],
+    queryKey: ["storage-files", bucket, path, userId],
     queryFn: async () => {
+      if (!userId) return [];
       if (bucket === 'study-files') return null;
 
       if (bucket === 'notes') {
+        // Notes are filtered by RLS automatically
         const { data, error } = await supabase
           .from('notes')
           .select('*')
@@ -72,11 +79,8 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         }));
       }
 
-      // Storage bucket
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
-      
-      const userPath = path ? `${user.id}/${path}` : user.id;
+      // Storage bucket - use cached userId
+      const userPath = path ? `${userId}/${path}` : userId;
       
       const { data, error } = await supabase.storage
         .from(bucket)
@@ -85,22 +89,21 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
       if (error) return [];
       return data || [];
     },
-    enabled: enabled && bucket !== 'study-files',
+    enabled: enabled && isAuthenticated && !!userId && bucket !== 'study-files',
     staleTime: 30000,
     gcTime: 120000,
-    refetchOnWindowFocus: false,
   });
 }
 
 export function useFileUpload(bucket: string, path: string) {
+  const { userId } = useUserSession();
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (file: File) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!userId) throw new Error('Not authenticated');
       
-      const userFilePath = `${user.id}/${path ? `${path}/` : ''}${file.name}`;
+      const userFilePath = `${userId}/${path ? `${path}/` : ''}${file.name}`;
       const { error } = await supabase.storage.from(bucket).upload(userFilePath, file);
       if (error) throw error;
     },
@@ -113,14 +116,14 @@ export function useFileUpload(bucket: string, path: string) {
 }
 
 export function useFileDelete(bucket: string, path: string) {
+  const { userId } = useUserSession();
   const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (fileName: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!userId) throw new Error('Not authenticated');
       
-      const filePath = path ? `${user.id}/${path}/${fileName}` : `${user.id}/${fileName}`;
+      const filePath = path ? `${userId}/${path}/${fileName}` : `${userId}/${fileName}`;
       const { error } = await supabase.storage.from(bucket).remove([filePath]);
       if (error) throw error;
     },
