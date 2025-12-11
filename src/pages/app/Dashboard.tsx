@@ -1,12 +1,8 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useState, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Activity, Upload, StickyNote, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
-import PerformanceCharts from "@/components/dashboard/PerformanceCharts";
-import ActivityFeed from "@/components/dashboard/ActivityFeed";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import GlobalTriageProgressBar from "@/components/dashboard/GlobalTriageProgressBar";
@@ -21,190 +17,54 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDashboardData, Study } from "@/hooks/useDashboardData";
 
-interface Study {
-  id: string;
-  sla: string;
-  state: string;
-  created_at: string;
-  meta: any;
-  triage_status?: string;
-  triage_progress?: number;
-  triage_completed_at?: string;
-  refund_requested?: boolean;
-  tokens_deducted?: number;
-  duration_min?: number;
-}
+// Memoized components to prevent unnecessary re-renders
+const MemoizedKPICard = memo(KPICard);
+const MemoizedPendingTriageSection = memo(PendingTriageSection);
+const MemoizedRecentReportsSection = memo(RecentReportsSection);
+const MemoizedGlobalTriageProgressBar = memo(GlobalTriageProgressBar);
+const MemoizedUrgentQueue = memo(UrgentQueue);
+const MemoizedCalendarWidget = memo(CalendarWidget);
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [selectedStudy, setSelectedStudy] = useState<Study | null>(null);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [refundStudy, setRefundStudy] = useState<Study | null>(null);
-  const previousBalanceRef = useRef<number | undefined>(undefined);
 
-  const { data: user } = useQuery({
-    queryKey: ["current-user"],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getUser();
-      return data.user;
-    },
-  });
+  // Use optimized hook with request deduplication
+  const {
+    studies,
+    metrics,
+    filteredStudies,
+    isLoading,
+    tokenBalance,
+    previousBalance,
+  } = useDashboardData();
 
-  const { data: studies, isLoading, refetch: refetchStudies } = useQuery({
-    queryKey: ["dashboard-studies"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("studies")
-        .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min")
-        .order("created_at", { ascending: false })
-        .limit(100);
-      // Return empty array if error or no data - never fail
-      if (error || !data) return [] as Study[];
-      return data as Study[];
-    },
-    staleTime: 3000,
-    gcTime: 30000,
-    refetchInterval: 5000,
-  });
+  const { pendingTriageStudies, processingStudies, completedReports, pendingStudies } = filteredStudies;
 
-  const { data: wallet, refetch: refetchWallet } = useQuery({
-    queryKey: ["wallet-balance"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("wallets").select("tokens").single();
-      // If no wallet exists, return 0 tokens instead of failing
-      if (error || !data) return { tokens: 0 };
-      return data;
-    },
-    refetchInterval: 5000,
-    staleTime: 3000,
-  });
+  const handleSelectSla = useCallback((study: Study) => {
+    setSelectedStudy(study);
+    setSlaModalOpen(true);
+  }, []);
 
-  // Track previous balance for animation
-  useEffect(() => {
-    if (wallet?.tokens !== undefined && previousBalanceRef.current !== wallet.tokens) {
-      previousBalanceRef.current = wallet.tokens;
-    }
-  }, [wallet?.tokens]);
+  const handleInsufficientTokens = useCallback(() => {
+    setSlaModalOpen(false);
+    toast.error("Not enough tokens", {
+      description: "Please purchase more tokens to start triage.",
+    });
+    navigate("/app/wallet");
+  }, [navigate]);
 
-  // Subscribe to realtime updates for studies
-  useEffect(() => {
-    const channel = supabase
-      .channel("dashboard-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "studies",
-        },
-        (payload) => {
-          // Immediately refetch studies
-          refetchStudies();
-          refetchWallet();
+  const handleRequestRefund = useCallback((study: Study) => {
+    setRefundStudy(study);
+    setRefundDialogOpen(true);
+  }, []);
 
-          // Show toast for completed triage
-          if (payload.eventType === "UPDATE") {
-            const newData = payload.new as Study;
-            const oldData = payload.old as Partial<Study>;
-            
-            if (
-              oldData.triage_status === "processing" &&
-              newData.triage_status === "completed"
-            ) {
-              const meta = (newData.meta || {}) as Record<string, any>;
-              const patientId = meta.patient_name || meta.patient_id || `Study ${newData.id.slice(0, 6)}`;
-              toast.success(`Analysis complete for ${patientId}`, {
-                description: "Report is ready for review",
-                action: {
-                  label: "View Report",
-                  onClick: () => navigate(`/app/studies/${newData.id}`),
-                },
-              });
-            }
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "wallets",
-        },
-        () => {
-          refetchWallet();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient, navigate, refetchStudies, refetchWallet]);
-
-  // Compute metrics from studies data
-  const metrics = useMemo(() => {
-    if (!studies) return null;
-    
-    const now = dayjs();
-    const todayStart = now.startOf("day");
-    const weekStart = now.startOf("week");
-    const monthStart = now.startOf("month");
-    
-    // Completed studies (signed or triage completed)
-    const completedStudies = studies.filter(s => 
-      s.state === "signed" || s.triage_status === "completed"
-    );
-    
-    const completedToday = completedStudies.filter(s => 
-      dayjs(s.triage_completed_at || s.created_at).isAfter(todayStart)
-    ).length;
-    
-    const completedWeek = completedStudies.filter(s => 
-      dayjs(s.triage_completed_at || s.created_at).isAfter(weekStart)
-    ).length;
-    
-    const completedMonth = completedStudies.filter(s => 
-      dayjs(s.triage_completed_at || s.created_at).isAfter(monthStart)
-    ).length;
-    
-    // Pending studies (awaiting SLA or uploaded without triage)
-    const pendingStudies = studies.filter(s => 
-      s.state === "awaiting_sla" ||
-      (s.state === "uploaded" && 
-       (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending"))
-    );
-    
-    // Processing studies
-    const processingStudies = studies.filter(s => s.triage_status === "processing");
-    
-    // STAT cases
-    const statCases = pendingStudies.filter(s => s.sla === "STAT").length;
-    
-    // Calculate average turnaround (mock for now - would need actual timestamps)
-    const avgTurnaround = completedStudies.length > 0 ? "4.2h" : "--";
-    
-    // Total tokens used this month
-    const tokensUsedMonth = studies
-      .filter(s => dayjs(s.created_at).isAfter(monthStart))
-      .reduce((sum, s) => sum + (s.tokens_deducted || 0), 0);
-    
-    return {
-      completedToday,
-      completedWeek,
-      completedMonth,
-      pendingCount: pendingStudies.length,
-      processingCount: processingStudies.length,
-      statCases,
-      avgTurnaround,
-      tokensUsedMonth,
-      totalStudies: studies.length,
-      completedTotal: completedStudies.length,
-    };
-  }, [studies]);
+  const hasProcessingStudies = processingStudies.length > 0;
 
   if (isLoading) {
     return (
@@ -217,51 +77,11 @@ export default function Dashboard() {
     );
   }
 
-  // Filter studies by status
-  const pendingTriageStudies = studies?.filter(
-    (s) => s.state === "awaiting_sla" || (s.state === "uploaded" && (!s.triage_status || s.triage_status === "awaiting_sla" || s.triage_status === "pending"))
-  ) || [];
-
-  const processingStudies = studies?.filter(
-    (s) => s.triage_status === "processing"
-  ) || [];
-
-  const completedReports = studies?.filter(
-    (s) => s.state === "signed" || s.triage_status === "completed"
-  ).slice(0, 5) || [];
-
-  const pendingStudies = studies?.filter(
-    (s) => s.state === "uploaded" || s.state === "ai_draft" || s.state === "in_review"
-  ) || [];
-
-  const handleSelectSla = (study: Study) => {
-    setSelectedStudy(study);
-    setSlaModalOpen(true);
-  };
-
-  const handleInsufficientTokens = () => {
-    setSlaModalOpen(false);
-    toast.error("Not enough tokens", {
-      description: "Please purchase more tokens to start triage.",
-    });
-    navigate("/app/wallet");
-  };
-
-  const handleRequestRefund = (study: Study) => {
-    setRefundStudy(study);
-    setRefundDialogOpen(true);
-  };
-
-  // Ensure tokenBalance always has a valid number
-  const tokenBalance = typeof wallet?.tokens === 'number' ? wallet.tokens : 0;
-  const hasProcessingStudies = processingStudies.length > 0;
-  const studyCount = studies?.length ?? 0;
-
   return (
     <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-24" : ""}`}>
       {/* Global Progress Bar for Processing Studies */}
       {hasProcessingStudies && (
-        <GlobalTriageProgressBar studies={processingStudies} />
+        <MemoizedGlobalTriageProgressBar studies={processingStudies} />
       )}
 
       {/* Header with Token Balance */}
@@ -274,13 +94,13 @@ export default function Dashboard() {
         </div>
         <TokenBalanceHeader 
           balance={tokenBalance} 
-          previousBalance={previousBalanceRef.current}
+          previousBalance={previousBalance}
         />
       </div>
 
       {/* Pending Triage Section - Shows when there are uploads awaiting SLA */}
       {pendingTriageStudies.length > 0 && (
-        <PendingTriageSection
+        <MemoizedPendingTriageSection
           studies={pendingTriageStudies}
           onSelectSla={handleSelectSla}
         />
@@ -358,7 +178,7 @@ export default function Dashboard() {
 
       {/* KPI Cards - Using real metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
+        <MemoizedKPICard
           label="Pending Studies"
           value={metrics?.pendingCount || 0}
           change={`${metrics?.statCases || 0} STAT urgent`}
@@ -367,7 +187,7 @@ export default function Dashboard() {
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
 
-        <KPICard
+        <MemoizedKPICard
           label="Completed Today"
           value={metrics?.completedToday || 0}
           change="Daily progress"
@@ -375,7 +195,7 @@ export default function Dashboard() {
           color="kpi-green"
         />
 
-        <KPICard 
+        <MemoizedKPICard 
           label="This Week" 
           value={metrics?.completedWeek || 0} 
           change="Studies analyzed" 
@@ -383,7 +203,7 @@ export default function Dashboard() {
           color="kpi-cyan" 
         />
 
-        <KPICard
+        <MemoizedKPICard
           label="Token Balance"
           value={tokenBalance}
           change={`${metrics?.tokensUsedMonth || 0} used this month`}
@@ -395,7 +215,7 @@ export default function Dashboard() {
 
       {/* Secondary metrics row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard 
+        <MemoizedKPICard 
           label="Avg Turnaround" 
           value={metrics?.avgTurnaround || "--"} 
           change="Time to report" 
@@ -403,7 +223,7 @@ export default function Dashboard() {
           color="kpi-blue" 
         />
 
-        <KPICard
+        <MemoizedKPICard
           label="This Month"
           value={metrics?.completedMonth || 0}
           change="Monthly total"
@@ -411,7 +231,7 @@ export default function Dashboard() {
           color="kpi-neutral"
         />
 
-        <KPICard 
+        <MemoizedKPICard 
           label="Total Studies" 
           value={metrics?.totalStudies || 0} 
           change={`${metrics?.completedTotal || 0} completed`}
@@ -419,7 +239,7 @@ export default function Dashboard() {
           color="kpi-cyan" 
         />
 
-        <KPICard 
+        <MemoizedKPICard 
           label="Processing Now" 
           value={metrics?.processingCount || 0} 
           change="Active analyses" 
@@ -430,7 +250,7 @@ export default function Dashboard() {
 
       {/* Recent Reports Section */}
       {completedReports.length > 0 && (
-        <RecentReportsSection
+        <MemoizedRecentReportsSection
           studies={completedReports}
           onRequestRefund={handleRequestRefund}
         />
@@ -535,12 +355,12 @@ export default function Dashboard() {
       </div>
 
       {/* Calendar Widget - Full width to match Activity card height */}
-      <CalendarWidget />
+      <MemoizedCalendarWidget />
 
       {/* Urgent Queue */}
       {pendingStudies.length > 0 && (
         <div className="openai-section">
-          <UrgentQueue studies={pendingStudies} />
+          <MemoizedUrgentQueue studies={pendingStudies} />
         </div>
       )}
 
