@@ -570,6 +570,33 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_lifecycle_policies: {
+        Row: {
+          bucket_id: string
+          created_at: string
+          id: string
+          is_active: boolean
+          retention_days: number
+          updated_at: string
+        }
+        Insert: {
+          bucket_id: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          retention_days?: number
+          updated_at?: string
+        }
+        Update: {
+          bucket_id?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          retention_days?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       studies: {
         Row: {
           ai_draft_json: Json | null
@@ -1113,6 +1140,17 @@ export type Database = {
       }
       get_current_fy: { Args: never; Returns: string }
       get_current_quarter: { Args: never; Returns: string }
+      get_files_for_cleanup: {
+        Args: never
+        Returns: {
+          bucket_id: string
+          created_at: string
+          file_id: string
+          file_path: string
+          retention_days: number
+          study_id: string
+        }[]
+      }
       get_tfa_secret: { Args: never; Returns: string }
       get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
