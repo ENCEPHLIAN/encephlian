@@ -148,7 +148,7 @@ export default function Login() {
               letterSpacing: "-0.05em",
             }}
           >
-            MIND<sup className="text-lg md:text-xl lg:text-2xl align-super">™</sup>
+            MIND<sup className="text-xl md:text-2xl lg:text-3xl ml-1 -top-[0.5em] relative font-normal">™</sup>
           </h1>
 
           <p className="text-sm md:text-base text-muted-foreground tracking-wide uppercase font-light">
@@ -163,7 +163,7 @@ export default function Login() {
               letterSpacing: "-0.02em",
             }}
           >
-            ENCEPHLIAN<sup className="text-[8px] align-super">™</sup>
+            ENCEPHLIAN<sup className="text-[9px] ml-0.5 -top-[0.4em] relative font-normal">™</sup>
           </p>
 
           <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-lg font-medium mt-8">
@@ -186,7 +186,7 @@ export default function Login() {
                 letterSpacing: "-0.03em",
               }}
             >
-              ENCEPHLIAN<sup className="text-xs align-super">™</sup>
+              ENCEPHLIAN<sup className="text-[10px] ml-0.5 -top-[0.4em] relative font-normal">™</sup>
             </span>
           </div>
 
@@ -199,7 +199,7 @@ export default function Login() {
                 letterSpacing: "-0.05em",
               }}
             >
-              MIND<sup className="text-base md:text-lg lg:text-xl align-super">™</sup>
+              MIND<sup className="text-lg md:text-xl lg:text-2xl ml-0.5 -top-[0.5em] relative font-normal">™</sup>
             </h1>
 
             <p className="text-sm text-muted-foreground mb-12 tracking-wide uppercase">
