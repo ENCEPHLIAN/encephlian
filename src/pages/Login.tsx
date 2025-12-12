@@ -148,7 +148,7 @@ export default function Login() {
               letterSpacing: "-0.05em",
             }}
           >
-            MIND
+            MIND<sup className="text-lg md:text-xl lg:text-2xl align-super">™</sup>
           </h1>
 
           <p className="text-sm md:text-base text-muted-foreground tracking-wide uppercase font-light">
@@ -163,7 +163,7 @@ export default function Login() {
               letterSpacing: "-0.02em",
             }}
           >
-            ENCEPHLIAN
+            ENCEPHLIAN<sup className="text-[8px] align-super">™</sup>
           </p>
 
           <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-lg font-medium mt-8">
@@ -186,7 +186,7 @@ export default function Login() {
                 letterSpacing: "-0.03em",
               }}
             >
-              ENCEPHLIAN
+              ENCEPHLIAN<sup className="text-xs align-super">™</sup>
             </span>
           </div>
 
@@ -199,7 +199,7 @@ export default function Login() {
                 letterSpacing: "-0.05em",
               }}
             >
-              MIND
+              MIND<sup className="text-base md:text-lg lg:text-xl align-super">™</sup>
             </h1>
 
             <p className="text-sm text-muted-foreground mb-12 tracking-wide uppercase">

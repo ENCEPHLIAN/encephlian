@@ -40,7 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import CommandPalette from "@/components/CommandPalette";
-import EditableBranding from "@/components/EditableBranding";
+import logo from "@/assets/logo.png";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 import { MissionPanel } from "@/components/MissionPanel";
@@ -262,7 +262,12 @@ function AppLayoutContent() {
         <div className="flex h-16 items-center justify-between px-4 sm:px-6">
           {/* LEFT: sidebar toggle + logo */}
           <div className="flex items-center gap-2">
-            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
+            <div className="flex items-center gap-2">
+              <img src={logoUrl || logo} alt="Logo" className="h-8 w-8 object-contain flex-shrink-0" />
+              <h1 className="text-xl md:text-2xl font-bold logo-text">
+                {brandName}<sup className="text-[10px] align-super">™</sup>
+              </h1>
+            </div>
             {/* Sidebar toggle button - after branding, desktop only */}
             {!isMobile && (
               <Tooltip>
@@ -466,7 +471,7 @@ function AppLayoutContent() {
         !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
         "transition-[margin] duration-200 ease-out"
       )}>
-        <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN©2025</p>
+        <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN™ ©2025</p>
       </footer>
 
       {/* Floating elements */}
