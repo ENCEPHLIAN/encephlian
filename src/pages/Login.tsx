@@ -148,7 +148,7 @@ export default function Login() {
               letterSpacing: "-0.05em",
             }}
           >
-            MIND<sup className="text-sm md:text-base lg:text-lg ml-1.5 relative top-[0.1em] font-light opacity-60">™</sup>
+            MIND<sup className="text-sm md:text-base lg:text-lg ml-1.5 align-top relative top-[0.15em] font-light opacity-60">™</sup>
           </h1>
 
           <p className="text-sm md:text-base text-muted-foreground tracking-wide uppercase font-light">
@@ -199,7 +199,7 @@ export default function Login() {
                 letterSpacing: "-0.05em",
               }}
             >
-              MIND<sup className="text-xs md:text-sm lg:text-base ml-1 relative top-[0.1em] font-light opacity-60">™</sup>
+              MIND<sup className="text-xs md:text-sm lg:text-base ml-1 align-top relative top-[0.15em] font-light opacity-60">™</sup>
             </h1>
 
             <p className="text-sm text-muted-foreground mb-12 tracking-wide uppercase">
