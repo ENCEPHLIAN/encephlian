@@ -163,7 +163,7 @@ export default function Login() {
               letterSpacing: "-0.02em",
             }}
           >
-            ENCEPHLIAN<sup className="text-[7px] ml-0.5 align-top font-light opacity-60">™</sup>
+            ENCEPHLIAN<sup className="text-[7px] align-top relative top-[0.1em] font-light">™</sup>
           </p>
 
           <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-lg font-medium mt-8">
@@ -186,7 +186,7 @@ export default function Login() {
                 letterSpacing: "-0.03em",
               }}
             >
-              ENCEPHLIAN<sup className="text-[8px] ml-0.5 align-top font-light opacity-60">™</sup>
+              ENCEPHLIAN<sup className="text-[8px] align-top relative top-[0.1em] font-light">™</sup>
             </span>
           </div>
 
