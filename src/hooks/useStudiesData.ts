@@ -41,29 +41,45 @@ export function useStudiesData(stateFilter: string) {
     gcTime: 120000,
   });
 
-  // Single realtime subscription - only set up once
+  // Single realtime subscription - optimized with filter for user's studies
   useEffect(() => {
-    if (channelRef.current || !isAuthenticated) return;
+    if (channelRef.current || !isAuthenticated || !userId) return;
+
+    const debounceTimerRef = { current: null as NodeJS.Timeout | null };
 
     channelRef.current = supabase
-      .channel("studies-realtime-unified")
+      .channel(`studies-realtime-${userId}`)
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "studies" },
+        { 
+          event: "*", 
+          schema: "public", 
+          table: "studies",
+          filter: `owner=eq.${userId}`
+        },
         () => {
-          // Debounced refetch
-          setTimeout(() => refetch(), 500);
+          // Debounced refetch to avoid multiple rapid updates
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+          }
+          debounceTimerRef.current = setTimeout(() => {
+            refetch();
+            debounceTimerRef.current = null;
+          }, 300);
         }
       )
       .subscribe();
 
     return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
     };
-  }, [isAuthenticated, refetch]);
+  }, [isAuthenticated, userId, refetch]);
 
   return { studies: studies || [], isLoading, refetch };
 }

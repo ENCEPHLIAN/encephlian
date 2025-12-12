@@ -29,9 +29,8 @@ import {
   CreditCard,
   HelpCircle,
   Menu,
-  Smartphone,
-  Cpu,
-  Bluetooth,
+  Monitor,
+  Cloud,
   PanelLeftClose,
   PanelLeft,
 } from "lucide-react";
@@ -220,21 +219,19 @@ function AppLayoutContent() {
 
   const [commandOpen, setCommandOpen] = useState(false);
   const [missionOpen, setMissionOpen] = useState(false);
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
   // desktop: collapsed vs expanded
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // mobile: full-screen nav open/close
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Placeholder device status for dropdown
+  // Device status - Windows Uploader + Cloud Sync only
   const deviceStatus = {
-    androidApp: { connected: false },
-    eegMachine: { connected: false },
-    bleBridge: { connected: false },
+    windowsUploader: { connected: false },
+    cloudSync: { connected: true },
   };
-  const allConnected = deviceStatus.androidApp.connected && 
-                       deviceStatus.eegMachine.connected && 
-                       deviceStatus.bleBridge.connected;
+  const allConnected = deviceStatus.windowsUploader.connected && deviceStatus.cloudSync.connected;
 
   // Use cached profile from context
   const userName = profile?.full_name?.trim() || "Account";
@@ -358,67 +355,87 @@ function AppLayoutContent() {
               </>
             )}
 
-            {/* Account dropdown - only on desktop */}
+            {/* Account dropdown - only on desktop, opens on hover */}
             {!isMobile && (
+            <div 
+              className="relative"
+              onMouseEnter={() => setAccountDropdownOpen(true)}
+              onMouseLeave={() => setAccountDropdownOpen(false)}
+            >
+              <DropdownMenu open={accountDropdownOpen} onOpenChange={setAccountDropdownOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="flex items-center gap-2 rounded-full">
+                    <User className="h-5 w-5" />
+                    <span className="hidden md:inline">{userName}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 p-2">
+                  <div className="px-2 py-3 border-b border-border/50 mb-2">
+                    <p className="font-medium text-sm">{userName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Portal"}</p>
+                  </div>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2 rounded-full">
-                  <User className="h-5 w-5" />
-                  <span className="hidden md:inline">{userName}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2">
-                <div className="px-2 py-3 border-b border-border/50 mb-2">
-                  <p className="font-medium text-sm">{userName}</p>
-                  <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Portal"}</p>
-                </div>
-
-                {/* Device Status in dropdown */}
-                <div className="px-2 py-2 mb-2 rounded-lg bg-muted/50">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Device Status</span>
-                    <div className="flex items-center gap-1.5">
-                      <Smartphone className={cn("h-3.5 w-3.5", deviceStatus.androidApp.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                      <Cpu className={cn("h-3.5 w-3.5", deviceStatus.eegMachine.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                      <Bluetooth className={cn("h-3.5 w-3.5", deviceStatus.bleBridge.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                      <div className={cn("h-2 w-2 rounded-full ml-1", allConnected ? "bg-emerald-500" : "bg-amber-500")} />
+                  {/* Device Status in dropdown - Windows Uploader + Cloud Sync only */}
+                  <div className="px-2 py-2 mb-2 rounded-lg bg-muted/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">Device Status</span>
+                      <div className={cn("h-2 w-2 rounded-full", allConnected ? "bg-emerald-500" : "bg-amber-500")} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Monitor className={cn("h-3 w-3", deviceStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                          Windows Uploader
+                        </span>
+                        <span className={cn("text-[10px]", deviceStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50")}>
+                          {deviceStatus.windowsUploader.connected ? "Online" : "Offline"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <Cloud className={cn("h-3 w-3", deviceStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
+                          Cloud Sync
+                        </span>
+                        <span className={cn("text-[10px]", deviceStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50")}>
+                          {deviceStatus.cloudSync.connected ? "Online" : "Offline"}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                
-                <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
-                  <User className="mr-3 h-4 w-4" />
-                  <div>
-                    <p className="text-sm">Profile</p>
-                    <p className="text-xs text-muted-foreground">Manage your account</p>
-                  </div>
-                </DropdownMenuItem>
-                
-                <DropdownMenuItem onClick={() => navigate("/app/settings")} className="py-2.5">
-                  <Settings className="mr-3 h-4 w-4" />
-                  <div>
-                    <p className="text-sm">Settings</p>
-                    <p className="text-xs text-muted-foreground">Preferences & security</p>
-                  </div>
-                </DropdownMenuItem>
-                
-                <DropdownMenuItem onClick={() => navigate("/app/wallet")} className="py-2.5">
-                  <CreditCard className="mr-3 h-4 w-4" />
-                  <div>
-                    <p className="text-sm">Billing</p>
-                    <p className="text-xs text-muted-foreground">Tokens & payments</p>
-                  </div>
-                </DropdownMenuItem>
-                
-                <DropdownMenuSeparator className="my-2" />
-                
-                <DropdownMenuItem onClick={handleSignOut} className="py-2.5 text-destructive focus:text-destructive">
-                  <LogOut className="mr-3 h-4 w-4" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  
+                  <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
+                    <User className="mr-3 h-4 w-4" />
+                    <div>
+                      <p className="text-sm">Profile</p>
+                      <p className="text-xs text-muted-foreground">Manage your account</p>
+                    </div>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => navigate("/app/settings")} className="py-2.5">
+                    <Settings className="mr-3 h-4 w-4" />
+                    <div>
+                      <p className="text-sm">Settings</p>
+                      <p className="text-xs text-muted-foreground">Preferences & security</p>
+                    </div>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuItem onClick={() => navigate("/app/wallet")} className="py-2.5">
+                    <CreditCard className="mr-3 h-4 w-4" />
+                    <div>
+                      <p className="text-sm">Billing</p>
+                      <p className="text-xs text-muted-foreground">Tokens & payments</p>
+                    </div>
+                  </DropdownMenuItem>
+                  
+                  <DropdownMenuSeparator className="my-2" />
+                  
+                  <DropdownMenuItem onClick={handleSignOut} className="py-2.5 text-destructive focus:text-destructive">
+                    <LogOut className="mr-3 h-4 w-4" />
+                    Sign out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
             )}
           </div>
         </div>
