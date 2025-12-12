@@ -14,7 +14,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { X, Activity, Upload, StickyNote, Wallet, Monitor, Cloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import EditableBranding from "./EditableBranding";
+import logo from "@/assets/logo.png";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -107,7 +107,12 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
         <div className="flex flex-col h-full">
           {/* Header: Branding + System Status + Close */}
           <div className="flex items-center justify-between px-6 py-4" onClick={(e) => e.stopPropagation()}>
-            <EditableBranding companyName={brandName} logoUrl={logoUrl} logoClassName="h-8 w-8" />
+            <div className="flex items-center gap-2">
+              <img src={logoUrl || logo} alt="Logo" className="h-8 w-8 object-contain flex-shrink-0" />
+              <h1 className="text-2xl font-bold logo-text">
+                {brandName}<sup className="text-[10px] align-super">™</sup>
+              </h1>
+            </div>
             
             {/* System Status - frosted glass panel */}
             <div className="flex items-center gap-4">
