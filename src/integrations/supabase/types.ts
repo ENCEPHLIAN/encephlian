@@ -331,6 +331,27 @@ export type Database = {
           },
         ]
       }
+      platform_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           company_name: string | null
@@ -1107,6 +1128,10 @@ export type Database = {
         Args: { p_clinic_id: string; p_updates: Json }
         Returns: Json
       }
+      admin_update_platform_setting: {
+        Args: { p_key: string; p_value: Json }
+        Returns: Json
+      }
       admin_update_profile: {
         Args: { p_updates: Json; p_user_id: string }
         Returns: Json
@@ -1151,6 +1176,7 @@ export type Database = {
           study_id: string
         }[]
       }
+      get_platform_setting: { Args: { p_key: string }; Returns: Json }
       get_tfa_secret: { Args: never; Returns: string }
       get_user_clinic_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
