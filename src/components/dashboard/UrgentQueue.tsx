@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Clock, ArrowRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -20,8 +22,55 @@ interface UrgentQueueProps {
   studies: Study[];
 }
 
-export default function UrgentQueue({ studies }: UrgentQueueProps) {
+export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProps) {
   const navigate = useNavigate();
+  const [studies, setStudies] = useState<Study[]>(initialStudies);
+
+  // Update local state when prop changes
+  useEffect(() => {
+    setStudies(initialStudies);
+  }, [initialStudies]);
+
+  // Real-time subscription for study updates
+  useEffect(() => {
+    const channel = supabase
+      .channel("urgent-queue-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "studies",
+        },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const newStudy = payload.new as Study;
+            // Only add if pending or processing
+            if (["pending", "processing", "awaiting_sla"].includes(newStudy.state)) {
+              setStudies((prev) => [...prev, newStudy]);
+            }
+          } else if (payload.eventType === "UPDATE") {
+            const updated = payload.new as Study;
+            setStudies((prev) => {
+              // Remove if completed or not relevant
+              if (["completed", "signed", "cancelled"].includes(updated.state)) {
+                return prev.filter((s) => s.id !== updated.id);
+              }
+              // Update existing
+              return prev.map((s) => (s.id === updated.id ? updated : s));
+            });
+          } else if (payload.eventType === "DELETE") {
+            const deleted = payload.old as { id: string };
+            setStudies((prev) => prev.filter((s) => s.id !== deleted.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   
   // Sort: STAT first, then by age
   const sortedStudies = [...studies]
