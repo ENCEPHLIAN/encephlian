@@ -44,9 +44,8 @@ serve(async (req) => {
     
     const body = await req.json();
     const study_id = body.study_id;
-    const email_enabled = body.email_enabled;
     
-    console.log("send_triage_notification called with:", { study_id, email_enabled, caller: user.id });
+    console.log("send_triage_notification called with:", { study_id, caller: user.id });
     
     if (!study_id) {
       return new Response(
@@ -102,9 +101,14 @@ serve(async (req) => {
     
     console.log("Authorization passed:", { isOwner, isClinicMember, isAdmin });
 
-    // Check if emails are enabled (passed from client-side setting)
-    // Explicitly check for false to skip emails
-    if (email_enabled === false) {
+    // Check if emails are enabled from database setting (not client-passed value)
+    const { data: emailSetting } = await supabase
+      .rpc("get_platform_setting", { p_key: "email_notifications_enabled" });
+    
+    const emailEnabled = emailSetting === true;
+    console.log("Email setting from database:", { emailSetting, emailEnabled });
+    
+    if (!emailEnabled) {
       console.log("Email notifications DISABLED - skipping Resend API call");
       return new Response(
         JSON.stringify({ success: true, message: "Email skipped (disabled by admin)" }),

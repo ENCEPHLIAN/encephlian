@@ -54,14 +54,10 @@ async function simulateTriageProgress(studyId: string) {
       .eq("id", studyId);
   }
   
-  // Send triage completion notification (check localStorage for email toggle)
-  // Default to FALSE if not explicitly set to "true" - admin must explicitly enable
+  // Send triage completion notification (edge function reads setting from database)
   try {
-    const storedValue = localStorage.getItem("encephlian_emails_enabled");
-    const emailEnabled = storedValue === "true"; // Only true if explicitly "true"
-    console.log("Email toggle status:", { storedValue, emailEnabled });
     await supabase.functions.invoke("send_triage_notification", {
-      body: { study_id: studyId, email_enabled: emailEnabled },
+      body: { study_id: studyId },
     });
   } catch (err) {
     console.error("Failed to send triage notification:", err);
