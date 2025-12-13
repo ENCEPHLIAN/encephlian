@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Sparkles, FileSearch, Wand2, FileCheck, Brain } from "lucide-react";
+import { Loader2, Sparkles, FileSearch, FileCheck, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface ProcessingStudy {
@@ -22,15 +22,23 @@ const TRIAGE_STAGES = [
   { key: "completed", label: "Analysis complete", icon: FileCheck, progress: 100, spinning: false },
 ];
 
-export default function GlobalTriageProgressBar({ studies }: GlobalTriageProgressBarProps) {
+export default function GlobalTriageProgressBar({ studies: initialStudies }: GlobalTriageProgressBarProps) {
+  const [studies, setStudies] = useState<ProcessingStudy[]>(initialStudies);
   const [animatedProgress, setAnimatedProgress] = useState(0);
+
+  // Sync with props when they change
+  useEffect(() => {
+    setStudies(initialStudies);
+  }, [initialStudies]);
 
   // Subscribe to realtime updates for processing studies
   useEffect(() => {
     if (studies.length === 0) return;
 
+    const studyIds = studies.map(s => s.id);
+
     const channel = supabase
-      .channel("triage-progress-bar")
+      .channel("triage-progress-realtime")
       .on(
         "postgres_changes",
         {
@@ -39,7 +47,18 @@ export default function GlobalTriageProgressBar({ studies }: GlobalTriageProgres
           table: "studies",
         },
         (payload) => {
-          console.log("Triage progress update:", payload);
+          const updated = payload.new as ProcessingStudy;
+          
+          // Only process updates for studies we're tracking
+          if (studyIds.includes(updated.id)) {
+            setStudies(prev => 
+              prev.map(s => 
+                s.id === updated.id 
+                  ? { ...s, triage_progress: updated.triage_progress, triage_status: updated.triage_status, meta: updated.meta }
+                  : s
+              ).filter(s => s.triage_status !== "completed" || s.id === updated.id)
+            );
+          }
         }
       )
       .subscribe();
@@ -47,9 +66,9 @@ export default function GlobalTriageProgressBar({ studies }: GlobalTriageProgres
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [studies.length]);
+  }, [studies.map(s => s.id).join(",")]);
 
-  // Calculate average progress
+  // Calculate average progress from real-time state
   const avgProgress = studies.length > 0
     ? Math.round(studies.reduce((sum, s) => sum + (s.triage_progress || 5), 0) / studies.length)
     : 0;
@@ -62,16 +81,17 @@ export default function GlobalTriageProgressBar({ studies }: GlobalTriageProgres
       return;
     }
     
+    const step = Math.max(1, Math.abs(diff) / 10);
     const timer = setInterval(() => {
       setAnimatedProgress(prev => {
-        const newVal = prev + Math.sign(diff) * 2;
+        const newVal = prev + Math.sign(diff) * step;
         if ((diff > 0 && newVal >= avgProgress) || (diff < 0 && newVal <= avgProgress)) {
           clearInterval(timer);
           return avgProgress;
         }
-        return newVal;
+        return Math.round(newVal);
       });
-    }, 50);
+    }, 30);
     
     return () => clearInterval(timer);
   }, [avgProgress]);
@@ -81,7 +101,7 @@ export default function GlobalTriageProgressBar({ studies }: GlobalTriageProgres
   }
 
   // Get current stage based on average progress
-  const currentStage = TRIAGE_STAGES.reduce((found, stage, idx) => {
+  const currentStage = TRIAGE_STAGES.reduce((found, stage) => {
     if (avgProgress >= stage.progress) return stage;
     return found;
   }, TRIAGE_STAGES[0]);
