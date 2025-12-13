@@ -19,7 +19,7 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { study_id, check_email_enabled } = await req.json();
+    const { study_id, email_enabled } = await req.json();
     
     if (!study_id) {
       return new Response(
@@ -28,8 +28,8 @@ serve(async (req) => {
       );
     }
 
-    // Check if emails are enabled
-    if (check_email_enabled === false) {
+    // Check if emails are enabled (passed from client-side setting)
+    if (email_enabled === false) {
       console.log("Email notifications disabled by admin setting");
       return new Response(
         JSON.stringify({ success: true, message: "Email skipped (disabled)" }),

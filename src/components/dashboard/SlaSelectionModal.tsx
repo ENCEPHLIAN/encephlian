@@ -54,10 +54,11 @@ async function simulateTriageProgress(studyId: string) {
       .eq("id", studyId);
   }
   
-  // Send triage completion notification
+  // Send triage completion notification (check localStorage for email toggle)
   try {
+    const emailEnabled = localStorage.getItem("encephlian_emails_enabled") !== "false";
     await supabase.functions.invoke("send_triage_notification", {
-      body: { study_id: studyId },
+      body: { study_id: studyId, email_enabled: emailEnabled },
     });
   } catch (err) {
     console.error("Failed to send triage notification:", err);
