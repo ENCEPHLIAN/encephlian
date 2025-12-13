@@ -26,6 +26,11 @@ export default function AdminIntegrations() {
   const handleEmailToggle = (enabled: boolean) => {
     setEmailEnabled(enabled);
     localStorage.setItem(EMAIL_ENABLED_KEY, String(enabled));
+    console.log("[AdminIntegrations] Email toggle changed:", {
+      enabled,
+      storedValue: localStorage.getItem(EMAIL_ENABLED_KEY),
+      key: EMAIL_ENABLED_KEY
+    });
     toast.info(enabled ? "Email notifications enabled" : "Email notifications disabled");
   };
 
