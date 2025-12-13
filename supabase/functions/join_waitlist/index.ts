@@ -25,7 +25,16 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    const { email, feature } = await req.json();
+    const { email, feature, email_enabled } = await req.json();
+
+    // Check if emails are enabled (passed from frontend based on localStorage)
+    if (email_enabled === false) {
+      console.log("Email notifications disabled by admin setting");
+      return new Response(
+        JSON.stringify({ success: true, message: "Email skipped (disabled)" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (!email?.trim() || !email.includes("@")) {
       return new Response(

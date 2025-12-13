@@ -19,7 +19,11 @@ serve(async (req) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    const { study_id, email_enabled } = await req.json();
+    const body = await req.json();
+    const study_id = body.study_id;
+    const email_enabled = body.email_enabled;
+    
+    console.log("send_triage_notification called with:", { study_id, email_enabled });
     
     if (!study_id) {
       return new Response(
@@ -29,13 +33,16 @@ serve(async (req) => {
     }
 
     // Check if emails are enabled (passed from client-side setting)
+    // Explicitly check for false to skip emails
     if (email_enabled === false) {
-      console.log("Email notifications disabled by admin setting");
+      console.log("Email notifications DISABLED - skipping Resend API call");
       return new Response(
-        JSON.stringify({ success: true, message: "Email skipped (disabled)" }),
+        JSON.stringify({ success: true, message: "Email skipped (disabled by admin)" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    console.log("Email notifications ENABLED - proceeding with Resend API call");
     
     // Get study and user info
     const { data: study, error: studyError } = await supabase

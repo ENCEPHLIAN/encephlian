@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Sparkles, FileSearch, FileCheck, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,9 +26,10 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
   const [studies, setStudies] = useState<ProcessingStudy[]>(initialStudies);
   const [animatedProgress, setAnimatedProgress] = useState(0);
 
-  // Sync with props when they change
+  // Sync with props when they change - filter out completed studies
   useEffect(() => {
-    setStudies(initialStudies);
+    const activeStudies = initialStudies.filter(s => s.triage_status !== "completed");
+    setStudies(activeStudies);
   }, [initialStudies]);
 
   // Subscribe to realtime updates for processing studies
@@ -51,13 +52,28 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
           
           // Only process updates for studies we're tracking
           if (studyIds.includes(updated.id)) {
-            setStudies(prev => 
-              prev.map(s => 
-                s.id === updated.id 
-                  ? { ...s, triage_progress: updated.triage_progress, triage_status: updated.triage_status, meta: updated.meta }
-                  : s
-              ).filter(s => s.triage_status !== "completed" || s.id === updated.id)
-            );
+            // If completed, remove after a brief delay to show 100%
+            if (updated.triage_status === "completed") {
+              setStudies(prev => 
+                prev.map(s => 
+                  s.id === updated.id 
+                    ? { ...s, triage_progress: 100, triage_status: "completed" }
+                    : s
+                )
+              );
+              // Remove completed study after 2 seconds
+              setTimeout(() => {
+                setStudies(prev => prev.filter(s => s.id !== updated.id));
+              }, 2000);
+            } else {
+              setStudies(prev => 
+                prev.map(s => 
+                  s.id === updated.id 
+                    ? { ...s, triage_progress: updated.triage_progress, triage_status: updated.triage_status }
+                    : s
+                )
+              );
+            }
           }
         }
       )
