@@ -17,13 +17,36 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     
+    // Create service client for database operations
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Verify caller authorization from JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      console.error("No authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Extract user from JWT
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    
+    if (authError || !user) {
+      console.error("Auth error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Invalid token" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     
     const body = await req.json();
     const study_id = body.study_id;
     const email_enabled = body.email_enabled;
     
-    console.log("send_triage_notification called with:", { study_id, email_enabled });
+    console.log("send_triage_notification called with:", { study_id, email_enabled, caller: user.id });
     
     if (!study_id) {
       return new Response(
@@ -31,6 +54,53 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    
+    // Verify caller has access to this study (owns it or is in the clinic)
+    const { data: accessCheck, error: accessError } = await supabase
+      .from("studies")
+      .select("id, owner, clinic_id")
+      .eq("id", study_id)
+      .single();
+    
+    if (accessError || !accessCheck) {
+      console.error("Study not found or access denied:", accessError);
+      return new Response(
+        JSON.stringify({ error: "Study not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Check if caller owns the study or is a clinic member
+    const isOwner = accessCheck.owner === user.id;
+    
+    const { data: membership } = await supabase
+      .from("clinic_memberships")
+      .select("clinic_id")
+      .eq("user_id", user.id)
+      .eq("clinic_id", accessCheck.clinic_id)
+      .single();
+    
+    const isClinicMember = !!membership;
+    
+    // Also check for admin roles
+    const { data: adminRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .in("role", ["super_admin", "management"])
+      .single();
+    
+    const isAdmin = !!adminRole;
+    
+    if (!isOwner && !isClinicMember && !isAdmin) {
+      console.error("Caller does not have access to study:", { userId: user.id, studyId: study_id });
+      return new Response(
+        JSON.stringify({ error: "Forbidden: No access to this study" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    console.log("Authorization passed:", { isOwner, isClinicMember, isAdmin });
 
     // Check if emails are enabled (passed from client-side setting)
     // Explicitly check for false to skip emails
