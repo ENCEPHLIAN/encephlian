@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import AdminCleanup from "@/pages/admin/AdminCleanup";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
+import AdminReadApi from "@/admin/index";
 import AdminAccount from "@/pages/admin/AdminAccount";
 import AdminWallets from "@/pages/admin/AdminWallets";
 import AdminTickets from "@/pages/admin/AdminTickets";
@@ -91,7 +92,7 @@ function App() {
                     <Route path="team" element={<AdminTeam />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="eeg-push" element={<AdminEegPush />} />
-                    
+                    <Route path="read-api" element={<AdminReadApi />} />
                     <Route path="account" element={<AdminAccount />} />
                   </Route>
                 </Route>
