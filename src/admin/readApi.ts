@@ -8,10 +8,11 @@ const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || '';
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number>;
+  skipAuth?: boolean;
 }
 
 export async function readApiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const { params, ...fetchOptions } = options;
+  const { params, skipAuth, ...fetchOptions } = options;
   
   let url = `${API_BASE}${endpoint}`;
   if (params) {
@@ -22,21 +23,34 @@ export async function readApiFetch<T>(endpoint: string, options: FetchOptions = 
     url += `?${searchParams.toString()}`;
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...fetchOptions.headers as Record<string, string>,
+  };
+
+  // Only add API key if not skipping auth
+  if (!skipAuth && API_KEY) {
+    headers['X-API-KEY'] = API_KEY;
+  }
+
   const response = await fetch(url, {
     ...fetchOptions,
-    headers: {
-      'X-API-KEY': API_KEY,
-      'Content-Type': 'application/json',
-      ...fetchOptions.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`API Error ${response.status}: ${errorText}`);
+    throw new ApiError(response.status, errorText);
   }
 
   return response.json();
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, public details: string) {
+    super(`API Error ${status}: ${details}`);
+    this.name = 'ApiError';
+  }
 }
 
 export interface StudyMeta {
@@ -66,6 +80,15 @@ export interface ArtifactResponse {
   mask_b64: string;
 }
 
+export interface HealthResponse {
+  status: string;
+  version?: string;
+}
+
+export async function checkHealth(): Promise<HealthResponse> {
+  return readApiFetch<HealthResponse>('/health', { skipAuth: true });
+}
+
 export async function fetchStudyMeta(studyId: string): Promise<StudyMeta> {
   return readApiFetch<StudyMeta>(`/studies/${studyId}/meta`);
 }
@@ -92,4 +115,8 @@ export async function fetchArtifactMask(
 
 export function isApiConfigured(): boolean {
   return Boolean(API_BASE && API_KEY);
+}
+
+export function getApiBase(): string {
+  return API_BASE;
 }
