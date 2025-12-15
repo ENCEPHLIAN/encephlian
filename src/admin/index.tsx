@@ -17,8 +17,8 @@ import {
 
 export default function AdminReadApi() {
   const [studyId, setStudyId] = useState('TUH_CANON_001');
-  const [startSeconds, setStartSeconds] = useState(10);
-  const [windowSeconds, setWindowSeconds] = useState(5);
+  const [startSample, setStartSample] = useState(0);
+  const [lengthSamples, setLengthSamples] = useState(1280); // ~10s at 128Hz
   
   const [meta, setMeta] = useState<StudyMeta | null>(null);
   const [signals, setSignals] = useState<Float32Array[]>([]);
@@ -35,14 +35,23 @@ export default function AdminReadApi() {
 
   const configured = isApiConfigured();
 
+  // Compute bounds from meta
+  const maxStart = meta ? meta.n_samples - 1 : 0;
+  const maxLength = meta ? Math.min(500000, meta.n_samples - startSample) : 500000;
+
   const handleLoadMeta = async () => {
     setError(null);
     setLoadingMeta(true);
+    setMeta(null);
+    setSignals([]);
     try {
       const data = await fetchStudyMeta(studyId);
       setMeta(data);
       setChannelNames(data.channel_names);
       setSamplingRate(data.sampling_rate_hz);
+      // Reset window params to valid defaults
+      setStartSample(0);
+      setLengthSamples(Math.min(data.sampling_rate_hz * 10, data.n_samples)); // 10s default
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load meta');
     } finally {
@@ -51,21 +60,19 @@ export default function AdminReadApi() {
   };
 
   const handleLoadWindow = async () => {
-    if (!meta) {
-      setError('Load meta first to get sampling rate');
-      return;
-    }
+    if (!meta) return;
+    
+    // Clamp values to valid range
+    const clampedStart = Math.max(0, Math.min(startSample, meta.n_samples - 1));
+    const clampedLength = Math.max(1, Math.min(lengthSamples, Math.min(500000, meta.n_samples - clampedStart)));
     
     setError(null);
     setLoadingWindow(true);
     try {
-      const startSample = Math.floor(startSeconds * meta.sampling_rate_hz);
-      const length = Math.floor(windowSeconds * meta.sampling_rate_hz);
-      
       // Fetch chunk and artifact in parallel
       const [chunkData, artifactData] = await Promise.all([
-        fetchStudyChunk(studyId, startSample, length),
-        fetchArtifactMask(studyId, startSample, length).catch(() => null),
+        fetchStudyChunk(studyId, clampedStart, clampedLength),
+        fetchArtifactMask(studyId, clampedStart, clampedLength).catch(() => null),
       ]);
       
       const decodedSignals = decodeFloat32B64(
@@ -134,31 +141,44 @@ export default function AdminReadApi() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="startSeconds" className="text-xs text-muted-foreground">
-                Start (seconds)
+              <Label htmlFor="startSample" className="text-xs text-muted-foreground">
+                Start (sample)
               </Label>
               <Input
-                id="startSeconds"
+                id="startSample"
                 type="number"
-                value={startSeconds}
-                onChange={(e) => setStartSeconds(Number(e.target.value))}
-                className="w-28"
+                value={startSample}
+                onChange={(e) => setStartSample(Math.max(0, Math.min(Number(e.target.value), maxStart)))}
+                className="w-32"
                 min={0}
+                max={maxStart}
+                disabled={!meta}
               />
+              {meta && (
+                <span className="text-xs text-muted-foreground">
+                  max: {maxStart.toLocaleString()}
+                </span>
+              )}
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="windowSeconds" className="text-xs text-muted-foreground">
-                Window (seconds)
+              <Label htmlFor="lengthSamples" className="text-xs text-muted-foreground">
+                Length (samples)
               </Label>
               <Input
-                id="windowSeconds"
+                id="lengthSamples"
                 type="number"
-                value={windowSeconds}
-                onChange={(e) => setWindowSeconds(Number(e.target.value))}
-                className="w-28"
+                value={lengthSamples}
+                onChange={(e) => setLengthSamples(Math.max(1, Math.min(Number(e.target.value), maxLength)))}
+                className="w-32"
                 min={1}
-                max={60}
+                max={maxLength}
+                disabled={!meta}
               />
+              {meta && (
+                <span className="text-xs text-muted-foreground">
+                  max: {maxLength.toLocaleString()} (~{(maxLength / meta.sampling_rate_hz).toFixed(1)}s)
+                </span>
+              )}
             </div>
             <Button
               onClick={handleLoadMeta}
