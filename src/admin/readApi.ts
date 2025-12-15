@@ -54,16 +54,35 @@ export class ApiError extends Error {
   }
 }
 
-export interface StudyMeta {
+export interface CanonicalMeta {
   study_id: string;
   n_channels: number;
   sampling_rate_hz: number;
   n_samples: number;
-  channel_names: string[];
-  normal_abnormal?: {
-    decision: string;
-    confidence?: number;
+  canonical_version?: string;
+  converter_id?: string;
+  channel_map?: Array<{
+    index: number;
+    canonical_id: string;
+    original_label: string;
+    unit: string;
+  }>;
+  source?: {
+    vendor: string;
+    format: string;
   };
+}
+
+export interface NormalAbnormalResult {
+  task: string;
+  method: string;
+  score_abnormal: number;
+  decision: string;
+}
+
+export interface StudyMetaResponse {
+  meta: CanonicalMeta;
+  normal_abnormal?: NormalAbnormalResult;
 }
 
 export interface ChunkResponse {
@@ -90,8 +109,8 @@ export async function checkHealth(): Promise<HealthResponse> {
   return readApiFetch<HealthResponse>('/health', { skipAuth: true });
 }
 
-export async function fetchStudyMeta(studyId: string): Promise<StudyMeta> {
-  return readApiFetch<StudyMeta>(`/studies/${studyId}/meta`);
+export async function fetchStudyMeta(studyId: string): Promise<StudyMetaResponse> {
+  return readApiFetch<StudyMetaResponse>(`/studies/${studyId}/meta`);
 }
 
 export async function fetchStudyChunk(
