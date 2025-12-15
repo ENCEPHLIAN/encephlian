@@ -35,9 +35,11 @@ export default function AdminReadApi() {
 
   const configured = isApiConfigured();
 
-  // Compute bounds from meta
-  const maxStart = meta ? meta.n_samples - 1 : 0;
-  const maxLength = meta ? Math.min(500000, meta.n_samples - startSample) : 500000;
+  // Compute bounds from meta - with defensive null checks
+  const nSamples = meta?.n_samples ?? 0;
+  const sRate = meta?.sampling_rate_hz ?? 128;
+  const maxStart = nSamples > 0 ? nSamples - 1 : 0;
+  const maxLength = nSamples > 0 ? Math.min(500000, nSamples - startSample) : 500000;
 
   const handleLoadMeta = async () => {
     setError(null);
@@ -46,6 +48,19 @@ export default function AdminReadApi() {
     setSignals([]);
     try {
       const data = await fetchStudyMeta(studyId);
+      console.log('Meta response:', JSON.stringify(data, null, 2));
+      
+      // Validate response has required fields
+      if (!data || typeof data.n_samples !== 'number') {
+        throw new Error(`Invalid meta response: missing n_samples. Got: ${JSON.stringify(data)}`);
+      }
+      if (!data.channel_names || !Array.isArray(data.channel_names)) {
+        throw new Error(`Invalid meta response: missing channel_names`);
+      }
+      if (typeof data.sampling_rate_hz !== 'number') {
+        throw new Error(`Invalid meta response: missing sampling_rate_hz`);
+      }
+      
       setMeta(data);
       setChannelNames(data.channel_names);
       setSamplingRate(data.sampling_rate_hz);
@@ -53,6 +68,7 @@ export default function AdminReadApi() {
       setStartSample(0);
       setLengthSamples(Math.min(data.sampling_rate_hz * 10, data.n_samples)); // 10s default
     } catch (err) {
+      console.error('Load meta error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load meta');
     } finally {
       setLoadingMeta(false);
@@ -208,7 +224,7 @@ export default function AdminReadApi() {
       )}
 
       {/* Meta Summary */}
-      {meta && (
+      {meta && meta.n_samples !== undefined && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Study Metadata</CardTitle>
@@ -217,20 +233,22 @@ export default function AdminReadApi() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Channels:</span>{' '}
-                <span className="font-mono">{meta.n_channels}</span>
+                <span className="font-mono">{meta.n_channels ?? 'N/A'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Sampling Rate:</span>{' '}
-                <span className="font-mono">{meta.sampling_rate_hz} Hz</span>
+                <span className="font-mono">{meta.sampling_rate_hz ?? 'N/A'} Hz</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Samples:</span>{' '}
-                <span className="font-mono">{meta.n_samples.toLocaleString()}</span>
+                <span className="font-mono">{meta.n_samples?.toLocaleString() ?? 'N/A'}</span>
               </div>
               <div>
                 <span className="text-muted-foreground">Duration:</span>{' '}
                 <span className="font-mono">
-                  {(meta.n_samples / meta.sampling_rate_hz).toFixed(1)}s
+                  {meta.n_samples && meta.sampling_rate_hz 
+                    ? (meta.n_samples / meta.sampling_rate_hz).toFixed(1) + 's'
+                    : 'N/A'}
                 </span>
               </div>
             </div>
@@ -238,12 +256,12 @@ export default function AdminReadApi() {
             <div className="mt-4">
               <span className="text-muted-foreground text-sm">First 8 Channels:</span>
               <div className="flex flex-wrap gap-1 mt-1">
-                {meta.channel_names.slice(0, 8).map((ch, i) => (
+                {(meta.channel_names ?? []).slice(0, 8).map((ch, i) => (
                   <Badge key={i} variant="secondary" className="font-mono text-xs">
                     {ch}
                   </Badge>
                 ))}
-                {meta.channel_names.length > 8 && (
+                {(meta.channel_names?.length ?? 0) > 8 && (
                   <Badge variant="outline" className="text-xs">
                     +{meta.channel_names.length - 8} more
                   </Badge>
