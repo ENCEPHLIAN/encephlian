@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,19 +12,19 @@ import {
   fetchStudyChunk,
   fetchArtifactMask,
   isApiConfigured,
-  type StudyMeta,
+  type StudyMetaResponse,
 } from './readApi';
 
 export default function AdminReadApi() {
   const [studyId, setStudyId] = useState('TUH_CANON_001');
   const [startSample, setStartSample] = useState(0);
-  const [lengthSamples, setLengthSamples] = useState(1280); // ~10s at 128Hz
+  const [lengthSamples, setLengthSamples] = useState(2500); // ~10s at 250Hz
   
-  const [meta, setMeta] = useState<StudyMeta | null>(null);
+  const [metaResponse, setMetaResponse] = useState<StudyMetaResponse | null>(null);
   const [signals, setSignals] = useState<Float32Array[]>([]);
   const [artifactMask, setArtifactMask] = useState<Uint8Array | undefined>();
   const [channelNames, setChannelNames] = useState<string[]>([]);
-  const [samplingRate, setSamplingRate] = useState(128);
+  const [samplingRate, setSamplingRate] = useState(250);
   
   const [spacing, setSpacing] = useState(40);
   const [downsampleFactor, setDownsampleFactor] = useState(2);
@@ -35,38 +35,48 @@ export default function AdminReadApi() {
 
   const configured = isApiConfigured();
 
+  // Extract inner meta for convenience
+  const meta = metaResponse?.meta;
+  
   // Compute bounds from meta - with defensive null checks
   const nSamples = meta?.n_samples ?? 0;
-  const sRate = meta?.sampling_rate_hz ?? 128;
+  const sRate = meta?.sampling_rate_hz ?? 250;
   const maxStart = nSamples > 0 ? nSamples - 1 : 0;
   const maxLength = nSamples > 0 ? Math.min(500000, nSamples - startSample) : 500000;
+  
+  // Check if window loading is enabled
+  const canLoadWindow = Boolean(meta && meta.n_samples > 0);
 
   const handleLoadMeta = async () => {
     setError(null);
     setLoadingMeta(true);
-    setMeta(null);
+    setMetaResponse(null);
     setSignals([]);
     try {
       const data = await fetchStudyMeta(studyId);
       console.log('Meta response:', JSON.stringify(data, null, 2));
       
-      // Validate response has required fields
-      if (!data || typeof data.n_samples !== 'number') {
-        throw new Error(`Invalid meta response: missing n_samples. Got: ${JSON.stringify(data)}`);
+      // Validate response has required nested structure
+      if (!data?.meta) {
+        throw new Error('Invalid response: missing meta object');
       }
-      if (!data.channel_names || !Array.isArray(data.channel_names)) {
-        throw new Error(`Invalid meta response: missing channel_names`);
+      if (typeof data.meta.n_samples !== 'number') {
+        throw new Error('Invalid meta: missing n_samples');
       }
-      if (typeof data.sampling_rate_hz !== 'number') {
-        throw new Error(`Invalid meta response: missing sampling_rate_hz`);
+      if (typeof data.meta.sampling_rate_hz !== 'number') {
+        throw new Error('Invalid meta: missing sampling_rate_hz');
       }
       
-      setMeta(data);
-      setChannelNames(data.channel_names);
-      setSamplingRate(data.sampling_rate_hz);
-      // Reset window params to valid defaults
+      setMetaResponse(data);
+      
+      // Extract channel names from channel_map
+      const channels = data.meta.channel_map?.map(ch => ch.canonical_id) ?? [];
+      setChannelNames(channels);
+      setSamplingRate(data.meta.sampling_rate_hz);
+      
+      // Reset window params to valid defaults (10s at native rate)
       setStartSample(0);
-      setLengthSamples(Math.min(data.sampling_rate_hz * 10, data.n_samples)); // 10s default
+      setLengthSamples(Math.min(data.meta.sampling_rate_hz * 10, data.meta.n_samples));
     } catch (err) {
       console.error('Load meta error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load meta');
@@ -91,19 +101,31 @@ export default function AdminReadApi() {
         fetchArtifactMask(studyId, clampedStart, clampedLength).catch(() => null),
       ]);
       
-      const decodedSignals = decodeFloat32B64(
-        chunkData.data_b64,
-        chunkData.n_channels,
-        chunkData.length
-      );
+      // Decode with error handling
+      let decodedSignals: Float32Array[];
+      try {
+        decodedSignals = decodeFloat32B64(
+          chunkData.data_b64,
+          chunkData.n_channels,
+          chunkData.length
+        );
+      } catch (decodeErr) {
+        throw new Error(`Failed to decode EEG data: ${decodeErr instanceof Error ? decodeErr.message : 'unknown error'}`);
+      }
+      
       setSignals(decodedSignals);
       
       if (artifactData?.mask_b64) {
-        setArtifactMask(decodeUint8B64(artifactData.mask_b64));
+        try {
+          setArtifactMask(decodeUint8B64(artifactData.mask_b64));
+        } catch {
+          setArtifactMask(undefined);
+        }
       } else {
         setArtifactMask(undefined);
       }
     } catch (err) {
+      console.error('Load window error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load window');
     } finally {
       setLoadingWindow(false);
@@ -168,7 +190,7 @@ export default function AdminReadApi() {
                 className="w-32"
                 min={0}
                 max={maxStart}
-                disabled={!meta}
+                disabled={!canLoadWindow}
               />
               {meta && (
                 <span className="text-xs text-muted-foreground">
@@ -188,11 +210,11 @@ export default function AdminReadApi() {
                 className="w-32"
                 min={1}
                 max={maxLength}
-                disabled={!meta}
+                disabled={!canLoadWindow}
               />
               {meta && (
                 <span className="text-xs text-muted-foreground">
-                  max: {maxLength.toLocaleString()} (~{(maxLength / meta.sampling_rate_hz).toFixed(1)}s)
+                  max: {maxLength.toLocaleString()} (~{(maxLength / sRate).toFixed(1)}s)
                 </span>
               )}
             </div>
@@ -206,7 +228,7 @@ export default function AdminReadApi() {
             </Button>
             <Button
               onClick={handleLoadWindow}
-              disabled={loadingWindow || !meta || !configured}
+              disabled={loadingWindow || !canLoadWindow || !configured}
             >
               {loadingWindow && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Load Window
@@ -223,11 +245,25 @@ export default function AdminReadApi() {
         </Alert>
       )}
 
+      {/* Meta Loaded Status */}
+      {metaResponse && !meta && (
+        <Alert>
+          <CheckCircle className="h-4 w-4" />
+          <AlertTitle>Meta Loaded</AlertTitle>
+          <AlertDescription>Response received but inner meta structure is missing.</AlertDescription>
+        </Alert>
+      )}
+
       {/* Meta Summary */}
-      {meta && meta.n_samples !== undefined && (
+      {meta && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Study Metadata</CardTitle>
+            <CardTitle className="text-lg flex items-center gap-2">
+              Study Metadata
+              <Badge variant="outline" className="text-xs font-normal">
+                {meta.study_id}
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -253,31 +289,36 @@ export default function AdminReadApi() {
               </div>
             </div>
             
-            <div className="mt-4">
-              <span className="text-muted-foreground text-sm">First 8 Channels:</span>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {(meta.channel_names ?? []).slice(0, 8).map((ch, i) => (
-                  <Badge key={i} variant="secondary" className="font-mono text-xs">
-                    {ch}
-                  </Badge>
-                ))}
-                {(meta.channel_names?.length ?? 0) > 8 && (
-                  <Badge variant="outline" className="text-xs">
-                    +{meta.channel_names.length - 8} more
-                  </Badge>
-                )}
+            {meta.channel_map && meta.channel_map.length > 0 && (
+              <div className="mt-4">
+                <span className="text-muted-foreground text-sm">First 8 Channels:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {meta.channel_map.slice(0, 8).map((ch, i) => (
+                    <Badge key={i} variant="secondary" className="font-mono text-xs">
+                      {ch.canonical_id}
+                    </Badge>
+                  ))}
+                  {meta.channel_map.length > 8 && (
+                    <Badge variant="outline" className="text-xs">
+                      +{meta.channel_map.length - 8} more
+                    </Badge>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
-            {meta.normal_abnormal && (
+            {metaResponse.normal_abnormal && (
               <div className="mt-4">
                 <span className="text-muted-foreground text-sm">Classification:</span>
                 <Badge
-                  variant={meta.normal_abnormal.decision === 'normal' ? 'default' : 'destructive'}
+                  variant={metaResponse.normal_abnormal.decision === 'normal' ? 'default' : 'destructive'}
                   className="ml-2"
                 >
-                  {meta.normal_abnormal.decision}
+                  {metaResponse.normal_abnormal.decision}
                 </Badge>
+                <span className="text-xs text-muted-foreground ml-2">
+                  (score: {metaResponse.normal_abnormal.score_abnormal?.toFixed(2) ?? 'N/A'})
+                </span>
               </div>
             )}
           </CardContent>
