@@ -1,13 +1,13 @@
-import { useRef, useEffect, useCallback } from 'react';
-import { Slider } from '@/components/ui/slider';
-import { Label } from '@/components/ui/label';
+import { useRef, useEffect, useCallback, useState } from "react";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
 
 interface EEGViewerProps {
   signals: Float32Array[];
   channelNames: string[];
   samplingRate: number;
   artifactMask?: Uint8Array;
-  spacing?: number;
+  spacing?: number; // interpreted as "µV" spacing if your signals are µV
   downsampleFactor?: number;
   onSpacingChange?: (spacing: number) => void;
   onDownsampleChange?: (factor: number) => void;
@@ -16,26 +16,19 @@ interface EEGViewerProps {
 /**
  * Decodes base64 float32 data (C-order) into a 2D array of channels
  */
-export function decodeFloat32B64(
-  b64: string,
-  nChannels: number,
-  nSamples: number
-): Float32Array[] {
+export function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): Float32Array[] {
   const binaryString = atob(b64);
   const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+  // NOTE: atob() returns bytes; buffer is aligned enough for Float32Array in modern browsers
   const float32 = new Float32Array(bytes.buffer);
   const channels: Float32Array[] = [];
-  
-  // C-order: [n_channels, n_samples] - row-major
+
   for (let ch = 0; ch < nChannels; ch++) {
     const start = ch * nSamples;
     channels.push(float32.slice(start, start + nSamples));
   }
-  
   return channels;
 }
 
@@ -45,10 +38,19 @@ export function decodeFloat32B64(
 export function decodeUint8B64(b64: string): Uint8Array {
   const binaryString = atob(b64);
   const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
   return bytes;
+}
+
+// Canvas cannot use "hsl(var(--x))". Resolve the CSS var to "hsl(<numbers>)".
+function cssHsl(varName: string, fallback: string) {
+  try {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    if (!raw) return fallback;
+    return `hsl(${raw})`;
+  } catch {
+    return fallback;
+  }
 }
 
 export default function EEGViewer({
@@ -62,66 +64,80 @@ export default function EEGViewer({
   onDownsampleChange,
 }: EEGViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [autoGain, setAutoGain] = useState(true);
 
   const drawEEG = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || signals.length === 0) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const width = Math.max(320, Math.floor(canvas.clientWidth || 0));
+    const height = Math.max(200, Math.floor(canvas.clientHeight || 0));
     const dpr = window.devicePixelRatio || 1;
-    const width = canvas.clientWidth;
-    const height = canvas.clientHeight;
-    
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    // ✅ CRITICAL: reset transform each draw (prevents infinite scaling)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
+    // ✅ Resolve theme colors properly for canvas
+    const BG = cssHsl("--background", "#000");
+    const FG = cssHsl("--foreground", "#fff");
+    const BORDER = cssHsl("--border", "#333");
+    const PRIMARY = cssHsl("--primary", "#fff");
+    const MUTED = cssHsl("--muted-foreground", "#aaa");
+
     // Clear canvas
-    ctx.fillStyle = 'hsl(var(--background))';
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = BG;
     ctx.fillRect(0, 0, width, height);
 
     const nChannels = signals.length;
     const nSamples = signals[0]?.length || 0;
-    if (nSamples === 0) return;
+    if (nSamples === 0) {
+      ctx.fillStyle = FG;
+      ctx.font = "14px monospace";
+      ctx.fillText("No samples", 20, 30);
+      return;
+    }
 
-    const leftMargin = 80;
-    const rightMargin = 20;
-    const topMargin = 20;
-    const bottomMargin = 30;
-    const plotWidth = width - leftMargin - rightMargin;
-    const plotHeight = height - topMargin - bottomMargin;
+    const leftMargin = 90;
+    const rightMargin = 16;
+    const topMargin = 16;
+    const bottomMargin = 28;
+    const plotWidth = Math.max(10, width - leftMargin - rightMargin);
+    const plotHeight = Math.max(10, height - topMargin - bottomMargin);
     const channelHeight = plotHeight / nChannels;
 
-    // Draw artifact mask overlay if present
+    // Artifact overlay (fast-ish): samples per pixel scan
     if (artifactMask && artifactMask.length > 0) {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.15)'; // red-500 with low opacity
+      ctx.fillStyle = "rgba(239, 68, 68, 0.12)";
       const samplesPerPixel = nSamples / plotWidth;
-      
+
       for (let px = 0; px < plotWidth; px++) {
-        const sampleStart = Math.floor(px * samplesPerPixel);
-        const sampleEnd = Math.floor((px + 1) * samplesPerPixel);
-        
-        // Check if any sample in this pixel range has artifact
-        let hasArtifact = false;
-        for (let s = sampleStart; s < sampleEnd && s < artifactMask.length; s++) {
+        const s0 = Math.floor(px * samplesPerPixel);
+        const s1 = Math.min(artifactMask.length, Math.floor((px + 1) * samplesPerPixel));
+
+        let has = false;
+        for (let s = s0; s < s1; s++) {
           if (artifactMask[s] > 0) {
-            hasArtifact = true;
+            has = true;
             break;
           }
         }
-        
-        if (hasArtifact) {
-          ctx.fillRect(leftMargin + px, topMargin, 1, plotHeight);
-        }
+        if (has) ctx.fillRect(leftMargin + px, topMargin, 1, plotHeight);
       }
     }
 
-    // Draw grid lines
-    ctx.strokeStyle = 'hsl(var(--border))';
+    // Grid lines
+    ctx.strokeStyle = BORDER;
     ctx.lineWidth = 0.5;
-    
     for (let i = 0; i <= nChannels; i++) {
       const y = topMargin + i * channelHeight;
       ctx.beginPath();
@@ -130,101 +146,119 @@ export default function EEGViewer({
       ctx.stroke();
     }
 
-    // Draw channel labels
-    ctx.fillStyle = 'hsl(var(--foreground))';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    
+    // Channel labels
+    ctx.fillStyle = FG;
+    ctx.font = "11px monospace";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
     for (let ch = 0; ch < nChannels; ch++) {
       const y = topMargin + ch * channelHeight + channelHeight / 2;
       const label = channelNames[ch] || `Ch ${ch + 1}`;
-      ctx.fillText(label.slice(0, 8), leftMargin - 8, y);
+      ctx.fillText(label.slice(0, 12), leftMargin - 8, y);
     }
 
-    // Draw signals
-    ctx.strokeStyle = 'hsl(var(--primary))';
+    // Signal traces
+    ctx.strokeStyle = PRIMARY;
     ctx.lineWidth = 1;
 
-    const downsampledLength = Math.ceil(nSamples / downsampleFactor);
-    const xScale = plotWidth / downsampledLength;
-    const yScale = channelHeight / (spacing * 2); // spacing in µV, signals assumed in µV
+    const ds = Math.max(1, Math.floor(downsampleFactor || 1));
+    const downsampledLength = Math.max(2, Math.ceil(nSamples / ds));
+    const xScale = plotWidth / (downsampledLength - 1);
+
+    // If autoGain: compute per-window maxAbs across all channels (downsampled)
+    let globalMaxAbs = 0;
+    if (autoGain) {
+      for (let ch = 0; ch < nChannels; ch++) {
+        const sig = signals[ch];
+        for (let i = 0; i < nSamples; i += ds) {
+          const v = sig[i] ?? 0;
+          const a = Math.abs(v);
+          if (a > globalMaxAbs) globalMaxAbs = a;
+        }
+      }
+      if (globalMaxAbs === 0) globalMaxAbs = 1;
+    }
 
     for (let ch = 0; ch < nChannels; ch++) {
-      const signal = signals[ch];
+      const sig = signals[ch];
       const yCenter = topMargin + ch * channelHeight + channelHeight / 2;
-      
+
+      // yScale:
+      // - autoGain: fit into 90% of channel band
+      // - manual: treat spacing as µV scale if your values are µV
+      const yScale = autoGain ? ((channelHeight / 2) * 0.9) / globalMaxAbs : channelHeight / (Math.max(1, spacing) * 2);
+
       ctx.beginPath();
-      for (let i = 0; i < downsampledLength; i++) {
-        const sampleIdx = i * downsampleFactor;
-        const x = leftMargin + i * xScale;
-        const y = yCenter - signal[sampleIdx] * yScale;
-        
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
+      let p = 0;
+      for (let i = 0; i < nSamples; i += ds) {
+        const x = leftMargin + p * xScale;
+        const y = yCenter - (sig[i] ?? 0) * yScale;
+        if (p === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        p++;
       }
       ctx.stroke();
     }
 
-    // Draw time axis
-    const duration = nSamples / samplingRate;
-    ctx.fillStyle = 'hsl(var(--muted-foreground))';
-    ctx.font = '10px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    
+    // Time axis
+    const duration = nSamples / Math.max(1, samplingRate || 250);
+    ctx.fillStyle = MUTED;
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
     const numTicks = 5;
     for (let i = 0; i <= numTicks; i++) {
       const x = leftMargin + (i / numTicks) * plotWidth;
-      const time = (i / numTicks) * duration;
-      ctx.fillText(`${time.toFixed(1)}s`, x, height - bottomMargin + 5);
+      const t = (i / numTicks) * duration;
+      ctx.fillText(`${t.toFixed(1)}s`, x, height - bottomMargin + 6);
     }
-  }, [signals, channelNames, samplingRate, artifactMask, spacing, downsampleFactor]);
+
+    // Debug corner (remove later)
+    ctx.fillStyle = MUTED;
+    ctx.font = "10px monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(`draw ok | ch=${nChannels} samp=${nSamples} ds=${ds} autoGain=${autoGain ? "on" : "off"}`, 10, 6);
+  }, [signals, channelNames, samplingRate, artifactMask, spacing, downsampleFactor, autoGain]);
 
   useEffect(() => {
     drawEEG();
-    
-    const handleResize = () => drawEEG();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const onResize = () => drawEEG();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, [drawEEG]);
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-6 items-end">
-        <div className="flex flex-col gap-2 w-48">
-          <Label className="text-xs text-muted-foreground">
-            Channel Spacing: {spacing} µV
-          </Label>
-          <Slider
-            value={[spacing]}
-            onValueChange={([v]) => onSpacingChange?.(v)}
-            min={10}
-            max={200}
-            step={5}
-          />
+      <div className="flex flex-wrap gap-6 items-end">
+        <div className="flex flex-col gap-2 w-52">
+          <Label className="text-xs text-muted-foreground">Channel Spacing: {spacing} µV (manual)</Label>
+          <Slider value={[spacing]} onValueChange={([v]) => onSpacingChange?.(v)} min={10} max={200} step={5} />
         </div>
-        <div className="flex flex-col gap-2 w-48">
-          <Label className="text-xs text-muted-foreground">
-            Downsample: {downsampleFactor}x
-          </Label>
+
+        <div className="flex flex-col gap-2 w-52">
+          <Label className="text-xs text-muted-foreground">Downsample: {downsampleFactor}x</Label>
           <Slider
             value={[downsampleFactor]}
             onValueChange={([v]) => onDownsampleChange?.(v)}
             min={1}
-            max={8}
+            max={16}
             step={1}
           />
         </div>
+
+        <button
+          type="button"
+          onClick={() => setAutoGain((v) => !v)}
+          className="text-xs px-3 py-2 rounded-md border border-border bg-background hover:bg-muted"
+          title="AutoGain fits the waveform to the channel band so you always see it"
+        >
+          AutoGain: {autoGain ? "ON" : "OFF"}
+        </button>
       </div>
-      
-      <canvas
-        ref={canvasRef}
-        className="w-full h-[500px] rounded-lg border border-border bg-background"
-      />
+
+      <canvas ref={canvasRef} className="w-full h-[500px] rounded-lg border border-border bg-background" />
     </div>
   );
 }
