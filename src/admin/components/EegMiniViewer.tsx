@@ -28,7 +28,7 @@ export function bytesToFloat32(bytes: Uint8Array): Float32Array {
 export interface WindowDataForViewer {
   nCh: number;
   nSamp: number;
-  data: Float32Array;
+  data: Float32Array; // row-major: ch*nSamp + i
   start: number;
   length: number;
 }
@@ -38,9 +38,23 @@ interface EegMiniViewerProps {
   windowData: WindowDataForViewer | null;
 }
 
+function getCssHsl(varName: string, fallback: string) {
+  // shadcn vars look like: "--background: 0 0% 100%;"
+  // Canvas can't do "hsl(var(--background))" so we convert to "hsl(0 0% 100%)"
+  try {
+    const root = document.documentElement;
+    const v = getComputedStyle(root).getPropertyValue(varName).trim();
+    if (!v) return fallback;
+    return `hsl(${v})`;
+  } catch {
+    return fallback;
+  }
+}
+
 export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
   const [selectedChannel, setSelectedChannel] = useState(0);
   const [canvasWidth, setCanvasWidth] = useState(800);
 
@@ -83,19 +97,25 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
 
-    // ✅ CRITICAL: reset transform every draw (prevents infinite scaling)
+    // IMPORTANT: reset transform every draw to avoid compounding scale
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
-    // Clear
+    // Resolve theme colors for canvas
+    const bg = getCssHsl("--background", "#ffffff");
+    const border = getCssHsl("--border", "#999999");
+    const primary = getCssHsl("--primary", "#111111");
+    const muted = getCssHsl("--muted-foreground", "#666666");
+
+    // Clear + background
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "hsl(var(--background))";
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, width, height);
 
-    // Extract channel data (row-major)
+    // Extract channel offset (row-major)
     const offset = ch * nSamp;
 
-    // Downsample to fit screen
+    // Downsample to fit width
     const maxPoints = width * 2;
     const step = nSamp > maxPoints ? Math.ceil(nSamp / maxPoints) : 1;
 
@@ -114,7 +134,7 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     const midY = margin.top + plotHeight / 2;
 
     // baseline
-    ctx.strokeStyle = "hsl(var(--border))";
+    ctx.strokeStyle = border;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -124,7 +144,7 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     ctx.setLineDash([]);
 
     // waveform
-    ctx.strokeStyle = "hsl(var(--primary))";
+    ctx.strokeStyle = primary;
     ctx.lineWidth = 1;
     ctx.beginPath();
 
@@ -143,7 +163,7 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     ctx.stroke();
 
     // labels
-    ctx.fillStyle = "hsl(var(--muted-foreground))";
+    ctx.fillStyle = muted;
     ctx.font = "10px monospace";
     ctx.textAlign = "right";
     ctx.fillText(`±${maxAbs.toExponential(2)}`, width - margin.right, margin.top + 12);
