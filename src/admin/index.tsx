@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import EEGViewer, { decodeFloat32B64, decodeUint8B64 } from './EEGViewer';
+import EegMiniViewer, { type WindowDataForViewer } from './components/EegMiniViewer';
 import type { CanonicalMeta, NormalAbnormalResult } from './readApi';
 
 const STORAGE_KEY_BASE = 'enceph_read_api_base';
@@ -42,7 +43,7 @@ export default function AdminReadApi() {
   const [channelNames, setChannelNames] = useState<string[]>([]);
   const [samplingRate, setSamplingRate] = useState(250);
   const [windowData, setWindowData] = useState<WindowData | null>(null);
-  
+  const [miniViewerData, setMiniViewerData] = useState<WindowDataForViewer | null>(null);
   const [spacing, setSpacing] = useState(40);
   const [downsampleFactor, setDownsampleFactor] = useState(2);
   
@@ -85,8 +86,8 @@ export default function AdminReadApi() {
   const maxStart = nSamples > 0 ? nSamples - 1 : 0;
   const maxLength = nSamples > 0 ? Math.min(500000, nSamples - startSample) : 500000;
   
-  // Enable window loading when meta has valid n_samples
-  const canLoadWindow = Boolean(meta?.n_samples && meta.n_samples > 0);
+  // Enable window loading when configured (meta optional)
+  const canLoadWindow = configured;
 
   const handleTestHealth = async () => {
     if (!normalizedBase) {
@@ -173,19 +174,19 @@ export default function AdminReadApi() {
       toast.error('Base URL is required');
       return;
     }
-    if (!meta?.n_samples) return;
     
-    // Clamp values
-    const clampedStart = Math.max(0, Math.min(startSample, meta.n_samples - 1));
-    const clampedLength = Math.max(1, Math.min(lengthSamples, Math.min(500000, meta.n_samples - clampedStart)));
+    // Clamp values (use defaults if meta not loaded)
+    const maxSamples = meta?.n_samples ?? 1000000;
+    const clampedStart = Math.max(0, Math.min(startSample, maxSamples - 1));
+    const clampedLength = Math.max(1, Math.min(lengthSamples, Math.min(500000, maxSamples - clampedStart)));
     
     setError(null);
     setLoadingWindow(true);
     setWindowData(null);
-    
+    setMiniViewerData(null);
     try {
-      const chunkUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/chunk?start=${clampedStart}&length=${clampedLength}`;
-      const artifactUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/artifact?start=${clampedStart}&length=${clampedLength}`;
+      const chunkUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${clampedStart}&length=${clampedLength}`;
+      const artifactUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/artifact?root=.&start=${clampedStart}&length=${clampedLength}`;
       
       const [chunkRes, artifactRes] = await Promise.all([
         fetch(chunkUrl, { headers: getHeaders() }),
@@ -245,6 +246,25 @@ export default function AdminReadApi() {
       }
       
       setWindowData(wd);
+      
+      // Set data for mini viewer (flattened Float32Array with shape info)
+      const nCh = chunkData.n_channels;
+      const nSamp = chunkData.length;
+      // Flatten all channel data into a single Float32Array for row-major access
+      const flatData = new Float32Array(nCh * nSamp);
+      for (let ch = 0; ch < nCh; ch++) {
+        for (let i = 0; i < nSamp; i++) {
+          flatData[ch * nSamp + i] = decodedSignals[ch][i];
+        }
+      }
+      setMiniViewerData({
+        nCh,
+        nSamp,
+        data: flatData,
+        start: clampedStart,
+        length: clampedLength,
+      });
+      
       toast.success('Window loaded successfully');
     } catch (err) {
       console.error('Load window error:', err);
@@ -426,6 +446,11 @@ export default function AdminReadApi() {
             )}
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* EEG Mini Viewer */}
+      {miniViewerData && (
+        <EegMiniViewer meta={meta} windowData={miniViewerData} />
       )}
 
       {/* Meta Summary */}
