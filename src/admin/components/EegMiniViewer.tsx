@@ -1,9 +1,10 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import type { CanonicalMeta } from '../readApi';
+cat > (src / admin / components / EegMiniViewer.tsx) << "EOF";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import type { CanonicalMeta } from "../readApi";
 
 // Helper: decode base64 to Uint8Array
 export function base64ToBytes(b64: string): Uint8Array {
@@ -17,7 +18,6 @@ export function base64ToBytes(b64: string): Uint8Array {
 
 // Helper: convert Uint8Array to Float32Array (little-endian, browser native)
 export function bytesToFloat32(bytes: Uint8Array): Float32Array {
-  // Ensure alignment - create aligned buffer if needed
   if (bytes.byteOffset % 4 !== 0) {
     const aligned = new Uint8Array(bytes.length);
     aligned.set(bytes);
@@ -45,18 +45,21 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
   const [selectedChannel, setSelectedChannel] = useState(0);
   const [canvasWidth, setCanvasWidth] = useState(800);
 
-  // Observe container width
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        setCanvasWidth(entry.contentRect.width);
+        const w = Math.max(320, Math.floor(entry.contentRect.width || 0));
+        setCanvasWidth(w);
       }
     });
+
     observer.observe(container);
-    setCanvasWidth(container.clientWidth || 800);
+    const initial = Math.max(320, Math.floor(container.clientWidth || 800));
+    setCanvasWidth(initial);
+
     return () => observer.disconnect();
   }, []);
 
@@ -64,54 +67,45 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     const canvas = canvasRef.current;
     if (!canvas || !windowData) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const { nCh, nSamp, data } = windowData;
-    const ch = Math.min(selectedChannel, nCh - 1);
+    if (!nCh || !nSamp || !data || data.length === 0) return;
+
+    const ch = Math.min(Math.max(0, selectedChannel), nCh - 1);
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvasWidth;
+    const width = Math.max(320, Math.floor(canvasWidth || 0));
     const height = 240;
 
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
     canvas.style.width = `${width}px`;
     canvas.style.height = `${height}px`;
+
+    // ✅ CRITICAL: reset transform every draw (prevents infinite scaling)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
-    // Clear with background
-    ctx.fillStyle = 'hsl(var(--background))';
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "hsl(var(--background))";
     ctx.fillRect(0, 0, width, height);
 
-    if (nSamp === 0) {
-      ctx.fillStyle = 'hsl(var(--muted-foreground))';
-      ctx.font = '14px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('No data', width / 2, height / 2);
-      return;
-    }
+    // Extract channel data (row-major)
+    const offset = ch * nSamp;
 
-    // Extract channel data (row-major: ch * nSamp + i)
-    const channelData: number[] = [];
-    for (let i = 0; i < nSamp; i++) {
-      const idx = ch * nSamp + i;
-      channelData.push(data[idx] ?? 0);
-    }
-
-    // Downsample if needed
+    // Downsample to fit screen
     const maxPoints = width * 2;
     const step = nSamp > maxPoints ? Math.ceil(nSamp / maxPoints) : 1;
-    const downsampledData: number[] = [];
-    for (let i = 0; i < nSamp; i += step) {
-      downsampledData.push(channelData[i]);
-    }
 
-    // Autoscale: find max abs value
+    // Compute max abs
     let maxAbs = 0;
-    for (const v of downsampledData) {
-      const absV = Math.abs(v);
-      if (absV > maxAbs) maxAbs = absV;
+    for (let i = 0; i < nSamp; i += step) {
+      const v = data[offset + i] ?? 0;
+      const a = Math.abs(v);
+      if (a > maxAbs) maxAbs = a;
     }
     if (maxAbs === 0) maxAbs = 1;
 
@@ -120,8 +114,8 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     const plotHeight = height - margin.top - margin.bottom;
     const midY = margin.top + plotHeight / 2;
 
-    // Draw baseline
-    ctx.strokeStyle = 'hsl(var(--border))';
+    // baseline
+    ctx.strokeStyle = "hsl(var(--border))";
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -130,35 +124,34 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Draw waveform
-    ctx.strokeStyle = 'hsl(var(--primary))';
+    // waveform
+    ctx.strokeStyle = "hsl(var(--primary))";
     ctx.lineWidth = 1;
     ctx.beginPath();
 
-    const xScale = plotWidth / (downsampledData.length - 1 || 1);
-    const yScale = (plotHeight / 2) * 0.9 / maxAbs;
+    const nPts = Math.max(2, Math.ceil(nSamp / step));
+    const xScale = plotWidth / (nPts - 1);
+    const yScale = ((plotHeight / 2) * 0.9) / maxAbs;
 
-    for (let i = 0; i < downsampledData.length; i++) {
-      const x = margin.left + i * xScale;
-      const y = midY - downsampledData[i] * yScale;
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
+    let p = 0;
+    for (let i = 0; i < nSamp; i += step) {
+      const x = margin.left + p * xScale;
+      const y = midY - (data[offset + i] ?? 0) * yScale;
+      if (p === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+      p++;
     }
     ctx.stroke();
 
-    // Draw amplitude scale
-    ctx.fillStyle = 'hsl(var(--muted-foreground))';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'right';
+    // labels
+    ctx.fillStyle = "hsl(var(--muted-foreground))";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "right";
     ctx.fillText(`±${maxAbs.toExponential(2)}`, width - margin.right, margin.top + 12);
 
-    // Draw time info at bottom
     const samplingRate = meta?.sampling_rate_hz ?? 250;
     const duration = nSamp / samplingRate;
-    ctx.textAlign = 'center';
+    ctx.textAlign = "center";
     ctx.fillText(`${duration.toFixed(2)}s (${nSamp} samples @ ${samplingRate}Hz)`, width / 2, height - 8);
   }, [windowData, selectedChannel, canvasWidth, meta]);
 
@@ -166,12 +159,10 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     drawWaveform();
   }, [drawWaveform]);
 
-  if (!windowData) {
-    return null;
-  }
+  if (!windowData) return null;
 
   const channelOptions = Array.from({ length: windowData.nCh }, (_, i) => {
-    const channelName = meta?.channel_map?.[i]?.canonical_id ?? `Ch ${i}`;
+    const channelName = meta?.channel_map?.find((c) => c.index === i)?.canonical_id ?? `Ch ${i}`;
     return { value: i, label: channelName };
   });
 
@@ -186,14 +177,10 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {/* Controls */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground">Channel:</Label>
-            <Select
-              value={String(selectedChannel)}
-              onValueChange={(v) => setSelectedChannel(Number(v))}
-            >
+            <Select value={String(selectedChannel)} onValueChange={(v) => setSelectedChannel(Number(v))}>
               <SelectTrigger className="w-40 h-8">
                 <SelectValue />
               </SelectTrigger>
@@ -211,14 +198,11 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
           </div>
         </div>
 
-        {/* Canvas */}
         <div ref={containerRef} className="w-full">
-          <canvas
-            ref={canvasRef}
-            className="w-full rounded border border-border bg-background"
-          />
+          <canvas ref={canvasRef} className="w-full rounded border border-border bg-background" />
         </div>
       </CardContent>
     </Card>
   );
 }
+EOF;
