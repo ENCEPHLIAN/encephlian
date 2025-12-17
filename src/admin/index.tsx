@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AlertTriangle, Loader2, CheckCircle, Activity, XCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertTriangle, Loader2, CheckCircle, Activity, XCircle, Save, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,26 +10,27 @@ import { toast } from 'sonner';
 import EEGViewer, { decodeFloat32B64, decodeUint8B64 } from './EEGViewer';
 import type { CanonicalMeta, NormalAbnormalResult } from './readApi';
 
-// Read and normalize config from env
-const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || '').trim().replace(/\/+$/, '');
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || '').trim();
+const STORAGE_KEY_BASE = 'enceph_read_api_base';
+const STORAGE_KEY_KEY = 'enceph_read_api_key';
 
-const getHeaders = (): Record<string, string> => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (API_KEY) {
-    headers['X-API-KEY'] = API_KEY;
-  }
-  return headers;
-};
+// Fallback from env
+const ENV_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || '').trim().replace(/\/+$/, '');
+const ENV_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || '').trim();
 
 interface WindowData {
   chunkShape: { n_channels: number; length: number };
+  dtype: string;
   artifactShape?: { length: number };
   startSample: number;
   lengthSamples: number;
+  samplePreview: number[];
 }
 
 export default function AdminReadApi() {
+  // Connection settings
+  const [apiBase, setApiBase] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  
   const [studyId, setStudyId] = useState('TUH_CANON_001');
   const [startSample, setStartSample] = useState(0);
   const [lengthSamples, setLengthSamples] = useState(2500);
@@ -49,9 +50,34 @@ export default function AdminReadApi() {
   const [loadingWindow, setLoadingWindow] = useState(false);
   const [loadingHealth, setLoadingHealth] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [healthStatus, setHealthStatus] = useState<'ok' | 'fail' | null>(null);
+  const [healthResult, setHealthResult] = useState<{ status: number; body: string } | null>(null);
 
-  const configured = Boolean(API_BASE);
+  // Initialize from localStorage or env
+  useEffect(() => {
+    const storedBase = localStorage.getItem(STORAGE_KEY_BASE);
+    const storedKey = localStorage.getItem(STORAGE_KEY_KEY);
+    setApiBase((storedBase ?? ENV_BASE).trim().replace(/\/+$/, ''));
+    setApiKey((storedKey ?? ENV_KEY).trim());
+  }, []);
+
+  const normalizedBase = apiBase.trim().replace(/\/+$/, '');
+  const configured = Boolean(normalizedBase);
+
+  const getHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey.trim()) {
+      headers['X-API-KEY'] = apiKey.trim();
+    }
+    return headers;
+  };
+
+  const handleSaveConnection = () => {
+    const base = apiBase.trim().replace(/\/+$/, '');
+    const key = apiKey.trim();
+    localStorage.setItem(STORAGE_KEY_BASE, base);
+    localStorage.setItem(STORAGE_KEY_KEY, key);
+    toast.success('Connection settings saved');
+  };
 
   // Compute bounds from meta with defensive checks
   const nSamples = meta?.n_samples ?? 0;
@@ -63,19 +89,24 @@ export default function AdminReadApi() {
   const canLoadWindow = Boolean(meta?.n_samples && meta.n_samples > 0);
 
   const handleTestHealth = async () => {
+    if (!normalizedBase) {
+      toast.error('Base URL is required');
+      return;
+    }
     setLoadingHealth(true);
-    setHealthStatus(null);
+    setHealthResult(null);
     try {
-      const res = await fetch(`${API_BASE}/health`, { headers: getHeaders() });
-      if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`HTTP ${res.status}: ${body}`);
+      const res = await fetch(`${normalizedBase}/health`, { headers: getHeaders() });
+      const body = await res.text();
+      setHealthResult({ status: res.status, body });
+      if (res.ok) {
+        toast.success(`Health check passed (HTTP ${res.status})`);
+      } else {
+        toast.error(`Health check failed (HTTP ${res.status})`);
       }
-      setHealthStatus('ok');
-      toast.success('Health check passed');
     } catch (err) {
-      setHealthStatus('fail');
-      const msg = err instanceof Error ? err.message : 'Health check failed';
+      const msg = err instanceof Error ? err.message : 'Network error';
+      setHealthResult({ status: 0, body: msg });
       toast.error(msg);
     } finally {
       setLoadingHealth(false);
@@ -83,6 +114,10 @@ export default function AdminReadApi() {
   };
 
   const handleLoadMeta = async () => {
+    if (!normalizedBase) {
+      toast.error('Base URL is required');
+      return;
+    }
     setError(null);
     setLoadingMeta(true);
     setMeta(null);
@@ -91,7 +126,7 @@ export default function AdminReadApi() {
     setWindowData(null);
     
     try {
-      const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/meta?root=.`;
+      const url = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/meta?root=.`;
       const res = await fetch(url, { headers: getHeaders() });
       
       if (!res.ok) {
@@ -134,6 +169,10 @@ export default function AdminReadApi() {
   };
 
   const handleLoadWindow = async () => {
+    if (!normalizedBase) {
+      toast.error('Base URL is required');
+      return;
+    }
     if (!meta?.n_samples) return;
     
     // Clamp values
@@ -145,8 +184,8 @@ export default function AdminReadApi() {
     setWindowData(null);
     
     try {
-      const chunkUrl = `${API_BASE}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${clampedStart}&length=${clampedLength}`;
-      const artifactUrl = `${API_BASE}/studies/${encodeURIComponent(studyId)}/artifact?root=.&start=${clampedStart}&length=${clampedLength}`;
+      const chunkUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/chunk?start=${clampedStart}&length=${clampedLength}`;
+      const artifactUrl = `${normalizedBase}/studies/${encodeURIComponent(studyId)}/artifact?start=${clampedStart}&length=${clampedLength}`;
       
       const [chunkRes, artifactRes] = await Promise.all([
         fetch(chunkUrl, { headers: getHeaders() }),
@@ -174,11 +213,18 @@ export default function AdminReadApi() {
       
       setSignals(decodedSignals);
       
+      // Get first 20 samples of channel 0 for preview
+      const samplePreview = decodedSignals.length > 0 
+        ? Array.from(decodedSignals[0].slice(0, 20))
+        : [];
+      
       // Build window data
       const wd: WindowData = {
         chunkShape: { n_channels: chunkData.n_channels, length: chunkData.length },
+        dtype: 'float32',
         startSample: clampedStart,
         lengthSamples: clampedLength,
+        samplePreview,
       };
       
       // Handle artifact
@@ -214,39 +260,77 @@ export default function AdminReadApi() {
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Admin: EEG Read API</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleTestHealth}
-            disabled={!configured || loadingHealth}
-          >
-            {loadingHealth ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : healthStatus === 'ok' ? (
-              <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
-            ) : healthStatus === 'fail' ? (
-              <XCircle className="h-4 w-4 mr-2 text-red-500" />
-            ) : (
-              <Activity className="h-4 w-4 mr-2" />
-            )}
-            Test /health
-          </Button>
-        </div>
       </div>
 
-      {/* Config Status */}
-      <Alert variant={configured ? 'default' : 'destructive'} className={configured ? 'border-muted' : ''}>
-        <AlertTriangle className="h-4 w-4" />
-        <AlertTitle>{configured ? 'Development Mode' : 'API Not Configured'}</AlertTitle>
-        <AlertDescription className="text-xs font-mono break-all">
-          {configured ? (
-            <>BASE: {API_BASE} | KEY: {API_KEY ? '***' + API_KEY.slice(-4) : '(none)'}</>
-          ) : (
-            <>Set VITE_ENCEPH_READ_API_BASE in your .env</>
+      {/* Connection Section */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Settings className="h-4 w-4" />
+            Connection
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-col gap-2 flex-1 min-w-[250px]">
+              <Label htmlFor="apiBase" className="text-xs text-muted-foreground">Read API Base URL</Label>
+              <Input
+                id="apiBase"
+                value={apiBase}
+                onChange={(e) => setApiBase(e.target.value)}
+                placeholder="https://xxxxx.trycloudflare.com"
+                className="font-mono text-sm"
+              />
+            </div>
+            <div className="flex flex-col gap-2 w-48">
+              <Label htmlFor="apiKey" className="text-xs text-muted-foreground">API Key</Label>
+              <Input
+                id="apiKey"
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="(optional)"
+                className="font-mono text-sm"
+              />
+            </div>
+            <Button onClick={handleSaveConnection} variant="outline" size="sm">
+              <Save className="h-4 w-4 mr-2" />
+              Save
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestHealth}
+              disabled={!configured || loadingHealth}
+            >
+              {loadingHealth ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Activity className="h-4 w-4 mr-2" />
+              )}
+              Test /health
+            </Button>
+          </div>
+          
+          {/* Health Result */}
+          {healthResult && (
+            <div className={`mt-3 p-2 rounded text-xs font-mono ${healthResult.status >= 200 && healthResult.status < 300 ? 'bg-green-500/10 border border-green-500/30' : 'bg-destructive/10 border border-destructive/30'}`}>
+              <span className="font-semibold">HTTP {healthResult.status}:</span> {healthResult.body}
+            </div>
           )}
-        </AlertDescription>
-      </Alert>
+        </CardContent>
+      </Card>
+
+      {/* Warning if not configured */}
+      {!configured && (
+        <Alert variant="default" className="border-yellow-500/50 bg-yellow-500/10">
+          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          <AlertTitle>Base URL Not Set</AlertTitle>
+          <AlertDescription className="text-xs">
+            Enter a Base URL above to connect to the Read API.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Error Box */}
       {error && (
@@ -325,10 +409,21 @@ export default function AdminReadApi() {
         <Alert className="border-green-500/50 bg-green-500/10">
           <CheckCircle className="h-4 w-4 text-green-500" />
           <AlertTitle>Window Loaded</AlertTitle>
-          <AlertDescription className="font-mono text-xs">
-            chunk: [{windowData.chunkShape.n_channels} × {windowData.chunkShape.length}] float32
-            {windowData.artifactShape && <> | artifact: [{windowData.artifactShape.length}] uint8</>}
-            {' '}| start: {windowData.startSample} | length: {windowData.lengthSamples}
+          <AlertDescription className="font-mono text-xs space-y-1">
+            <div>
+              <span className="text-muted-foreground">shape:</span> [{windowData.chunkShape.n_channels} × {windowData.chunkShape.length}]
+              <span className="ml-2 text-muted-foreground">dtype:</span> {windowData.dtype}
+              {windowData.artifactShape && <><span className="ml-2 text-muted-foreground">artifact:</span> [{windowData.artifactShape.length}] uint8</>}
+            </div>
+            <div>
+              <span className="text-muted-foreground">start:</span> {windowData.startSample}
+              <span className="ml-2 text-muted-foreground">length:</span> {windowData.lengthSamples}
+            </div>
+            {windowData.samplePreview.length > 0 && (
+              <div>
+                <span className="text-muted-foreground">ch0[0:20]:</span> [{windowData.samplePreview.map(v => v.toFixed(4)).join(', ')}]
+              </div>
+            )}
           </AlertDescription>
         </Alert>
       )}
