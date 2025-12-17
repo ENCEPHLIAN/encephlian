@@ -1,4 +1,3 @@
-cat > (src / admin / components / EegMiniViewer.tsx) << "EOF";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -205,4 +204,3 @@ export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) 
     </Card>
   );
 }
-EOF;
