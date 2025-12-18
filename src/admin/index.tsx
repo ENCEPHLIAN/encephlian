@@ -221,7 +221,8 @@ export default function AdminReadApi() {
       const decodedSignals = decodeFloat32B64(chunkData.data_b64, nCh, winLen);
       setSignals(decodedSignals);
 
-      const samplePreview = decodedSignals.length > 0 ? Array.from(decodedSignals[0].slice(0, 20)) : [];
+      const samplePreview: number[] =
+        decodedSignals.length > 0 ? Array.from(decodedSignals[0].slice(0, 20), (v) => Number(v)) : [];
 
       const wd: WindowData = {
         chunkShape: { n_channels: nCh, length: winLen },

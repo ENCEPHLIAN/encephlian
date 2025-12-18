@@ -4,8 +4,8 @@
  */
 
 // Dev defaults - remove before production
-const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || "").trim();
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || "").trim();
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE || "https://placement-ala-katrina-rush.trycloudflare.com";
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || "dev-secret";
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number>;
