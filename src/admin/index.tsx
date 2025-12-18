@@ -1,3 +1,4 @@
+import EEGViewer, { decodeFloat32B64, decodeUint8B64 } from "./EEGViewer";
 import { useState, useEffect } from "react";
 import { AlertTriangle, Loader2, CheckCircle, Activity, XCircle, Save, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import EEGViewer, { decodeFloat32B64, decodeUint8B64 } from "./EEGViewer";
 import EegMiniViewer, { type WindowDataForViewer } from "./components/EegMiniViewer";
 import type { CanonicalMeta, NormalAbnormalResult } from "./readApi";
 
@@ -222,7 +222,7 @@ export default function AdminReadApi() {
       setSignals(decodedSignals);
 
       const samplePreview: number[] =
-        decodedSignals.length > 0 ? Array.from(decodedSignals[0].slice(0, 20), (v) => Number(v)) : [];
+        decodedSignals.length > 0 ? Array.from(decodedSignals[0].subarray(0, 20), (v) => Number(v)) : [];
 
       const wd: WindowData = {
         chunkShape: { n_channels: nCh, length: winLen },
