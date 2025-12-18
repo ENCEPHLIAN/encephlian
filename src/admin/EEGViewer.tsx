@@ -1,339 +1,292 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
-type Meta = {
-  study_id: string;
-  sampling_rate_hz: number; // 250
-  n_channels: number;
-  n_samples: number;
-  channels?: string[];
-};
+interface EEGViewerProps {
+  signals: Float32Array[];
+  channelNames: string[];
+  samplingRate: number;
+  artifactMask?: Uint8Array;
 
-type ChunkResp = {
-  study_id?: string;
-  start: number;
-  length: number;
-  dtype: string;
-  shape: [number, number]; // [nCh, nSamp]
-  order: "C";
-  data_b64: string;
-};
-
-type MaskResp = {
-  study_id?: string;
-  start: number;
-  length: number;
-  dtype: string; // uint8
-  shape: [number]; // [nSamp]
-  data_b64: string;
-};
-
-function b64ToUint8(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  spacing?: number;
+  downsampleFactor?: number;
+  onSpacingChange?: (spacing: number) => void;
+  onDownsampleChange?: (factor: number) => void;
 }
 
-function b64ToFloat32(b64: string): Float32Array {
-  const bytes = b64ToUint8(b64);
-  // assumes little-endian float32
-  return new Float32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+/**
+ * Decodes base64 float32 data (C-order) into a 2D array of channels
+ */
+export function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): Float32Array[] {
+  const binaryString = atob(b64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+  // important: Float32Array over the bytes buffer
+  const float32 = new Float32Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.byteLength / 4));
+
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < nChannels; ch++) {
+    const start = ch * nSamples;
+    channels.push(float32.slice(start, start + nSamples));
+  }
+  return channels;
+}
+
+/**
+ * Decodes base64 uint8 artifact mask
+ */
+export function decodeUint8B64(b64: string): Uint8Array {
+  const binaryString = atob(b64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+  return bytes;
 }
 
 function colorForIndex(i: number): string {
-  // Good-enough distinct palette without external libs
   const hues = [210, 0, 120, 30, 270, 160, 50, 300, 190, 340, 90, 240];
   const h = hues[i % hues.length];
-  const s = 70;
-  const l = 40;
-  return `hsl(${h} ${s}% ${l}%)`;
+  return `hsl(${h} 70% 45%)`;
 }
 
-function useCanvasSize(containerRef: React.RefObject<HTMLDivElement>) {
-  const [size, setSize] = useState({ w: 0, h: 0 });
+export default function EEGViewer({
+  signals,
+  channelNames,
+  samplingRate,
+  artifactMask,
+  spacing = 40,
+  downsampleFactor = 4,
+  onSpacingChange,
+  onDownsampleChange,
+}: EEGViewerProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
+  const [playing, setPlaying] = useState(false);
+  const [playhead, setPlayhead] = useState(0); // in samples
+
+  const nChannels = signals.length;
+  const nSamples = signals[0]?.length ?? 0;
+
+  const durationSec = useMemo(() => (nSamples && samplingRate ? nSamples / samplingRate : 0), [nSamples, samplingRate]);
+
+  // keep playhead moving (optional)
+  useEffect(() => {
+    if (!playing || nSamples === 0) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (t: number) => {
+      const dt = (t - last) / 1000;
+      last = t;
+      setPlayhead((p) => {
+        const next = p + Math.floor(dt * samplingRate);
+        return next >= nSamples ? 0 : next;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, nSamples, samplingRate]);
+
+  // ResizeObserver -> redraw when container size changes
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      setSize({ w: Math.max(1, Math.floor(r.width)), h: Math.max(1, Math.floor(r.height)) });
+      drawEEG();
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [containerRef]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signals, spacing, downsampleFactor, artifactMask, channelNames, samplingRate, playhead]);
 
-  return size;
-}
-
-export default function EEGViewer({
-  apiBase,
-  apiKey,
-  root = ".",
-  studyId,
-  meta,
-  secondsPerWindow = 10,
-}: {
-  apiBase: string; // e.g. https://your-read-api...
-  apiKey: string;
-  root?: string;
-  studyId: string;
-  meta: Meta;
-  secondsPerWindow?: number;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const { w: cssW, h: cssH } = useCanvasSize(containerRef);
-
-  const sfreq = meta.sampling_rate_hz ?? 250;
-  const nCh = meta.n_channels ?? meta.channels?.length ?? 0;
-
-  const [playing, setPlaying] = useState(true);
-  const [playheadSec, setPlayheadSec] = useState(0);
-  const [channelSpacingUv, setChannelSpacingUv] = useState(40); // UI units (not true uV unless calibrated)
-  const [downsample, setDownsample] = useState(4);
-
-  const windowLenSamp = useMemo(() => Math.max(250, Math.floor(secondsPerWindow * sfreq)), [secondsPerWindow, sfreq]);
-
-  // Keep canvas DPI-correct + deterministic (prevents shrinking)
-  useEffect(() => {
+  const drawEEG = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+    if (!signals || signals.length === 0) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const rect = container.getBoundingClientRect();
+    const cssW = Math.max(1, Math.floor(rect.width));
+    const cssH = Math.max(300, Math.floor(rect.height)); // enforce sane height
+
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
+    // Set canvas backing store
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
     canvas.width = Math.floor(cssW * dpr);
     canvas.height = Math.floor(cssH * dpr);
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    // critical: reset transform then set once (prevents accumulating scale)
+    // CRITICAL: reset transform each draw (prevents “shrinking / scaling drift”)
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }, [cssW, cssH]);
-
-  // Playback clock
-  useEffect(() => {
-    if (!playing) return;
-    let raf = 0;
-    let last = performance.now();
-
-    const tick = (t: number) => {
-      const dt = (t - last) / 1000;
-      last = t;
-      setPlayheadSec((s) => {
-        const durSec = meta.n_samples / sfreq;
-        const next = s + dt;
-        return next >= durSec ? 0 : next;
-      });
-      raf = requestAnimationFrame(tick);
-    };
-
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, meta.n_samples, sfreq]);
-
-  // Fetch a window around playhead
-  const [chunk, setChunk] = useState<{ start: number; data: Float32Array; shape: [number, number] } | null>(null);
-  const [mask, setMask] = useState<{ start: number; data: Uint8Array; length: number } | null>(null);
-
-  useEffect(() => {
-    const abort = new AbortController();
-
-    (async () => {
-      const center = Math.floor(playheadSec * sfreq);
-      const start = Math.max(0, center - Math.floor(windowLenSamp / 2));
-      const length = Math.min(windowLenSamp, meta.n_samples - start);
-
-      const hdrs: Record<string, string> = { "X-API-KEY": apiKey };
-
-      const [cRes, mRes] = await Promise.all([
-        fetch(`${apiBase}/studies/${studyId}/chunk?root=${encodeURIComponent(root)}&start=${start}&length=${length}`, {
-          headers: hdrs,
-          signal: abort.signal,
-        }),
-        fetch(
-          `${apiBase}/studies/${studyId}/artifact?root=${encodeURIComponent(root)}&start=${start}&length=${length}`,
-          {
-            headers: hdrs,
-            signal: abort.signal,
-          },
-        ),
-      ]);
-
-      if (!cRes.ok) return;
-      if (!mRes.ok) return;
-
-      const cJson = (await cRes.json()) as ChunkResp;
-      const mJson = (await mRes.json()) as MaskResp;
-
-      const c = b64ToFloat32(cJson.data_b64);
-      const m = b64ToUint8(mJson.data_b64);
-
-      setChunk({ start, data: c, shape: cJson.shape });
-      setMask({ start, data: m, length: mJson.length });
-    })().catch(() => {});
-
-    return () => abort.abort();
-  }, [playheadSec, sfreq, windowLenSamp, apiBase, apiKey, root, studyId, meta.n_samples]);
-
-  // Draw
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Clear
-    ctx.clearRect(0, 0, cssW, cssH);
 
     // Background (not black)
-    ctx.fillStyle = "#f7f7fb";
+    ctx.fillStyle = "hsl(var(--background))";
     ctx.fillRect(0, 0, cssW, cssH);
 
-    // Panel padding
-    const padL = 56;
-    const padR = 16;
-    const padT = 16;
-    const padB = 20;
-    const plotW = Math.max(1, cssW - padL - padR);
-    const plotH = Math.max(1, cssH - padT - padB);
+    const leftMargin = 90;
+    const rightMargin = 16;
+    const topMargin = 14;
+    const bottomMargin = 24;
+
+    const plotW = Math.max(1, cssW - leftMargin - rightMargin);
+    const plotH = Math.max(1, cssH - topMargin - bottomMargin);
+
+    const nCh = signals.length;
+    const nSamp = signals[0]?.length ?? 0;
+    if (nSamp === 0) return;
+
+    const laneH = plotH / Math.max(1, nCh);
 
     // Grid
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = "rgba(0,0,0,0.08)";
+    ctx.strokeStyle = "hsl(var(--border))";
     ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.35;
+
     for (let i = 0; i <= 8; i++) {
-      const x = padL + (plotW * i) / 8;
+      const x = leftMargin + (plotW * i) / 8;
       ctx.beginPath();
-      ctx.moveTo(x, padT);
-      ctx.lineTo(x, padT + plotH);
+      ctx.moveTo(x, topMargin);
+      ctx.lineTo(x, topMargin + plotH);
       ctx.stroke();
     }
-    for (let i = 0; i <= 6; i++) {
-      const y = padT + (plotH * i) / 6;
+    for (let i = 0; i <= nCh; i++) {
+      const y = topMargin + i * laneH;
       ctx.beginPath();
-      ctx.moveTo(padL, y);
-      ctx.lineTo(padL + plotW, y);
+      ctx.moveTo(leftMargin, y);
+      ctx.lineTo(leftMargin + plotW, y);
       ctx.stroke();
     }
+    ctx.globalAlpha = 1;
 
-    if (!chunk || !mask) return;
-
-    const [chCount, sampCount] = chunk.shape;
-    const stride = sampCount; // row-major: channel blocks contiguous
-    const ds = Math.max(1, downsample);
-
-    // Artifact overlay shading (vertical bands)
-    // mask.data is uint8 per sample (0/1)
-    ctx.fillStyle = "rgba(255, 80, 80, 0.12)";
-    const m = mask.data;
-    for (let i = 0; i < m.length; i += ds) {
-      if (m[i] === 0) continue;
-      const x = padL + (i / (sampCount - 1)) * plotW;
-      // small band
-      ctx.fillRect(x, padT, Math.max(1, (plotW / sampCount) * ds), plotH);
+    // Artifact overlay (vertical bands)
+    if (artifactMask && artifactMask.length > 0) {
+      ctx.fillStyle = "rgba(255, 80, 80, 0.10)";
+      const ds = Math.max(1, downsampleFactor);
+      for (let i = 0; i < Math.min(artifactMask.length, nSamp); i += ds) {
+        if (artifactMask[i] === 0) continue;
+        const x = leftMargin + (i / (nSamp - 1)) * plotW;
+        ctx.fillRect(x, topMargin, Math.max(1, (plotW / nSamp) * ds), plotH);
+      }
     }
 
-    // Plot traces
-    const centerYForCh = (ch: number) => {
-      const laneH = plotH / Math.max(1, chCount);
-      return padT + laneH * (ch + 0.5);
-    };
+    // Labels
+    ctx.fillStyle = "hsl(var(--foreground))";
+    ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
 
-    // scale factor: user slider maps to pixels/lane
-    const laneH = plotH / Math.max(1, chCount);
-    const ampPx = Math.max(2, (laneH * 0.42 * 40) / Math.max(1, channelSpacingUv)); // heuristic
+    for (let ch = 0; ch < nCh; ch++) {
+      const y = topMargin + laneH * (ch + 0.5);
+      const label = channelNames[ch] ?? `Ch ${ch + 1}`;
+      ctx.fillText(label, leftMargin - 10, y);
+    }
 
-    for (let ch = 0; ch < chCount; ch++) {
-      const y0 = centerYForCh(ch);
+    // Scaling: spacing slider is “bigger spacing => smaller waveform”
+    // This maps roughly to “microvolt scale feel” even if raw units differ.
+    const ampPx = Math.max(2, (laneH * 0.42 * 40) / Math.max(1, spacing));
 
-      // faint baseline
-      ctx.strokeStyle = "rgba(0,0,0,0.15)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(padL, y0);
-      ctx.lineTo(padL + plotW, y0);
-      ctx.stroke();
+    // Draw traces
+    const ds = Math.max(1, downsampleFactor);
+    const nPts = Math.max(2, Math.ceil(nSamp / ds));
+    const xScale = plotW / (nPts - 1);
+
+    for (let ch = 0; ch < nCh; ch++) {
+      const sig = signals[ch];
+      const y0 = topMargin + laneH * (ch + 0.5);
 
       ctx.strokeStyle = colorForIndex(ch);
-      ctx.lineWidth = 1.25;
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
 
-      for (let i = 0; i < sampCount; i += ds) {
-        const x = padL + (i / (sampCount - 1)) * plotW;
-        const v = chunk.data[ch * stride + i]; // float32
-        const y = y0 - v * ampPx; // assumes v is roughly in “scaled uV-like” units
-        if (i === 0) ctx.moveTo(x, y);
+      let p = 0;
+      for (let i = 0; i < nSamp; i += ds) {
+        const x = leftMargin + p * xScale;
+        const v = sig[i] ?? 0;
+        const y = y0 - v * ampPx;
+        if (p === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
+        p++;
       }
-
       ctx.stroke();
-
-      // channel label
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.font = "12px system-ui, -apple-system";
-      const label = meta.channels?.[ch] ?? `Ch ${ch + 1}`;
-      ctx.fillText(label, 8, y0 + 4);
     }
 
-    // Playhead (center of window)
-    ctx.strokeStyle = "rgba(0,0,0,0.35)";
-    ctx.lineWidth = 2;
-    const px = padL + plotW * 0.5;
-    ctx.beginPath();
-    ctx.moveTo(px, padT);
-    ctx.lineTo(px, padT + plotH);
-    ctx.stroke();
-  }, [chunk, mask, cssW, cssH, downsample, channelSpacingUv, meta.channels]);
+    // Playhead line
+    if (nSamp > 1) {
+      const ph = Math.max(0, Math.min(playhead, nSamp - 1));
+      const x = leftMargin + (ph / (nSamp - 1)) * plotW;
+      ctx.strokeStyle = "rgba(0, 200, 120, 0.65)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, topMargin);
+      ctx.lineTo(x, topMargin + plotH);
+      ctx.stroke();
+    }
+
+    // Time axis
+    ctx.fillStyle = "hsl(var(--muted-foreground))";
+    ctx.font = "11px system-ui, -apple-system";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    const dur = nSamp / samplingRate;
+    for (let i = 0; i <= 5; i++) {
+      const x = leftMargin + (plotW * i) / 5;
+      const t = (dur * i) / 5;
+      ctx.fillText(`${t.toFixed(1)}s`, x, topMargin + plotH + 4);
+    }
+  }, [signals, channelNames, samplingRate, artifactMask, spacing, downsampleFactor, playhead]);
+
+  useEffect(() => {
+    drawEEG();
+  }, [drawEEG]);
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
-        <button onClick={() => setPlaying((p) => !p)}>{playing ? "Pause" : "Play"}</button>
-        <button onClick={() => setPlayheadSec(0)}>Reset</button>
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-4 items-center">
+        <Button variant="outline" size="sm" onClick={() => setPlaying((p) => !p)}>
+          {playing ? "Pause" : "Play"}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setPlayhead(0);
+            setPlaying(false);
+          }}
+        >
+          Reset
+        </Button>
 
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          Channel Spacing
-          <input
-            type="range"
-            min={10}
-            max={120}
-            value={channelSpacingUv}
-            onChange={(e) => setChannelSpacingUv(Number(e.target.value))}
-          />
-          <span>{channelSpacingUv}</span>
-        </label>
+        <div className="flex flex-col gap-1 w-56">
+          <Label className="text-xs text-muted-foreground">Channel Spacing: {spacing} µV</Label>
+          <Slider value={[spacing]} onValueChange={([v]) => onSpacingChange?.(v)} min={10} max={200} step={5} />
+        </div>
 
-        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          Downsample
-          <input
-            type="range"
+        <div className="flex flex-col gap-1 w-56">
+          <Label className="text-xs text-muted-foreground">Downsample: {downsampleFactor}×</Label>
+          <Slider
+            value={[downsampleFactor]}
+            onValueChange={([v]) => onDownsampleChange?.(v)}
             min={1}
             max={16}
-            value={downsample}
-            onChange={(e) => setDownsample(Number(e.target.value))}
+            step={1}
           />
-          <span>{downsample}×</span>
-        </label>
+        </div>
 
-        <div style={{ marginLeft: "auto", opacity: 0.7 }}>
-          Playhead: {playheadSec.toFixed(2)}s / {(meta.n_samples / sfreq).toFixed(2)}s
+        <div className="text-xs text-muted-foreground ml-auto">
+          {durationSec ? `Window: ${durationSec.toFixed(1)}s` : null}
         </div>
       </div>
 
       <div
         ref={containerRef}
-        style={{
-          width: "100%",
-          height: "520px",
-          borderRadius: 12,
-          overflow: "hidden",
-          border: "1px solid rgba(0,0,0,0.08)",
-          background: "#ffffff",
-        }}
+        className="w-full h-[520px] rounded-lg border border-border bg-background overflow-hidden"
       >
         <canvas ref={canvasRef} />
       </div>
