@@ -4,8 +4,8 @@
  */
 
 // Dev defaults - remove before production
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE || 'https://placement-ala-katrina-rush.trycloudflare.com';
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || 'dev-secret';
+const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || "").trim();
+const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || "").trim();
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number>;
@@ -14,7 +14,7 @@ interface FetchOptions extends RequestInit {
 
 export async function readApiFetch<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
   const { params, skipAuth, ...fetchOptions } = options;
-  
+
   let url = `${API_BASE}${endpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
@@ -25,13 +25,13 @@ export async function readApiFetch<T>(endpoint: string, options: FetchOptions = 
   }
 
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...fetchOptions.headers as Record<string, string>,
+    "Content-Type": "application/json",
+    ...(fetchOptions.headers as Record<string, string>),
   };
 
   // Only add API key if not skipping auth
   if (!skipAuth && API_KEY) {
-    headers['X-API-KEY'] = API_KEY;
+    headers["X-API-KEY"] = API_KEY;
   }
 
   const response = await fetch(url, {
@@ -48,9 +48,12 @@ export async function readApiFetch<T>(endpoint: string, options: FetchOptions = 
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, public details: string) {
+  constructor(
+    public status: number,
+    public details: string,
+  ) {
     super(`API Error ${status}: ${details}`);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
@@ -106,18 +109,14 @@ export interface HealthResponse {
 }
 
 export async function checkHealth(): Promise<HealthResponse> {
-  return readApiFetch<HealthResponse>('/health', { skipAuth: true });
+  return readApiFetch<HealthResponse>("/health", { skipAuth: true });
 }
 
 export async function fetchStudyMeta(studyId: string): Promise<StudyMetaResponse> {
   return readApiFetch<StudyMetaResponse>(`/studies/${studyId}/meta`);
 }
 
-export async function fetchStudyChunk(
-  studyId: string,
-  startSample: number,
-  length: number
-): Promise<ChunkResponse> {
+export async function fetchStudyChunk(studyId: string, startSample: number, length: number): Promise<ChunkResponse> {
   return readApiFetch<ChunkResponse>(`/studies/${studyId}/chunk`, {
     params: { start: startSample, length },
   });
@@ -126,7 +125,7 @@ export async function fetchStudyChunk(
 export async function fetchArtifactMask(
   studyId: string,
   startSample: number,
-  length: number
+  length: number,
 ): Promise<ArtifactResponse> {
   return readApiFetch<ArtifactResponse>(`/studies/${studyId}/artifact`, {
     params: { start: startSample, length },
