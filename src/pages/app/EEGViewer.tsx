@@ -44,7 +44,7 @@ const API_BASE = (
   .trim()
   .replace(/\/+$/, "");
 
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || window.__ENCEPH__?.READ_API_KEY || "").trim();
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || "e3sg-bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
 
 /** Safety: keep viewer fast + deterministic UX */
 const MAX_SECONDS_TO_LOAD = 600; // 10 minutes in-memory cap
