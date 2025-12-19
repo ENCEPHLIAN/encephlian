@@ -28,9 +28,23 @@ import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
 import { filterStandardChannels } from "@/lib/eeg/standard-channels";
 import { cn } from "@/lib/utils";
 
-/** === Read API env === */
-const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || "").trim().replace(/\/+$/, "");
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || "").trim();
+// Lovable sometimes doesn't inject Vite envs unless configured in project settings.
+// So: read from Vite env first, then from window.__ENCEPH__ (optional), then hard fallback.
+declare global {
+  interface Window {
+    __ENCEPH__?: { READ_API_BASE?: string; READ_API_KEY?: string };
+  }
+}
+
+const API_BASE = (
+  import.meta.env.VITE_ENCEPH_READ_API_BASE ||
+  window.__ENCEPH__?.READ_API_BASE ||
+  "https://marcus-monday-betty-delivery.trycloudflare.com"
+)
+  .trim()
+  .replace(/\/+$/, "");
+
+const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || window.__ENCEPH__?.READ_API_KEY || "").trim();
 
 /** Safety: keep viewer fast + deterministic UX */
 const MAX_SECONDS_TO_LOAD = 600; // 10 minutes in-memory cap
