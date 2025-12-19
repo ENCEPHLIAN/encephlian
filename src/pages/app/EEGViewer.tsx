@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu } from "lucide-react";
+import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu, RefreshCw, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "next-themes";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -28,17 +30,12 @@ import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
 import { filterStandardChannels } from "@/lib/eeg/standard-channels";
 import { cn } from "@/lib/utils";
 
-// Lovable sometimes doesn't inject Vite envs unless configured in project settings.
-// So: read from Vite env first, then from window.__ENCEPH__ (optional), then hard fallback.
-declare global {
-  interface Window {
-    __ENCEPH__?: { READ_API_BASE?: string; READ_API_KEY?: string };
-  }
-}
+// Hard-lock study ID
+const STUDY_ID = "TUH_CANON_001";
 
+// API Base URL
 const API_BASE = (
   import.meta.env.VITE_ENCEPH_READ_API_BASE ||
-  window.__ENCEPH__?.READ_API_BASE ||
   "https://drops-patch-crucial-differential.trycloudflare.com"
 )
   .trim()
@@ -46,9 +43,9 @@ const API_BASE = (
 
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || "e3sg-bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
 
-/** Safety: keep viewer fast + deterministic UX */
-const MAX_SECONDS_TO_LOAD = 600; // 10 minutes in-memory cap
-const BLOCK_SECONDS = 30; // chunk fetch block size
+/** Chunk streaming settings */
+const BLOCK_SECONDS = 10;
+const UI_UPDATE_INTERVAL_MS = 250;
 
 type CanonicalMeta = {
   study_id: string;
@@ -71,6 +68,12 @@ type Marker = {
   notes?: string | null;
 };
 
+type ArtifactInterval = {
+  start_sec: number;
+  end_sec: number;
+  label?: string;
+};
+
 function getHeaders() {
   const h: Record<string, string> = { "Content-Type": "application/json" };
   if (API_KEY) h["X-API-KEY"] = API_KEY;
@@ -83,7 +86,6 @@ function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): num
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
 
-  // Ensure aligned Float32 view
   const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const float32 = new Float32Array(buf);
 
@@ -91,19 +93,103 @@ function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): num
   for (let ch = 0; ch < nChannels; ch++) {
     const start = ch * nSamples;
     const seg = float32.subarray(start, start + nSamples);
-    // convert to number[] for WebGLEEGViewer expectations
     out[ch] = Array.from(seg);
   }
   return out;
 }
 
+/** Compute unit multiplier to convert to microvolts */
+function getUnitMultiplier(unit: string): number {
+  const u = (unit || "").toLowerCase().trim();
+  if (u === "v" || u === "volt" || u === "volts") return 1e6;
+  if (u === "mv" || u === "millivolt" || u === "millivolts") return 1e3;
+  if (u === "uv" || u === "µv" || u === "microvolt" || u === "microvolts") return 1;
+  return 1; // Default: assume already in uV
+}
+
+/** Compute robust amplitude (95th percentile abs) */
+function computeRobustAmplitude(signals: number[][], visibleChannels: Set<number>, startSample: number, endSample: number): number {
+  const values: number[] = [];
+  const step = Math.max(1, Math.floor((endSample - startSample) / 500)); // Sample up to 500 points per channel
+  
+  visibleChannels.forEach(ch => {
+    const signal = signals[ch];
+    if (!signal) return;
+    for (let i = startSample; i < Math.min(endSample, signal.length); i += step) {
+      values.push(Math.abs(signal[i]));
+    }
+  });
+  
+  if (values.length === 0) return 100; // Default 100 uV
+  
+  values.sort((a, b) => a - b);
+  const p95Index = Math.floor(values.length * 0.95);
+  return values[p95Index] || 100;
+}
+
+/** Generate deterministic artifact intervals (fallback) */
+function generateDeterministicArtifacts(signals: number[][], sampleRate: number): ArtifactInterval[] {
+  const artifacts: ArtifactInterval[] = [];
+  if (!signals.length || !signals[0]?.length) return artifacts;
+  
+  const totalSamples = signals[0].length;
+  const windowSamples = Math.floor(sampleRate * 0.5); // 0.5s windows
+  const threshold = 500; // uV threshold for artifact
+  
+  for (let start = 0; start < totalSamples - windowSamples; start += windowSamples) {
+    let maxAbs = 0;
+    let highFreqEnergy = 0;
+    
+    for (let ch = 0; ch < Math.min(signals.length, 10); ch++) {
+      const signal = signals[ch];
+      for (let i = start; i < start + windowSamples && i < signal.length; i++) {
+        maxAbs = Math.max(maxAbs, Math.abs(signal[i]));
+        if (i > start) {
+          highFreqEnergy += Math.abs(signal[i] - signal[i - 1]);
+        }
+      }
+    }
+    
+    const avgHighFreq = highFreqEnergy / (windowSamples * Math.min(signals.length, 10));
+    
+    if (maxAbs > threshold || avgHighFreq > 50) {
+      const startSec = start / sampleRate;
+      const endSec = (start + windowSamples) / sampleRate;
+      
+      // Merge with previous if adjacent
+      if (artifacts.length > 0 && Math.abs(artifacts[artifacts.length - 1].end_sec - startSec) < 0.1) {
+        artifacts[artifacts.length - 1].end_sec = endSec;
+      } else {
+        artifacts.push({ start_sec: startSec, end_sec: endSec, label: "artifact" });
+      }
+    }
+  }
+  
+  return artifacts;
+}
+
+/** Generate deterministic channel colors */
+const CHANNEL_PALETTE = [
+  "#60a5fa", "#4ade80", "#fbbf24", "#a78bfa", "#f87171",
+  "#34d399", "#fb923c", "#818cf8", "#f472b6", "#22d3d8",
+  "#a3e635", "#e879f9", "#fcd34d", "#6ee7b7", "#93c5fd",
+  "#c084fc", "#fdba74", "#86efac", "#fca5a5", "#67e8f9",
+];
+
+function getChannelColors(nChannels: number): string[] {
+  const colors: string[] = [];
+  for (let i = 0; i < nChannels; i++) {
+    colors.push(CHANNEL_PALETTE[i % CHANNEL_PALETTE.length]);
+  }
+  return colors;
+}
+
 export default function EEGViewer() {
-  const [searchParams] = useSearchParams();
   const isMobile = useIsMobile();
   const { theme } = useTheme();
 
-  /** Study ID comes from query param. This is the canonical study id (e.g., NATUS_001, TUH_CANON_001) */
-  const studyId = searchParams.get("studyId") || "NATUS_001";
+  // Hard-locked study ID
+  const studyId = STUDY_ID;
 
   // UI State
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -112,48 +198,70 @@ export default function EEGViewer() {
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [timeWindow, setTimeWindow] = useState(60);
-  const [amplitudeScale, setAmplitudeScale] = useState(0.1);
+  const [timeWindow, setTimeWindow] = useState(10);
+  const [amplitudeScale, setAmplitudeScale] = useState(0.01);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
+  const [autoGain, setAutoGain] = useState(true);
 
   // Loading state
   const [isLoadingEEG, setIsLoadingEEG] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [loadError, setLoadError] = useState<{ message: string; url?: string; status?: number } | null>(null);
 
-  // Meta + EEG data state (canonical)
+  // Meta + EEG data state
   const [meta, setMeta] = useState<CanonicalMeta | null>(null);
-  const [rawEegData, setRawEegData] = useState<{
-    signals: number[][];
-    channelLabels: string[];
-    sampleRate: number;
-    duration: number;
-  } | null>(null);
+  const [durationSec, setDurationSec] = useState(0);
+  const [loadedSeconds, setLoadedSeconds] = useState(0);
+  
+  // Streaming signals storage
+  const signalsRef = useRef<number[][]>([]);
+  const [signalsVersion, setSignalsVersion] = useState(0);
+  
+  const [channelLabels, setChannelLabels] = useState<string[]>([]);
+  const [channelColors, setChannelColors] = useState<string[]>([]);
+  const [unitMultipliers, setUnitMultipliers] = useState<number[]>([]);
 
-  // Local markers (no Supabase dependency here)
+  // Markers + Artifacts
   const [markers, setMarkers] = useState<Marker[]>([]);
+  const [artifactIntervals, setArtifactIntervals] = useState<ArtifactInterval[]>([]);
   const [newMarkerType, setNewMarkerType] = useState("event");
   const [newMarkerLabel, setNewMarkerLabel] = useState("");
   const [newMarkerNotes, setNewMarkerNotes] = useState("");
 
   // Channel Group Visibility
   const [visibleGroups, setVisibleGroups] = useState<Set<ChannelGroup>>(
-    new Set(["frontal", "central", "temporal", "occipital"]),
+    new Set(["frontal", "central", "temporal", "occipital", "other"]),
   );
 
   // Transformed data based on montage
-  const eegData = rawEegData
-    ? (() => {
-        const transformed = applyMontage(rawEegData.signals, rawEegData.channelLabels, montage);
-        return { ...rawEegData, signals: transformed.signals, channelLabels: transformed.labels };
-      })()
-    : null;
+  const eegData = useMemo(() => {
+    if (!signalsRef.current.length || !channelLabels.length) return null;
+    
+    const signals = signalsRef.current;
+    const sampleRate = meta?.sampling_rate_hz ?? 250;
+    const duration = signals[0]?.length ? signals[0].length / sampleRate : 0;
+    
+    const transformed = applyMontage(signals, channelLabels, montage);
+    return {
+      signals: transformed.signals,
+      channelLabels: transformed.labels,
+      sampleRate,
+      duration,
+    };
+  }, [channelLabels, montage, meta?.sampling_rate_hz, signalsVersion]);
 
-  // Visible channels (memoized)
+  // Visible channels - fallback to ALL if standard filter returns empty
   const visibleChannels = useMemo(() => {
     if (!eegData) return new Set<number>();
 
     const standardIndices = filterStandardChannels(eegData.channelLabels);
+    
+    // FALLBACK: If no standard channels found, show ALL channels
+    if (standardIndices.length === 0) {
+      return new Set(eegData.channelLabels.map((_, i) => i));
+    }
+    
     const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
     const groups = groupChannels(standardLabels);
 
@@ -163,131 +271,213 @@ export default function EEGViewer() {
         localIndices.forEach((localIdx) => visible.add(standardIndices[localIdx]));
       }
     });
+    
+    // FALLBACK: If group filtering returns empty, show ALL channels
+    if (visible.size === 0) {
+      return new Set(eegData.channelLabels.map((_, i) => i));
+    }
+    
     return visible;
   }, [eegData?.channelLabels, visibleGroups]);
 
-  /** === Read API fetchers === */
-  const fetchMeta = useCallback(async (sid: string) => {
-    if (!API_BASE) throw new Error("VITE_ENCEPH_READ_API_BASE is not set");
-    const url = `${API_BASE}/studies/${encodeURIComponent(sid)}/meta?root=.`;
+  // Auto-gain computation
+  useEffect(() => {
+    if (!autoGain || !eegData || visibleChannels.size === 0) return;
+    
+    const startSample = Math.floor(currentTime * eegData.sampleRate);
+    const endSample = Math.floor((currentTime + timeWindow) * eegData.sampleRate);
+    
+    const robustAmp = computeRobustAmplitude(eegData.signals, visibleChannels, startSample, endSample);
+    if (robustAmp > 0) {
+      // Target: amplitude fits nicely in channel height (~0.3 of channel height)
+      const targetScale = 100 / robustAmp; // Scale to make 100uV reasonable
+      setAmplitudeScale(Math.max(0.001, Math.min(1, targetScale * 0.01)));
+    }
+  }, [autoGain, eegData, visibleChannels, currentTime, timeWindow, signalsVersion]);
+
+  /** Fetch meta */
+  const fetchMeta = useCallback(async () => {
+    const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/meta?root=.`;
     const res = await fetch(url, { headers: getHeaders() });
     const body = await res.text();
-    if (!res.ok) throw new Error(`Meta HTTP ${res.status}: ${body}`);
+    if (!res.ok) {
+      throw { message: `Meta fetch failed: HTTP ${res.status}`, url, status: res.status, body };
+    }
     const json = JSON.parse(body);
     return (json.meta ?? json) as CanonicalMeta;
-  }, []);
+  }, [studyId]);
 
-  const fetchChunk = useCallback(async (sid: string, start: number, length: number) => {
-    if (!API_BASE) throw new Error("VITE_ENCEPH_READ_API_BASE is not set");
-    const url = `${API_BASE}/studies/${encodeURIComponent(sid)}/chunk?root=.&start=${start}&length=${length}`;
+  /** Fetch chunk */
+  const fetchChunk = useCallback(async (start: number, length: number) => {
+    const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${start}&length=${length}`;
     const res = await fetch(url, { headers: getHeaders() });
     const body = await res.text();
-    if (!res.ok) throw new Error(`Chunk HTTP ${res.status}: ${body}`);
+    if (!res.ok) {
+      throw { message: `Chunk fetch failed: HTTP ${res.status}`, url, status: res.status, body };
+    }
     return JSON.parse(body) as { n_channels: number; length: number; data_b64: string };
-  }, []);
+  }, [studyId]);
 
-  /** === Load EEG from Read API (canonical) === */
-  useEffect(() => {
-    let cancelled = false;
+  /** Fetch artifact intervals */
+  const fetchArtifacts = useCallback(async (): Promise<ArtifactInterval[]> => {
+    try {
+      const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/derivatives/artifact_intervals?root=.`;
+      const res = await fetch(url, { headers: getHeaders() });
+      if (res.ok) {
+        const json = await res.json();
+        return json.intervals ?? json ?? [];
+      }
+    } catch {
+      // Fallback to local computation
+    }
+    return [];
+  }, [studyId]);
 
-    const load = async () => {
-      setIsLoadingEEG(true);
-      setLoadError(null);
-      setMeta(null);
-      setRawEegData(null);
-      setMarkers([]);
-      setCurrentTime(0);
-      setIsPlaying(false);
+  /** Load EEG with progressive streaming */
+  const loadEEG = useCallback(async () => {
+    setIsLoadingEEG(true);
+    setIsStreaming(true);
+    setLoadError(null);
+    setMeta(null);
+    signalsRef.current = [];
+    setSignalsVersion(0);
+    setChannelLabels([]);
+    setMarkers([]);
+    setArtifactIntervals([]);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setLoadedSeconds(0);
+    setDurationSec(0);
 
-      try {
-        toast.info("Loading canonical meta...");
-        const m = await fetchMeta(studyId);
-        if (cancelled) return;
+    try {
+      // 1. Fetch meta
+      toast.info("Loading meta...");
+      const m = await fetchMeta();
+      setMeta(m);
 
-        setMeta(m);
+      const sampleRate = m.sampling_rate_hz ?? 250;
+      const nSamplesTotal = m.n_samples ?? 0;
+      const nChannels = m.n_channels ?? 0;
 
-        const sampleRate = m.sampling_rate_hz ?? 250;
-        const nSamplesTotal = m.n_samples ?? 0;
+      if (!nSamplesTotal || !nChannels) {
+        throw { message: "Meta missing n_samples or n_channels", url: `${API_BASE}/studies/${studyId}/meta` };
+      }
 
-        const channelLabels = m.channel_map?.length
-          ? m.channel_map
-              .slice()
-              .sort((a, b) => a.index - b.index)
-              .map((c) => c.canonical_id)
-          : Array.from({ length: m.n_channels ?? 0 }, (_, i) => `CH${i}`);
+      // Compute real duration
+      const realDuration = nSamplesTotal / sampleRate;
+      setDurationSec(realDuration);
 
-        const maxSamples = Math.min(nSamplesTotal, Math.floor(MAX_SECONDS_TO_LOAD * sampleRate));
-        const blockSamples = Math.max(1, Math.floor(BLOCK_SECONDS * sampleRate));
+      // Setup channel labels and units
+      const labels = m.channel_map?.length
+        ? m.channel_map.slice().sort((a, b) => a.index - b.index).map((c) => c.canonical_id)
+        : Array.from({ length: nChannels }, (_, i) => `CH${i}`);
+      
+      const multipliers = m.channel_map?.length
+        ? m.channel_map.slice().sort((a, b) => a.index - b.index).map((c) => getUnitMultiplier(c.unit))
+        : Array.from({ length: nChannels }, () => 1);
 
-        if (!nSamplesTotal || !m.n_channels) {
-          throw new Error("Meta missing n_samples / n_channels");
-        }
+      setChannelLabels(labels);
+      setChannelColors(getChannelColors(nChannels));
+      setUnitMultipliers(multipliers);
 
-        toast.info(`Loading canonical signal (up to ${Math.round(maxSamples / sampleRate)}s)...`);
+      // Pre-allocate signals
+      signalsRef.current = Array.from({ length: nChannels }, () => []);
 
-        // Pre-allocate numeric arrays by channel (number[]), append blocks
-        const signals: number[][] = Array.from({ length: m.n_channels }, () => []);
+      toast.info(`Streaming ${Math.round(realDuration)}s of EEG...`);
+      setIsLoadingEEG(false);
 
-        for (let start = 0; start < maxSamples; start += blockSamples) {
-          if (cancelled) return;
+      // 2. Stream chunks
+      const blockSamples = Math.floor(BLOCK_SECONDS * sampleRate);
+      let lastUIUpdate = Date.now();
 
-          const len = Math.min(blockSamples, maxSamples - start);
-          const chunk = await fetchChunk(studyId, start, len);
-
-          // Decode: returns [n_channels][len] number[][]
+      for (let start = 0; start < nSamplesTotal; start += blockSamples) {
+        const len = Math.min(blockSamples, nSamplesTotal - start);
+        
+        try {
+          const chunk = await fetchChunk(start, len);
           const decoded = decodeFloat32B64(chunk.data_b64, chunk.n_channels, chunk.length);
 
-          // Append into signals
-          for (let ch = 0; ch < decoded.length; ch++) {
-            signals[ch].push(...decoded[ch]);
+          // Apply unit conversion and append to signals
+          for (let ch = 0; ch < decoded.length && ch < signalsRef.current.length; ch++) {
+            const mult = multipliers[ch] ?? 1;
+            const converted = decoded[ch].map(v => v * mult);
+            signalsRef.current[ch].push(...converted);
           }
+
+          // Update UI periodically
+          if (Date.now() - lastUIUpdate >= UI_UPDATE_INTERVAL_MS) {
+            const loaded = signalsRef.current[0]?.length ?? 0;
+            setLoadedSeconds(loaded / sampleRate);
+            setSignalsVersion(v => v + 1);
+            lastUIUpdate = Date.now();
+          }
+        } catch (e: any) {
+          console.error("Chunk error:", e);
+          // Continue loading other chunks
         }
-
-        if (cancelled) return;
-
-        const duration = signals[0]?.length ? signals[0].length / sampleRate : 0;
-
-        setRawEegData({
-          signals,
-          channelLabels,
-          sampleRate,
-          duration,
-        });
-
-        toast.success(`Loaded: ${channelLabels.length}ch @ ${sampleRate}Hz (${Math.round(duration)}s)`);
-      } catch (e: any) {
-        if (cancelled) return;
-        console.error(e);
-        setLoadError(e?.message ?? "Failed to load canonical EEG");
-        toast.error(e?.message ?? "Failed to load canonical EEG");
-      } finally {
-        if (!cancelled) setIsLoadingEEG(false);
       }
-    };
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [studyId, fetchMeta, fetchChunk]);
+      // Final update
+      const finalLoaded = signalsRef.current[0]?.length ?? 0;
+      setLoadedSeconds(finalLoaded / sampleRate);
+      setSignalsVersion(v => v + 1);
 
-  /** Playback loop */
+      // 3. Fetch or compute artifacts
+      let artifacts = await fetchArtifacts();
+      if (artifacts.length === 0) {
+        artifacts = generateDeterministicArtifacts(signalsRef.current, sampleRate);
+      }
+      setArtifactIntervals(artifacts);
+
+      // Add artifact start times as markers
+      const artifactMarkers: Marker[] = artifacts.map((a, i) => ({
+        id: `artifact-${i}`,
+        timestamp_sec: a.start_sec,
+        marker_type: "artifact",
+        label: a.label || "Artifact",
+        notes: `Duration: ${(a.end_sec - a.start_sec).toFixed(1)}s`,
+      }));
+      setMarkers(artifactMarkers);
+
+      toast.success(`Loaded: ${labels.length}ch @ ${sampleRate}Hz (${Math.round(finalLoaded / sampleRate)}s)`);
+    } catch (e: any) {
+      console.error("Load error:", e);
+      setLoadError({
+        message: e?.message ?? "Failed to load EEG",
+        url: e?.url,
+        status: e?.status,
+      });
+      toast.error(e?.message ?? "Failed to load EEG");
+    } finally {
+      setIsLoadingEEG(false);
+      setIsStreaming(false);
+    }
+  }, [fetchMeta, fetchChunk, fetchArtifacts, studyId]);
+
+  /** Initial load */
+  useEffect(() => {
+    loadEEG();
+  }, [loadEEG]);
+
+  /** Playback loop - clamp to loadedSeconds */
   useEffect(() => {
     if (!isPlaying || !eegData) return;
+
+    const maxSeekable = Math.max(0, loadedSeconds - timeWindow);
 
     const interval = setInterval(() => {
       setCurrentTime((prev) => {
         const next = prev + 0.1 * playbackSpeed;
-        if (next >= eegData.duration - timeWindow) {
+        if (next >= maxSeekable) {
           setIsPlaying(false);
-          return Math.max(0, eegData.duration - timeWindow);
+          return maxSeekable;
         }
         return next;
       });
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isPlaying, eegData, timeWindow, playbackSpeed]);
+  }, [isPlaying, eegData, timeWindow, playbackSpeed, loadedSeconds]);
 
   /** Controls */
   const handlePlayPause = () => setIsPlaying((prev) => !prev);
@@ -295,7 +485,8 @@ export default function EEGViewer() {
   const animateToTime = useCallback(
     (targetTime: number) => {
       if (!eegData) return;
-      const clamped = Math.max(0, Math.min(eegData.duration - timeWindow, targetTime));
+      const maxSeekable = Math.max(0, loadedSeconds - timeWindow);
+      const clamped = Math.max(0, Math.min(maxSeekable, targetTime));
 
       const startTime = currentTime;
       const startTs = performance.now();
@@ -310,7 +501,7 @@ export default function EEGViewer() {
 
       requestAnimationFrame(step);
     },
-    [eegData, timeWindow, currentTime],
+    [eegData, timeWindow, currentTime, loadedSeconds],
   );
 
   const handleSkipBackward = () => animateToTime(currentTime - 10);
@@ -319,10 +510,11 @@ export default function EEGViewer() {
   const handleTimeClick = useCallback(
     (time: number) => {
       if (!eegData) return;
-      const clamped = Math.max(0, Math.min(eegData.duration - timeWindow, time - timeWindow / 2));
+      const maxSeekable = Math.max(0, loadedSeconds - timeWindow);
+      const clamped = Math.max(0, Math.min(maxSeekable, time - timeWindow / 2));
       setCurrentTime(clamped);
     },
-    [eegData, timeWindow],
+    [eegData, timeWindow, loadedSeconds],
   );
 
   /** Marker ops (local) */
@@ -377,37 +569,54 @@ export default function EEGViewer() {
       return next;
     });
   };
-  const handleSelectAllGroups = () => setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
+  const handleSelectAllGroups = () => setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital", "other"]));
   const handleDeselectAllGroups = () => setVisibleGroups(new Set());
+
+  // Debug info
+  const debugInfo = {
+    duration: Math.round(durationSec),
+    loaded: Math.round(loadedSeconds),
+    channels: eegData?.channelLabels.length ?? 0,
+    visible: visibleChannels.size,
+    hasWarning: durationSec === 0 || loadedSeconds === 0 || (eegData?.channelLabels.length ?? 0) === 0,
+  };
 
   const EEGViewerContent = ({ isModal = false }: { isModal?: boolean }) => (
     <div className={cn("relative w-full h-full", isModal ? "min-h-[60vh]" : "")}>
-      {isLoadingEEG ? (
+      {isLoadingEEG && !isStreaming ? (
         <div className="absolute inset-0 flex items-center justify-center bg-background">
           <div className="text-center space-y-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-            <p className="text-sm text-muted-foreground">Loading canonical EEG...</p>
+            <p className="text-sm text-muted-foreground">Loading meta...</p>
           </div>
         </div>
       ) : loadError ? (
         <div className="absolute inset-0 flex items-center justify-center bg-background p-4">
-          <Card className="max-w-md w-full">
+          <Card className="max-w-lg w-full">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-destructive">
                 <AlertCircle className="h-5 w-5" />
                 Failed to Load EEG
               </CardTitle>
-              <CardDescription className="break-words">{loadError}</CardDescription>
+              <CardDescription className="break-words">{loadError.message}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="text-xs text-muted-foreground">Ensure Read API is reachable and env vars are set.</div>
-              <Button variant="outline" onClick={() => window.location.reload()}>
+            <CardContent className="space-y-3">
+              {loadError.url && (
+                <div className="text-xs text-muted-foreground bg-muted p-2 rounded font-mono break-all">
+                  URL: {loadError.url}
+                </div>
+              )}
+              {loadError.status && (
+                <Badge variant="destructive">HTTP {loadError.status}</Badge>
+              )}
+              <Button variant="outline" onClick={loadEEG} className="gap-2">
+                <RefreshCw className="h-4 w-4" />
                 Retry
               </Button>
             </CardContent>
           </Card>
         </div>
-      ) : eegData ? (
+      ) : eegData && eegData.signals.length > 0 ? (
         <WebGLEEGViewer
           signals={eegData.signals}
           channelLabels={eegData.channelLabels}
@@ -418,8 +627,19 @@ export default function EEGViewer() {
           visibleChannels={visibleChannels}
           theme={theme || "dark"}
           markers={markers}
+          artifactIntervals={artifactIntervals}
+          channelColors={channelColors}
           onTimeClick={handleTimeClick}
         />
+      ) : isStreaming ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-background">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">
+              Streaming: {Math.round(loadedSeconds)}s loaded...
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="absolute inset-0 flex items-center justify-center">
           <p className="text-muted-foreground">No EEG data available</p>
@@ -430,6 +650,19 @@ export default function EEGViewer() {
 
   return (
     <div className="h-[calc(100vh-4rem)] bg-background flex flex-col overflow-hidden">
+      {/* Debug Banner */}
+      <div className={cn(
+        "px-3 py-1 text-xs font-mono flex items-center gap-4 border-b",
+        debugInfo.hasWarning ? "bg-destructive/10 border-destructive/30 text-destructive" : "bg-muted/50 border-border/50 text-muted-foreground"
+      )}>
+        {debugInfo.hasWarning && <AlertTriangle className="h-3 w-3" />}
+        <span>duration={debugInfo.duration}s</span>
+        <span>loaded={debugInfo.loaded}s</span>
+        <span>channels={debugInfo.channels}</span>
+        <span>visible={debugInfo.visible}</span>
+        <span className="ml-auto text-[10px] opacity-60">study={studyId}</span>
+      </div>
+
       {/* Header */}
       <div className="border-b border-border/50 px-3 py-2 flex items-center gap-2 shrink-0">
         <Link to="/app">
@@ -440,7 +673,7 @@ export default function EEGViewer() {
 
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-semibold truncate">EEG Viewer</h1>
-          <p className="text-xs text-muted-foreground truncate">Canonical study: {studyId}</p>
+          <p className="text-xs text-muted-foreground truncate">Study: {studyId}</p>
         </div>
 
         {eegData && (
@@ -451,11 +684,22 @@ export default function EEGViewer() {
             <Badge variant="outline" className="text-[10px] px-1.5 py-0">
               {eegData.sampleRate} Hz
             </Badge>
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 hidden md:inline-flex">
-              {Math.round(eegData.duration)}s
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              {Math.round(durationSec)}s
             </Badge>
+            {isStreaming && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 animate-pulse">
+                Streaming...
+              </Badge>
+            )}
           </div>
         )}
+
+        {/* AutoGain Toggle */}
+        <div className="hidden sm:flex items-center gap-2">
+          <Label htmlFor="autogain" className="text-xs">AutoGain</Label>
+          <Switch id="autogain" checked={autoGain} onCheckedChange={setAutoGain} />
+        </div>
 
         {isMobile && (
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsMarkerPanelOpen(true)}>
@@ -479,7 +723,7 @@ export default function EEGViewer() {
           <DropdownMenuContent align="end" className="w-56 p-2">
             <DropdownMenuLabel className="text-xs">Channel Groups</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {(["frontal", "central", "temporal", "occipital"] as const).map((group) => (
+            {(["frontal", "central", "temporal", "occipital", "other"] as const).map((group) => (
               <DropdownMenuItem
                 key={group}
                 className="flex items-center justify-between cursor-pointer"
@@ -489,290 +733,209 @@ export default function EEGViewer() {
                 }}
               >
                 <span className="capitalize">{group}</span>
-                <div
-                  className={cn(
-                    "h-3 w-3 rounded-full border",
-                    visibleGroups.has(group)
-                      ? "bg-primary border-primary"
-                      : "bg-transparent border-muted-foreground/50",
-                  )}
-                />
+                <span className={cn("h-2 w-2 rounded-full", visibleGroups.has(group) ? "bg-primary" : "bg-muted")} />
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleSelectAllGroups} className="text-xs">
-              Show All
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleDeselectAllGroups} className="text-xs">
-              Hide All
-            </DropdownMenuItem>
+            <div className="flex gap-2 px-2 py-1">
+              <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={handleSelectAllGroups}>
+                All
+              </Button>
+              <Button variant="ghost" size="sm" className="flex-1 text-xs" onClick={handleDeselectAllGroups}>
+                None
+              </Button>
+            </div>
 
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs">Montage</DropdownMenuLabel>
-            {["referential", "bipolar-longitudinal", "bipolar-transverse"].map((m) => (
+            <DropdownMenuSeparator />
+            {["referential", "bipolar_longitudinal", "bipolar_transverse"].map((m) => (
               <DropdownMenuItem
                 key={m}
-                className="flex items-center justify-between cursor-pointer"
+                className="cursor-pointer"
                 onClick={() => setMontage(m)}
               >
-                <span className="text-xs capitalize">{m.replace(/-/g, " ")}</span>
-                {montage === m && <div className="h-2 w-2 rounded-full bg-primary" />}
+                <span className={cn("mr-2", montage === m ? "text-primary" : "text-muted-foreground")}>
+                  {montage === m ? "●" : "○"}
+                </span>
+                {m.replace(/_/g, " ")}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsFullscreenOpen(true)}>
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Fullscreen</TooltipContent>
+        </Tooltip>
       </div>
 
-      {/* Main */}
+      {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* EEG Canvas */}
+        {/* Viewer */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="border-b border-border/50 p-2 shrink-0 overflow-x-auto">
-            <EEGControls
-              isPlaying={isPlaying}
-              currentTime={currentTime}
-              duration={eegData?.duration || 0}
-              timeWindow={timeWindow}
-              amplitudeScale={amplitudeScale}
-              playbackSpeed={playbackSpeed}
-              onPlayPause={handlePlayPause}
-              onSkipBackward={handleSkipBackward}
-              onSkipForward={handleSkipForward}
-              onTimeWindowChange={setTimeWindow}
-              onAmplitudeScaleChange={setAmplitudeScale}
-              onPlaybackSpeedChange={setPlaybackSpeed}
-              onTimeChange={setCurrentTime}
-              onExport={handleExport}
-            />
+          <div className="flex-1 min-h-0">
+            <EEGViewerContent />
           </div>
 
-          <div className="flex-1 relative">
-            <EEGViewerContent />
-            <button
-              onClick={() => setIsFullscreenOpen(true)}
-              className={cn(
-                "absolute z-30 h-10 w-10 rounded-xl flex items-center justify-center",
-                "bg-background/30 backdrop-blur-md",
-                "border border-white/10 dark:border-white/5",
-                "shadow-lg shadow-black/10 dark:shadow-black/20",
-                "hover:bg-background/50 hover:scale-105",
-                "transition-all duration-300 ease-out",
-                isMobile ? "bottom-2 right-2" : "bottom-3 right-3",
-              )}
-            >
-              <Maximize2 className="h-4 w-4" />
-            </button>
-          </div>
+          {/* Controls */}
+          {eegData && (
+            <div className="shrink-0 p-3 border-t border-border/50">
+              <EEGControls
+                isPlaying={isPlaying}
+                currentTime={currentTime}
+                duration={Math.max(0, loadedSeconds - timeWindow)}
+                timeWindow={timeWindow}
+                amplitudeScale={amplitudeScale}
+                playbackSpeed={playbackSpeed}
+                onPlayPause={handlePlayPause}
+                onTimeChange={setCurrentTime}
+                onTimeWindowChange={setTimeWindow}
+                onAmplitudeScaleChange={(s) => { setAutoGain(false); setAmplitudeScale(s); }}
+                onPlaybackSpeedChange={setPlaybackSpeed}
+                onSkipBackward={handleSkipBackward}
+                onSkipForward={handleSkipForward}
+                onExport={handleExport}
+              />
+            </div>
+          )}
         </div>
 
-        {/* Right sidebar markers (desktop) */}
+        {/* Marker Panel (Desktop) */}
         {!isMobile && (
-          <div className="w-56 lg:w-64 border-l border-border/50 p-3 overflow-y-auto shrink-0">
-            <h3 className="font-semibold text-sm mb-3">Markers</h3>
+          <div className="w-72 border-l border-border/50 flex flex-col shrink-0">
+            <div className="p-3 border-b border-border/50">
+              <h3 className="text-sm font-medium">Markers & Events</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                {markers.length} markers • {artifactIntervals.length} artifacts
+              </p>
+            </div>
 
-            <div className="space-y-2 mb-4 p-3 bg-muted/30 rounded-lg">
+            <div className="flex-1 overflow-auto p-3 space-y-2">
+              {markers.map((marker) => (
+                <div
+                  key={marker.id}
+                  className={cn(
+                    "p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors",
+                    marker.marker_type === "artifact" ? "border-amber-500/50 bg-amber-500/5" : "border-border"
+                  )}
+                  onClick={() => handleTimeClick(marker.timestamp_sec)}
+                >
+                  <div className="flex items-center justify-between">
+                    <Badge
+                      variant={marker.marker_type === "seizure" ? "destructive" : marker.marker_type === "artifact" ? "secondary" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {marker.marker_type}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteMarker(marker.id);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  {marker.label && <p className="text-xs font-medium mt-1">{marker.label}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    {formatTime(marker.timestamp_sec)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Add Marker Form */}
+            <div className="p-3 border-t border-border/50 space-y-2">
               <Select value={newMarkerType} onValueChange={setNewMarkerType}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="event">Event</SelectItem>
-                  <SelectItem value="spike">Spike</SelectItem>
                   <SelectItem value="seizure">Seizure</SelectItem>
                   <SelectItem value="artifact">Artifact</SelectItem>
+                  <SelectItem value="sleep">Sleep Stage</SelectItem>
                 </SelectContent>
               </Select>
-
               <Input
-                placeholder="Label..."
+                placeholder="Label (optional)"
                 value={newMarkerLabel}
                 onChange={(e) => setNewMarkerLabel(e.target.value)}
                 className="h-8 text-xs"
               />
               <Textarea
-                placeholder="Notes..."
+                placeholder="Notes (optional)"
                 value={newMarkerNotes}
                 onChange={(e) => setNewMarkerNotes(e.target.value)}
-                className="text-xs min-h-[50px]"
+                className="h-16 text-xs resize-none"
               />
-
-              <Button size="sm" className="w-full h-8 text-xs" onClick={addMarker}>
-                Add at {currentTime.toFixed(1)}s
+              <Button size="sm" className="w-full" onClick={addMarker} disabled={!eegData}>
+                Add Marker at {formatTime(currentTime)}
               </Button>
-            </div>
-
-            <div className="space-y-2">
-              {markers.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">No markers</p>
-              ) : (
-                markers.map((m) => (
-                  <div
-                    key={m.id}
-                    className="p-2 bg-muted/30 rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                    onClick={() => handleTimeClick(m.timestamp_sec)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Badge variant="outline" className="text-[10px]">
-                        {m.marker_type}
-                      </Badge>
-                      <div className="flex items-center gap-1">
-                        <span className="text-[10px] text-muted-foreground">{m.timestamp_sec.toFixed(1)}s</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteMarker(m.id);
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                    {m.label && <p className="text-xs font-medium mt-1">{m.label}</p>}
-                    {m.notes && <p className="text-[10px] text-muted-foreground mt-0.5">{m.notes}</p>}
-                  </div>
-                ))
-              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Mobile markers modal */}
-      <Dialog open={isMarkerPanelOpen} onOpenChange={setIsMarkerPanelOpen}>
-        <DialogContent className="max-w-sm max-h-[80vh] overflow-y-auto">
+      {/* Fullscreen Dialog */}
+      <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-4">
           <DialogHeader>
-            <DialogTitle>Markers</DialogTitle>
+            <DialogTitle className="flex items-center justify-between">
+              <span>EEG Viewer - {studyId}</span>
+              <Button variant="ghost" size="icon" onClick={() => setIsFullscreenOpen(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
           </DialogHeader>
-
-          <div className="space-y-2 mb-4 p-3 bg-muted/30 rounded-lg">
-            <Select value={newMarkerType} onValueChange={setNewMarkerType}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="spike">Spike</SelectItem>
-                <SelectItem value="seizure">Seizure</SelectItem>
-                <SelectItem value="artifact">Artifact</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              placeholder="Label..."
-              value={newMarkerLabel}
-              onChange={(e) => setNewMarkerLabel(e.target.value)}
-              className="h-8 text-xs"
-            />
-
-            <Button size="sm" className="w-full h-8 text-xs" onClick={addMarker}>
-              Add at {currentTime.toFixed(1)}s
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            {markers.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No markers</p>
-            ) : (
-              markers.map((m) => (
-                <div
-                  key={m.id}
-                  className="p-2 bg-muted/30 rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                  onClick={() => {
-                    handleTimeClick(m.timestamp_sec);
-                    setIsMarkerPanelOpen(false);
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px]">
-                      {m.marker_type}
-                    </Badge>
-                    <span className="text-[10px] text-muted-foreground">{m.timestamp_sec.toFixed(1)}s</span>
-                  </div>
-                  {m.label && <p className="text-xs font-medium mt-1">{m.label}</p>}
-                </div>
-              ))
-            )}
+          <div className="flex-1 min-h-0">
+            <EEGViewerContent isModal />
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Fullscreen modal */}
-      <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
-        <DialogContent
-          className={cn(
-            "p-0 rounded-2xl overflow-hidden",
-            "bg-background/95 backdrop-blur-2xl",
-            "border border-border/20",
-            "shadow-2xl shadow-black/30",
-            isMobile ? "max-w-[98vw] max-h-[95vh] w-[98vw] h-[92vh]" : "max-w-[94vw] max-h-[90vh] w-[94vw] h-[88vh]",
-            "[&>button]:hidden",
-          )}
-        >
-          <div className="flex flex-col h-full">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/20 bg-background/50">
-              <div className="flex-1 min-w-0">
-                <h2 className="text-sm font-medium truncate">Canonical {studyId}</h2>
-                <p className="text-xs text-muted-foreground">
-                  {eegData ? `${eegData.channelLabels.length} channels • ${eegData.sampleRate}Hz` : ""}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-1.5 mr-3">
-                <button
-                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-all duration-150"
-                  onMouseDown={() => {
-                    setAmplitudeScale(Math.max(0.001, amplitudeScale - 0.001));
-                    const interval = setInterval(() => setAmplitudeScale((p) => Math.max(0.001, p - 0.001)), 80);
-                    const cleanup = () => {
-                      clearInterval(interval);
-                      window.removeEventListener("mouseup", cleanup);
-                    };
-                    window.addEventListener("mouseup", cleanup);
-                  }}
-                  title="Decrease amplitude"
-                >
-                  <span className="text-xs">−</span>
-                </button>
-
-                <span className="text-[10px] font-mono text-muted-foreground min-w-[48px] text-center">
-                  {amplitudeScale.toFixed(3)}x
-                </span>
-
-                <button
-                  className="h-6 w-6 rounded border border-border/30 bg-background/50 hover:bg-muted/50 flex items-center justify-center transition-all duration-150"
-                  onMouseDown={() => {
-                    setAmplitudeScale(amplitudeScale + 0.001);
-                    const interval = setInterval(() => setAmplitudeScale((p) => p + 0.001), 80);
-                    const cleanup = () => {
-                      clearInterval(interval);
-                      window.removeEventListener("mouseup", cleanup);
-                    };
-                    window.addEventListener("mouseup", cleanup);
-                  }}
-                  title="Increase amplitude"
-                >
-                  <span className="text-xs">+</span>
-                </button>
-              </div>
-
-              <button
-                onClick={() => setIsFullscreenOpen(false)}
-                className="h-7 w-7 rounded-full flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-colors"
-                title="Close"
+      {/* Mobile Marker Panel */}
+      <Dialog open={isMarkerPanelOpen} onOpenChange={setIsMarkerPanelOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Markers & Events</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[50vh] overflow-auto space-y-2">
+            {markers.map((marker) => (
+              <div
+                key={marker.id}
+                className="p-2 rounded-md border border-border cursor-pointer hover:bg-muted/50"
+                onClick={() => {
+                  handleTimeClick(marker.timestamp_sec);
+                  setIsMarkerPanelOpen(false);
+                }}
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 relative bg-background/80 backdrop-blur-sm">
-              <EEGViewerContent isModal />
-            </div>
+                <div className="flex items-center justify-between">
+                  <Badge variant="outline" className="text-[10px]">
+                    {marker.marker_type}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">{formatTime(marker.timestamp_sec)}</span>
+                </div>
+                {marker.label && <p className="text-xs font-medium mt-1">{marker.label}</p>}
+              </div>
+            ))}
           </div>
         </DialogContent>
       </Dialog>
     </div>
   );
+}
+
+function formatTime(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
