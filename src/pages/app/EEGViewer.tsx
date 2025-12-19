@@ -39,7 +39,7 @@ declare global {
 const API_BASE = (
   import.meta.env.VITE_ENCEPH_READ_API_BASE ||
   window.__ENCEPH__?.READ_API_BASE ||
-  "https://marcus-monday-betty-delivery.trycloudflare.com"
+  "https://formerly-foam-transaction-custody.trycloudflare.com"
 )
   .trim()
   .replace(/\/+$/, "");
