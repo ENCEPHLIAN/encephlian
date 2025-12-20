@@ -33,10 +33,11 @@ import { cn } from "@/lib/utils";
 // Hard-lock study ID
 const STUDY_ID = "TUH_CANON_001";
 
-// API Base URL
+// API Base URL - check both env vars
 const API_BASE = (
+  import.meta.env.VITE_READ_API_BASE_URL ||
   import.meta.env.VITE_ENCEPH_READ_API_BASE ||
-  "https://drops-patch-crucial-differential.trycloudflare.com"
+  "https://funk-drunk-does-furthermore.trycloudflare.com"
 )
   .trim()
   .replace(/\/+$/, "");
