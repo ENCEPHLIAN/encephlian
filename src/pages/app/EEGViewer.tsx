@@ -18,10 +18,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu, RefreshCw, AlertTriangle } from "lucide-react";
+import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu, RefreshCw, AlertTriangle, Eye, EyeOff, Zap } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "next-themes";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useEEGChunkCache } from "@/hooks/useEEGChunkCache";
 
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
@@ -69,6 +70,14 @@ type ArtifactInterval = {
   start_sec: number;
   end_sec: number;
   label?: string;
+  channel?: string;
+};
+
+type Annotation = {
+  timestamp_sec: number;
+  duration_sec?: number;
+  label: string;
+  channel?: string;
 };
 
 function getHeaders() {
@@ -137,7 +146,11 @@ export default function EEGViewer() {
   const [amplitudeScale, setAmplitudeScale] = useState(0.01);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
+  
+  // New toggles
   const [autoGain, setAutoGain] = useState(true);
+  const [showArtifacts, setShowArtifacts] = useState(true);
+  const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
   // Loading state
   const [isLoadingMeta, setIsLoadingMeta] = useState(false);
@@ -155,9 +168,10 @@ export default function EEGViewer() {
   const [windowSignals, setWindowSignals] = useState<number[][] | null>(null);
   const [windowStartTime, setWindowStartTime] = useState(0);
 
-  // Markers + Artifacts
+  // Markers + Artifacts + Annotations
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [artifactIntervals, setArtifactIntervals] = useState<ArtifactInterval[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [newMarkerType, setNewMarkerType] = useState("event");
   const [newMarkerLabel, setNewMarkerLabel] = useState("");
   const [newMarkerNotes, setNewMarkerNotes] = useState("");
@@ -170,22 +184,43 @@ export default function EEGViewer() {
   // Debounce ref for chunk fetching
   const chunkFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchedWindowRef = useRef<{ start: number; length: number } | null>(null);
+  
+  // Smooth amplitude scale for auto-gain
+  const targetAmplitudeRef = useRef(0.01);
+  const smoothAmplitudeRef = useRef(0.01);
 
-  // Compute eegData from windowSignals
+  // Compute eegData from windowSignals with optional artifact suppression
   const eegData = useMemo(() => {
     if (!windowSignals || !channelLabels.length) return null;
 
     const sampleRate = meta?.sampling_rate_hz ?? 250;
     const windowDuration = windowSignals[0]?.length ? windowSignals[0].length / sampleRate : 0;
 
-    const transformed = applyMontage(windowSignals, channelLabels, montage);
+    // Apply artifact suppression if enabled
+    let processedSignals = windowSignals;
+    if (suppressArtifacts && artifactIntervals.length > 0) {
+      processedSignals = windowSignals.map((channelData) => {
+        const suppressed = [...channelData];
+        artifactIntervals.forEach((artifact) => {
+          const artifactStartSample = Math.floor((artifact.start_sec - windowStartTime) * sampleRate);
+          const artifactEndSample = Math.floor((artifact.end_sec - windowStartTime) * sampleRate);
+          
+          for (let i = Math.max(0, artifactStartSample); i < Math.min(suppressed.length, artifactEndSample); i++) {
+            suppressed[i] *= 0.2; // Attenuate by 80%
+          }
+        });
+        return suppressed;
+      });
+    }
+
+    const transformed = applyMontage(processedSignals, channelLabels, montage);
     return {
       signals: transformed.signals,
       channelLabels: transformed.labels,
       sampleRate,
       duration: windowDuration,
     };
-  }, [windowSignals, channelLabels, montage, meta?.sampling_rate_hz]);
+  }, [windowSignals, channelLabels, montage, meta?.sampling_rate_hz, suppressArtifacts, artifactIntervals, windowStartTime]);
 
   // Visible channels - fallback to ALL if standard filter returns empty
   const visibleChannels = useMemo(() => {
@@ -214,22 +249,38 @@ export default function EEGViewer() {
     return visible;
   }, [eegData?.channelLabels, visibleGroups]);
 
-  // Auto-gain computation
+  // Auto-gain computation using 95th percentile with smooth transition
   useEffect(() => {
     if (!autoGain || !eegData || visibleChannels.size === 0) return;
 
-    let maxAbs = 0;
+    // Collect samples for percentile calculation
+    const allSamples: number[] = [];
     visibleChannels.forEach(ch => {
       const signal = eegData.signals[ch];
       if (!signal) return;
-      for (let i = 0; i < signal.length; i += Math.max(1, Math.floor(signal.length / 500))) {
-        maxAbs = Math.max(maxAbs, Math.abs(signal[i]));
+      // Sample every Nth point for efficiency
+      for (let i = 0; i < signal.length; i += Math.max(1, Math.floor(signal.length / 200))) {
+        allSamples.push(Math.abs(signal[i]));
       }
     });
 
-    if (maxAbs > 0) {
-      const targetScale = 100 / maxAbs;
-      setAmplitudeScale(Math.max(0.001, Math.min(1, targetScale * 0.01)));
+    if (allSamples.length === 0) return;
+
+    // Calculate 95th percentile
+    allSamples.sort((a, b) => a - b);
+    const idx95 = Math.floor(allSamples.length * 0.95);
+    const percentile95 = allSamples[idx95] || allSamples[allSamples.length - 1];
+
+    if (percentile95 > 0) {
+      // Target scale to fit 95th percentile nicely
+      const targetScale = 80 / percentile95;
+      targetAmplitudeRef.current = Math.max(0.001, Math.min(1, targetScale * 0.01));
+      
+      // Smooth transition
+      const smoothFactor = 0.3;
+      const newSmooth = smoothAmplitudeRef.current + (targetAmplitudeRef.current - smoothAmplitudeRef.current) * smoothFactor;
+      smoothAmplitudeRef.current = newSmooth;
+      setAmplitudeScale(newSmooth);
     }
   }, [autoGain, eegData, visibleChannels]);
 
@@ -336,10 +387,54 @@ export default function EEGViewer() {
     }
   }, [studyId, unitMultipliers]);
 
-  /** Initial load - fetch meta */
+  /** Fetch annotations (optional - ignore 404) */
+  const fetchAnnotations = useCallback(async () => {
+    const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/annotations?root=.`;
+    try {
+      const res = await fetch(url, { headers: getHeaders() });
+      if (res.status === 404) {
+        console.log("No annotations endpoint available");
+        return;
+      }
+      if (!res.ok) return;
+      const json = await res.json();
+      const annots = (json.annotations || json || []) as Annotation[];
+      setAnnotations(annots);
+      console.log(`Loaded ${annots.length} annotations`);
+    } catch (e) {
+      console.log("Annotations fetch failed (ignored):", e);
+    }
+  }, [studyId]);
+
+  /** Fetch artifacts (optional - ignore 404) */
+  const fetchArtifacts = useCallback(async () => {
+    const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/artifacts?root=.`;
+    try {
+      const res = await fetch(url, { headers: getHeaders() });
+      if (res.status === 404) {
+        console.log("No artifacts endpoint available");
+        return;
+      }
+      if (!res.ok) return;
+      const json = await res.json();
+      const artifacts = (json.artifacts || json || []) as ArtifactInterval[];
+      setArtifactIntervals(artifacts);
+      console.log(`Loaded ${artifacts.length} artifact intervals`);
+    } catch (e) {
+      console.log("Artifacts fetch failed (ignored):", e);
+    }
+  }, [studyId]);
+
+  /** Initial load - fetch meta, then annotations/artifacts */
   useEffect(() => {
-    fetchMeta();
-  }, [fetchMeta]);
+    const init = async () => {
+      await fetchMeta();
+      // Fetch overlays in parallel
+      fetchAnnotations();
+      fetchArtifacts();
+    };
+    init();
+  }, [fetchMeta, fetchAnnotations, fetchArtifacts]);
 
   /** Fetch chunk when currentTime or timeWindow changes (debounced) */
   useEffect(() => {
@@ -529,15 +624,46 @@ export default function EEGViewer() {
             <p className="text-sm text-muted-foreground">{studyId}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* AutoGain Toggle */}
           <div className="flex items-center gap-2">
             <Switch
               id="auto-gain"
               checked={autoGain}
               onCheckedChange={setAutoGain}
             />
-            <Label htmlFor="auto-gain" className="text-sm">AutoGain</Label>
+            <Label htmlFor="auto-gain" className="text-sm flex items-center gap-1">
+              <Zap className="h-3 w-3" />
+              AutoGain
+            </Label>
           </div>
+          
+          {/* Show Artifacts Toggle */}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="show-artifacts"
+              checked={showArtifacts}
+              onCheckedChange={setShowArtifacts}
+            />
+            <Label htmlFor="show-artifacts" className="text-sm flex items-center gap-1">
+              <Eye className="h-3 w-3" />
+              Artifacts
+            </Label>
+          </div>
+          
+          {/* Suppress Artifacts Toggle */}
+          <div className="flex items-center gap-2">
+            <Switch
+              id="suppress-artifacts"
+              checked={suppressArtifacts}
+              onCheckedChange={setSuppressArtifacts}
+            />
+            <Label htmlFor="suppress-artifacts" className="text-sm flex items-center gap-1">
+              <EyeOff className="h-3 w-3" />
+              Suppress
+            </Label>
+          </div>
+          
           <Button variant="outline" size="icon" onClick={() => setIsMarkerPanelOpen(true)}>
             <Menu className="h-4 w-4" />
           </Button>
@@ -590,17 +716,30 @@ export default function EEGViewer() {
             amplitudeScale={amplitudeScale}
             visibleChannels={visibleChannels}
             theme={theme ?? "dark"}
-            markers={markers.filter(m => 
-              m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
-            ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime }))}
-            artifactIntervals={artifactIntervals
+            markers={[
+              // Include user markers
+              ...markers.filter(m => 
+                m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
+              ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
+              // Include annotations as markers
+              ...annotations.filter(a => 
+                a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow
+              ).map(a => ({
+                id: `annot-${a.timestamp_sec}`,
+                timestamp_sec: a.timestamp_sec - currentTime,
+                marker_type: "annotation",
+                label: a.label,
+              })),
+            ]}
+            artifactIntervals={showArtifacts ? artifactIntervals
               .filter(a => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
               .map(a => ({
                 start_sec: Math.max(0, a.start_sec - currentTime),
                 end_sec: Math.min(timeWindow, a.end_sec - currentTime),
                 label: a.label,
-              }))}
+              })) : []}
             channelColors={channelColors}
+            showArtifactsAsRed={showArtifacts}
           />
         )}
 
@@ -722,17 +861,28 @@ export default function EEGViewer() {
                   amplitudeScale={amplitudeScale}
                   visibleChannels={visibleChannels}
                   theme={theme ?? "dark"}
-                  markers={markers.filter(m => 
-                    m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
-                  ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime }))}
-                  artifactIntervals={artifactIntervals
+                  markers={[
+                    ...markers.filter(m => 
+                      m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
+                    ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
+                    ...annotations.filter(a => 
+                      a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow
+                    ).map(a => ({
+                      id: `annot-${a.timestamp_sec}`,
+                      timestamp_sec: a.timestamp_sec - currentTime,
+                      marker_type: "annotation",
+                      label: a.label,
+                    })),
+                  ]}
+                  artifactIntervals={showArtifacts ? artifactIntervals
                     .filter(a => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
                     .map(a => ({
                       start_sec: Math.max(0, a.start_sec - currentTime),
                       end_sec: Math.min(timeWindow, a.end_sec - currentTime),
                       label: a.label,
-                    }))}
+                    })) : []}
                   channelColors={channelColors}
+                  showArtifactsAsRed={showArtifacts}
                 />
               )}
             </div>
