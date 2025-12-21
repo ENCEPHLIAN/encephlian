@@ -34,7 +34,7 @@ import { ChannelGroup, groupChannels } from "@/lib/eeg/channel-groups";
 import { filterStandardChannels } from "@/lib/eeg/standard-channels";
 import { cn } from "@/lib/utils";
 
-/** Hard-lock study ID */
+/** Hard lock */
 const STUDY_ID = "TUH_CANON_001";
 
 /** Read API */
@@ -46,15 +46,14 @@ const API_BASE = (
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY || "e3sg-bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
 
 /**
- * Viewer policy:
- * - Always windowed (no bulk preload)
- * - While playing, fetch only when the desired window start moves enough
+ * Streaming policy
+ * - We keep a fetched window [windowStartTime, windowStartTime+timeWindow]
+ * - Cursor moves smoothly inside that window (no refetch needed)
+ * - We refetch only when cursor approaches right edge (or seeks outside window)
  */
 const DEFAULT_WINDOW_SEC = 10;
-const PREFETCH_AHEAD = true; // prefetch next window (small + fast)
-const MAX_INFLIGHT = 2; // concurrency cap (current + prefetch)
-const SEEK_DEBOUNCE_MS = 120; // not 50ms (too aggressive)
-const PLAY_WINDOW_STEP_SEC = 0.5; // only refetch when window start changes by >= this
+const SEEK_DEBOUNCE_MS = 120;
+const RIGHT_EDGE_MARGIN_SEC = 1.0; // refetch when cursor reaches windowEnd - margin
 
 type CanonicalMeta = {
   study_id: string;
@@ -97,6 +96,10 @@ function getHeaders() {
   return h;
 }
 
+function clamp(x: number, a: number, b: number) {
+  return Math.max(a, Math.min(b, x));
+}
+
 /** Decode base64 float32 chunk (row-major [n_channels, n_samples]) */
 function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): number[][] {
   const binaryString = atob(b64);
@@ -109,8 +112,7 @@ function decodeFloat32B64(b64: string, nChannels: number, nSamples: number): num
   const out: number[][] = new Array(nChannels);
   for (let ch = 0; ch < nChannels; ch++) {
     const start = ch * nSamples;
-    const seg = float32.subarray(start, start + nSamples);
-    out[ch] = Array.from(seg);
+    out[ch] = Array.from(float32.subarray(start, start + nSamples));
   }
   return out;
 }
@@ -147,17 +149,13 @@ const CHANNEL_PALETTE = [
   "#fca5a5",
   "#67e8f9",
 ];
-
-function getChannelColors(n: number): string[] {
+function getChannelColors(n: number) {
   return Array.from({ length: n }, (_, i) => CHANNEL_PALETTE[i % CHANNEL_PALETTE.length]);
 }
 
-/** Tiny util */
-const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
-
-/** Persist autogain amplitude per study (so refresh never flatlines) */
+/** Persist manual amplitude (ONLY when user changes it) */
 function ampKey(studyId: string) {
-  return `enceph_amp_${studyId}`;
+  return `enceph_amp_manual_${studyId}`;
 }
 
 export default function EEGViewer() {
@@ -172,13 +170,13 @@ export default function EEGViewer() {
 
   // Playback
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0); // global time (sec) in recording
+  const [currentTime, setCurrentTime] = useState(0); // GLOBAL time in recording
   const [timeWindow, setTimeWindow] = useState(DEFAULT_WINDOW_SEC);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
 
-  // Toggles
-  const [autoGain, setAutoGain] = useState(true);
+  // Toggles — MUST NOT affect amplitude
+  const [autoGain, setAutoGain] = useState(false); // RAW default
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
@@ -193,16 +191,16 @@ export default function EEGViewer() {
   const [channelLabels, setChannelLabels] = useState<string[]>([]);
   const [channelColors, setChannelColors] = useState<string[]>([]);
 
-  // Unit multipliers need to be stable for chunk decode (avoid state-race)
+  // Unit multipliers stable ref
   const unitMultRef = useRef<number[]>([]);
   const labelsRef = useRef<string[]>([]);
   const colorsRef = useRef<string[]>([]);
 
-  // Windowed data
+  // Window data
   const [windowSignals, setWindowSignals] = useState<number[][] | null>(null);
-  const [windowStartTime, setWindowStartTime] = useState(0); // sec (global) aligned to the fetched chunk
+  const [windowStartTime, setWindowStartTime] = useState(0); // GLOBAL start for fetched window (sec)
 
-  // User markers + overlays
+  // Overlays
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [artifactIntervals, setArtifactIntervals] = useState<ArtifactInterval[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
@@ -215,116 +213,19 @@ export default function EEGViewer() {
     new Set(["frontal", "central", "temporal", "occipital", "other"]),
   );
 
-  // Amplitude: default should NOT flatline. Use persisted if present.
+  // Amplitude (raw default). Only changed by user or autogain (if enabled).
   const [amplitudeScale, setAmplitudeScale] = useState(() => {
     const saved = localStorage.getItem(ampKey(studyId));
     const v = saved ? Number(saved) : NaN;
-    // sensible default for your WebGL viewer – not tiny:
-    return Number.isFinite(v) ? v : 0.1;
+    return Number.isFinite(v) ? v : 1.0; // RAW, no flatline
   });
 
-  // Abort + in-flight control
+  // Internal: track if user manually touched amplitude (so autogain shouldn’t override)
+  const manualAmpTouchedRef = useRef(false);
+
+  // Abort & debounce
   const abortRef = useRef<AbortController | null>(null);
-  const inflightRef = useRef(0);
-  const reqIdRef = useRef(0);
-
-  // Debounce
   const seekDebounceRef = useRef<number | null>(null);
-
-  // Prefetch cache (tiny)
-  const chunkCacheRef = useRef<Map<string, { start: number; len: number; signals: number[][] }>>(new Map());
-
-  /** ===== Derived: visible channels (fallback ALL) ===== */
-  const eegData = useMemo(() => {
-    if (!windowSignals || labelsRef.current.length === 0) return null;
-
-    const fs = meta?.sampling_rate_hz ?? 250;
-    const winDur = windowSignals[0]?.length ? windowSignals[0].length / fs : 0;
-
-    // Apply suppression only on overlap, only if toggle enabled
-    let processed = windowSignals;
-    if (suppressArtifacts && artifactIntervals.length) {
-      const overlaps = artifactIntervals.filter(
-        (a) => a.start_sec < windowStartTime + winDur && a.end_sec > windowStartTime,
-      );
-      if (overlaps.length) {
-        processed = windowSignals.map((ch) => {
-          const out = ch.slice();
-          for (const a of overlaps) {
-            const s0 = Math.floor((a.start_sec - windowStartTime) * fs);
-            const s1 = Math.floor((a.end_sec - windowStartTime) * fs);
-            const i0 = clamp(s0, 0, out.length);
-            const i1 = clamp(s1, 0, out.length);
-            for (let i = i0; i < i1; i++) out[i] *= 0.2;
-          }
-          return out;
-        });
-      }
-    }
-
-    const transformed = applyMontage(processed, labelsRef.current, montage);
-
-    return {
-      signals: transformed.signals,
-      channelLabels: transformed.labels,
-      sampleRate: fs,
-      duration: winDur,
-    };
-  }, [windowSignals, montage, meta?.sampling_rate_hz, suppressArtifacts, artifactIntervals, windowStartTime]);
-
-  const visibleChannels = useMemo(() => {
-    if (!eegData) return new Set<number>();
-
-    const standardIndices = filterStandardChannels(eegData.channelLabels);
-    if (!standardIndices.length) return new Set(eegData.channelLabels.map((_, i) => i));
-
-    const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
-    const groups = groupChannels(standardLabels);
-
-    const visible = new Set<number>();
-    groups.forEach((localIdxs, group) => {
-      if (visibleGroups.has(group)) {
-        localIdxs.forEach((li) => visible.add(standardIndices[li]));
-      }
-    });
-
-    if (!visible.size) return new Set(eegData.channelLabels.map((_, i) => i));
-    return visible;
-  }, [eegData?.channelLabels, visibleGroups]);
-
-  /** ===== AutoGain (stable + non-destructive) =====
-   * Only updates when autoGain is ON.
-   * Persists result so refresh doesn’t flatline.
-   */
-  useEffect(() => {
-    if (!autoGain || !eegData || !visibleChannels.size) return;
-
-    // collect a light sample of abs amplitudes
-    const samples: number[] = [];
-    visibleChannels.forEach((chIdx) => {
-      const sig = eegData.signals[chIdx];
-      if (!sig?.length) return;
-      const step = Math.max(1, Math.floor(sig.length / 250)); // ~250 points
-      for (let i = 0; i < sig.length; i += step) samples.push(Math.abs(sig[i]));
-    });
-
-    if (samples.length < 20) return;
-
-    samples.sort((a, b) => a - b);
-    const p95 = samples[Math.floor(samples.length * 0.95)] || samples[samples.length - 1];
-    if (!p95 || p95 <= 0) return;
-
-    // map p95 into a pleasant on-screen range
-    // IMPORTANT: clamp so it never becomes tiny (flatline) or insane
-    const target = clamp(0.08 / p95, 0.02, 0.5);
-
-    // smooth a little (don’t jump)
-    setAmplitudeScale((prev) => {
-      const next = prev * 0.7 + target * 0.3;
-      localStorage.setItem(ampKey(studyId), String(next));
-      return next;
-    });
-  }, [autoGain, eegData, visibleChannels, studyId]);
 
   /** ===== Fetch meta ===== */
   const fetchMeta = useCallback(async () => {
@@ -369,7 +270,7 @@ export default function EEGViewer() {
       setChannelLabels(labels);
       setChannelColors(colors);
 
-      toast.success(`Meta: ${labels.length}ch @ ${m.sampling_rate_hz}Hz (${Math.round(duration)}s)`);
+      toast.success(`Meta loaded: ${labels.length}ch @ ${m.sampling_rate_hz}Hz (${Math.round(duration)}s)`);
       return m;
     } catch (e: any) {
       console.error("Meta fetch error:", e);
@@ -408,7 +309,7 @@ export default function EEGViewer() {
     }
   }, [studyId]);
 
-  /** ===== Chunk fetch (windowed, concurrency-safe) ===== */
+  /** ===== Chunk fetch (windowed) ===== */
   const fetchWindow = useCallback(
     async (startSec: number, winSec: number, m: CanonicalMeta, signal: AbortSignal) => {
       const fs = m.sampling_rate_hz;
@@ -418,16 +319,10 @@ export default function EEGViewer() {
       const maxStart = Math.max(0, m.n_samples - lenSamples);
       const clampedStart = clamp(startSample, 0, maxStart);
       const clampedLen = Math.min(lenSamples, m.n_samples - clampedStart);
-
       if (clampedLen <= 0) return null;
-
-      const cacheKey = `${clampedStart}:${clampedLen}`;
-      const cached = chunkCacheRef.current.get(cacheKey);
-      if (cached) return cached;
 
       const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${clampedStart}&length=${clampedLen}`;
       const res = await fetch(url, { headers: getHeaders(), signal });
-
       const body = await res.text();
       if (!res.ok) throw { message: `HTTP ${res.status}: ${body}`, url, status: res.status };
 
@@ -437,106 +332,90 @@ export default function EEGViewer() {
 
       const decoded = decodeFloat32B64(json.data_b64, nCh, nS);
 
-      // Unit conversion (to microvolts)
+      // Unit conversion (to microvolts) — applied ONCE per fetch, never accumulated
       const mults = unitMultRef.current;
       for (let ch = 0; ch < decoded.length; ch++) {
         const mult = mults[ch] ?? 1;
         if (mult !== 1) for (let i = 0; i < decoded[ch].length; i++) decoded[ch][i] *= mult;
       }
 
-      const payload = { start: clampedStart, len: clampedLen, signals: decoded };
-
-      // cache (keep small)
-      chunkCacheRef.current.set(cacheKey, payload);
-      if (chunkCacheRef.current.size > 8) {
-        // delete oldest
-        const first = chunkCacheRef.current.keys().next().value;
-        if (first) chunkCacheRef.current.delete(first);
-      }
-
-      return payload;
+      return { startSample: clampedStart, lenSamples: clampedLen, signals: decoded };
     },
     [studyId],
   );
 
-  /** Decide desired window start for fetching */
-  const desiredWindowStart = useMemo(() => {
-    // keep window start = currentTime, but clamp so we never ask beyond end
+  /** Decide when to refetch:
+   * - If currentTime outside current window => refetch around currentTime
+   * - If near right edge => refetch forward so it keeps streaming while playing
+   */
+  const computeDesiredStart = useCallback(() => {
+    if (!meta) return 0;
     const maxStart = Math.max(0, durationSec - timeWindow);
-    return clamp(currentTime, 0, maxStart);
-  }, [currentTime, durationSec, timeWindow]);
 
-  /** Load meta on mount, then overlays, then first window */
+    const winEnd = windowStartTime + timeWindow;
+
+    // If outside window, recenter with small left padding
+    if (currentTime < windowStartTime || currentTime > winEnd) {
+      return clamp(currentTime - 0.25 * timeWindow, 0, maxStart);
+    }
+
+    // If near right edge, advance window forward
+    if (currentTime > winEnd - RIGHT_EDGE_MARGIN_SEC) {
+      return clamp(currentTime - 0.25 * timeWindow, 0, maxStart);
+    }
+
+    // else: keep current window
+    return windowStartTime;
+  }, [meta, durationSec, timeWindow, windowStartTime, currentTime]);
+
+  /** Initial load */
   useEffect(() => {
     const init = async () => {
       const m = await fetchMeta();
       if (!m) return;
-      // overlays (best-effort)
       fetchAnnotations();
       fetchArtifacts();
-      // first window load at t=0
       setCurrentTime(0);
+      setWindowStartTime(0);
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchMeta, fetchAnnotations, fetchArtifacts]);
 
-  /** Window fetch scheduler (debounced for seeks; stepped for playback) */
+  /** Window fetch scheduler (debounced) */
   useEffect(() => {
     if (!meta) return;
 
-    // cancel previous scheduled
     if (seekDebounceRef.current) {
       window.clearTimeout(seekDebounceRef.current);
       seekDebounceRef.current = null;
     }
 
-    // while playing: only fetch when start changes enough
-    const lastStart = windowStartTime;
-    const shouldFetchNow = !isPlaying || Math.abs(desiredWindowStart - lastStart) >= PLAY_WINDOW_STEP_SEC;
+    const desiredStart = computeDesiredStart();
+    const shouldFetch = windowSignals == null || Math.abs(desiredStart - windowStartTime) > 1e-6;
 
-    if (!shouldFetchNow) return;
+    if (!shouldFetch) return;
 
     seekDebounceRef.current = window.setTimeout(async () => {
-      // abort older requests
       abortRef.current?.abort();
       const ac = new AbortController();
       abortRef.current = ac;
 
-      const myReq = ++reqIdRef.current;
-
       try {
-        // concurrency cap
-        if (inflightRef.current >= MAX_INFLIGHT) return;
-        inflightRef.current++;
         setIsLoadingChunk(true);
         setLoadError(null);
 
-        const primary = await fetchWindow(desiredWindowStart, timeWindow, meta, ac.signal);
-        if (ac.signal.aborted) return;
-        if (!primary) return;
-        if (myReq !== reqIdRef.current) return;
+        const payload = await fetchWindow(desiredStart, timeWindow, meta, ac.signal);
+        if (!payload || ac.signal.aborted) return;
 
         const fs = meta.sampling_rate_hz;
-        setWindowSignals(primary.signals);
-        setWindowStartTime(primary.start / fs);
-
-        // optional prefetch next window (concurrent, but capped)
-        if (PREFETCH_AHEAD && inflightRef.current < MAX_INFLIGHT) {
-          inflightRef.current++;
-          const nextStart = clamp(desiredWindowStart + timeWindow, 0, Math.max(0, durationSec - timeWindow));
-          fetchWindow(nextStart, timeWindow, meta, ac.signal)
-            .catch(() => null)
-            .finally(() => {
-              inflightRef.current = Math.max(0, inflightRef.current - 1);
-            });
-        }
+        setWindowSignals(payload.signals);
+        setWindowStartTime(payload.startSample / fs);
       } catch (e: any) {
         if (ac.signal.aborted) return;
         console.error("Chunk fetch error:", e);
         setLoadError({ message: e?.message ?? "Failed to load chunk", url: e?.url, status: e?.status });
       } finally {
-        inflightRef.current = Math.max(0, inflightRef.current - 1);
         setIsLoadingChunk(false);
       }
     }, SEEK_DEBOUNCE_MS);
@@ -544,56 +423,186 @@ export default function EEGViewer() {
     return () => {
       if (seekDebounceRef.current) window.clearTimeout(seekDebounceRef.current);
     };
-  }, [meta, desiredWindowStart, timeWindow, isPlaying, durationSec, windowStartTime, fetchWindow]);
+  }, [meta, currentTime, timeWindow, computeDesiredStart, windowStartTime, windowSignals, fetchWindow]);
 
-  /** Playback loop (does NOT fetch directly; fetch is handled by effect above) */
+  /** Playback loop (moves GLOBAL currentTime; canvas cursor moves via relative time) */
   useEffect(() => {
     if (!isPlaying || !meta) return;
 
-    const maxStart = Math.max(0, durationSec - timeWindow);
+    const maxT = Math.max(0, durationSec - 0.001);
 
     const interval = window.setInterval(() => {
       setCurrentTime((prev) => {
         const next = prev + 0.1 * playbackSpeed;
-        if (next >= maxStart) {
+        if (next >= maxT) {
           setIsPlaying(false);
-          return maxStart;
+          return maxT;
         }
         return next;
       });
     }, 100);
 
     return () => window.clearInterval(interval);
-  }, [isPlaying, meta, playbackSpeed, durationSec, timeWindow]);
+  }, [isPlaying, meta, playbackSpeed, durationSec]);
+
+  /** ===== Derived signals:
+   * - Suppression only affects the current window view
+   * - It MUST NOT mutate windowSignals
+   * - It MUST NOT affect amplitudeScale
+   */
+  const eegData = useMemo(() => {
+    if (!windowSignals || !labelsRef.current.length || !meta) return null;
+
+    const fs = meta.sampling_rate_hz;
+    const winDur = windowSignals[0]?.length ? windowSignals[0].length / fs : 0;
+
+    let processed = windowSignals;
+
+    if (suppressArtifacts && artifactIntervals.length) {
+      const overlaps = artifactIntervals.filter(
+        (a) => a.start_sec < windowStartTime + winDur && a.end_sec > windowStartTime,
+      );
+
+      if (overlaps.length) {
+        processed = windowSignals.map((ch) => {
+          const out = ch.slice();
+          for (const a of overlaps) {
+            const s0 = Math.floor((a.start_sec - windowStartTime) * fs);
+            const s1 = Math.floor((a.end_sec - windowStartTime) * fs);
+            const i0 = clamp(s0, 0, out.length);
+            const i1 = clamp(s1, 0, out.length);
+            for (let i = i0; i < i1; i++) out[i] *= 0.2;
+          }
+          return out;
+        });
+      }
+    }
+
+    const transformed = applyMontage(processed, labelsRef.current, montage);
+    return { signals: transformed.signals, channelLabels: transformed.labels, sampleRate: fs, duration: winDur };
+  }, [windowSignals, meta, montage, suppressArtifacts, artifactIntervals, windowStartTime]);
+
+  /** Visible channels */
+  const visibleChannels = useMemo(() => {
+    if (!eegData) return new Set<number>();
+
+    const standardIndices = filterStandardChannels(eegData.channelLabels);
+    if (!standardIndices.length) return new Set(eegData.channelLabels.map((_, i) => i));
+
+    const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
+    const groups = groupChannels(standardLabels);
+
+    const visible = new Set<number>();
+    groups.forEach((localIdxs, group) => {
+      if (visibleGroups.has(group)) {
+        localIdxs.forEach((li) => visible.add(standardIndices[li]));
+      }
+    });
+
+    if (!visible.size) return new Set(eegData.channelLabels.map((_, i) => i));
+    return visible;
+  }, [eegData?.channelLabels, visibleGroups]);
+
+  /** ===== AutoGain (isolated):
+   * - Only runs when autoGain is true AND user hasn't manually adjusted amplitude
+   * - Computes from RAW windowSignals (not suppressed/montage), so toggles don't change gain
+   */
+  useEffect(() => {
+    if (!autoGain) return;
+    if (manualAmpTouchedRef.current) return;
+    if (!windowSignals || !meta) return;
+
+    // sample absolute values from raw windowSignals
+    const samples: number[] = [];
+    const stepBy = Math.max(1, Math.floor((windowSignals[0]?.length || 1) / 250));
+    for (let ch = 0; ch < windowSignals.length; ch++) {
+      const sig = windowSignals[ch];
+      if (!sig?.length) continue;
+      for (let i = 0; i < sig.length; i += stepBy) samples.push(Math.abs(sig[i]));
+    }
+    if (samples.length < 50) return;
+
+    samples.sort((a, b) => a - b);
+    const p95 = samples[Math.floor(samples.length * 0.95)] || samples[samples.length - 1];
+    if (!p95 || p95 <= 0) return;
+
+    // IMPORTANT: choose a gain that never flatlines
+    const target = clamp(0.12 / p95, 0.05, 2.0);
+    setAmplitudeScale((prev) => prev * 0.7 + target * 0.3);
+  }, [autoGain, windowSignals, meta]);
+
+  /** Cursor inside window (THIS is what makes the player move on canvas) */
+  const cursorInWindow = useMemo(() => {
+    return clamp(currentTime - windowStartTime, 0, timeWindow);
+  }, [currentTime, windowStartTime, timeWindow]);
+
+  /** Overlays shifted into window coordinates */
+  const windowMarkers = useMemo(() => {
+    const start = windowStartTime;
+    const end = windowStartTime + timeWindow;
+
+    const userMarkers = markers
+      .filter((m) => m.timestamp_sec >= start && m.timestamp_sec <= end)
+      .map((m) => ({ ...m, timestamp_sec: m.timestamp_sec - start }));
+
+    const annotMarkers = annotations
+      .filter((a) => a.timestamp_sec >= start && a.timestamp_sec <= end)
+      .map((a) => ({
+        id: `annot-${a.timestamp_sec}`,
+        timestamp_sec: a.timestamp_sec - start,
+        marker_type: "annotation",
+        label: a.label,
+      }));
+
+    return [...userMarkers, ...annotMarkers];
+  }, [markers, annotations, windowStartTime, timeWindow]);
+
+  const windowArtifacts = useMemo(() => {
+    if (!showArtifacts) return [];
+    const start = windowStartTime;
+    const end = windowStartTime + timeWindow;
+
+    return artifactIntervals
+      .filter((a) => a.start_sec < end && a.end_sec > start)
+      .map((a) => ({
+        start_sec: clamp(a.start_sec - start, 0, timeWindow),
+        end_sec: clamp(a.end_sec - start, 0, timeWindow),
+        label: a.label,
+        channel: a.channel,
+      }));
+  }, [artifactIntervals, showArtifacts, windowStartTime, timeWindow]);
 
   /** Controls */
   const handlePlayPause = () => setIsPlaying((p) => !p);
 
   const handleSeek = (t: number) => {
-    const maxStart = Math.max(0, durationSec - timeWindow);
-    setCurrentTime(clamp(t, 0, maxStart));
+    const maxT = Math.max(0, durationSec - 0.001);
+    setCurrentTime(clamp(t, 0, maxT));
   };
 
   const handleTimeWindowChange = (v: number) => {
-    // avoid absurd sizes that stress origin
     const next = clamp(v, 5, 60);
     setTimeWindow(next);
-    // clamp current time after changing window
-    const maxStart = Math.max(0, durationSec - next);
-    setCurrentTime((p) => clamp(p, 0, maxStart));
+
+    // keep cursor valid
+    const maxT = Math.max(0, durationSec - 0.001);
+    setCurrentTime((p) => clamp(p, 0, maxT));
   };
 
   const handleAmplitudeScaleChange = (v: number) => {
+    // manual override: raw amplitude should be stable across toggles
+    manualAmpTouchedRef.current = true;
     setAutoGain(false);
-    const next = clamp(v, 0.02, 2);
+
+    const next = clamp(v, 0.02, 5);
     setAmplitudeScale(next);
     localStorage.setItem(ampKey(studyId), String(next));
   };
 
   const handleSkipBackward = () => setCurrentTime((p) => Math.max(0, p - timeWindow));
   const handleSkipForward = () => {
-    const maxStart = Math.max(0, durationSec - timeWindow);
-    setCurrentTime((p) => Math.min(maxStart, p + timeWindow));
+    const maxT = Math.max(0, durationSec - 0.001);
+    setCurrentTime((p) => Math.min(maxT, p + timeWindow));
   };
 
   const handleExport = () => {
@@ -634,7 +643,11 @@ export default function EEGViewer() {
   const handleRetry = async () => {
     setLoadError(null);
     abortRef.current?.abort();
-    chunkCacheRef.current.clear();
+    setWindowSignals(null);
+    setWindowStartTime(0);
+    manualAmpTouchedRef.current = false;
+    setAutoGain(false); // RAW default
+
     const m = await fetchMeta();
     if (m) {
       fetchAnnotations();
@@ -642,53 +655,6 @@ export default function EEGViewer() {
       setCurrentTime(0);
     }
   };
-
-  /** Debug banner */
-  const debugInfo = {
-    duration: Math.round(durationSec),
-    channels: channelLabels.length,
-    windowStart: desiredWindowStart.toFixed(1),
-    windowLen: timeWindow,
-    hasData: !!(windowSignals && windowSignals.length && windowSignals[0]?.length),
-  };
-  const hasWarning = debugInfo.duration === 0 || debugInfo.channels === 0 || !debugInfo.hasData;
-
-  /** Viewer markers: shift into [0..timeWindow] because viewer displays windowed data */
-  const windowMarkers = useMemo(() => {
-    const start = windowStartTime;
-    const end = windowStartTime + timeWindow;
-
-    const userMarkers = markers
-      .filter((m) => m.timestamp_sec >= start && m.timestamp_sec <= end)
-      .map((m) => ({ ...m, timestamp_sec: m.timestamp_sec - start }));
-
-    const annotMarkers = annotations
-      .filter((a) => a.timestamp_sec >= start && a.timestamp_sec <= end)
-      .map((a) => ({
-        id: `annot-${a.timestamp_sec}`,
-        timestamp_sec: a.timestamp_sec - start,
-        marker_type: "annotation",
-        label: a.label,
-      }));
-
-    return [...userMarkers, ...annotMarkers];
-  }, [markers, annotations, windowStartTime, timeWindow]);
-
-  /** Viewer artifact overlays: shift into window coords */
-  const windowArtifacts = useMemo(() => {
-    if (!showArtifacts) return [];
-    const start = windowStartTime;
-    const end = windowStartTime + timeWindow;
-
-    return artifactIntervals
-      .filter((a) => a.start_sec < end && a.end_sec > start)
-      .map((a) => ({
-        start_sec: clamp(a.start_sec - start, 0, timeWindow),
-        end_sec: clamp(a.end_sec - start, 0, timeWindow),
-        label: a.label,
-        channel: a.channel,
-      }));
-  }, [artifactIntervals, showArtifacts, windowStartTime, timeWindow]);
 
   /** Error state (meta not loaded) */
   if (loadError && !meta) {
@@ -724,6 +690,18 @@ export default function EEGViewer() {
     );
   }
 
+  /** Debug */
+  const debugInfo = {
+    duration: Math.round(durationSec),
+    channels: channelLabels.length,
+    t: currentTime.toFixed(2),
+    winStart: windowStartTime.toFixed(2),
+    win: timeWindow,
+    cursor: cursorInWindow.toFixed(2),
+    hasData: !!(windowSignals && windowSignals.length && windowSignals[0]?.length),
+  };
+  const hasWarning = debugInfo.duration === 0 || debugInfo.channels === 0 || !debugInfo.hasData;
+
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Debug Banner */}
@@ -734,11 +712,13 @@ export default function EEGViewer() {
         )}
       >
         {hasWarning && <AlertTriangle className="h-4 w-4" />}
-        <span>duration={debugInfo.duration}s</span>
-        <span>channels={debugInfo.channels}</span>
+        <span>dur={debugInfo.duration}s</span>
+        <span>ch={debugInfo.channels}</span>
+        <span>t={debugInfo.t}s</span>
         <span>
-          win={debugInfo.windowStart}s +{debugInfo.windowLen}s
+          win=[{debugInfo.winStart}s .. +{debugInfo.win}s]
         </span>
+        <span>cursor={debugInfo.cursor}s</span>
         <span>data={debugInfo.hasData ? "yes" : "no"}</span>
         {isLoadingMeta && <span className="text-primary">(meta...)</span>}
         {isLoadingChunk && <span className="text-primary">(chunk...)</span>}
@@ -765,8 +745,12 @@ export default function EEGViewer() {
               checked={autoGain}
               onCheckedChange={(v) => {
                 setAutoGain(v);
-                if (!v) toast.info("AutoGain off (manual amplitude)");
-                else toast.info("AutoGain on");
+                if (v) {
+                  manualAmpTouchedRef.current = false; // allow autogain to manage again
+                  toast.info("AutoGain ON (does not change on artifact toggles)");
+                } else {
+                  toast.info("AutoGain OFF (raw/manual amplitude)");
+                }
               }}
             />
             <Label htmlFor="auto-gain" className="text-sm flex items-center gap-1">
@@ -820,22 +804,34 @@ export default function EEGViewer() {
             onExport={handleExport}
           />
 
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-xs">
-              windowStart={windowStartTime.toFixed(2)}s
-            </Badge>
-            <Badge variant="outline" className="text-xs">
-              amp={amplitudeScale.toFixed(4)}x
+              amp={amplitudeScale.toFixed(3)}x
             </Badge>
             <Button
               size="sm"
               variant="outline"
               onClick={() => {
-                setAutoGain(true);
-                toast.info("AutoGain re-enabled");
+                manualAmpTouchedRef.current = false;
+                setAutoGain(false);
+                setAmplitudeScale(1.0);
+                localStorage.setItem(ampKey(studyId), "1.0");
+                toast.info("Reset amplitude to RAW (1.0x)");
               }}
             >
-              Reset AutoGain
+              Raw 1.0x
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                manualAmpTouchedRef.current = false;
+                setAutoGain(true);
+                toast.info("AutoGain ON");
+              }}
+            >
+              Enable AutoGain
             </Button>
           </div>
         </div>
@@ -857,14 +853,15 @@ export default function EEGViewer() {
             signals={eegData.signals}
             channelLabels={eegData.channelLabels}
             sampleRate={eegData.sampleRate}
-            currentTime={0}
+            // ✅ THIS makes the cursor move:
+            currentTime={cursorInWindow}
             timeWindow={timeWindow}
             amplitudeScale={amplitudeScale}
             visibleChannels={visibleChannels}
             theme={theme ?? "dark"}
             markers={windowMarkers}
-            // If your WebGLEEGViewer supports these props, they will render overlays + colors.
-            // If it doesn't, TS will tell you immediately and we’ll adjust.
+            // click in window => seek global time
+            onTimeClick={(t) => handleSeek(windowStartTime + t)}
             artifactIntervals={windowArtifacts as any}
             channelColors={colorsRef.current as any}
             showArtifactsAsRed={showArtifacts as any}
@@ -986,12 +983,13 @@ export default function EEGViewer() {
                   signals={eegData.signals}
                   channelLabels={eegData.channelLabels}
                   sampleRate={eegData.sampleRate}
-                  currentTime={0}
+                  currentTime={cursorInWindow}
                   timeWindow={timeWindow}
                   amplitudeScale={amplitudeScale}
                   visibleChannels={visibleChannels}
                   theme={theme ?? "dark"}
                   markers={windowMarkers}
+                  onTimeClick={(t) => handleSeek(windowStartTime + t)}
                   artifactIntervals={windowArtifacts as any}
                   channelColors={colorsRef.current as any}
                   showArtifactsAsRed={showArtifacts as any}
