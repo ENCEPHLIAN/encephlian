@@ -32,6 +32,7 @@ interface WebGLEEGViewerProps {
   markers?: Marker[];
   artifactIntervals?: ArtifactInterval[];
   channelColors?: string[];
+  showArtifactsAsRed?: boolean;
   onTimeClick?: (time: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
@@ -47,6 +48,7 @@ const THEME_COLORS = {
     selection: "rgba(59, 130, 246, 0.2)",
     selectionBorder: "rgba(59, 130, 246, 0.6)",
     artifactBg: "rgba(251, 191, 36, 0.15)",
+    artifactBgRed: "rgba(239, 68, 68, 0.25)",
   },
   light: {
     background: 0xffffff,
@@ -57,6 +59,7 @@ const THEME_COLORS = {
     selection: "rgba(59, 130, 246, 0.15)",
     selectionBorder: "rgba(59, 130, 246, 0.5)",
     artifactBg: "rgba(251, 191, 36, 0.2)",
+    artifactBgRed: "rgba(239, 68, 68, 0.3)",
   },
 };
 
@@ -126,6 +129,7 @@ function WebGLEEGViewerComponent({
   markers = [],
   artifactIntervals = [],
   channelColors = [],
+  showArtifactsAsRed = false,
   onTimeClick,
   onSelectionChange,
 }: WebGLEEGViewerProps) {
@@ -380,7 +384,7 @@ function WebGLEEGViewerComponent({
       artifactOverlaysRef.current.innerHTML = "";
     }
 
-    // Draw artifact overlays (behind everything)
+    // Draw artifact overlays (behind everything) - use red when showArtifactsAsRed
     artifactIntervals.forEach((artifact) => {
       const artifactStart = artifact.start_sec - currentTime;
       const artifactEnd = artifact.end_sec - currentTime;
@@ -394,14 +398,17 @@ function WebGLEEGViewerComponent({
         
         if (artifactOverlaysRef.current) {
           const overlayEl = document.createElement("div");
+          const bgColor = showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBg;
           overlayEl.style.cssText = `
             position: absolute;
             left: ${x1}px;
             top: 0;
             width: ${x2 - x1}px;
             height: 100%;
-            background: ${colors.artifactBg};
+            background: ${bgColor};
             pointer-events: none;
+            border-left: 1px solid ${showArtifactsAsRed ? 'rgba(239, 68, 68, 0.5)' : 'transparent'};
+            border-right: 1px solid ${showArtifactsAsRed ? 'rgba(239, 68, 68, 0.5)' : 'transparent'};
           `;
           artifactOverlaysRef.current.appendChild(overlayEl);
         }
@@ -588,7 +595,7 @@ function WebGLEEGViewerComponent({
 
     // Render
     rendererRef.current.render(scene, cameraRef.current);
-  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers, artifactIntervals, channelColors, colors]);
+  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers, artifactIntervals, channelColors, colors, showArtifactsAsRed]);
 
   // Run update on dependency changes with requestAnimationFrame
   useEffect(() => {
