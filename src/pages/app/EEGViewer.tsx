@@ -42,17 +42,13 @@ function getHeaders() {
   return h;
 }
 
-/** ===== Streaming policy =====
- * We fetch a BUFFER (e.g., 60s) and render a VIEW window (e.g., 10s).
- * WebGLEEGViewer typically draws [currentTime .. currentTime + timeWindow] in the provided signals.
- * So we MUST guarantee the provided buffer covers that range → otherwise you get blank/black.
- */
-const DEFAULT_VIEW_SEC = 10; // what the user sees
+/** ===== Streaming policy ===== */
+const DEFAULT_VIEW_SEC = 10;
 const MIN_VIEW_SEC = 5;
 const MAX_VIEW_SEC = 60;
 
-const DEFAULT_BUFFER_SEC = 60; // how much we fetch around the playhead (MVP fast)
-const BUFFER_MARGIN_SEC = 8; // when near buffer edge, refetch
+const DEFAULT_BUFFER_SEC = 60;
+const BUFFER_MARGIN_SEC = 8;
 const FETCH_DEBOUNCE_MS = 120;
 
 type CanonicalMeta = {
@@ -163,13 +159,13 @@ export default function EEGViewer() {
 
   /** Playback */
   const [isPlaying, setIsPlaying] = useState(false);
-  const [globalTime, setGlobalTime] = useState(0); // seconds in full recording
+  const [globalTime, setGlobalTime] = useState(0);
   const [viewSec, setViewSec] = useState(DEFAULT_VIEW_SEC);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
 
-  /** Toggles — MUST NOT change amplitude */
-  const [autoGain, setAutoGain] = useState(false); // OFF by default for raw
+  /** Toggles (must not change amplitude) */
+  const [autoGain, setAutoGain] = useState(false);
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
@@ -185,12 +181,12 @@ export default function EEGViewer() {
   const [colors, setColors] = useState<string[]>([]);
   const unitMultRef = useRef<number[]>([]);
 
-  /** Buffer (what we actually render) */
+  /** Buffer */
   const [bufferStartSec, setBufferStartSec] = useState(0);
   const [bufferSec, setBufferSec] = useState(DEFAULT_BUFFER_SEC);
   const [bufferSignals, setBufferSignals] = useState<number[][] | null>(null);
 
-  /** amplitude — RAW default (no flatline). Persist manual changes. */
+  /** amplitude — RAW default */
   const [amplitudeScale, setAmplitudeScale] = useState(() => {
     const saved = localStorage.getItem(ampKey(studyId));
     const v = saved ? Number(saved) : NaN;
@@ -259,7 +255,7 @@ export default function EEGViewer() {
     }
   }, [studyId]);
 
-  /** ===== API: overlays (optional) ===== */
+  /** ===== overlays (optional) ===== */
   const fetchAnnotations = useCallback(async () => {
     const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/annotations?root=.`;
     try {
@@ -286,7 +282,7 @@ export default function EEGViewer() {
     }
   }, [studyId]);
 
-  /** ===== API: chunk fetch into buffer ===== */
+  /** ===== chunk fetch ===== */
   const fetchBuffer = useCallback(
     async (desiredStartSec: number, m: CanonicalMeta, desiredBufferSec: number) => {
       const fs = m.sampling_rate_hz;
@@ -318,7 +314,7 @@ export default function EEGViewer() {
 
         const decoded = decodeFloat32B64(json.data_b64, nCh, nS);
 
-        // unit conversion ONCE per fetch, no accumulation
+        // unit conversion once (no accumulation)
         const mults = unitMultRef.current;
         for (let ch = 0; ch < decoded.length; ch++) {
           const mult = mults[ch] ?? 1;
@@ -340,27 +336,6 @@ export default function EEGViewer() {
     [studyId],
   );
 
-  /** Decide if we need to refetch buffer to keep play smooth and avoid blank */
-  const computeDesiredBufferStart = useCallback(() => {
-    if (!meta) return 0;
-    const maxT = Math.max(0, durationSec - 0.001);
-
-    const t = clamp(globalTime, 0, maxT);
-
-    // ensure buffer covers [t .. t+viewSec]
-    const bufferEnd = bufferStartSec + bufferSec;
-
-    const needs =
-      bufferSignals == null || t < bufferStartSec + BUFFER_MARGIN_SEC || t + viewSec > bufferEnd - BUFFER_MARGIN_SEC;
-
-    if (!needs) return null;
-
-    // place t at ~1/3 into buffer so we have room to play forward
-    const start = t - bufferSec * 0.33;
-    const maxStart = Math.max(0, durationSec - bufferSec);
-    return clamp(start, 0, maxStart);
-  }, [meta, durationSec, globalTime, bufferStartSec, bufferSec, viewSec, bufferSignals]);
-
   /** Initial load */
   useEffect(() => {
     const init = async () => {
@@ -369,7 +344,6 @@ export default function EEGViewer() {
       fetchAnnotations();
       fetchArtifacts();
 
-      // fetch initial buffer at t=0
       setGlobalTime(0);
       setBufferSec(DEFAULT_BUFFER_SEC);
       await fetchBuffer(0, m, DEFAULT_BUFFER_SEC);
@@ -378,10 +352,28 @@ export default function EEGViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Determine whether we need a new buffer */
+  const computeDesiredBufferStart = useCallback(() => {
+    if (!meta) return 0;
+
+    const maxT = Math.max(0, durationSec - 0.001);
+    const t = clamp(globalTime, 0, maxT);
+
+    const bufferEnd = bufferStartSec + bufferSec;
+
+    const needs =
+      bufferSignals == null || t < bufferStartSec + BUFFER_MARGIN_SEC || t + viewSec > bufferEnd - BUFFER_MARGIN_SEC;
+
+    if (!needs) return null;
+
+    const start = t - bufferSec * 0.33;
+    const maxStart = Math.max(0, durationSec - bufferSec);
+    return clamp(start, 0, maxStart);
+  }, [meta, durationSec, globalTime, bufferStartSec, bufferSec, viewSec, bufferSignals]);
+
   /** Refetch buffer when needed (debounced) */
   useEffect(() => {
     if (!meta) return;
-
     const desired = computeDesiredBufferStart();
     if (desired == null) return;
 
@@ -396,7 +388,7 @@ export default function EEGViewer() {
     };
   }, [meta, computeDesiredBufferStart, fetchBuffer, bufferSec]);
 
-  /** Playback loop (global time) */
+  /** Playback loop */
   useEffect(() => {
     if (!isPlaying || !meta) return;
 
@@ -421,10 +413,7 @@ export default function EEGViewer() {
     return clamp(globalTime - bufferStartSec, 0, Math.max(0, bufferSec - viewSec));
   }, [globalTime, bufferStartSec, bufferSec, viewSec]);
 
-  /** Build signals to render:
-   * - Suppression: optional attenuation, derived from bufferSignals (no mutation, no accumulation).
-   * - Montage applied after suppression.
-   */
+  /** Compute EEG data from buffer */
   const eegData = useMemo(() => {
     if (!meta || !bufferSignals || !labels.length) return null;
 
@@ -464,11 +453,10 @@ export default function EEGViewer() {
     };
   }, [meta, bufferSignals, labels, montage, suppressArtifacts, artifactIntervals, bufferStartSec]);
 
-  /** Visible channels: if grouping yields nothing, show all */
+  /** Visible channels */
   const visibleChannels = useMemo(() => {
     if (!eegData) return new Set<number>();
     const standardIndices = filterStandardChannels(eegData.channelLabels);
-
     if (!standardIndices.length) return new Set(eegData.channelLabels.map((_, i) => i));
 
     const standardLabels = standardIndices.map((i) => eegData.channelLabels[i]);
@@ -483,17 +471,15 @@ export default function EEGViewer() {
 
     if (!visible.size) return new Set(eegData.channelLabels.map((_, i) => i));
     return visible;
-  }, [eegData?.channelLabels, visibleGroups]);
+  }, [eegData?.channelLabels, visibleGroups, eegData]);
 
-  /** AutoGain: OFF by default. If ON, compute from RAW bufferSignals only (not suppressed) so toggles don’t ratchet. */
+  /** AutoGain (does not ratchet with toggles) */
   useEffect(() => {
     if (!autoGain) return;
     if (manualAmpTouchedRef.current) return;
     if (!meta || !bufferSignals) return;
 
-    const fs = meta.sampling_rate_hz;
     const step = Math.max(1, Math.floor((bufferSignals[0]?.length || 1) / 300));
-
     const samples: number[] = [];
     for (let ch = 0; ch < bufferSignals.length; ch++) {
       const sig = bufferSignals[ch];
@@ -505,13 +491,11 @@ export default function EEGViewer() {
     const p95 = samples[Math.floor(samples.length * 0.95)] || samples[samples.length - 1];
     if (!p95 || p95 <= 0) return;
 
-    // pick a conservative gain so it’s never a flatline
     const target = clamp(0.12 / p95, 0.05, 2.0);
-
     setAmplitudeScale((prev) => prev * 0.6 + target * 0.4);
   }, [autoGain, meta, bufferSignals]);
 
-  /** Overlays shifted into buffer coordinates (NOT view coordinates) */
+  /** Overlays shifted into buffer coordinates */
   const bufferMarkers = useMemo(() => {
     const start = bufferStartSec;
     const end = bufferStartSec + bufferSec;
@@ -564,8 +548,6 @@ export default function EEGViewer() {
   const onTimeWindowChange = (v: number) => {
     const next = clamp(v, MIN_VIEW_SEC, MAX_VIEW_SEC);
     setViewSec(next);
-
-    // make buffer large enough vs view (keep it stable)
     const desiredBuffer = Math.max(DEFAULT_BUFFER_SEC, next * 6);
     setBufferSec(desiredBuffer);
   };
@@ -679,7 +661,6 @@ export default function EEGViewer() {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Debug */}
       <div className={cn("px-4 py-2 text-xs font-mono flex flex-wrap items-center gap-3 border-b", "bg-muted/50")}>
         <span>t={debug.t}</span>
         <span>view={debug.view}s</span>
@@ -693,7 +674,6 @@ export default function EEGViewer() {
         {loadingChunk && <span className="text-primary">chunk...</span>}
       </div>
 
-      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b shrink-0">
         <div className="flex items-center gap-4">
           <Link to="/app/studies">
@@ -742,13 +722,13 @@ export default function EEGViewer() {
           <Button variant="outline" size="icon" onClick={() => setIsMarkerPanelOpen(true)}>
             <Menu className="h-4 w-4" />
           </Button>
+
           <Button variant="outline" size="icon" onClick={() => setIsFullscreenOpen(true)}>
             <Maximize2 className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Controls */}
       {meta && (
         <div className="p-4 border-b shrink-0">
           <EEGControls
@@ -786,23 +766,10 @@ export default function EEGViewer() {
             >
               Raw 1.0x
             </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setAutoGain(true);
-                manualAmpTouchedRef.current = false;
-                toast.info("AutoGain enabled");
-              }}
-            >
-              AutoGain ON
-            </Button>
           </div>
         </div>
       )}
 
-      {/* Viewer */}
       <div className="flex-1 min-h-0 relative">
         {loadingMeta && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
@@ -818,20 +785,13 @@ export default function EEGViewer() {
             signals={eegData.signals}
             channelLabels={eegData.channelLabels}
             sampleRate={eegData.sampleRate}
-            // IMPORTANT: currentTime is within buffer (local time)
             currentTime={localTime}
             timeWindow={viewSec}
             amplitudeScale={amplitudeScale}
-            visibleChannels={useMemo(() => {
-              // compute once in render path by reusing memo above
-              return visibleChannels;
-              // eslint-disable-next-line react-hooks/exhaustive-deps
-            }, [visibleChannels])}
+            visibleChannels={visibleChannels}
             theme={theme ?? "dark"}
-            // Clicking time inside buffer → seek global
             onTimeClick={(t) => onSeek(bufferStartSec + t)}
             markers={bufferMarkers}
-            // These may or may not exist in your WebGLEEGViewer types; if TS complains, cast to any at callsite.
             artifactIntervals={bufferArtifacts as any}
             channelColors={colors as any}
             showArtifactsAsRed={showArtifacts as any}
@@ -860,7 +820,6 @@ export default function EEGViewer() {
         )}
       </div>
 
-      {/* Marker Panel */}
       <Dialog open={isMarkerPanelOpen} onOpenChange={setIsMarkerPanelOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -931,7 +890,6 @@ export default function EEGViewer() {
         </DialogContent>
       </Dialog>
 
-      {/* Fullscreen */}
       <Dialog open={isFullscreenOpen} onOpenChange={setIsFullscreenOpen}>
         <DialogContent className="max-w-[95vw] w-full h-[90vh] p-0">
           <div className="h-full flex flex-col">
