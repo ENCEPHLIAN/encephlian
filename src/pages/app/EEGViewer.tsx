@@ -12,7 +12,8 @@ import { useTheme } from "next-themes";
    CONFIG — DO NOT TOUCH
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE ?? "http://localhost:8787";
+const API_BASE =
+  import.meta.env.VITE_ENCEPH_READ_API_BASE ?? "https://interesting-retirement-assistant-trained.trycloudflare.com";
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY ?? "e3sg-bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
 
 /* =======================
