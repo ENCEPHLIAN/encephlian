@@ -18,7 +18,21 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { Loader2, ArrowLeft, Trash2, AlertCircle, Maximize2, Layers, X, Menu, RefreshCw, AlertTriangle, Eye, EyeOff, Zap } from "lucide-react";
+import {
+  Loader2,
+  ArrowLeft,
+  Trash2,
+  AlertCircle,
+  Maximize2,
+  Layers,
+  X,
+  Menu,
+  RefreshCw,
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Zap,
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTheme } from "next-themes";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -38,7 +52,7 @@ const STUDY_ID = "TUH_CANON_001";
 const API_BASE = (
   import.meta.env.VITE_READ_API_BASE_URL ||
   import.meta.env.VITE_ENCEPH_READ_API_BASE ||
-  "https://funk-drunk-does-furthermore.trycloudflare.com"
+  "https://atmospheric-wage-drama-glucose.trycloudflare.com"
 )
   .trim()
   .replace(/\/+$/, "");
@@ -115,10 +129,26 @@ function getUnitMultiplier(unit: string): number {
 
 /** Generate deterministic channel colors */
 const CHANNEL_PALETTE = [
-  "#60a5fa", "#4ade80", "#fbbf24", "#a78bfa", "#f87171",
-  "#34d399", "#fb923c", "#818cf8", "#f472b6", "#22d3d8",
-  "#a3e635", "#e879f9", "#fcd34d", "#6ee7b7", "#93c5fd",
-  "#c084fc", "#fdba74", "#86efac", "#fca5a5", "#67e8f9",
+  "#60a5fa",
+  "#4ade80",
+  "#fbbf24",
+  "#a78bfa",
+  "#f87171",
+  "#34d399",
+  "#fb923c",
+  "#818cf8",
+  "#f472b6",
+  "#22d3d8",
+  "#a3e635",
+  "#e879f9",
+  "#fcd34d",
+  "#6ee7b7",
+  "#93c5fd",
+  "#c084fc",
+  "#fdba74",
+  "#86efac",
+  "#fca5a5",
+  "#67e8f9",
 ];
 
 function getChannelColors(nChannels: number): string[] {
@@ -146,7 +176,7 @@ export default function EEGViewer() {
   const [amplitudeScale, setAmplitudeScale] = useState(0.01);
   const [playbackSpeed, setPlaybackSpeed] = useState(2);
   const [montage, setMontage] = useState("referential");
-  
+
   // New toggles
   const [autoGain, setAutoGain] = useState(true);
   const [showArtifacts, setShowArtifacts] = useState(true);
@@ -184,7 +214,7 @@ export default function EEGViewer() {
   // Debounce ref for chunk fetching
   const chunkFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastFetchedWindowRef = useRef<{ start: number; length: number } | null>(null);
-  
+
   // Smooth amplitude scale for auto-gain
   const targetAmplitudeRef = useRef(0.01);
   const smoothAmplitudeRef = useRef(0.01);
@@ -204,7 +234,7 @@ export default function EEGViewer() {
         artifactIntervals.forEach((artifact) => {
           const artifactStartSample = Math.floor((artifact.start_sec - windowStartTime) * sampleRate);
           const artifactEndSample = Math.floor((artifact.end_sec - windowStartTime) * sampleRate);
-          
+
           for (let i = Math.max(0, artifactStartSample); i < Math.min(suppressed.length, artifactEndSample); i++) {
             suppressed[i] *= 0.2; // Attenuate by 80%
           }
@@ -220,7 +250,15 @@ export default function EEGViewer() {
       sampleRate,
       duration: windowDuration,
     };
-  }, [windowSignals, channelLabels, montage, meta?.sampling_rate_hz, suppressArtifacts, artifactIntervals, windowStartTime]);
+  }, [
+    windowSignals,
+    channelLabels,
+    montage,
+    meta?.sampling_rate_hz,
+    suppressArtifacts,
+    artifactIntervals,
+    windowStartTime,
+  ]);
 
   // Visible channels - fallback to ALL if standard filter returns empty
   const visibleChannels = useMemo(() => {
@@ -255,7 +293,7 @@ export default function EEGViewer() {
 
     // Collect samples for percentile calculation
     const allSamples: number[] = [];
-    visibleChannels.forEach(ch => {
+    visibleChannels.forEach((ch) => {
       const signal = eegData.signals[ch];
       if (!signal) return;
       // Sample every Nth point for efficiency
@@ -275,10 +313,11 @@ export default function EEGViewer() {
       // Target scale to fit 95th percentile nicely
       const targetScale = 80 / percentile95;
       targetAmplitudeRef.current = Math.max(0.001, Math.min(1, targetScale * 0.01));
-      
+
       // Smooth transition
       const smoothFactor = 0.3;
-      const newSmooth = smoothAmplitudeRef.current + (targetAmplitudeRef.current - smoothAmplitudeRef.current) * smoothFactor;
+      const newSmooth =
+        smoothAmplitudeRef.current + (targetAmplitudeRef.current - smoothAmplitudeRef.current) * smoothFactor;
       smoothAmplitudeRef.current = newSmooth;
       setAmplitudeScale(newSmooth);
     }
@@ -307,11 +346,17 @@ export default function EEGViewer() {
 
       // Setup channel labels
       const labels = m.channel_map?.length
-        ? m.channel_map.slice().sort((a, b) => a.index - b.index).map((c) => c.canonical_id)
+        ? m.channel_map
+            .slice()
+            .sort((a, b) => a.index - b.index)
+            .map((c) => c.canonical_id)
         : Array.from({ length: m.n_channels }, (_, i) => `CH${i}`);
 
       const multipliers = m.channel_map?.length
-        ? m.channel_map.slice().sort((a, b) => a.index - b.index).map((c) => getUnitMultiplier(c.unit))
+        ? m.channel_map
+            .slice()
+            .sort((a, b) => a.index - b.index)
+            .map((c) => getUnitMultiplier(c.unit))
         : Array.from({ length: m.n_channels }, () => 1);
 
       setChannelLabels(labels);
@@ -331,61 +376,64 @@ export default function EEGViewer() {
   }, [studyId]);
 
   /** Fetch chunk for current window */
-  const fetchWindowChunk = useCallback(async (startTime: number, windowLen: number, metaData: CanonicalMeta) => {
-    const fs = metaData.sampling_rate_hz;
-    const startSample = Math.floor(startTime * fs);
-    const lengthSamples = Math.floor(windowLen * fs);
+  const fetchWindowChunk = useCallback(
+    async (startTime: number, windowLen: number, metaData: CanonicalMeta) => {
+      const fs = metaData.sampling_rate_hz;
+      const startSample = Math.floor(startTime * fs);
+      const lengthSamples = Math.floor(windowLen * fs);
 
-    // Skip if same window already fetched
-    if (
-      lastFetchedWindowRef.current &&
-      lastFetchedWindowRef.current.start === startSample &&
-      lastFetchedWindowRef.current.length === lengthSamples
-    ) {
-      return;
-    }
-
-    // Clamp to valid range
-    const maxStart = Math.max(0, metaData.n_samples - lengthSamples);
-    const clampedStart = Math.max(0, Math.min(startSample, maxStart));
-    const clampedLength = Math.min(lengthSamples, metaData.n_samples - clampedStart);
-
-    if (clampedLength <= 0) return;
-
-    setIsLoadingChunk(true);
-
-    const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${clampedStart}&length=${clampedLength}`;
-    try {
-      const res = await fetch(url, { headers: getHeaders() });
-      const body = await res.text();
-      if (!res.ok) {
-        throw { message: `HTTP ${res.status}: ${body}`, url, status: res.status };
+      // Skip if same window already fetched
+      if (
+        lastFetchedWindowRef.current &&
+        lastFetchedWindowRef.current.start === startSample &&
+        lastFetchedWindowRef.current.length === lengthSamples
+      ) {
+        return;
       }
-      const json = JSON.parse(body);
 
-      const nCh = json.shape?.[0] ?? json.n_channels ?? metaData.n_channels;
-      const winLen = json.shape?.[1] ?? json.length ?? clampedLength;
+      // Clamp to valid range
+      const maxStart = Math.max(0, metaData.n_samples - lengthSamples);
+      const clampedStart = Math.max(0, Math.min(startSample, maxStart));
+      const clampedLength = Math.min(lengthSamples, metaData.n_samples - clampedStart);
 
-      const decoded = decodeFloat32B64(json.data_b64, nCh, winLen);
+      if (clampedLength <= 0) return;
 
-      // Apply unit conversion
-      for (let ch = 0; ch < decoded.length; ch++) {
-        const mult = unitMultipliers[ch] ?? 1;
-        for (let i = 0; i < decoded[ch].length; i++) {
-          decoded[ch][i] *= mult;
+      setIsLoadingChunk(true);
+
+      const url = `${API_BASE}/studies/${encodeURIComponent(studyId)}/chunk?root=.&start=${clampedStart}&length=${clampedLength}`;
+      try {
+        const res = await fetch(url, { headers: getHeaders() });
+        const body = await res.text();
+        if (!res.ok) {
+          throw { message: `HTTP ${res.status}: ${body}`, url, status: res.status };
         }
-      }
+        const json = JSON.parse(body);
 
-      setWindowSignals(decoded);
-      setWindowStartTime(clampedStart / fs);
-      lastFetchedWindowRef.current = { start: clampedStart, length: clampedLength };
-    } catch (e: any) {
-      console.error("Chunk fetch error:", e);
-      setLoadError({ message: e?.message ?? "Failed to load chunk", url: e?.url, status: e?.status });
-    } finally {
-      setIsLoadingChunk(false);
-    }
-  }, [studyId, unitMultipliers]);
+        const nCh = json.shape?.[0] ?? json.n_channels ?? metaData.n_channels;
+        const winLen = json.shape?.[1] ?? json.length ?? clampedLength;
+
+        const decoded = decodeFloat32B64(json.data_b64, nCh, winLen);
+
+        // Apply unit conversion
+        for (let ch = 0; ch < decoded.length; ch++) {
+          const mult = unitMultipliers[ch] ?? 1;
+          for (let i = 0; i < decoded[ch].length; i++) {
+            decoded[ch][i] *= mult;
+          }
+        }
+
+        setWindowSignals(decoded);
+        setWindowStartTime(clampedStart / fs);
+        lastFetchedWindowRef.current = { start: clampedStart, length: clampedLength };
+      } catch (e: any) {
+        console.error("Chunk fetch error:", e);
+        setLoadError({ message: e?.message ?? "Failed to load chunk", url: e?.url, status: e?.status });
+      } finally {
+        setIsLoadingChunk(false);
+      }
+    },
+    [studyId, unitMultipliers],
+  );
 
   /** Fetch annotations (optional - ignore 404) */
   const fetchAnnotations = useCallback(async () => {
@@ -571,12 +619,8 @@ export default function EEGViewer() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-sm text-muted-foreground">{loadError.message}</div>
-            {loadError.url && (
-              <div className="p-2 bg-muted rounded text-xs font-mono break-all">{loadError.url}</div>
-            )}
-            {loadError.status && (
-              <Badge variant="destructive">HTTP {loadError.status}</Badge>
-            )}
+            {loadError.url && <div className="p-2 bg-muted rounded text-xs font-mono break-all">{loadError.url}</div>}
+            {loadError.status && <Badge variant="destructive">HTTP {loadError.status}</Badge>}
             <div className="flex gap-2">
               <Button onClick={handleRetry} variant="default">
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -598,14 +642,18 @@ export default function EEGViewer() {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Debug Banner */}
-      <div className={cn(
-        "px-4 py-2 text-xs font-mono flex items-center gap-4 border-b",
-        hasWarning ? "bg-destructive/10 text-destructive" : "bg-muted/50 text-muted-foreground"
-      )}>
+      <div
+        className={cn(
+          "px-4 py-2 text-xs font-mono flex items-center gap-4 border-b",
+          hasWarning ? "bg-destructive/10 text-destructive" : "bg-muted/50 text-muted-foreground",
+        )}
+      >
         {hasWarning && <AlertTriangle className="h-4 w-4" />}
         <span>duration={debugInfo.duration}s</span>
         <span>channels={debugInfo.channels}</span>
-        <span>window={debugInfo.windowStart}s-{(parseFloat(debugInfo.windowStart) + timeWindow).toFixed(1)}s</span>
+        <span>
+          window={debugInfo.windowStart}s-{(parseFloat(debugInfo.windowStart) + timeWindow).toFixed(1)}s
+        </span>
         <span>data={debugInfo.hasData ? "yes" : "no"}</span>
         {isLoadingMeta && <span className="text-primary">(loading meta...)</span>}
         {isLoadingChunk && <span className="text-primary">(loading chunk...)</span>}
@@ -627,43 +675,31 @@ export default function EEGViewer() {
         <div className="flex items-center gap-4 flex-wrap">
           {/* AutoGain Toggle */}
           <div className="flex items-center gap-2">
-            <Switch
-              id="auto-gain"
-              checked={autoGain}
-              onCheckedChange={setAutoGain}
-            />
+            <Switch id="auto-gain" checked={autoGain} onCheckedChange={setAutoGain} />
             <Label htmlFor="auto-gain" className="text-sm flex items-center gap-1">
               <Zap className="h-3 w-3" />
               AutoGain
             </Label>
           </div>
-          
+
           {/* Show Artifacts Toggle */}
           <div className="flex items-center gap-2">
-            <Switch
-              id="show-artifacts"
-              checked={showArtifacts}
-              onCheckedChange={setShowArtifacts}
-            />
+            <Switch id="show-artifacts" checked={showArtifacts} onCheckedChange={setShowArtifacts} />
             <Label htmlFor="show-artifacts" className="text-sm flex items-center gap-1">
               <Eye className="h-3 w-3" />
               Artifacts
             </Label>
           </div>
-          
+
           {/* Suppress Artifacts Toggle */}
           <div className="flex items-center gap-2">
-            <Switch
-              id="suppress-artifacts"
-              checked={suppressArtifacts}
-              onCheckedChange={setSuppressArtifacts}
-            />
+            <Switch id="suppress-artifacts" checked={suppressArtifacts} onCheckedChange={setSuppressArtifacts} />
             <Label htmlFor="suppress-artifacts" className="text-sm flex items-center gap-1">
               <EyeOff className="h-3 w-3" />
               Suppress
             </Label>
           </div>
-          
+
           <Button variant="outline" size="icon" onClick={() => setIsMarkerPanelOpen(true)}>
             <Menu className="h-4 w-4" />
           </Button>
@@ -718,26 +754,30 @@ export default function EEGViewer() {
             theme={theme ?? "dark"}
             markers={[
               // Include user markers
-              ...markers.filter(m => 
-                m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
-              ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
+              ...markers
+                .filter((m) => m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow)
+                .map((m) => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
               // Include annotations as markers
-              ...annotations.filter(a => 
-                a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow
-              ).map(a => ({
-                id: `annot-${a.timestamp_sec}`,
-                timestamp_sec: a.timestamp_sec - currentTime,
-                marker_type: "annotation",
-                label: a.label,
-              })),
+              ...annotations
+                .filter((a) => a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow)
+                .map((a) => ({
+                  id: `annot-${a.timestamp_sec}`,
+                  timestamp_sec: a.timestamp_sec - currentTime,
+                  marker_type: "annotation",
+                  label: a.label,
+                })),
             ]}
-            artifactIntervals={showArtifacts ? artifactIntervals
-              .filter(a => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
-              .map(a => ({
-                start_sec: Math.max(0, a.start_sec - currentTime),
-                end_sec: Math.min(timeWindow, a.end_sec - currentTime),
-                label: a.label,
-              })) : []}
+            artifactIntervals={
+              showArtifacts
+                ? artifactIntervals
+                    .filter((a) => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
+                    .map((a) => ({
+                      start_sec: Math.max(0, a.start_sec - currentTime),
+                      end_sec: Math.min(timeWindow, a.end_sec - currentTime),
+                      label: a.label,
+                    }))
+                : []
+            }
             channelColors={channelColors}
             showArtifactsAsRed={showArtifacts}
           />
@@ -771,25 +811,21 @@ export default function EEGViewer() {
                   <SelectItem value="artifact">Artifact</SelectItem>
                 </SelectContent>
               </Select>
-              <Input
-                placeholder="Label"
-                value={newMarkerLabel}
-                onChange={(e) => setNewMarkerLabel(e.target.value)}
-              />
+              <Input placeholder="Label" value={newMarkerLabel} onChange={(e) => setNewMarkerLabel(e.target.value)} />
               <Textarea
                 placeholder="Notes (optional)"
                 value={newMarkerNotes}
                 onChange={(e) => setNewMarkerNotes(e.target.value)}
                 rows={2}
               />
-              <Button onClick={handleAddMarker} className="w-full">Add Marker</Button>
+              <Button onClick={handleAddMarker} className="w-full">
+                Add Marker
+              </Button>
             </div>
 
             {/* Marker List */}
             <div className="space-y-2 max-h-64 overflow-y-auto">
-              {markers.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No markers yet</p>
-              )}
+              {markers.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No markers yet</p>}
               {markers.map((marker) => (
                 <div
                   key={marker.id}
@@ -798,7 +834,9 @@ export default function EEGViewer() {
                 >
                   <div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">{marker.marker_type}</Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {marker.marker_type}
+                      </Badge>
                       <span className="text-sm font-medium">{marker.label}</span>
                     </div>
                     <span className="text-xs text-muted-foreground">{marker.timestamp_sec.toFixed(1)}s</span>
@@ -862,25 +900,29 @@ export default function EEGViewer() {
                   visibleChannels={visibleChannels}
                   theme={theme ?? "dark"}
                   markers={[
-                    ...markers.filter(m => 
-                      m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow
-                    ).map(m => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
-                    ...annotations.filter(a => 
-                      a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow
-                    ).map(a => ({
-                      id: `annot-${a.timestamp_sec}`,
-                      timestamp_sec: a.timestamp_sec - currentTime,
-                      marker_type: "annotation",
-                      label: a.label,
-                    })),
+                    ...markers
+                      .filter((m) => m.timestamp_sec >= currentTime && m.timestamp_sec <= currentTime + timeWindow)
+                      .map((m) => ({ ...m, timestamp_sec: m.timestamp_sec - currentTime })),
+                    ...annotations
+                      .filter((a) => a.timestamp_sec >= currentTime && a.timestamp_sec <= currentTime + timeWindow)
+                      .map((a) => ({
+                        id: `annot-${a.timestamp_sec}`,
+                        timestamp_sec: a.timestamp_sec - currentTime,
+                        marker_type: "annotation",
+                        label: a.label,
+                      })),
                   ]}
-                  artifactIntervals={showArtifacts ? artifactIntervals
-                    .filter(a => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
-                    .map(a => ({
-                      start_sec: Math.max(0, a.start_sec - currentTime),
-                      end_sec: Math.min(timeWindow, a.end_sec - currentTime),
-                      label: a.label,
-                    })) : []}
+                  artifactIntervals={
+                    showArtifacts
+                      ? artifactIntervals
+                          .filter((a) => a.start_sec < currentTime + timeWindow && a.end_sec > currentTime)
+                          .map((a) => ({
+                            start_sec: Math.max(0, a.start_sec - currentTime),
+                            end_sec: Math.min(timeWindow, a.end_sec - currentTime),
+                            label: a.label,
+                          }))
+                      : []
+                  }
                   channelColors={channelColors}
                   showArtifactsAsRed={showArtifacts}
                 />
