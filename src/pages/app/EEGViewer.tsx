@@ -50,9 +50,7 @@ const STUDY_ID = "TUH_CANON_001";
 
 // API Base URL
 const API_BASE = (
-  import.meta.env.VITE_READ_API_BASE_URL ||
-  import.meta.env.VITE_ENCEPH_READ_API_BASE ||
-  "https://atmospheric-wage-drama-glucose.trycloudflare.com"
+  import.meta.env.VITE_ENCEPH_READ_API_BASE || "https://atmospheric-wage-drama-glucose.trycloudflare.com"
 )
   .trim()
   .replace(/\/+$/, "");
