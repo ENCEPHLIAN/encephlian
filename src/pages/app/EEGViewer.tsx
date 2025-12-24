@@ -1,6 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -12,9 +10,8 @@ import { useTheme } from "next-themes";
    CONFIG — DO NOT TOUCH
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE =
-  import.meta.env.VITE_ENCEPH_READ_API_BASE ?? "https://interesting-retirement-assistant-trained.trycloudflare.com";
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY ?? "e3sg-bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE;
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY;
 
 /* =======================
    TYPES
@@ -36,29 +33,28 @@ type Artifact = {
 /* =======================
    HELPERS
 ======================= */
-function headers() {
+function authHeaders() {
   return {
-    "Content-Type": "application/json",
     "X-API-KEY": API_KEY,
   };
 }
 
-function decodeFloat32Hex(hex: string, nCh: number, nSamp: number) {
-  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
-  const f32 = new Float32Array(bytes.buffer);
-  const out: number[][] = Array.from({ length: nCh }, () => []);
+/**
+ * Your API returns Float32Array of length n_channels * n_samp.
+ * We reshape to number[][] for the existing WebGLEEGViewer.
+ *
+ * IMPORTANT: This does not mutate the raw float buffer; it copies into JS numbers.
+ * Later optimization: update WebGLEEGViewer to accept Float32Array directly.
+ */
+function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
+  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
   for (let ch = 0; ch < nCh; ch++) {
-    const start = ch * nSamp;
-    for (let i = 0; i < nSamp; i++) {
-      out[ch].push(f32[start + i]);
-    }
+    const base = ch * nSamp;
+    for (let i = 0; i < nSamp; i++) out[ch][i] = f32[base + i];
   }
   return out;
 }
 
-/* =======================
-   COMPONENT
-======================= */
 export default function EEGViewer() {
   const { theme } = useTheme();
 
@@ -76,47 +72,106 @@ export default function EEGViewer() {
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
   const [loading, setLoading] = useState(true);
+  const lastReqId = useRef(0);
 
   /* ---------- LOAD META ---------- */
   useEffect(() => {
-    fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: headers() })
-      .then((r) => r.json())
-      .then((j) => setMeta(j.meta ?? j))
-      .catch(console.error);
+    let alive = true;
+    setLoading(true);
+
+    fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() })
+      .then((r) => {
+        if (!r.ok) throw new Error(`meta ${r.status}`);
+        return r.json();
+      })
+      .then((j) => {
+        if (!alive) return;
+        setMeta(j.meta ?? j);
+      })
+      .catch((e) => {
+        console.error(e);
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   /* ---------- LOAD ARTIFACTS ---------- */
   useEffect(() => {
-    fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: headers() })
+    fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
   }, []);
 
-  /* ---------- LOAD WINDOW CHUNK ---------- */
+  /* ---------- LOAD WINDOW CHUNK (BINARY) ---------- */
   useEffect(() => {
     if (!meta) return;
-    setLoading(true);
 
     const fs = meta.sampling_rate_hz;
-    const start = Math.floor(currentTime * fs);
-    const length = Math.floor(windowSec * fs);
+    const start = Math.max(0, Math.floor(currentTime * fs));
+    const length = Math.max(1, Math.floor(windowSec * fs));
 
-    fetch(`${API_BASE}/studies/${STUDY_ID}/chunk?root=.&start=${start}&length=${length}`, { headers: headers() })
-      .then((r) => r.json())
-      .then((j) => {
-        const raw = decodeFloat32Hex(j.data_b64, j.n_channels, j.length);
-        setSignals(raw);
-        setLoading(false);
+    const reqId = ++lastReqId.current;
+    const controller = new AbortController();
+
+    setLoading(true);
+
+    fetch(`${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`, {
+      headers: authHeaders(),
+      signal: controller.signal,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`chunk.bin ${r.status}`);
+
+        // Contract headers (authoritative)
+        const nCh = Number(r.headers.get("x-eeg-nchannels"));
+        const nSamp = Number(r.headers.get("x-eeg-length"));
+        const dtype = r.headers.get("x-eeg-dtype");
+
+        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
+          throw new Error("missing x-eeg-* headers");
+        }
+        if (dtype && dtype !== "float32") {
+          throw new Error(`unexpected dtype: ${dtype}`);
+        }
+
+        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
       })
-      .catch(console.error);
+      .then(({ buf, nCh, nSamp }) => {
+        // stale response guard
+        if (reqId !== lastReqId.current) return;
+
+        const f32 = new Float32Array(buf);
+        // validate size
+        if (f32.length !== nCh * nSamp) {
+          throw new Error(`bad payload: f32=${f32.length} expected=${nCh * nSamp}`);
+        }
+
+        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
+        setSignals(reshaped);
+      })
+      .catch((e) => {
+        if (e?.name === "AbortError") return;
+        console.error(e);
+      })
+      .finally(() => {
+        // only clear loading if this is the latest request
+        if (reqId === lastReqId.current) setLoading(false);
+      });
+
+    return () => controller.abort();
   }, [meta, currentTime, windowSec]);
 
   /* ---------- PLAYBACK ---------- */
   useEffect(() => {
     if (!playing || !meta) return;
 
-    const maxT = meta.n_samples / meta.sampling_rate_hz - windowSec;
+    const maxT = Math.max(0, meta.n_samples / meta.sampling_rate_hz - windowSec);
     const id = setInterval(() => {
       setCurrentTime((t) => (t + 0.1 > maxT ? maxT : t + 0.1));
     }, 100);
