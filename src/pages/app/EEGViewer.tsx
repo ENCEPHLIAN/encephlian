@@ -1,4 +1,6 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -10,8 +12,8 @@ import { useTheme } from "next-themes";
    CONFIG — DO NOT TOUCH
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE;
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY;
 
 /* =======================
    TYPES
@@ -33,23 +35,24 @@ type Artifact = {
 /* =======================
    HELPERS
 ======================= */
-function authHeaders() {
+function headers() {
   return {
-    "X-API-KEY": API_KEY ?? "",
+    "Content-Type": "application/json",
+    "X-API-KEY": API_KEY,
   };
 }
 
-function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
-  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
+function decodeFloat32Hex(hex: string, nCh: number, nSamp: number) {
+  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
+  const f32 = new Float32Array(bytes.buffer);
+  const out: number[][] = Array.from({ length: nCh }, () => []);
   for (let ch = 0; ch < nCh; ch++) {
-    const base = ch * nSamp;
-    for (let i = 0; i < nSamp; i++) out[ch][i] = f32[base + i];
+    const start = ch * nSamp;
+    for (let i = 0; i < nSamp; i++) {
+      out[ch].push(f32[start + i]);
+    }
   }
   return out;
-}
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
 }
 
 /* =======================
@@ -71,135 +74,48 @@ export default function EEGViewer() {
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
-  const [loadingMeta, setLoadingMeta] = useState(true);
-  const [loadingChunk, setLoadingChunk] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const lastReqId = useRef(0);
-
-  /* ---------- PRE-FLIGHT CHECKS ---------- */
-  useEffect(() => {
-    if (!API_BASE || !API_KEY) {
-      setError(
-        `Missing env vars. Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY in Lovable env.\n` +
-          `Got base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}`,
-      );
-      setLoadingMeta(false);
-      setLoadingChunk(false);
-    }
-  }, []);
+  const [loading, setLoading] = useState(true);
 
   /* ---------- LOAD META ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-
-    let alive = true;
-    setLoadingMeta(true);
-    setError(null);
-
-    fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() })
-      .then((r) => {
-        if (!r.ok) throw new Error(`meta ${r.status} ${r.statusText}`);
-        return r.json();
-      })
-      .then((j) => {
-        if (!alive) return;
-        setMeta(j.meta ?? j);
-      })
-      .catch((e) => {
-        console.error(e);
-        if (!alive) return;
-        setError(String(e));
-      })
-      .finally(() => {
-        if (!alive) return;
-        setLoadingMeta(false);
-      });
-
-    return () => {
-      alive = false;
-    };
+    fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: headers() })
+      .then((r) => r.json())
+      .then((j) => setMeta(j.meta ?? j))
+      .catch(console.error);
   }, []);
 
-  /* ---------- LOAD ARTIFACTS (NON-BLOCKING) ---------- */
+  /* ---------- LOAD ARTIFACTS ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-
-    fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() })
+    fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: headers() })
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
   }, []);
 
-  /* ---------- LOAD WINDOW CHUNK (BINARY) ---------- */
+  /* ---------- LOAD WINDOW CHUNK ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY || !meta) return;
+    if (!meta) return;
+    setLoading(true);
 
     const fs = meta.sampling_rate_hz;
-    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+    const start = Math.floor(currentTime * fs);
+    const length = Math.floor(windowSec * fs);
 
-    const t0 = clamp(currentTime, 0, maxT);
-    if (t0 !== currentTime) setCurrentTime(t0);
-
-    const start = Math.max(0, Math.floor(t0 * fs));
-    const length = Math.max(1, Math.floor(windowSec * fs));
-
-    const reqId = ++lastReqId.current;
-    const controller = new AbortController();
-
-    setLoadingChunk(true);
-    setError(null);
-
-    fetch(`${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`, {
-      headers: authHeaders(),
-      signal: controller.signal,
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
-
-        const nCh = Number(r.headers.get("x-eeg-nchannels"));
-        const nSamp = Number(r.headers.get("x-eeg-length"));
-        const dtype = r.headers.get("x-eeg-dtype");
-
-        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-          throw new Error("missing x-eeg-* headers (CORS may be blocking expose_headers)");
-        }
-        if (dtype && dtype !== "float32") {
-          throw new Error(`unexpected dtype: ${dtype}`);
-        }
-
-        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+    fetch(`${API_BASE}/studies/${STUDY_ID}/chunk?root=.&start=${start}&length=${length}`, { headers: headers() })
+      .then((r) => r.json())
+      .then((j) => {
+        const raw = decodeFloat32Hex(j.data_b64, j.n_channels, j.length);
+        setSignals(raw);
+        setLoading(false);
       })
-      .then(({ buf, nCh, nSamp }) => {
-        if (reqId !== lastReqId.current) return;
-
-        const f32 = new Float32Array(buf);
-        if (f32.length !== nCh * nSamp) {
-          throw new Error(`bad payload: f32=${f32.length} expected=${nCh * nSamp}`);
-        }
-
-        setSignals(reshapeF32ToChannels(f32, nCh, nSamp));
-      })
-      .catch((e) => {
-        if (e?.name === "AbortError") return;
-        console.error(e);
-        setError(String(e));
-        setSignals(null);
-      })
-      .finally(() => {
-        if (reqId === lastReqId.current) setLoadingChunk(false);
-      });
-
-    return () => controller.abort();
+      .catch(console.error);
   }, [meta, currentTime, windowSec]);
 
   /* ---------- PLAYBACK ---------- */
   useEffect(() => {
     if (!playing || !meta) return;
 
-    const fs = meta.sampling_rate_hz;
-    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
-
+    const maxT = meta.n_samples / meta.sampling_rate_hz - windowSec;
     const id = setInterval(() => {
       setCurrentTime((t) => (t + 0.1 > maxT ? maxT : t + 0.1));
     }, 100);
@@ -213,7 +129,6 @@ export default function EEGViewer() {
     if (!suppressArtifacts) return signals;
 
     const fs = meta.sampling_rate_hz;
-
     return signals.map((ch, idx) =>
       ch.map((v, i) => {
         const t = currentTime + i / fs;
@@ -226,20 +141,7 @@ export default function EEGViewer() {
   }, [signals, suppressArtifacts, artifacts, meta, currentTime]);
 
   /* ---------- RENDER ---------- */
-  if (error) {
-    return (
-      <div className="h-full w-full p-4 space-y-2">
-        <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
-        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{error}</pre>
-        <div className="text-xs opacity-70">
-          If this mentions CORS or missing x-eeg headers, add CORS middleware on the Read API and expose headers:
-          x-eeg-dtype, x-eeg-nchannels, x-eeg-length, x-eeg-start, x-eeg-samplerate.
-        </div>
-      </div>
-    );
-  }
-
-  if (!meta || !signals || loadingMeta || loadingChunk) {
+  if (!meta || !signals || loading) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="animate-spin" />
@@ -273,7 +175,7 @@ export default function EEGViewer() {
         playbackSpeed={1}
         onPlaybackSpeedChange={() => {}}
         onSkipBackward={() => setCurrentTime((t) => Math.max(0, t - windowSec))}
-        onSkipForward={() => setCurrentTime((t) => Math.min(t + windowSec, meta.n_samples / meta.sampling_rate_hz))}
+        onSkipForward={() => setCurrentTime((t) => t + windowSec)}
         onExport={() => {}}
       />
 
