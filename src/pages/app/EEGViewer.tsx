@@ -1,6 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -8,16 +6,10 @@ import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 
-/* =======================
-   CONFIG — DO NOT TOUCH
-======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE;
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY;
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
-/* =======================
-   TYPES
-======================= */
 type Meta = {
   n_channels: number;
   sampling_rate_hz: number;
@@ -32,36 +24,36 @@ type Artifact = {
   channel?: number;
 };
 
-/* =======================
-   HELPERS
-======================= */
-function headers() {
-  return {
-    "Content-Type": "application/json",
-    "X-API-KEY": API_KEY,
-  };
+function authHeaders() {
+  return { "X-API-KEY": API_KEY ?? "" };
 }
 
-function decodeFloat32Hex(hex: string, nCh: number, nSamp: number) {
-  const bytes = new Uint8Array(hex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)));
-  const f32 = new Float32Array(bytes.buffer);
-  const out: number[][] = Array.from({ length: nCh }, () => []);
+function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
+  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
   for (let ch = 0; ch < nCh; ch++) {
-    const start = ch * nSamp;
-    for (let i = 0; i < nSamp; i++) {
-      out[ch].push(f32[start + i]);
-    }
+    const base = ch * nSamp;
+    for (let i = 0; i < nSamp; i++) out[ch][i] = f32[base + i];
   }
   return out;
 }
 
-/* =======================
-   COMPONENT
-======================= */
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 15000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
 export default function EEGViewer() {
   const { theme } = useTheme();
 
-  /* ---------- STATE ---------- */
   const [meta, setMeta] = useState<Meta | null>(null);
   const [signals, setSignals] = useState<number[][] | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -74,48 +66,114 @@ export default function EEGViewer() {
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
-  const [loading, setLoading] = useState(true);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadingChunk, setLoadingChunk] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  /* ---------- LOAD META ---------- */
+  const lastReqId = useRef(0);
+
   useEffect(() => {
-    fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: headers() })
-      .then((r) => r.json())
-      .then((j) => setMeta(j.meta ?? j))
-      .catch(console.error);
+    if (!API_BASE || !API_KEY) {
+      setError(
+        `Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n` +
+          `Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.`,
+      );
+      setLoadingMeta(false);
+      setLoadingChunk(false);
+    }
   }, []);
 
-  /* ---------- LOAD ARTIFACTS ---------- */
   useEffect(() => {
-    fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: headers() })
+    if (!API_BASE || !API_KEY) return;
+
+    let alive = true;
+    setLoadingMeta(true);
+    setError(null);
+
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() }, 15000)
+      .then((r) => {
+        if (!r.ok) throw new Error(`meta ${r.status} ${r.statusText}`);
+        return r.json();
+      })
+      .then((j) => {
+        if (!alive) return;
+        setMeta(j.meta ?? j);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError(String(e));
+      })
+      .finally(() => {
+        if (alive) setLoadingMeta(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!API_BASE || !API_KEY) return;
+
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() }, 15000)
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
   }, []);
 
-  /* ---------- LOAD WINDOW CHUNK ---------- */
   useEffect(() => {
-    if (!meta) return;
-    setLoading(true);
+    if (!API_BASE || !API_KEY || !meta) return;
 
     const fs = meta.sampling_rate_hz;
-    const start = Math.floor(currentTime * fs);
-    const length = Math.floor(windowSec * fs);
+    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+    const t0 = clamp(currentTime, 0, maxT);
+    if (t0 !== currentTime) setCurrentTime(t0);
 
-    fetch(`${API_BASE}/studies/${STUDY_ID}/chunk?root=.&start=${start}&length=${length}`, { headers: headers() })
-      .then((r) => r.json())
-      .then((j) => {
-        const raw = decodeFloat32Hex(j.data_b64, j.n_channels, j.length);
-        setSignals(raw);
-        setLoading(false);
+    const start = Math.max(0, Math.floor(t0 * fs));
+    const length = Math.max(1, Math.floor(windowSec * fs));
+
+    const reqId = ++lastReqId.current;
+    setLoadingChunk(true);
+    setError(null);
+
+    fetchWithTimeout(
+      `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`,
+      { headers: authHeaders() },
+      15000,
+    )
+      .then((r) => {
+        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
+
+        const nCh = Number(r.headers.get("x-eeg-nchannels"));
+        const nSamp = Number(r.headers.get("x-eeg-length"));
+        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
+          throw new Error("Missing x-eeg headers (CORS expose_headers issue or proxy stripping).");
+        }
+        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
       })
-      .catch(console.error);
+      .then(({ buf, nCh, nSamp }) => {
+        if (reqId !== lastReqId.current) return;
+        const f32 = new Float32Array(buf);
+        if (f32.length !== nCh * nSamp) {
+          throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
+        }
+        setSignals(reshapeF32ToChannels(f32, nCh, nSamp));
+      })
+      .catch((e) => {
+        if (reqId !== lastReqId.current) return;
+        setSignals(null);
+        setError(String(e));
+      })
+      .finally(() => {
+        if (reqId === lastReqId.current) setLoadingChunk(false);
+      });
   }, [meta, currentTime, windowSec]);
 
-  /* ---------- PLAYBACK ---------- */
   useEffect(() => {
     if (!playing || !meta) return;
+    const fs = meta.sampling_rate_hz;
+    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
 
-    const maxT = meta.n_samples / meta.sampling_rate_hz - windowSec;
     const id = setInterval(() => {
       setCurrentTime((t) => (t + 0.1 > maxT ? maxT : t + 0.1));
     }, 100);
@@ -123,7 +181,6 @@ export default function EEGViewer() {
     return () => clearInterval(id);
   }, [playing, meta, windowSec]);
 
-  /* ---------- VIEW DATA (IMMUTABLE) ---------- */
   const viewSignals = useMemo(() => {
     if (!signals || !meta) return null;
     if (!suppressArtifacts) return signals;
@@ -140,8 +197,20 @@ export default function EEGViewer() {
     );
   }, [signals, suppressArtifacts, artifacts, meta, currentTime]);
 
-  /* ---------- RENDER ---------- */
-  if (!meta || !signals || loading) {
+  if (error) {
+    return (
+      <div className="h-full w-full p-4 space-y-2">
+        <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
+        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{error}</pre>
+        <div className="text-xs opacity-70">
+          If you see timeouts: your network path to API_BASE is flaky (use revision FQDN). If you see missing x-eeg
+          headers: expose_headers or a proxy is stripping them.
+        </div>
+      </div>
+    );
+  }
+
+  if (!meta || !signals || loadingMeta || loadingChunk) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="animate-spin" />
@@ -175,7 +244,7 @@ export default function EEGViewer() {
         playbackSpeed={1}
         onPlaybackSpeedChange={() => {}}
         onSkipBackward={() => setCurrentTime((t) => Math.max(0, t - windowSec))}
-        onSkipForward={() => setCurrentTime((t) => t + windowSec)}
+        onSkipForward={() => setCurrentTime((t) => Math.min(t + windowSec, meta.n_samples / meta.sampling_rate_hz))}
         onExport={() => {}}
       />
 
