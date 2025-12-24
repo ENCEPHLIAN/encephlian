@@ -10,7 +10,6 @@ import { useTheme } from "next-themes";
    CONFIG — MVP LOCK
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-
 const API_BASE =
   (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
   "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
@@ -35,11 +34,19 @@ type Artifact = {
   channel?: number;
 };
 
-/* =======================
-   HELPERS
-======================= */
+type Annotation = {
+  start_sec: number;
+  end_sec?: number;
+  label?: string;
+  channel?: number;
+};
+
 function authHeaders() {
   return { "X-API-KEY": API_KEY ?? "" };
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
 }
 
 function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
@@ -61,74 +68,63 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 45000) {
   }
 }
 
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
 function keyFor(start: number, length: number) {
   return `${start}:${length}`;
 }
 
-/* =======================
-   COMPONENT
-======================= */
 export default function EEGViewer() {
   const { theme } = useTheme();
 
   /* ---------- STATE ---------- */
   const [meta, setMeta] = useState<Meta | null>(null);
 
-  // IMPORTANT: signals shown on screen (do NOT blank on every fetch)
+  // Most recent successfully rendered window (never set to null after first paint)
   const [signals, setSignals] = useState<number[][] | null>(null);
 
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [windowSec, setWindowSec] = useState(10);
   const [playing, setPlaying] = useState(false);
 
-  const [amplitude, setAmplitude] = useState(1.0);
+  const [amplitude, setAmplitude] = useState(0.25); // safer default; user can adjust
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingChunk, setLoadingChunk] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [fatalError, setFatalError] = useState<string | null>(null);
 
-  // Cache + concurrency control
-  const cacheRef = useRef<Map<string, number[][]>>(new Map());
+  // Concurrency + caching
   const lastReqId = useRef(0);
+  const hasPaintedOnce = useRef(false);
+  const cacheRef = useRef<Map<string, number[][]>>(new Map());
 
-  // Throttle: only fetch when window start moves meaningfully (0.25s)
-  const lastFetchStartSec = useRef<number | null>(null);
+  // Throttle: only fetch if window start changes by >= 0.25s
+  const lastWindowStartQuant = useRef<number | null>(null);
 
-  // Track last fetch stats for debugging
-  const lastLatencyMs = useRef<number | null>(null);
-  const lastCacheHit = useRef<boolean>(false);
+  // Debug / feel-good telemetry
+  const lastFetchMs = useRef<number | null>(null);
+  const lastFetchMode = useRef<"cache" | "net" | null>(null);
   const lastStartLen = useRef<{ start: number; length: number } | null>(null);
 
-  // After first paint, never full-screen spinner again
-  const hasPaintedOnce = useRef(false);
-
-  /* ---------- CONFIG CHECK ---------- */
+  /* ---------- META ---------- */
   useEffect(() => {
+    let alive = true;
+
     if (!API_BASE || !API_KEY) {
-      setError(
+      setFatalError(
         `Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n` +
           `Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.`,
       );
       setLoadingMeta(false);
       setLoadingChunk(false);
+      return;
     }
-  }, []);
 
-  /* ---------- LOAD META ---------- */
-  useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-
-    let alive = true;
     setLoadingMeta(true);
-    setError(null);
+    setFatalError(null);
 
     fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() }, 20000)
       .then((r) => {
@@ -141,7 +137,7 @@ export default function EEGViewer() {
       })
       .catch((e) => {
         if (!alive) return;
-        setError(String(e));
+        setFatalError(String(e));
       })
       .finally(() => {
         if (alive) setLoadingMeta(false);
@@ -152,7 +148,7 @@ export default function EEGViewer() {
     };
   }, []);
 
-  /* ---------- LOAD ARTIFACTS (NON-BLOCKING) ---------- */
+  /* ---------- ARTIFACTS ---------- */
   useEffect(() => {
     if (!API_BASE || !API_KEY) return;
 
@@ -162,95 +158,108 @@ export default function EEGViewer() {
       .catch(() => setArtifacts([]));
   }, []);
 
-  /* ---------- FETCH CHUNK (BINARY + CACHE + THROTTLE) ---------- */
+  /* ---------- ANNOTATIONS (optional) ---------- */
+  useEffect(() => {
+    if (!API_BASE || !API_KEY) return;
+
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/annotations?root=.`, { headers: authHeaders() }, 20000)
+      .then((r) => (r.ok ? r.json() : { annotations: [] }))
+      .then((j) => setAnnotations(j.annotations ?? []))
+      .catch(() => setAnnotations([]));
+  }, []);
+
+  /* ---------- CHUNK FETCH (binary + cache + throttle + no-blank) ---------- */
   useEffect(() => {
     if (!API_BASE || !API_KEY || !meta) return;
 
     const fs = meta.sampling_rate_hz;
-    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+    const duration = meta.n_samples / fs;
+    const maxT = Math.max(0, duration - windowSec);
 
-    // Clamp time deterministically
+    // Clamp time deterministically; avoid cascading fetches
     const t0 = clamp(currentTime, 0, maxT);
     if (t0 !== currentTime) {
       setCurrentTime(t0);
-      return; // let next render run with clamped time
-    }
-
-    // Throttle: only fetch when window start changes by >= 0.25s
-    const startSecQuant = Math.floor(t0 * 4) / 4;
-    if (lastFetchStartSec.current === startSecQuant) {
-      // no new window start; do not fetch (prevents churn)
       return;
     }
-    lastFetchStartSec.current = startSecQuant;
+
+    // Quantize fetch start to reduce thrash during playback/drag
+    const startSecQuant = Math.floor(t0 * 4) / 4; // 0.25s steps
+    if (lastWindowStartQuant.current === startSecQuant && hasPaintedOnce.current) {
+      return;
+    }
+    lastWindowStartQuant.current = startSecQuant;
 
     const start = Math.max(0, Math.floor(startSecQuant * fs));
     const length = Math.max(1, Math.floor(windowSec * fs));
     lastStartLen.current = { start, length };
 
     const k = keyFor(start, length);
+
+    // Cache hit: render immediately, no loading flicker
     const cached = cacheRef.current.get(k);
     if (cached) {
-      lastCacheHit.current = true;
+      lastFetchMode.current = "cache";
       setSignals(cached);
       setLoadingChunk(false);
       hasPaintedOnce.current = true;
-    } else {
-      lastCacheHit.current = false;
-      // Non-blocking: we keep old signals on screen; just show a badge
-      setLoadingChunk(true);
-
-      const reqId = ++lastReqId.current;
-      const tStart = performance.now();
-
-      fetchWithTimeout(
-        `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`,
-        { headers: authHeaders() },
-        45000,
-      )
-        .then((r) => {
-          if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
-
-          const nCh = Number(r.headers.get("x-eeg-nchannels"));
-          const nSamp = Number(r.headers.get("x-eeg-length"));
-          if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-            throw new Error("Missing x-eeg headers (CORS expose_headers or proxy stripping).");
-          }
-
-          return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
-        })
-        .then(({ buf, nCh, nSamp }) => {
-          if (reqId !== lastReqId.current) return;
-
-          const f32 = new Float32Array(buf);
-          if (f32.length !== nCh * nSamp) {
-            throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
-          }
-
-          const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
-
-          cacheRef.current.set(k, reshaped);
-          setSignals(reshaped);
-          hasPaintedOnce.current = true;
-
-          lastLatencyMs.current = Math.round(performance.now() - tStart);
-        })
-        .catch((e) => {
-          if (reqId !== lastReqId.current) return;
-          // Keep last signals; surface error (do not blank the UI)
-          setError(String(e));
-        })
-        .finally(() => {
-          if (reqId === lastReqId.current) setLoadingChunk(false);
-        });
+      return;
     }
 
-    // Prefetch next chunk (only when playing, only if not in cache)
+    // Network fetch: DO NOT blank signals, only show non-blocking loading indicator
+    setLoadingChunk(true);
+    lastFetchMode.current = "net";
+
+    const reqId = ++lastReqId.current;
+    const tStart = performance.now();
+
+    fetchWithTimeout(
+      `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`,
+      { headers: authHeaders() },
+      45000,
+    )
+      .then((r) => {
+        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
+
+        const nCh = Number(r.headers.get("x-eeg-nchannels"));
+        const nSamp = Number(r.headers.get("x-eeg-length"));
+
+        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
+          throw new Error("Missing x-eeg-* headers in browser (CORS expose_headers or proxy stripping).");
+        }
+
+        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+      })
+      .then(({ buf, nCh, nSamp }) => {
+        if (reqId !== lastReqId.current) return;
+
+        const f32 = new Float32Array(buf);
+        if (f32.length !== nCh * nSamp) {
+          throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
+        }
+
+        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
+        cacheRef.current.set(k, reshaped);
+
+        setSignals(reshaped);
+        hasPaintedOnce.current = true;
+
+        lastFetchMs.current = Math.round(performance.now() - tStart);
+      })
+      .catch((e) => {
+        // Non-fatal after first paint: keep last frame rendered
+        if (!hasPaintedOnce.current) setFatalError(String(e));
+        // else: ignore, user still sees something
+      })
+      .finally(() => {
+        if (reqId === lastReqId.current) setLoadingChunk(false);
+      });
+
+    // Prefetch next window during playback
     if (playing) {
       const nextStart = start + length;
       const nextKey = keyFor(nextStart, length);
       if (!cacheRef.current.has(nextKey)) {
-        // fire-and-forget; no UI state changes
         fetchWithTimeout(
           `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStart}&length=${length}`,
           { headers: authHeaders() },
@@ -281,6 +290,7 @@ export default function EEGViewer() {
     const fs = meta.sampling_rate_hz;
     const maxT = Math.max(0, meta.n_samples / fs - windowSec);
 
+    // 10 Hz time progression is fine; fetch is throttled by quantization above
     const id = setInterval(() => {
       setCurrentTime((t) => (t + 0.1 > maxT ? maxT : t + 0.1));
     }, 100);
@@ -288,7 +298,7 @@ export default function EEGViewer() {
     return () => clearInterval(id);
   }, [playing, meta, windowSec]);
 
-  /* ---------- VIEW DATA (IMMUTABLE DISPLAY TRANSFORM ONLY) ---------- */
+  /* ---------- DISPLAY TRANSFORM (raw immutable) ---------- */
   const viewSignals = useMemo(() => {
     if (!signals || !meta) return null;
     if (!suppressArtifacts) return signals;
@@ -306,16 +316,16 @@ export default function EEGViewer() {
   }, [signals, suppressArtifacts, artifacts, meta, currentTime]);
 
   /* ---------- RENDER ---------- */
-  if (error && !hasPaintedOnce.current) {
+  if (fatalError) {
     return (
       <div className="h-full w-full p-4 space-y-2">
         <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
-        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{error}</pre>
+        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{fatalError}</pre>
       </div>
     );
   }
 
-  // Only block on FIRST paint. After that, never replace canvas with spinner.
+  // Only block on initial paint
   if (loadingMeta || !meta || (!hasPaintedOnce.current && !signals)) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -324,25 +334,41 @@ export default function EEGViewer() {
     );
   }
 
-  // If we have painted once, keep rendering even if a later fetch fails
-  if (error && hasPaintedOnce.current) {
-    // keep UI running; error is informational
-    // (you can later render this as a toast)
-    // eslint-disable-next-line no-console
-    console.warn("EEGViewer warning:", error);
-  }
+  const durationSec = meta.n_samples / meta.sampling_rate_hz;
+
+  // IMPORTANT: we render a windowed chunk; renderer should not apply global currentTime again.
+  // This eliminates the “spring/unspool” behavior if WebGLEEGViewer double-applies time.
+  const rendererCurrentTime = 0;
+
+  // Artifacts are passed relative to window; annotations as markers (minimal MVP)
+  const windowArtifacts =
+    showArtifacts && meta
+      ? artifacts
+          .filter((a) => a.end_sec > currentTime && a.start_sec < currentTime + windowSec)
+          .map((a) => ({
+            start_sec: a.start_sec - currentTime,
+            end_sec: a.end_sec - currentTime,
+            label: a.label,
+          }))
+      : [];
+
+  const windowMarkers = annotations
+    .filter((m) => m.start_sec >= currentTime && m.start_sec <= currentTime + windowSec)
+    .map((m) => ({
+      time_sec: m.start_sec - currentTime,
+      label: m.label ?? "annotation",
+    }));
 
   return (
     <div className="h-full flex flex-col">
       <div className="p-2 flex flex-wrap gap-3 items-center border-b">
         <Badge>{meta.n_channels} ch</Badge>
         <Badge>{meta.sampling_rate_hz} Hz</Badge>
-
         {loadingChunk && <Badge variant="secondary">Loading…</Badge>}
-        {lastLatencyMs.current != null && <Badge variant="secondary">{lastLatencyMs.current}ms</Badge>}
+        {lastFetchMs.current != null && <Badge variant="secondary">{lastFetchMs.current}ms</Badge>}
         {lastStartLen.current && (
           <Badge variant="secondary">
-            {lastCacheHit.current ? "cache" : "net"} {lastStartLen.current.start}:{lastStartLen.current.length}
+            {lastFetchMode.current ?? "net"} {lastStartLen.current.start}:{lastStartLen.current.length}
           </Badge>
         )}
 
@@ -357,15 +383,15 @@ export default function EEGViewer() {
         isPlaying={playing}
         onPlayPause={() => setPlaying((p) => !p)}
         currentTime={currentTime}
-        duration={meta.n_samples / meta.sampling_rate_hz}
+        duration={durationSec}
         onTimeChange={(t) => {
-          // Immediate visual response; fetch will be throttled via quantization
+          // seeking should fetch immediately (reset throttle)
+          lastWindowStartQuant.current = null;
           setCurrentTime(t);
         }}
         timeWindow={windowSec}
         onTimeWindowChange={(w) => {
-          // Changing window size invalidates throttle; reset so it fetches once
-          lastFetchStartSec.current = null;
+          lastWindowStartQuant.current = null;
           setWindowSec(w);
         }}
         amplitudeScale={amplitude}
@@ -373,12 +399,12 @@ export default function EEGViewer() {
         playbackSpeed={1}
         onPlaybackSpeedChange={() => {}}
         onSkipBackward={() => {
-          lastFetchStartSec.current = null;
+          lastWindowStartQuant.current = null;
           setCurrentTime((t) => Math.max(0, t - windowSec));
         }}
         onSkipForward={() => {
-          lastFetchStartSec.current = null;
-          setCurrentTime((t) => Math.min(t + windowSec, meta.n_samples / meta.sampling_rate_hz));
+          lastWindowStartQuant.current = null;
+          setCurrentTime((t) => Math.min(t + windowSec, durationSec));
         }}
         onExport={() => {}}
       />
@@ -388,23 +414,14 @@ export default function EEGViewer() {
           signals={viewSignals}
           channelLabels={meta.channel_map.map((c) => c.canonical_id)}
           sampleRate={meta.sampling_rate_hz}
-          currentTime={currentTime}
+          // KEY FIX: renderer sees local window time, not global file time
+          currentTime={rendererCurrentTime}
           timeWindow={windowSec}
           amplitudeScale={amplitude}
           visibleChannels={new Set([...Array(meta.n_channels).keys()])}
           theme={theme ?? "dark"}
-          markers={[]}
-          artifactIntervals={
-            showArtifacts
-              ? artifacts
-                  .filter((a) => a.end_sec > currentTime && a.start_sec < currentTime + windowSec)
-                  .map((a) => ({
-                    start_sec: a.start_sec - currentTime,
-                    end_sec: a.end_sec - currentTime,
-                    label: a.label,
-                  }))
-              : []
-          }
+          markers={windowMarkers as any}
+          artifactIntervals={windowArtifacts}
         />
       </div>
     </div>
