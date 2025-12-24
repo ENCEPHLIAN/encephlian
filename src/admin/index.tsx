@@ -9,7 +9,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import EegMiniViewer, { type WindowDataForViewer } from "./components/EegMiniViewer";
-import type { CanonicalMeta, NormalAbnormalResult } from "./readApi";
+import type { CanonicalMeta } from "./readApi";
+
+// Type for normal/abnormal result (optional from server)
+type NormalAbnormalResult = { decision?: string; score_abnormal?: number; label?: string; confidence?: number } | null;
 
 const STORAGE_KEY_BASE = "enceph_read_api_base";
 const STORAGE_KEY_KEY = "enceph_read_api_key";
