@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -6,10 +6,26 @@ import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 
+/* =======================
+   CONFIG — MVP LOCK
+======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
+/**
+ * Prefer env vars (correct for production).
+ * Fallback to hardcoded values ONLY to unblock MVP if Lovable env injection is failing.
+ * Remove hardcoded fallback after env is confirmed.
+ */
+const API_BASE =
+  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
+  "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
+
+const API_KEY =
+  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ?? "e3sg_bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
+
+/* =======================
+   TYPES
+======================= */
 type Meta = {
   n_channels: number;
   sampling_rate_hz: number;
@@ -24,8 +40,11 @@ type Artifact = {
   channel?: number;
 };
 
+/* =======================
+   HELPERS
+======================= */
 function authHeaders() {
-  return { "X-API-KEY": API_KEY ?? "" };
+  return { "X-API-KEY": API_KEY };
 }
 
 function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
@@ -51,9 +70,18 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function isProbablyPlaceholderEnv(v?: string) {
+  if (!v) return true;
+  return v.includes("YOUR_") || v.includes("REPLACE_ME") || v.includes("undefined");
+}
+
+/* =======================
+   COMPONENT
+======================= */
 export default function EEGViewer() {
   const { theme } = useTheme();
 
+  /* ---------- STATE ---------- */
   const [meta, setMeta] = useState<Meta | null>(null);
   const [signals, setSignals] = useState<number[][] | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -72,21 +100,24 @@ export default function EEGViewer() {
 
   const lastReqId = useRef(0);
 
+  /* ---------- EARLY CONFIG SANITY ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) {
+    // If someone left placeholder values in env, fail loudly.
+    if (isProbablyPlaceholderEnv(API_BASE) || isProbablyPlaceholderEnv(API_KEY)) {
       setError(
-        `Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n` +
-          `Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.`,
+        `Bad config. API_BASE/API_KEY look missing or placeholder.\n` +
+          `API_BASE=${String(API_BASE)}\nAPI_KEY=${API_KEY ? "present" : "missing"}\n` +
+          `Set VITE_ENCEPH_READ_API_BASE + VITE_ENCEPH_READ_API_KEY and redeploy.`,
       );
       setLoadingMeta(false);
       setLoadingChunk(false);
     }
   }, []);
 
+  /* ---------- LOAD META ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-
     let alive = true;
+
     setLoadingMeta(true);
     setError(null);
 
@@ -112,20 +143,21 @@ export default function EEGViewer() {
     };
   }, []);
 
+  /* ---------- LOAD ARTIFACTS (NON-BLOCKING) ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-
     fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() }, 15000)
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
   }, []);
 
+  /* ---------- LOAD WINDOW CHUNK (BINARY) ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY || !meta) return;
+    if (!meta) return;
 
     const fs = meta.sampling_rate_hz;
     const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+
     const t0 = clamp(currentTime, 0, maxT);
     if (t0 !== currentTime) setCurrentTime(t0);
 
@@ -144,19 +176,29 @@ export default function EEGViewer() {
       .then((r) => {
         if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
 
+        // These headers must be exposed by CORS for browser access.
         const nCh = Number(r.headers.get("x-eeg-nchannels"));
         const nSamp = Number(r.headers.get("x-eeg-length"));
+        const dtype = r.headers.get("x-eeg-dtype");
+
         if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-          throw new Error("Missing x-eeg headers (CORS expose_headers issue or proxy stripping).");
+          throw new Error(
+            "Missing x-eeg-* headers in browser. This usually means CORS expose_headers is missing or a proxy is stripping headers.",
+          );
         }
+        if (dtype && dtype !== "float32") throw new Error(`Unexpected dtype: ${dtype}`);
+
         return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
       })
       .then(({ buf, nCh, nSamp }) => {
         if (reqId !== lastReqId.current) return;
+
         const f32 = new Float32Array(buf);
         if (f32.length !== nCh * nSamp) {
           throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
         }
+
+        // RAW is immutable; this is a render-time reshape only.
         setSignals(reshapeF32ToChannels(f32, nCh, nSamp));
       })
       .catch((e) => {
@@ -169,8 +211,10 @@ export default function EEGViewer() {
       });
   }, [meta, currentTime, windowSec]);
 
+  /* ---------- PLAYBACK ---------- */
   useEffect(() => {
     if (!playing || !meta) return;
+
     const fs = meta.sampling_rate_hz;
     const maxT = Math.max(0, meta.n_samples / fs - windowSec);
 
@@ -181,6 +225,7 @@ export default function EEGViewer() {
     return () => clearInterval(id);
   }, [playing, meta, windowSec]);
 
+  /* ---------- VIEW DATA (IMMUTABLE) ---------- */
   const viewSignals = useMemo(() => {
     if (!signals || !meta) return null;
     if (!suppressArtifacts) return signals;
@@ -192,19 +237,21 @@ export default function EEGViewer() {
         const hit = artifacts.some(
           (a) => (a.channel == null || a.channel === idx) && t >= a.start_sec && t <= a.end_sec,
         );
+        // Suppression is display-only (does not mutate raw).
         return hit ? v * 0.25 : v;
       }),
     );
   }, [signals, suppressArtifacts, artifacts, meta, currentTime]);
 
+  /* ---------- RENDER ---------- */
   if (error) {
     return (
       <div className="h-full w-full p-4 space-y-2">
         <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
         <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{error}</pre>
         <div className="text-xs opacity-70">
-          If you see timeouts: your network path to API_BASE is flaky (use revision FQDN). If you see missing x-eeg
-          headers: expose_headers or a proxy is stripping them.
+          If this says missing x-eeg headers: confirm CORS expose_headers in Read API and redeploy. If this says
+          timeouts: use the revision FQDN as API_BASE.
         </div>
       </div>
     );
