@@ -10,8 +10,8 @@ import { useTheme } from "next-themes";
    CONFIG — DO NOT TOUCH
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE;
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY;
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
 /* =======================
    TYPES
@@ -35,17 +35,10 @@ type Artifact = {
 ======================= */
 function authHeaders() {
   return {
-    "X-API-KEY": API_KEY,
+    "X-API-KEY": API_KEY ?? "",
   };
 }
 
-/**
- * Your API returns Float32Array of length n_channels * n_samp.
- * We reshape to number[][] for the existing WebGLEEGViewer.
- *
- * IMPORTANT: This does not mutate the raw float buffer; it copies into JS numbers.
- * Later optimization: update WebGLEEGViewer to accept Float32Array directly.
- */
 function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
   const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
   for (let ch = 0; ch < nCh; ch++) {
@@ -55,6 +48,13 @@ function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): nu
   return out;
 }
 
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+/* =======================
+   COMPONENT
+======================= */
 export default function EEGViewer() {
   const { theme } = useTheme();
 
@@ -71,17 +71,35 @@ export default function EEGViewer() {
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
-  const [loading, setLoading] = useState(true);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadingChunk, setLoadingChunk] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const lastReqId = useRef(0);
+
+  /* ---------- PRE-FLIGHT CHECKS ---------- */
+  useEffect(() => {
+    if (!API_BASE || !API_KEY) {
+      setError(
+        `Missing env vars. Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY in Lovable env.\n` +
+          `Got base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}`,
+      );
+      setLoadingMeta(false);
+      setLoadingChunk(false);
+    }
+  }, []);
 
   /* ---------- LOAD META ---------- */
   useEffect(() => {
+    if (!API_BASE || !API_KEY) return;
+
     let alive = true;
-    setLoading(true);
+    setLoadingMeta(true);
+    setError(null);
 
     fetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() })
       .then((r) => {
-        if (!r.ok) throw new Error(`meta ${r.status}`);
+        if (!r.ok) throw new Error(`meta ${r.status} ${r.statusText}`);
         return r.json();
       })
       .then((j) => {
@@ -90,9 +108,12 @@ export default function EEGViewer() {
       })
       .catch((e) => {
         console.error(e);
+        if (!alive) return;
+        setError(String(e));
       })
       .finally(() => {
-        if (alive) setLoading(false);
+        if (!alive) return;
+        setLoadingMeta(false);
       });
 
     return () => {
@@ -100,8 +121,10 @@ export default function EEGViewer() {
     };
   }, []);
 
-  /* ---------- LOAD ARTIFACTS ---------- */
+  /* ---------- LOAD ARTIFACTS (NON-BLOCKING) ---------- */
   useEffect(() => {
+    if (!API_BASE || !API_KEY) return;
+
     fetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() })
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
@@ -110,31 +133,36 @@ export default function EEGViewer() {
 
   /* ---------- LOAD WINDOW CHUNK (BINARY) ---------- */
   useEffect(() => {
-    if (!meta) return;
+    if (!API_BASE || !API_KEY || !meta) return;
 
     const fs = meta.sampling_rate_hz;
-    const start = Math.max(0, Math.floor(currentTime * fs));
+    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+
+    const t0 = clamp(currentTime, 0, maxT);
+    if (t0 !== currentTime) setCurrentTime(t0);
+
+    const start = Math.max(0, Math.floor(t0 * fs));
     const length = Math.max(1, Math.floor(windowSec * fs));
 
     const reqId = ++lastReqId.current;
     const controller = new AbortController();
 
-    setLoading(true);
+    setLoadingChunk(true);
+    setError(null);
 
     fetch(`${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`, {
       headers: authHeaders(),
       signal: controller.signal,
     })
       .then((r) => {
-        if (!r.ok) throw new Error(`chunk.bin ${r.status}`);
+        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
 
-        // Contract headers (authoritative)
         const nCh = Number(r.headers.get("x-eeg-nchannels"));
         const nSamp = Number(r.headers.get("x-eeg-length"));
         const dtype = r.headers.get("x-eeg-dtype");
 
         if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-          throw new Error("missing x-eeg-* headers");
+          throw new Error("missing x-eeg-* headers (CORS may be blocking expose_headers)");
         }
         if (dtype && dtype !== "float32") {
           throw new Error(`unexpected dtype: ${dtype}`);
@@ -143,25 +171,23 @@ export default function EEGViewer() {
         return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
       })
       .then(({ buf, nCh, nSamp }) => {
-        // stale response guard
         if (reqId !== lastReqId.current) return;
 
         const f32 = new Float32Array(buf);
-        // validate size
         if (f32.length !== nCh * nSamp) {
           throw new Error(`bad payload: f32=${f32.length} expected=${nCh * nSamp}`);
         }
 
-        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
-        setSignals(reshaped);
+        setSignals(reshapeF32ToChannels(f32, nCh, nSamp));
       })
       .catch((e) => {
         if (e?.name === "AbortError") return;
         console.error(e);
+        setError(String(e));
+        setSignals(null);
       })
       .finally(() => {
-        // only clear loading if this is the latest request
-        if (reqId === lastReqId.current) setLoading(false);
+        if (reqId === lastReqId.current) setLoadingChunk(false);
       });
 
     return () => controller.abort();
@@ -171,7 +197,9 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!playing || !meta) return;
 
-    const maxT = Math.max(0, meta.n_samples / meta.sampling_rate_hz - windowSec);
+    const fs = meta.sampling_rate_hz;
+    const maxT = Math.max(0, meta.n_samples / fs - windowSec);
+
     const id = setInterval(() => {
       setCurrentTime((t) => (t + 0.1 > maxT ? maxT : t + 0.1));
     }, 100);
@@ -185,6 +213,7 @@ export default function EEGViewer() {
     if (!suppressArtifacts) return signals;
 
     const fs = meta.sampling_rate_hz;
+
     return signals.map((ch, idx) =>
       ch.map((v, i) => {
         const t = currentTime + i / fs;
@@ -197,7 +226,20 @@ export default function EEGViewer() {
   }, [signals, suppressArtifacts, artifacts, meta, currentTime]);
 
   /* ---------- RENDER ---------- */
-  if (!meta || !signals || loading) {
+  if (error) {
+    return (
+      <div className="h-full w-full p-4 space-y-2">
+        <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
+        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{error}</pre>
+        <div className="text-xs opacity-70">
+          If this mentions CORS or missing x-eeg headers, add CORS middleware on the Read API and expose headers:
+          x-eeg-dtype, x-eeg-nchannels, x-eeg-length, x-eeg-start, x-eeg-samplerate.
+        </div>
+      </div>
+    );
+  }
+
+  if (!meta || !signals || loadingMeta || loadingChunk) {
     return (
       <div className="h-full flex items-center justify-center">
         <Loader2 className="animate-spin" />
@@ -231,7 +273,7 @@ export default function EEGViewer() {
         playbackSpeed={1}
         onPlaybackSpeedChange={() => {}}
         onSkipBackward={() => setCurrentTime((t) => Math.max(0, t - windowSec))}
-        onSkipForward={() => setCurrentTime((t) => t + windowSec)}
+        onSkipForward={() => setCurrentTime((t) => Math.min(t + windowSec, meta.n_samples / meta.sampling_rate_hz))}
         onExport={() => {}}
       />
 
