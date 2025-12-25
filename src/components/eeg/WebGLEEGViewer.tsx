@@ -2,45 +2,57 @@ import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "
 import * as THREE from "three";
 import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
+/**
+ * CONTRACT (MVP LOCK):
+ * - `signals` is ALREADY a windowed chunk for the CURRENT VIEW WINDOW.
+ * - WebGLEEGViewer MUST NOT slice signals again using currentTime.
+ * - X axis is 0..timeWindow within this buffer, not absolute file time.
+ *
+ * In other words:
+ *   signals[ch][i] corresponds to time = currentTime + i/sampleRate
+ * but this component renders the local window [0..timeWindow] only.
+ */
+
 interface Marker {
   id?: string;
-  timestamp_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
+  timestamp_sec: number; // absolute timestamp in file seconds OR window-relative if you choose
   marker_type: string;
   label?: string;
+  // optional: if already window-relative, set marker_type = "window"
 }
 
 interface ArtifactInterval {
-  start_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
-  end_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
+  start_sec: number; // window-relative seconds (0..timeWindow)
+  end_sec: number; // window-relative seconds
   label?: string;
-  channel?: number; // channel index in the global channel index space (same as signals[channelIndex])
+  channel?: number; // if omitted => all channels
 }
 
 interface Selection {
-  startTime: number; // window-local seconds
-  endTime: number; // window-local seconds
+  startTime: number; // absolute time (file sec)
+  endTime: number; // absolute time (file sec)
 }
 
-interface WebGLEEGViewerProps {
-  signals: number[][] | null; // EXPECTED: already-windowed chunk, channel-major
+export interface WebGLEEGViewerProps {
+  signals: number[][] | null;
   channelLabels: string[];
   sampleRate: number;
-  currentTime: number; // ignored for rendering (window-local rendering); kept for API compat
+  currentTime: number; // absolute file time (used for click/selection -> absolute mapping)
   timeWindow: number;
-  amplitudeScale: number; // user gain only (RAW scaling)
+  amplitudeScale: number;
   visibleChannels: Set<number>;
   theme: string;
-  markers?: Marker[]; // window-local markers
-  artifactIntervals?: ArtifactInterval[]; // window-local intervals
-  channelColors?: string[];
+
+  markers?: Marker[]; // assumed absolute timestamps unless marker_type === "window"
+  artifactIntervals?: ArtifactInterval[]; // window-relative
+  channelColors?: string[]; // optional hex strings
+
   showArtifactsAsRed?: boolean;
-  onTimeClick?: (timeSec: number) => void; // window-local
+
+  onTimeClick?: (timeAbsSec: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
 
-/* =======================
-   THEME
-======================= */
 const THEME_COLORS = {
   dark: {
     background: 0x0a0a0a,
@@ -50,8 +62,10 @@ const THEME_COLORS = {
     textMuted: "#737373",
     selection: "rgba(59, 130, 246, 0.18)",
     selectionBorder: "rgba(59, 130, 246, 0.55)",
+    artifactBg: "rgba(251, 191, 36, 0.10)",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.55)",
+    artifactBorder: "rgba(251, 191, 36, 0.35)",
+    artifactBorderRed: "rgba(239, 68, 68, 0.50)",
   },
   light: {
     background: 0xfafafa,
@@ -59,12 +73,14 @@ const THEME_COLORS = {
     gridStrong: 0xe0e0e0,
     text: "#171717",
     textMuted: "#525252",
-    selection: "rgba(59, 130, 246, 0.14)",
+    selection: "rgba(59, 130, 246, 0.12)",
     selectionBorder: "rgba(59, 130, 246, 0.45)",
+    artifactBg: "rgba(251, 191, 36, 0.12)",
     artifactBgRed: "rgba(239, 68, 68, 0.20)",
+    artifactBorder: "rgba(251, 191, 36, 0.45)",
     artifactBorderRed: "rgba(239, 68, 68, 0.60)",
   },
-};
+} as const;
 
 const DEFAULT_CHANNEL_PALETTE = [
   0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171, 0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8, 0xa3e635,
@@ -80,79 +96,73 @@ const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }
 };
 
 function parseColorToHex(color: string): number {
+  if (!color) return 0x9ca3af;
   if (color.startsWith("#")) return parseInt(color.slice(1), 16);
-  return 0x808080;
-}
-
-/* =======================
-   PERFORMANCE HELPERS
-======================= */
-
-// Envelope builder on RAW values (deterministic, no filtering).
-// Returns a Float32Array of y-values length = 2*pixelCount (alternating max/min).
-function buildEnvelopeY(signal: number[], pixelCount: number, gain: number, clampAbs: number): Float32Array {
-  const n = signal.length;
-  const out = new Float32Array(pixelCount * 2);
-  if (n === 0 || pixelCount <= 0) return out;
-
-  const spp = n / pixelCount;
-
-  for (let px = 0; px < pixelCount; px++) {
-    const s0 = Math.floor(px * spp);
-    const s1 = Math.min(Math.ceil((px + 1) * spp), n);
-
-    let minV = Infinity;
-    let maxV = -Infinity;
-
-    for (let s = s0; s < s1; s++) {
-      const v = signal[s];
-      if (v < minV) minV = v;
-      if (v > maxV) maxV = v;
-    }
-
-    if (minV === Infinity) {
-      minV = 0;
-      maxV = 0;
-    }
-
-    // Apply user gain (RAW scaling only)
-    let yMin = minV * gain;
-    let yMax = maxV * gain;
-
-    // Clamp to lane
-    if (yMin < -clampAbs) yMin = -clampAbs;
-    if (yMin > clampAbs) yMin = clampAbs;
-    if (yMax < -clampAbs) yMax = -clampAbs;
-    if (yMax > clampAbs) yMax = clampAbs;
-
-    // Alternate pattern for a continuous polyline-ish look
-    // Even px: (max, min) Odd px: (min, max)
-    const i = px * 2;
-    if (px % 2 === 0) {
-      out[i] = yMax;
-      out[i + 1] = yMin;
-    } else {
-      out[i] = yMin;
-      out[i + 1] = yMax;
-    }
-  }
-
-  return out;
+  return 0x9ca3af;
 }
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/* =======================
-   COMPONENT
-======================= */
+/**
+ * For each pixel column, compute min/max of samples to avoid aliasing.
+ * Returns a Float32Array of XYZ positions representing a polyline-like envelope.
+ * Output length = 2*pxCount points.
+ */
+function buildEnvelopePositions(
+  samples: number[],
+  widthPx: number,
+  baselineY: number,
+  laneHalfHeight: number,
+  gain: number,
+): Float32Array {
+  const pxCount = Math.max(64, Math.min(widthPx, 2000));
+  const n = samples.length;
+  const spp = n / pxCount;
+
+  const out = new Float32Array(pxCount * 2 * 3);
+  let w = 0;
+
+  for (let px = 0; px < pxCount; px++) {
+    const s0 = Math.floor(px * spp);
+    const s1 = Math.min(n, Math.ceil((px + 1) * spp));
+
+    let mn = Infinity;
+    let mx = -Infinity;
+    for (let i = s0; i < s1; i++) {
+      const v = samples[i];
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    if (!Number.isFinite(mn) || !Number.isFinite(mx)) {
+      mn = 0;
+      mx = 0;
+    }
+
+    // Scale and clamp to lane
+    const yMin = baselineY - clamp(mn * gain, -laneHalfHeight, laneHalfHeight);
+    const yMax = baselineY - clamp(mx * gain, -laneHalfHeight, laneHalfHeight);
+    const x = (px / (pxCount - 1)) * widthPx;
+
+    // Two vertices per pixel (min/max segment)
+    out[w++] = x;
+    out[w++] = yMax;
+    out[w++] = 0;
+    out[w++] = x;
+    out[w++] = yMin;
+    out[w++] = 0;
+  }
+
+  return out;
+}
+
 function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   const {
     signals,
     channelLabels,
     sampleRate,
-    currentTime, // intentionally not used for slicing
+    currentTime,
     timeWindow,
     amplitudeScale,
     visibleChannels,
@@ -165,568 +175,669 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     onSelectionChange,
   } = props;
 
-  const colors = useMemo(() => (theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light), [theme]);
+  const colors = useMemo(() => (theme === "light" ? THEME_COLORS.light : THEME_COLORS.dark), [theme]);
 
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Three.js refs
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
 
-  // We keep a persistent set of channel lines to avoid teardown each render.
-  // Map channelIndex -> { line, geometry, material, positions }
-  const channelLineRef = useRef<
-    Map<number, { line: THREE.Line; geom: THREE.BufferGeometry; mat: THREE.LineBasicMaterial; pos: Float32Array }>
-  >(new Map());
+  // Grid objects
+  const gridGroupRef = useRef<THREE.Group | null>(null);
 
-  // Grid lines persistent
-  const gridRef = useRef<{
-    lines: THREE.Line[];
-    mats: { weak: THREE.LineBasicMaterial; strong: THREE.LineBasicMaterial };
-  } | null>(null);
+  // Lines per channel (reused, not recreated per frame)
+  const lineGroupRef = useRef<THREE.Group | null>(null);
+  const channelLineRef = useRef<Map<number, THREE.Line>>(new Map());
+  const channelGeomRef = useRef<Map<number, THREE.BufferGeometry>>(new Map());
 
-  // DOM overlays (artifacts, labels, selection, marker labels)
-  const overlayRef = useRef<HTMLDivElement | null>(null);
+  // HTML overlays
   const labelsRef = useRef<HTMLDivElement | null>(null);
+  const artifactsRef = useRef<HTMLDivElement | null>(null);
   const selectionRef = useRef<HTMLDivElement | null>(null);
 
-  // Selection state
+  // Interaction state
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; t: number } | null>(null);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const dragStartRef = useRef<{ x: number; tAbs: number } | null>(null);
+  const selectionAbsRef = useRef<Selection | null>(null);
 
-  // Build list of channels to render (stable order)
-  const channelsToRender = useMemo(() => {
-    if (!signals || signals.length === 0) return [];
-    const vis = Array.from(visibleChannels).sort((a, b) => a - b);
-    return vis.length > 0 ? vis : signals.map((_, i) => i);
-  }, [signals, visibleChannels]);
+  // Render scheduling
+  const rafRef = useRef<number | null>(null);
+  const needsRenderRef = useRef<boolean>(false);
 
-  /* =======================
-     INIT THREE + OVERLAYS
-  ======================= */
+  const requestRender = useCallback(() => {
+    needsRenderRef.current = true;
+    if (rafRef.current != null) return;
+
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      if (!needsRenderRef.current) return;
+      needsRenderRef.current = false;
+
+      const r = rendererRef.current;
+      const s = sceneRef.current;
+      const c = cameraRef.current;
+      if (!r || !s || !c) return;
+      r.render(s, c);
+    });
+  }, []);
+
+  // Init scene once
   useEffect(() => {
-    if (!containerRef.current) return;
-
     const container = containerRef.current;
-    const width = container.clientWidth;
-    const height = container.clientHeight;
+    if (!container) return;
 
     // Canvas
     const canvas = document.createElement("canvas");
-    canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;";
+    canvas.style.cssText = "position:absolute; inset:0; width:100%; height:100%;";
     container.appendChild(canvas);
     canvasRef.current = canvas;
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: false, // envelope already anti-aliases effectively; keep fast
-      alpha: true,
+      antialias: true,
+      alpha: false,
       powerPreference: "high-performance",
     });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(colors.background);
     rendererRef.current = renderer;
 
-    // Scene/camera
+    // Scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    const camera = new THREE.OrthographicCamera(0, width, height, 0, 0.1, 1000);
-    camera.position.z = 100;
+    // Camera
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    const camera = new THREE.OrthographicCamera(0, w, h, 0, -100, 100);
+    camera.position.z = 10;
     cameraRef.current = camera;
 
-    // Overlays
-    const overlay = document.createElement("div");
-    overlay.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:100%;
-      pointer-events:none;overflow:hidden;z-index:2;
-    `;
-    container.appendChild(overlay);
-    overlayRef.current = overlay;
+    // Groups
+    const gridGroup = new THREE.Group();
+    gridGroupRef.current = gridGroup;
+    scene.add(gridGroup);
 
-    const labels = document.createElement("div");
-    labels.style.cssText = `
-      position:absolute;top:0;left:0;width:100%;height:100%;
-      pointer-events:none;overflow:hidden;z-index:10;
-    `;
-    container.appendChild(labels);
-    labelsRef.current = labels;
+    const lineGroup = new THREE.Group();
+    lineGroupRef.current = lineGroup;
+    scene.add(lineGroup);
 
-    const selectionDiv = document.createElement("div");
-    selectionDiv.style.cssText = `
-      position:absolute;top:0;height:100%;pointer-events:none;
+    // Overlays: artifacts
+    const artifactsDiv = document.createElement("div");
+    artifactsDiv.style.cssText = `
+      position:absolute; inset:0;
+      pointer-events:none;
+      z-index:2;
+      overflow:hidden;
+    `;
+    container.appendChild(artifactsDiv);
+    artifactsRef.current = artifactsDiv;
+
+    // Overlays: labels and marker labels
+    const labelsDiv = document.createElement("div");
+    labelsDiv.style.cssText = `
+      position:absolute; inset:0;
+      pointer-events:none;
+      z-index:10;
+      overflow:hidden;
+    `;
+    container.appendChild(labelsDiv);
+    labelsRef.current = labelsDiv;
+
+    // Selection overlay
+    const selDiv = document.createElement("div");
+    selDiv.style.cssText = `
+      position:absolute; top:0; height:100%;
+      pointer-events:none;
       background:${colors.selection};
       border-left:2px solid ${colors.selectionBorder};
       border-right:2px solid ${colors.selectionBorder};
-      display:none;z-index:5;
-      box-sizing:border-box;
+      display:none;
+      z-index:5;
     `;
-    container.appendChild(selectionDiv);
-    selectionRef.current = selectionDiv;
+    container.appendChild(selDiv);
+    selectionRef.current = selDiv;
 
-    // Materials for grid
-    const weak = new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.55 });
-    const strong = new THREE.LineBasicMaterial({ color: colors.gridStrong, transparent: true, opacity: 0.8 });
-    gridRef.current = { lines: [], mats: { weak, strong } };
+    // Initial sizing
+    const resize = () => {
+      const el = containerRef.current;
+      const r = rendererRef.current;
+      const c = cameraRef.current;
+      if (!el || !r || !c) return;
 
-    const handleResize = () => {
-      if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      rendererRef.current.setSize(w, h);
-      cameraRef.current.right = w;
-      cameraRef.current.top = h;
-      cameraRef.current.updateProjectionMatrix();
+      const W = el.clientWidth;
+      const H = el.clientHeight;
+
+      r.setSize(W, H, false);
+      r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      r.setClearColor(colors.background, 1);
+
+      c.right = W;
+      c.top = H;
+      c.updateProjectionMatrix();
+
+      requestRender();
     };
 
-    const ro = new ResizeObserver(handleResize);
+    resize();
+    const ro = new ResizeObserver(resize);
     ro.observe(container);
 
     return () => {
       ro.disconnect();
 
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+
       // Cleanup three
-      channelLineRef.current.forEach(({ line, geom, mat }) => {
-        scene.remove(line);
+      channelLineRef.current.forEach((line) => {
+        const geom = line.geometry as THREE.BufferGeometry;
         geom.dispose();
-        mat.dispose();
+        (line.material as THREE.Material).dispose();
       });
       channelLineRef.current.clear();
-
-      if (gridRef.current) {
-        gridRef.current.lines.forEach((l) => {
-          scene.remove(l);
-          l.geometry.dispose();
-          (l.material as THREE.Material).dispose();
-        });
-        gridRef.current.mats.weak.dispose();
-        gridRef.current.mats.strong.dispose();
-      }
-      gridRef.current = null;
+      channelGeomRef.current.clear();
 
       renderer.dispose();
 
-      // Cleanup DOM
+      // Remove DOM
       if (canvasRef.current && container.contains(canvasRef.current)) container.removeChild(canvasRef.current);
-      if (overlayRef.current && container.contains(overlayRef.current)) container.removeChild(overlayRef.current);
+      if (artifactsRef.current && container.contains(artifactsRef.current)) container.removeChild(artifactsRef.current);
       if (labelsRef.current && container.contains(labelsRef.current)) container.removeChild(labelsRef.current);
       if (selectionRef.current && container.contains(selectionRef.current)) container.removeChild(selectionRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update background when theme changes
+  // Update theme colors
   useEffect(() => {
-    if (rendererRef.current) rendererRef.current.setClearColor(colors.background);
+    const r = rendererRef.current;
+    if (!r) return;
+    r.setClearColor(colors.background, 1);
     if (selectionRef.current) {
       selectionRef.current.style.background = colors.selection;
-      selectionRef.current.style.borderLeft = `2px solid ${colors.selectionBorder}`;
-      selectionRef.current.style.borderRight = `2px solid ${colors.selectionBorder}`;
+      selectionRef.current.style.borderLeftColor = colors.selectionBorder;
+      selectionRef.current.style.borderRightColor = colors.selectionBorder;
     }
-  }, [colors.background, colors.selection, colors.selectionBorder]);
+    requestRender();
+  }, [colors, requestRender]);
 
-  /* =======================
-     MOUSE INTERACTION
-  ======================= */
+  // Mouse interactions
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const t = (x / rect.width) * timeWindow;
+
+      const tAbs = currentTime + (x / rect.width) * timeWindow;
 
       setIsDragging(true);
-      setDragStart({ x, t });
-      setSelection(null);
+      dragStartRef.current = { x, tAbs };
+      selectionAbsRef.current = null;
+
       if (selectionRef.current) selectionRef.current.style.display = "none";
     },
-    [timeWindow],
+    [currentTime, timeWindow],
   );
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDragging || !dragStart || !containerRef.current || !selectionRef.current) return;
+      if (!isDragging) return;
+      const el = containerRef.current;
+      const sel = selectionRef.current;
+      const start = dragStartRef.current;
+      if (!el || !sel || !start) return;
 
-      const rect = containerRef.current.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const t = (x / rect.width) * timeWindow;
 
-      const left = Math.min(dragStart.x, x);
-      const width = Math.abs(x - dragStart.x);
+      const left = Math.min(start.x, x);
+      const width = Math.abs(x - start.x);
 
-      if (width > 5) {
-        selectionRef.current.style.display = "block";
-        selectionRef.current.style.left = `${left}px`;
-        selectionRef.current.style.width = `${width}px`;
-
-        const sel = { startTime: Math.min(dragStart.t, t), endTime: Math.max(dragStart.t, t) };
-        setSelection(sel);
+      if (width < 6) {
+        sel.style.display = "none";
+        selectionAbsRef.current = null;
+        return;
       }
+
+      sel.style.display = "block";
+      sel.style.left = `${left}px`;
+      sel.style.width = `${width}px`;
+
+      const tAbs = currentTime + (x / rect.width) * timeWindow;
+      selectionAbsRef.current = {
+        startTime: Math.min(start.tAbs, tAbs),
+        endTime: Math.max(start.tAbs, tAbs),
+      };
     },
-    [isDragging, dragStart, timeWindow],
+    [isDragging, currentTime, timeWindow],
   );
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
-      if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
+      const el = containerRef.current;
+      const start = dragStartRef.current;
+      if (!el || !start) {
+        setIsDragging(false);
+        dragStartRef.current = null;
+        return;
+      }
 
-      if (isDragging && dragStart) {
-        const distance = Math.abs(x - dragStart.x);
-        if (distance < 5) {
-          const t = (x / rect.width) * timeWindow;
-          onTimeClick?.(t);
-          if (selectionRef.current) selectionRef.current.style.display = "none";
-          setSelection(null);
-          onSelectionChange?.(null);
-        } else {
-          if (selection) onSelectionChange?.(selection);
-        }
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const dist = Math.abs(x - start.x);
+
+      if (dist < 6) {
+        const tAbs = currentTime + (x / rect.width) * timeWindow;
+        onTimeClick?.(tAbs);
+        onSelectionChange?.(null);
+      } else {
+        onSelectionChange?.(selectionAbsRef.current);
       }
 
       setIsDragging(false);
-      setDragStart(null);
+      dragStartRef.current = null;
     },
-    [isDragging, dragStart, selection, timeWindow, onTimeClick, onSelectionChange],
+    [currentTime, timeWindow, onTimeClick, onSelectionChange],
   );
 
   const handleMouseLeave = useCallback(() => {
-    if (isDragging) {
-      setIsDragging(false);
-      setDragStart(null);
-    }
+    if (!isDragging) return;
+    setIsDragging(false);
+    dragStartRef.current = null;
   }, [isDragging]);
 
-  /* =======================
-     GRID (persistent rebuild only when size/timeWindow/channels change)
-  ======================= */
+  // Determine which channels to render
+  const channelsToRender = useMemo(() => {
+    if (!signals || signals.length === 0) return [];
+    const v = Array.from(visibleChannels);
+    if (v.length > 0) return v.sort((a, b) => a - b);
+    return signals.map((_, i) => i);
+  }, [signals, visibleChannels]);
+
+  // Draw / update grid (cheap)
   const rebuildGrid = useCallback(() => {
-    if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !containerRef.current || !gridRef.current)
-      return;
+    const el = containerRef.current;
+    const gridGroup = gridGroupRef.current;
+    if (!el || !gridGroup) return;
 
-    const scene = sceneRef.current;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const W = el.clientWidth;
+    const H = el.clientHeight;
 
-    // Remove old grid
-    gridRef.current.lines.forEach((l) => {
-      scene.remove(l);
-      l.geometry.dispose();
-      // materials reused (weak/strong) -> don't dispose here
-    });
-    gridRef.current.lines = [];
-
-    const weak = gridRef.current.mats.weak;
-    const strong = gridRef.current.mats.strong;
-
-    // Vertical grid (seconds) strong every 5s
-    const step = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
-    for (let s = 0; s <= timeWindow + 1e-6; s += step) {
-      const x = (s / timeWindow) * width;
-      const geom = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(x, 0, 0),
-        new THREE.Vector3(x, height, 0),
-      ]);
-      const mat = Math.round(s) % (step * 5) === 0 ? strong : weak;
-      const line = new THREE.Line(geom, mat);
-      scene.add(line);
-      gridRef.current.lines.push(line);
+    // Clear old grid objects
+    while (gridGroup.children.length) {
+      const obj = gridGroup.children.pop();
+      if (!obj) break;
+      const line = obj as THREE.Line;
+      (line.geometry as THREE.BufferGeometry).dispose();
+      (line.material as THREE.Material).dispose();
     }
 
-    // Horizontal separators per lane
-    const n = channelsToRender.length || 1;
+    const minorMat = new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.55 });
+    const majorMat = new THREE.LineBasicMaterial({ color: colors.gridStrong, transparent: true, opacity: 0.75 });
+
+    // Vertical grid lines: 1s minor, 5s major (bounded)
+    const maxLines = 240;
+    const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 2 : 5;
+    const majorEvery = interval * 5;
+
+    for (let t = 0; t <= timeWindow; t += interval) {
+      if (gridGroup.children.length > maxLines) break;
+      const x = (t / timeWindow) * W;
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, H, 0)]);
+      const mat = t % majorEvery === 0 ? majorMat : minorMat;
+      gridGroup.add(new THREE.Line(geom, mat));
+    }
+
+    // Horizontal lane separators
+    const n = Math.max(1, channelsToRender.length);
     const pad = 4;
-    const laneH = (height - (n + 1) * pad) / n;
+    const laneH = (H - (n + 1) * pad) / n;
 
     for (let i = 0; i <= n; i++) {
       const y = pad + i * (laneH + pad);
-      const geom = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(0, y, 0),
-        new THREE.Vector3(width, y, 0),
-      ]);
-      const line = new THREE.Line(geom, weak);
-      scene.add(line);
-      gridRef.current.lines.push(line);
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, y, 0), new THREE.Vector3(W, y, 0)]);
+      const mat = minorMat;
+      gridGroup.add(new THREE.Line(geom, mat));
     }
-  }, [timeWindow, channelsToRender.length]);
+  }, [channelsToRender.length, colors.grid, colors.gridStrong, timeWindow]);
 
-  /* =======================
-     CHANNEL COLOR RESOLUTION
-  ======================= */
-  const resolveChannelColor = useCallback(
-    (label: string, chIndex: number) => {
-      if (channelColors[chIndex]) return parseColorToHex(channelColors[chIndex]);
-      const colorInfo = getChannelColor(label);
-      const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
-      return (
-        CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] ??
-        DEFAULT_CHANNEL_PALETTE[chIndex % DEFAULT_CHANNEL_PALETTE.length]
-      );
-    },
-    [channelColors, theme],
-  );
+  // Update artifacts overlay (HTML) — window-relative
+  const rebuildArtifactsOverlay = useCallback(() => {
+    const el = containerRef.current;
+    const root = artifactsRef.current;
+    if (!el || !root) return;
 
-  /* =======================
-     OVERLAY DOM (artifacts + marker labels + time labels + channel labels)
-     - we rebuild these only on dependency changes, not per frame
-  ======================= */
-  const rebuildOverlays = useCallback(() => {
-    if (!containerRef.current || !overlayRef.current || !labelsRef.current) return;
+    root.innerHTML = "";
 
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    if (!artifactIntervals || artifactIntervals.length === 0) return;
 
-    overlayRef.current.innerHTML = "";
-    labelsRef.current.innerHTML = "";
-
-    const n = channelsToRender.length || 1;
+    const W = el.clientWidth;
+    const H = el.clientHeight;
+    const n = Math.max(1, channelsToRender.length);
     const pad = 4;
-    const laneH = (height - (n + 1) * pad) / n;
+    const laneH = (H - (n + 1) * pad) / n;
 
-    // Channel labels
-    for (let di = 0; di < channelsToRender.length; di++) {
-      const chIndex = channelsToRender[di];
-      const label = channelLabels[chIndex] || `Ch${chIndex + 1}`;
-      const c = resolveChannelColor(label, chIndex);
-      const cStr = `#${c.toString(16).padStart(6, "0")}`;
-
-      const top = pad + di * (laneH + pad);
-      const el = document.createElement("div");
-      el.style.cssText = `
-        position:absolute;left:8px;top:${top + 4}px;
-        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-        font-size:10px;font-weight:600;color:${colors.text};
-        background:${theme === "dark" ? "rgba(10,10,10,0.85)" : "rgba(250,250,250,0.9)"};
-        padding:2px 6px;border-radius:3px;border-left:3px solid ${cStr};
-        pointer-events:none;
-      `;
-      el.textContent = label;
-      labelsRef.current.appendChild(el);
-    }
-
-    // Artifact overlays (red)
-    const bg = colors.artifactBgRed;
-    const bd = colors.artifactBorderRed;
+    const bg = showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBg;
+    const bd = showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorder;
 
     for (const a of artifactIntervals) {
-      // Expect window-local coords
-      const a0 = clamp(a.start_sec, 0, timeWindow);
-      const a1 = clamp(a.end_sec, 0, timeWindow);
-      if (a1 <= a0) continue;
+      if (a.end_sec < 0 || a.start_sec > timeWindow) continue;
 
-      const x1 = (a0 / timeWindow) * width;
-      const x2 = (a1 / timeWindow) * width;
+      const s = clamp(a.start_sec, 0, timeWindow);
+      const e = clamp(a.end_sec, 0, timeWindow);
+      const x1 = (s / timeWindow) * W;
+      const x2 = (e / timeWindow) * W;
 
       const affected = a.channel != null ? [a.channel] : channelsToRender;
+
       for (const chIdx of affected) {
-        const di = channelsToRender.indexOf(chIdx);
-        if (di === -1) continue;
+        const laneIdx = channelsToRender.indexOf(chIdx);
+        if (laneIdx < 0) continue;
 
-        const top = pad + di * (laneH + pad);
+        const top = pad + laneIdx * (laneH + pad);
 
-        const el = document.createElement("div");
-        el.style.cssText = `
-          position:absolute;left:${x1}px;top:${top}px;width:${Math.max(2, x2 - x1)}px;height:${laneH}px;
-          background:${showArtifactsAsRed ? bg : bg};
-          border-left:1px solid ${bd};border-right:1px solid ${bd};
+        const div = document.createElement("div");
+        div.style.cssText = `
+          position:absolute;
+          left:${x1}px;
+          top:${top}px;
+          width:${Math.max(2, x2 - x1)}px;
+          height:${laneH}px;
+          background:${bg};
+          border-left:1px solid ${bd};
+          border-right:1px solid ${bd};
+          pointer-events:none;
           box-sizing:border-box;
         `;
-        overlayRef.current.appendChild(el);
+        root.appendChild(div);
       }
     }
+  }, [artifactIntervals, channelsToRender, colors, showArtifactsAsRed, timeWindow]);
 
-    // Marker verticals + labels (use overlay for lines, labels for chips)
-    const markerColor: Record<string, string> = {
-      event: theme === "dark" ? "#3b82f6" : "#2563eb",
-      seizure: theme === "dark" ? "#ef4444" : "#dc2626",
-      artifact: theme === "dark" ? "#f59e0b" : "#d97706",
-      sleep: theme === "dark" ? "#8b5cf6" : "#7c3aed",
-    };
+  // Update labels + marker labels (HTML) — cheap and deterministic
+  const rebuildLabels = useCallback(() => {
+    const el = containerRef.current;
+    const root = labelsRef.current;
+    if (!el || !root) return;
 
-    for (const m of markers) {
-      const t = m.timestamp_sec; // window-local expected
-      if (t < 0 || t > timeWindow) continue;
-      const x = (t / timeWindow) * width;
+    root.innerHTML = "";
 
-      const line = document.createElement("div");
-      line.style.cssText = `
-        position:absolute;left:${x}px;top:0;height:100%;width:2px;
-        background:${markerColor[m.marker_type] ?? (theme === "dark" ? "#888" : "#666")};
-        opacity:0.9;
+    const W = el.clientWidth;
+    const H = el.clientHeight;
+    const n = Math.max(1, channelsToRender.length);
+    const pad = 4;
+    const laneH = (H - (n + 1) * pad) / n;
+
+    // Channel labels
+    for (let i = 0; i < channelsToRender.length; i++) {
+      const chIdx = channelsToRender[i];
+      const label = channelLabels[chIdx] ?? `Ch${chIdx + 1}`;
+
+      let colorHex: number;
+      if (channelColors[chIdx]) {
+        colorHex = parseColorToHex(channelColors[chIdx]);
+      } else {
+        const c = getChannelColor(label);
+        const group = c.label.toLowerCase() as ChannelGroup;
+        colorHex =
+          CHANNEL_THEME_COLORS[group]?.[theme === "light" ? "light" : "dark"] ??
+          DEFAULT_CHANNEL_PALETTE[chIdx % DEFAULT_CHANNEL_PALETTE.length];
+      }
+      const colorStr = `#${colorHex.toString(16).padStart(6, "0")}`;
+
+      const top = pad + i * (laneH + pad);
+
+      const div = document.createElement("div");
+      div.style.cssText = `
+        position:absolute;
+        left:8px;
+        top:${top + 2}px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size:10px;
+        font-weight:600;
+        color:${colors.text};
+        background:${theme === "light" ? "rgba(250,250,250,0.85)" : "rgba(10,10,10,0.85)"};
+        padding:2px 6px;
+        border-radius:4px;
+        border-left:3px solid ${colorStr};
+        pointer-events:none;
+        white-space:nowrap;
       `;
-      overlayRef.current.appendChild(line);
-
-      const chip = document.createElement("div");
-      const c = markerColor[m.marker_type] ?? (theme === "dark" ? "#888" : "#666");
-      chip.style.cssText = `
-        position:absolute;left:${Math.min(x + 4, width - 140)}px;top:6px;
-        max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-        font-size:9px;font-weight:700;color:${c};
-        background:${theme === "dark" ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.9)"};
-        border:1px solid ${c};
-        padding:2px 6px;border-radius:3px;
-      `;
-      chip.textContent = m.label ?? m.marker_type;
-      labelsRef.current.appendChild(chip);
+      div.textContent = label;
+      root.appendChild(div);
     }
 
     // Time labels (bottom)
     const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
-    for (let s = 0; s <= timeWindow + 1e-6; s += interval) {
-      const x = (s / timeWindow) * width;
+    for (let t = 0; t <= timeWindow; t += interval) {
+      const x = (t / timeWindow) * W;
+      const abs = currentTime + t;
+      const mm = Math.floor(abs / 60);
+      const ss = Math.floor(abs % 60);
 
-      const el = document.createElement("div");
-      el.style.cssText = `
-        position:absolute;left:${x + 2}px;bottom:4px;
-        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
-        font-size:9px;color:${colors.textMuted};
-        background:${theme === "dark" ? "rgba(10,10,10,0.7)" : "rgba(250,250,250,0.7)"};
-        padding:1px 3px;border-radius:2px;
+      const div = document.createElement("div");
+      div.style.cssText = `
+        position:absolute;
+        left:${x + 2}px;
+        bottom:4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size:9px;
+        color:${colors.textMuted};
+        background:${theme === "light" ? "rgba(250,250,250,0.75)" : "rgba(10,10,10,0.75)"};
+        padding:1px 3px;
+        border-radius:3px;
+        pointer-events:none;
       `;
-      el.textContent = `${s.toFixed(0)}s`;
-      labelsRef.current.appendChild(el);
+      div.textContent = `${mm}:${ss.toString().padStart(2, "0")}`;
+      root.appendChild(div);
+    }
+
+    // Marker labels (vertical marker lines are drawn in three; labels are HTML)
+    for (const m of markers) {
+      const local = m.marker_type === "window" ? m.timestamp_sec : m.timestamp_sec - currentTime;
+
+      if (local < 0 || local > timeWindow) continue;
+      const x = (local / timeWindow) * W;
+
+      const div = document.createElement("div");
+      div.style.cssText = `
+        position:absolute;
+        left:${x + 4}px;
+        top:6px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size:9px;
+        font-weight:700;
+        color:${theme === "light" ? "#111827" : "#e5e7eb"};
+        background:${theme === "light" ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.75)"};
+        padding:2px 6px;
+        border-radius:6px;
+        border:1px solid ${theme === "light" ? "rgba(17,24,39,0.25)" : "rgba(229,231,235,0.25)"};
+        pointer-events:none;
+        white-space:nowrap;
+      `;
+      div.textContent = m.label ?? m.marker_type;
+      root.appendChild(div);
     }
   }, [
-    artifactIntervals,
-    markers,
+    channelColors,
     channelLabels,
     channelsToRender,
-    colors.artifactBgRed,
-    colors.artifactBorderRed,
     colors.text,
     colors.textMuted,
-    resolveChannelColor,
-    showArtifactsAsRed,
+    currentTime,
+    markers,
     theme,
     timeWindow,
   ]);
 
-  /* =======================
-     WAVEFORM UPDATE (no teardown)
-  ======================= */
-  const renderWaveforms = useCallback(() => {
-    if (!signals || signals.length === 0) return;
-    if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !containerRef.current) return;
-
+  // Update channel lines (core performance fix: reuse geometries)
+  const updateWaveforms = useCallback(() => {
+    const el = containerRef.current;
     const scene = sceneRef.current;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    const lineGroup = lineGroupRef.current;
+    if (!el || !scene || !lineGroup) return;
 
-    const n = channelsToRender.length || 1;
+    if (!signals || signals.length === 0) return;
+    if (channelsToRender.length === 0) return;
+
+    const W = el.clientWidth;
+    const H = el.clientHeight;
+
     const pad = 4;
-    const laneH = (height - (n + 1) * pad) / n;
-    const usable = laneH * 0.65;
-    const clampAbs = laneH * 0.48;
+    const n = channelsToRender.length;
+    const laneH = (H - (n + 1) * pad) / n;
+    const laneHalf = laneH * 0.46; // keep margin
 
-    // Pixel budget (cap for perf)
-    const pixelCount = Math.min(Math.floor(width), 1800);
+    // Remove lines for channels that are no longer visible
+    const keep = new Set(channelsToRender);
+    for (const [chIdx, line] of channelLineRef.current.entries()) {
+      if (!keep.has(chIdx)) {
+        lineGroup.remove(line);
+        (line.geometry as THREE.BufferGeometry).dispose();
+        (line.material as THREE.Material).dispose();
+        channelLineRef.current.delete(chIdx);
+        channelGeomRef.current.delete(chIdx);
+      }
+    }
 
-    // For deterministic raw rendering, only user gain applies.
-    const gain = amplitudeScale;
+    // For each visible channel: build envelope positions from the WINDOWED buffer directly
+    for (let lane = 0; lane < channelsToRender.length; lane++) {
+      const chIdx = channelsToRender[lane];
+      const buf = signals[chIdx];
+      if (!buf || buf.length === 0) continue;
 
-    // Ensure each channel line exists and update its buffer
-    for (let di = 0; di < channelsToRender.length; di++) {
-      const chIndex = channelsToRender[di];
-      const sig = signals[chIndex];
-      if (!sig || sig.length === 0) continue;
+      // Lane baseline y (top-down coordinate system)
+      const top = pad + lane * (laneH + pad);
+      const baselineY = top + laneH / 2;
 
-      const label = channelLabels[chIndex] || `Ch${chIndex + 1}`;
-      const colorHex = resolveChannelColor(label, chIndex);
+      // RAW rendering: no filtering, no baseline subtraction, no autoscale.
+      // We only apply user amplitudeScale.
+      const gain = amplitudeScale;
 
-      // envelope y values (window-local)
-      const envY = buildEnvelopeY(sig, pixelCount, gain, clampAbs);
+      const pos = buildEnvelopePositions(buf, W, baselineY, laneHalf, gain);
 
-      // Build/update positions: x mapped to [0,width], y around lane baseline
-      // positions length = envY.length * 3
-      const baselineY = pad + di * (laneH + pad) + laneH / 2;
-
-      const neededVerts = envY.length;
-      const neededFloats = neededVerts * 3;
-
-      let entry = channelLineRef.current.get(chIndex);
-      if (!entry) {
-        const pos = new Float32Array(neededFloats);
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        const mat = new THREE.LineBasicMaterial({ color: colorHex });
-        const line = new THREE.Line(geom, mat);
-        scene.add(line);
-        entry = { line, geom, mat, pos };
-        channelLineRef.current.set(chIndex, entry);
+      // Color
+      let colorHex: number;
+      if (channelColors[chIdx]) {
+        colorHex = parseColorToHex(channelColors[chIdx]);
       } else {
-        // If buffer size changed (resize), recreate buffer attribute (cheap)
-        if (entry.pos.length !== neededFloats) {
-          entry.pos = new Float32Array(neededFloats);
-          entry.geom.setAttribute("position", new THREE.BufferAttribute(entry.pos, 3));
+        const label = channelLabels[chIdx] ?? `Ch${chIdx + 1}`;
+        const c = getChannelColor(label);
+        const group = c.label.toLowerCase() as ChannelGroup;
+        colorHex =
+          CHANNEL_THEME_COLORS[group]?.[theme === "light" ? "light" : "dark"] ??
+          DEFAULT_CHANNEL_PALETTE[chIdx % DEFAULT_CHANNEL_PALETTE.length];
+      }
+
+      // Reuse or create geometry+line
+      let line = channelLineRef.current.get(chIdx);
+      let geom = channelGeomRef.current.get(chIdx);
+
+      if (!line || !geom) {
+        geom = new THREE.BufferGeometry();
+        const attr = new THREE.BufferAttribute(pos, 3);
+        geom.setAttribute("position", attr);
+
+        const mat = new THREE.LineBasicMaterial({
+          color: colorHex,
+          transparent: true,
+          opacity: 0.95,
+        });
+
+        line = new THREE.Line(geom, mat);
+        line.frustumCulled = false;
+
+        channelGeomRef.current.set(chIdx, geom);
+        channelLineRef.current.set(chIdx, line);
+        lineGroup.add(line);
+      } else {
+        // Update existing attribute
+        const attr = geom.getAttribute("position") as THREE.BufferAttribute;
+        if (!attr || attr.array.length !== pos.length) {
+          // Replace attribute if length changed (e.g., resize)
+          geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        } else {
+          (attr.array as Float32Array).set(pos);
+          attr.needsUpdate = true;
         }
-        // Update color if needed
-        if (entry.mat.color.getHex() !== colorHex) entry.mat.color.setHex(colorHex);
-      }
 
-      const pos = entry.pos;
-
-      for (let i = 0; i < neededVerts; i++) {
-        const px = Math.floor(i / 2);
-        const x = (px / pixelCount) * width;
-
-        // y in signal space (μV*gain), screen y goes down, so subtract
-        const y = baselineY - envY[i];
-
-        const j = i * 3;
-        pos[j] = x;
-        pos[j + 1] = y;
-        pos[j + 2] = 0;
-      }
-
-      (entry.geom.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
-    }
-
-    // Remove lines for channels no longer visible
-    for (const [chIndex, entry] of channelLineRef.current.entries()) {
-      if (!channelsToRender.includes(chIndex)) {
-        scene.remove(entry.line);
-        entry.geom.dispose();
-        entry.mat.dispose();
-        channelLineRef.current.delete(chIndex);
+        // Update material color
+        const mat = line.material as THREE.LineBasicMaterial;
+        if (mat.color.getHex() !== colorHex) mat.color.setHex(colorHex);
       }
     }
 
-    rendererRef.current.render(scene, cameraRef.current);
-  }, [signals, channelsToRender, amplitudeScale, channelLabels, resolveChannelColor]);
+    requestRender();
+  }, [signals, channelsToRender, channelColors, channelLabels, amplitudeScale, theme, requestRender]);
 
-  /* =======================
-     EFFECTS: rebuild grid/overlays on structural changes
-  ======================= */
+  // Draw markers as vertical lines (three.js)
+  const updateMarkers = useCallback(() => {
+    const el = containerRef.current;
+    const gridGroup = gridGroupRef.current;
+    if (!el || !gridGroup) return;
+
+    // Remove old marker lines from grid group: we tag them via name
+    const toRemove: THREE.Object3D[] = [];
+    for (const child of gridGroup.children) {
+      if (child.name === "marker-line") toRemove.push(child);
+    }
+    for (const obj of toRemove) {
+      const line = obj as THREE.Line;
+      gridGroup.remove(line);
+      (line.geometry as THREE.BufferGeometry).dispose();
+      (line.material as THREE.Material).dispose();
+    }
+
+    if (!markers || markers.length === 0) return;
+
+    const W = el.clientWidth;
+    const H = el.clientHeight;
+
+    const colorMap: Record<string, number> = {
+      event: theme === "light" ? 0x2563eb : 0x3b82f6,
+      seizure: theme === "light" ? 0xdc2626 : 0xef4444,
+      artifact: theme === "light" ? 0xd97706 : 0xf59e0b,
+      sleep: theme === "light" ? 0x7c3aed : 0x8b5cf6,
+      window: theme === "light" ? 0x111827 : 0xe5e7eb,
+    };
+
+    for (const m of markers) {
+      const local = m.marker_type === "window" ? m.timestamp_sec : m.timestamp_sec - currentTime;
+      if (local < 0 || local > timeWindow) continue;
+
+      const x = (local / timeWindow) * W;
+      const mat = new THREE.LineBasicMaterial({
+        color: colorMap[m.marker_type] ?? colorMap.event,
+        transparent: true,
+        opacity: 0.9,
+      });
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, H, 0)]);
+      const line = new THREE.Line(geom, mat);
+      line.name = "marker-line";
+      gridGroup.add(line);
+    }
+
+    requestRender();
+  }, [markers, currentTime, timeWindow, theme, requestRender]);
+
+  // Rebuild grid + overlays when layout/time changes
   useEffect(() => {
     rebuildGrid();
-    rebuildOverlays();
-    // We also render once after rebuild
-    requestAnimationFrame(() => renderWaveforms());
-  }, [rebuildGrid, rebuildOverlays, renderWaveforms]);
-
-  // Render whenever waveform inputs change (signals, gain, visible channels)
-  useEffect(() => {
-    requestAnimationFrame(() => renderWaveforms());
-  }, [renderWaveforms]);
-
-  /* =======================
-     NOTE ABOUT currentTime
-     We intentionally do NOT use currentTime to reslice signals.
-     EEGViewer.tsx should pass window-local data and set currentTime=0.
-  ======================= */
+    rebuildArtifactsOverlay();
+    rebuildLabels();
+    updateMarkers();
+    updateWaveforms();
+  }, [rebuildGrid, rebuildArtifactsOverlay, rebuildLabels, updateMarkers, updateWaveforms]);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full relative cursor-crosshair"
       style={{
-        background: theme === "dark" ? "#0a0a0a" : "#fafafa",
+        background: theme === "light" ? "#fafafa" : "#0a0a0a",
         borderRadius: 6,
         overflow: "hidden",
       }}
@@ -734,7 +845,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      aria-label="EEG viewer"
     />
   );
 }
