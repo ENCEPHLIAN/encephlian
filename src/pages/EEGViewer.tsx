@@ -7,21 +7,9 @@ import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 
 const STUDY_ID = "TUH_CANON_001";
-<<<<<<< HEAD
-const API_BASE =
-  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined);
-
-const API_KEY =
-  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined);
-
-/* =======================
-   TYPES
-======================= */
-=======
 const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
->>>>>>> d8a7d83 (fix(viewer): alias-free rendering + channel colors + readable grid)
 type Meta = {
   n_channels: number;
   sampling_rate_hz: number;
