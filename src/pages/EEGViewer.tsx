@@ -11,12 +11,10 @@ import { useTheme } from "next-themes";
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
 const API_BASE =
-  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
-  "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io"\;
+  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined);
 
 const API_KEY =
-  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ??
-  "REPLACE_ME_IN_LOVABLE_ENV";
+  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined);
 
 /* =======================
    TYPES
