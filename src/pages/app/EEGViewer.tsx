@@ -85,10 +85,10 @@ export default function EEGViewer() {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
 
   const [currentTime, setCurrentTime] = useState(0);
-  const [windowSec, setWindowSec] = useState(10);
+  const [windowSec, setWindowSec] = useState(60);
   const [playing, setPlaying] = useState(false);
 
-  const [amplitude, setAmplitude] = useState(0.25); // safer default; user can adjust
+  const [amplitude, setAmplitude] = useState(1.0); // safer default; user can adjust
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
