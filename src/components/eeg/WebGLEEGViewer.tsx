@@ -1,44 +1,46 @@
-import { useEffect, useRef, useCallback, memo, useState, useMemo } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
 interface Marker {
-  id: string;
-  timestamp_sec: number;
+  id?: string;
+  timestamp_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
   marker_type: string;
   label?: string;
 }
 
 interface ArtifactInterval {
-  start_sec: number;
-  end_sec: number;
+  start_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
+  end_sec: number; // EXPECTED: window-local seconds (0..timeWindow)
   label?: string;
-  channel?: number;
+  channel?: number; // channel index in the global channel index space (same as signals[channelIndex])
 }
 
 interface Selection {
-  startTime: number;
-  endTime: number;
+  startTime: number; // window-local seconds
+  endTime: number; // window-local seconds
 }
 
 interface WebGLEEGViewerProps {
-  signals: number[][] | null;
+  signals: number[][] | null; // EXPECTED: already-windowed chunk, channel-major
   channelLabels: string[];
   sampleRate: number;
-  currentTime: number;
+  currentTime: number; // ignored for rendering (window-local rendering); kept for API compat
   timeWindow: number;
-  amplitudeScale: number;
+  amplitudeScale: number; // user gain only (RAW scaling)
   visibleChannels: Set<number>;
   theme: string;
-  markers?: Marker[];
-  artifactIntervals?: ArtifactInterval[];
+  markers?: Marker[]; // window-local markers
+  artifactIntervals?: ArtifactInterval[]; // window-local intervals
   channelColors?: string[];
   showArtifactsAsRed?: boolean;
-  onTimeClick?: (time: number) => void;
+  onTimeClick?: (timeSec: number) => void; // window-local
   onSelectionChange?: (selection: Selection | null) => void;
 }
 
-// Color palette for dark and light themes
+/* =======================
+   THEME
+======================= */
 const THEME_COLORS = {
   dark: {
     background: 0x0a0a0a,
@@ -46,12 +48,10 @@ const THEME_COLORS = {
     gridStrong: 0x262626,
     text: "#e5e5e5",
     textMuted: "#737373",
-    selection: "rgba(59, 130, 246, 0.2)",
-    selectionBorder: "rgba(59, 130, 246, 0.6)",
-    artifactBg: "rgba(251, 191, 36, 0.12)",
+    selection: "rgba(59, 130, 246, 0.18)",
+    selectionBorder: "rgba(59, 130, 246, 0.55)",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
-    artifactBorder: "rgba(251, 191, 36, 0.4)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.5)",
+    artifactBorderRed: "rgba(239, 68, 68, 0.55)",
   },
   light: {
     background: 0xfafafa,
@@ -59,24 +59,18 @@ const THEME_COLORS = {
     gridStrong: 0xe0e0e0,
     text: "#171717",
     textMuted: "#525252",
-    selection: "rgba(59, 130, 246, 0.15)",
-    selectionBorder: "rgba(59, 130, 246, 0.5)",
-    artifactBg: "rgba(251, 191, 36, 0.15)",
-    artifactBgRed: "rgba(239, 68, 68, 0.2)",
-    artifactBorder: "rgba(251, 191, 36, 0.5)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.6)",
+    selection: "rgba(59, 130, 246, 0.14)",
+    selectionBorder: "rgba(59, 130, 246, 0.45)",
+    artifactBgRed: "rgba(239, 68, 68, 0.20)",
+    artifactBorderRed: "rgba(239, 68, 68, 0.60)",
   },
 };
 
-// Default channel colors
 const DEFAULT_CHANNEL_PALETTE = [
-  0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171,
-  0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8,
-  0xa3e635, 0xe879f9, 0xfcd34d, 0x6ee7b7, 0x93c5fd,
-  0xc084fc, 0xfdba74, 0x86efac, 0xfca5a5, 0x67e8f9,
+  0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171, 0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8, 0xa3e635,
+  0xe879f9, 0xfcd34d, 0x6ee7b7, 0x93c5fd, 0xc084fc, 0xfdba74, 0x86efac, 0xfca5a5, 0x67e8f9,
 ];
 
-// Enhanced channel colors with better contrast
 const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }> = {
   frontal: { dark: 0x60a5fa, light: 0x2563eb },
   central: { dark: 0x4ade80, light: 0x16a34a },
@@ -85,115 +79,133 @@ const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }
   other: { dark: 0x94a3b8, light: 0x64748b },
 };
 
-/* ============================================
-   CLINICAL-GRADE SIGNAL PROCESSING UTILITIES
-   ============================================ */
-
-/** Compute median of an array (non-destructive) */
-function median(arr: number[]): number {
-  if (arr.length === 0) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-/** Compute percentile (0-100) of absolute values */
-function percentileAbs(arr: number[], p: number): number {
-  if (arr.length === 0) return 1;
-  const absVals = arr.map(Math.abs).sort((a, b) => a - b);
-  const idx = Math.min(Math.floor((p / 100) * absVals.length), absVals.length - 1);
-  return absVals[idx] || 1;
-}
-
-/** Compute MAD (Median Absolute Deviation) - robust scale estimator */
-function mad(arr: number[], baseline: number): number {
-  if (arr.length === 0) return 1;
-  const deviations = arr.map(v => Math.abs(v - baseline));
-  return median(deviations) || 1;
-}
-
-/** Parse hex color string to number */
 function parseColorToHex(color: string): number {
-  if (color.startsWith("#")) {
-    return parseInt(color.slice(1), 16);
-  }
+  if (color.startsWith("#")) return parseInt(color.slice(1), 16);
   return 0x808080;
 }
 
-/** Butterworth-style IIR bandpass filter (simplified) */
-function applyBandpassFilter(
-  signal: number[],
-  sampleRate: number,
-  lowCut: number = 0.5,
-  highCut: number = 40
-): number[] {
+/* =======================
+   PERFORMANCE HELPERS
+======================= */
+
+// Envelope builder on RAW values (deterministic, no filtering).
+// Returns a Float32Array of y-values length = 2*pixelCount (alternating max/min).
+function buildEnvelopeY(signal: number[], pixelCount: number, gain: number, clampAbs: number): Float32Array {
   const n = signal.length;
-  if (n < 4) return [...signal];
+  const out = new Float32Array(pixelCount * 2);
+  if (n === 0 || pixelCount <= 0) return out;
 
-  const alpha = 1 / (1 + (2 * Math.PI * lowCut) / sampleRate);
-  const highPassed = new Array(n);
-  highPassed[0] = signal[0];
-  for (let i = 1; i < n; i++) {
-    highPassed[i] = alpha * (highPassed[i - 1] + signal[i] - signal[i - 1]);
+  const spp = n / pixelCount;
+
+  for (let px = 0; px < pixelCount; px++) {
+    const s0 = Math.floor(px * spp);
+    const s1 = Math.min(Math.ceil((px + 1) * spp), n);
+
+    let minV = Infinity;
+    let maxV = -Infinity;
+
+    for (let s = s0; s < s1; s++) {
+      const v = signal[s];
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
+    }
+
+    if (minV === Infinity) {
+      minV = 0;
+      maxV = 0;
+    }
+
+    // Apply user gain (RAW scaling only)
+    let yMin = minV * gain;
+    let yMax = maxV * gain;
+
+    // Clamp to lane
+    if (yMin < -clampAbs) yMin = -clampAbs;
+    if (yMin > clampAbs) yMin = clampAbs;
+    if (yMax < -clampAbs) yMax = -clampAbs;
+    if (yMax > clampAbs) yMax = clampAbs;
+
+    // Alternate pattern for a continuous polyline-ish look
+    // Even px: (max, min) Odd px: (min, max)
+    const i = px * 2;
+    if (px % 2 === 0) {
+      out[i] = yMax;
+      out[i + 1] = yMin;
+    } else {
+      out[i] = yMin;
+      out[i + 1] = yMax;
+    }
   }
 
-  const beta = (2 * Math.PI * highCut) / sampleRate / (1 + (2 * Math.PI * highCut) / sampleRate);
-  const filtered = new Array(n);
-  filtered[0] = highPassed[0];
-  for (let i = 1; i < n; i++) {
-    filtered[i] = filtered[i - 1] + beta * (highPassed[i] - filtered[i - 1]);
-  }
-
-  return filtered;
+  return out;
 }
 
-/* ============================================
-   COMPONENT
-   ============================================ */
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
 
-function WebGLEEGViewerComponent({
-  signals,
-  channelLabels,
-  sampleRate,
-  currentTime,
-  timeWindow,
-  amplitudeScale,
-  visibleChannels,
-  theme,
-  markers = [],
-  artifactIntervals = [],
-  channelColors = [],
-  showArtifactsAsRed = false,
-  onTimeClick,
-  onSelectionChange,
-}: WebGLEEGViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+/* =======================
+   COMPONENT
+======================= */
+function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
+  const {
+    signals,
+    channelLabels,
+    sampleRate,
+    currentTime, // intentionally not used for slicing
+    timeWindow,
+    amplitudeScale,
+    visibleChannels,
+    theme,
+    markers = [],
+    artifactIntervals = [],
+    channelColors = [],
+    showArtifactsAsRed = true,
+    onTimeClick,
+    onSelectionChange,
+  } = props;
+
+  const colors = useMemo(() => (theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light), [theme]);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
-  const linesRef = useRef<Map<number, THREE.Line>>(new Map());
-  const gridLinesRef = useRef<THREE.Line[]>([]);
-  const labelsRef = useRef<HTMLDivElement | null>(null);
-  const artifactOverlaysRef = useRef<HTMLDivElement | null>(null);
-  const selectionRef = useRef<HTMLDivElement | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
 
-  // Auto-gain smoothing state
-  const smoothedGainsRef = useRef<Map<number, number>>(new Map());
+  // We keep a persistent set of channel lines to avoid teardown each render.
+  // Map channelIndex -> { line, geometry, material, positions }
+  const channelLineRef = useRef<
+    Map<number, { line: THREE.Line; geom: THREE.BufferGeometry; mat: THREE.LineBasicMaterial; pos: Float32Array }>
+  >(new Map());
+
+  // Grid lines persistent
+  const gridRef = useRef<{
+    lines: THREE.Line[];
+    mats: { weak: THREE.LineBasicMaterial; strong: THREE.LineBasicMaterial };
+  } | null>(null);
+
+  // DOM overlays (artifacts, labels, selection, marker labels)
+  const overlayRef = useRef<HTMLDivElement | null>(null);
+  const labelsRef = useRef<HTMLDivElement | null>(null);
+  const selectionRef = useRef<HTMLDivElement | null>(null);
 
   // Selection state
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; time: number } | null>(null);
+  const [dragStart, setDragStart] = useState<{ x: number; t: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
 
-  // Memoize colors
-  const colors = useMemo(() => 
-    theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light,
-    [theme]
-  );
+  // Build list of channels to render (stable order)
+  const channelsToRender = useMemo(() => {
+    if (!signals || signals.length === 0) return [];
+    const vis = Array.from(visibleChannels).sort((a, b) => a - b);
+    return vis.length > 0 ? vis : signals.map((_, i) => i);
+  }, [signals, visibleChannels]);
 
-  // Initialize Three.js scene
+  /* =======================
+     INIT THREE + OVERLAYS
+  ======================= */
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -201,16 +213,16 @@ function WebGLEEGViewerComponent({
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // Create canvas
+    // Canvas
     const canvas = document.createElement("canvas");
-    canvas.style.cssText = "position: absolute; top: 0; left: 0; width: 100%; height: 100%;";
+    canvas.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;";
     container.appendChild(canvas);
     canvasRef.current = canvas;
 
-    // Create renderer
+    // Renderer
     const renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: false, // envelope already anti-aliases effectively; keep fast
       alpha: true,
       powerPreference: "high-performance",
     });
@@ -219,44 +231,48 @@ function WebGLEEGViewerComponent({
     renderer.setClearColor(colors.background);
     rendererRef.current = renderer;
 
-    // Create scene
+    // Scene/camera
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Create orthographic camera
     const camera = new THREE.OrthographicCamera(0, width, height, 0, 0.1, 1000);
     camera.position.z = 100;
     cameraRef.current = camera;
 
-    // Create artifact overlays container
-    const artifactDiv = document.createElement("div");
-    artifactDiv.style.cssText = `
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; overflow: hidden; z-index: 2;
+    // Overlays
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      pointer-events:none;overflow:hidden;z-index:2;
     `;
-    container.appendChild(artifactDiv);
-    artifactOverlaysRef.current = artifactDiv;
+    container.appendChild(overlay);
+    overlayRef.current = overlay;
 
-    // Create labels container
-    const labelsDiv = document.createElement("div");
-    labelsDiv.style.cssText = `
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; overflow: hidden; z-index: 10;
+    const labels = document.createElement("div");
+    labels.style.cssText = `
+      position:absolute;top:0;left:0;width:100%;height:100%;
+      pointer-events:none;overflow:hidden;z-index:10;
     `;
-    container.appendChild(labelsDiv);
-    labelsRef.current = labelsDiv;
+    container.appendChild(labels);
+    labelsRef.current = labels;
 
-    // Create selection overlay
     const selectionDiv = document.createElement("div");
     selectionDiv.style.cssText = `
-      position: absolute; top: 0; height: 100%; pointer-events: none;
-      background: ${colors.selection}; border-left: 2px solid ${colors.selectionBorder};
-      border-right: 2px solid ${colors.selectionBorder}; display: none; z-index: 5;
+      position:absolute;top:0;height:100%;pointer-events:none;
+      background:${colors.selection};
+      border-left:2px solid ${colors.selectionBorder};
+      border-right:2px solid ${colors.selectionBorder};
+      display:none;z-index:5;
+      box-sizing:border-box;
     `;
     container.appendChild(selectionDiv);
     selectionRef.current = selectionDiv;
 
-    // Handle resize
+    // Materials for grid
+    const weak = new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.55 });
+    const strong = new THREE.LineBasicMaterial({ color: colors.gridStrong, transparent: true, opacity: 0.8 });
+    gridRef.current = { lines: [], mats: { weak, strong } };
+
     const handleResize = () => {
       if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
       const w = containerRef.current.clientWidth;
@@ -267,102 +283,117 @@ function WebGLEEGViewerComponent({
       cameraRef.current.updateProjectionMatrix();
     };
 
-    const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(container);
+    const ro = new ResizeObserver(handleResize);
+    ro.observe(container);
 
     return () => {
-      resizeObserver.disconnect();
+      ro.disconnect();
+
+      // Cleanup three
+      channelLineRef.current.forEach(({ line, geom, mat }) => {
+        scene.remove(line);
+        geom.dispose();
+        mat.dispose();
+      });
+      channelLineRef.current.clear();
+
+      if (gridRef.current) {
+        gridRef.current.lines.forEach((l) => {
+          scene.remove(l);
+          l.geometry.dispose();
+          (l.material as THREE.Material).dispose();
+        });
+        gridRef.current.mats.weak.dispose();
+        gridRef.current.mats.strong.dispose();
+      }
+      gridRef.current = null;
+
       renderer.dispose();
-      if (canvasRef.current && container.contains(canvasRef.current)) {
-        container.removeChild(canvasRef.current);
-      }
-      if (labelsRef.current && container.contains(labelsRef.current)) {
-        container.removeChild(labelsRef.current);
-      }
-      if (artifactOverlaysRef.current && container.contains(artifactOverlaysRef.current)) {
-        container.removeChild(artifactOverlaysRef.current);
-      }
-      if (selectionRef.current && container.contains(selectionRef.current)) {
-        container.removeChild(selectionRef.current);
-      }
-      linesRef.current.clear();
-      gridLinesRef.current = [];
+
+      // Cleanup DOM
+      if (canvasRef.current && container.contains(canvasRef.current)) container.removeChild(canvasRef.current);
+      if (overlayRef.current && container.contains(overlayRef.current)) container.removeChild(overlayRef.current);
+      if (labelsRef.current && container.contains(labelsRef.current)) container.removeChild(labelsRef.current);
+      if (selectionRef.current && container.contains(selectionRef.current)) container.removeChild(selectionRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update colors when theme changes
+  // Update background when theme changes
   useEffect(() => {
-    if (rendererRef.current) {
-      rendererRef.current.setClearColor(colors.background);
-    }
-  }, [theme, colors.background]);
-
-  // Mouse handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const timeAtClick = currentTime + (x / rect.width) * timeWindow;
-    
-    setIsDragging(true);
-    setDragStart({ x, time: timeAtClick });
-    setSelection(null);
-    
+    if (rendererRef.current) rendererRef.current.setClearColor(colors.background);
     if (selectionRef.current) {
-      selectionRef.current.style.display = "none";
+      selectionRef.current.style.background = colors.selection;
+      selectionRef.current.style.borderLeft = `2px solid ${colors.selectionBorder}`;
+      selectionRef.current.style.borderRight = `2px solid ${colors.selectionBorder}`;
     }
-  }, [currentTime, timeWindow]);
+  }, [colors.background, colors.selection, colors.selectionBorder]);
 
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging || !dragStart || !containerRef.current || !selectionRef.current) return;
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const timeAtMouse = currentTime + (x / rect.width) * timeWindow;
-    
-    const left = Math.min(dragStart.x, x);
-    const width = Math.abs(x - dragStart.x);
-    
-    if (width > 5) {
-      selectionRef.current.style.display = "block";
-      selectionRef.current.style.left = `${left}px`;
-      selectionRef.current.style.width = `${width}px`;
-      
-      const newSelection = {
-        startTime: Math.min(dragStart.time, timeAtMouse),
-        endTime: Math.max(dragStart.time, timeAtMouse),
-      };
-      setSelection(newSelection);
-    }
-  }, [isDragging, dragStart, currentTime, timeWindow]);
+  /* =======================
+     MOUSE INTERACTION
+  ======================= */
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const t = (x / rect.width) * timeWindow;
 
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current) return;
-    
-    const rect = containerRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    
-    if (isDragging && dragStart) {
-      const distance = Math.abs(x - dragStart.x);
-      
-      if (distance < 5) {
-        const timeAtClick = currentTime + (x / rect.width) * timeWindow;
-        onTimeClick?.(timeAtClick);
-        
-        if (selectionRef.current) {
-          selectionRef.current.style.display = "none";
-        }
-        setSelection(null);
-      } else {
-        if (selection) {
-          onSelectionChange?.(selection);
+      setIsDragging(true);
+      setDragStart({ x, t });
+      setSelection(null);
+      if (selectionRef.current) selectionRef.current.style.display = "none";
+    },
+    [timeWindow],
+  );
+
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (!isDragging || !dragStart || !containerRef.current || !selectionRef.current) return;
+
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const t = (x / rect.width) * timeWindow;
+
+      const left = Math.min(dragStart.x, x);
+      const width = Math.abs(x - dragStart.x);
+
+      if (width > 5) {
+        selectionRef.current.style.display = "block";
+        selectionRef.current.style.left = `${left}px`;
+        selectionRef.current.style.width = `${width}px`;
+
+        const sel = { startTime: Math.min(dragStart.t, t), endTime: Math.max(dragStart.t, t) };
+        setSelection(sel);
+      }
+    },
+    [isDragging, dragStart, timeWindow],
+  );
+
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+
+      if (isDragging && dragStart) {
+        const distance = Math.abs(x - dragStart.x);
+        if (distance < 5) {
+          const t = (x / rect.width) * timeWindow;
+          onTimeClick?.(t);
+          if (selectionRef.current) selectionRef.current.style.display = "none";
+          setSelection(null);
+          onSelectionChange?.(null);
+        } else {
+          if (selection) onSelectionChange?.(selection);
         }
       }
-    }
-    
-    setIsDragging(false);
-    setDragStart(null);
-  }, [isDragging, dragStart, currentTime, timeWindow, selection, onTimeClick, onSelectionChange]);
+
+      setIsDragging(false);
+      setDragStart(null);
+    },
+    [isDragging, dragStart, selection, timeWindow, onTimeClick, onSelectionChange],
+  );
 
   const handleMouseLeave = useCallback(() => {
     if (isDragging) {
@@ -371,353 +402,324 @@ function WebGLEEGViewerComponent({
     }
   }, [isDragging]);
 
-  // Update waveforms - CLINICAL-GRADE RENDERING
-  const updateWaveforms = useCallback(() => {
-    if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !containerRef.current) return;
-    if (!signals || !signals.length) return;
+  /* =======================
+     GRID (persistent rebuild only when size/timeWindow/channels change)
+  ======================= */
+  const rebuildGrid = useCallback(() => {
+    if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !containerRef.current || !gridRef.current)
+      return;
 
     const scene = sceneRef.current;
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    // Get visible channel indices
-    const visibleChannelIndices = Array.from(visibleChannels).sort((a, b) => a - b);
-    const numVisibleChannels = visibleChannelIndices.length;
-    
-    const channelsToRender = numVisibleChannels > 0 
-      ? visibleChannelIndices 
-      : signals.map((_, i) => i);
-    
-    const numChannels = channelsToRender.length;
-    if (numChannels === 0) return;
-
-    // Fixed lane height with padding for no overlap
-    const LANE_PADDING = 4; // px padding between lanes
-    const channelHeight = (height - (numChannels + 1) * LANE_PADDING) / numChannels;
-    const usableHeight = channelHeight * 0.65; // Use 65% for trace, rest for spacing
-
-    const startSample = Math.floor(currentTime * sampleRate);
-    const samplesToShow = Math.floor(timeWindow * sampleRate);
-
-    // Clear existing objects
-    linesRef.current.forEach((line) => {
-      scene.remove(line);
-      line.geometry.dispose();
-      (line.material as THREE.Material).dispose();
+    // Remove old grid
+    gridRef.current.lines.forEach((l) => {
+      scene.remove(l);
+      l.geometry.dispose();
+      // materials reused (weak/strong) -> don't dispose here
     });
-    linesRef.current.clear();
+    gridRef.current.lines = [];
 
-    gridLinesRef.current.forEach((line) => {
-      scene.remove(line);
-      line.geometry.dispose();
-      (line.material as THREE.Material).dispose();
-    });
-    gridLinesRef.current = [];
+    const weak = gridRef.current.mats.weak;
+    const strong = gridRef.current.mats.strong;
 
-    if (labelsRef.current) labelsRef.current.innerHTML = "";
-    if (artifactOverlaysRef.current) artifactOverlaysRef.current.innerHTML = "";
-
-    // Draw artifact overlays per lane
-    artifactIntervals.forEach((artifact) => {
-      const artifactStart = artifact.start_sec;
-      const artifactEnd = artifact.end_sec;
-      
-      if (artifactEnd >= 0 && artifactStart <= timeWindow) {
-        const clampedStart = Math.max(0, artifactStart);
-        const clampedEnd = Math.min(timeWindow, artifactEnd);
-        
-        const x1 = (clampedStart / timeWindow) * width;
-        const x2 = (clampedEnd / timeWindow) * width;
-        
-        if (artifactOverlaysRef.current) {
-          // Determine which channels to highlight
-          const affectedChannels = artifact.channel != null 
-            ? [artifact.channel]
-            : channelsToRender;
-
-          affectedChannels.forEach((chIdx) => {
-            const displayIndex = channelsToRender.indexOf(chIdx);
-            if (displayIndex === -1) return;
-
-            const laneTop = LANE_PADDING + displayIndex * (channelHeight + LANE_PADDING);
-            const bgColor = showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBg;
-            const borderColor = showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorder;
-
-            const overlayEl = document.createElement("div");
-            overlayEl.style.cssText = `
-              position: absolute;
-              left: ${x1}px;
-              top: ${laneTop}px;
-              width: ${Math.max(2, x2 - x1)}px;
-              height: ${channelHeight}px;
-              background: ${bgColor};
-              border-left: 1px solid ${borderColor};
-              border-right: 1px solid ${borderColor};
-              pointer-events: none;
-              box-sizing: border-box;
-            `;
-            artifactOverlaysRef.current!.appendChild(overlayEl);
-          });
-        }
-      }
-    });
-
-    // Draw grid lines
-    const gridMaterial = new THREE.LineBasicMaterial({
-      color: colors.grid,
-      transparent: true,
-      opacity: 0.5,
-    });
-    const gridStrongMaterial = new THREE.LineBasicMaterial({
-      color: colors.gridStrong,
-      transparent: true,
-      opacity: 0.7,
-    });
-
-    // Vertical grid (every second, stronger every 5 seconds)
-    for (let i = 0; i <= timeWindow; i++) {
-      const x = (i / timeWindow) * width;
-      const points = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, height, 0)];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const material = i % 5 === 0 ? gridStrongMaterial : gridMaterial;
-      const line = new THREE.Line(geometry, material);
+    // Vertical grid (seconds) strong every 5s
+    const step = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
+    for (let s = 0; s <= timeWindow + 1e-6; s += step) {
+      const x = (s / timeWindow) * width;
+      const geom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(x, 0, 0),
+        new THREE.Vector3(x, height, 0),
+      ]);
+      const mat = Math.round(s) % (step * 5) === 0 ? strong : weak;
+      const line = new THREE.Line(geom, mat);
       scene.add(line);
-      gridLinesRef.current.push(line);
+      gridRef.current.lines.push(line);
     }
 
-    // Horizontal grid (lane separators)
-    for (let i = 0; i <= numChannels; i++) {
-      const y = LANE_PADDING + i * (channelHeight + LANE_PADDING);
-      const points = [new THREE.Vector3(0, y, 0), new THREE.Vector3(width, y, 0)];
-      const geometry = new THREE.BufferGeometry().setFromPoints(points);
-      const line = new THREE.Line(geometry, gridMaterial);
+    // Horizontal separators per lane
+    const n = channelsToRender.length || 1;
+    const pad = 4;
+    const laneH = (height - (n + 1) * pad) / n;
+
+    for (let i = 0; i <= n; i++) {
+      const y = pad + i * (laneH + pad);
+      const geom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, y, 0),
+        new THREE.Vector3(width, y, 0),
+      ]);
+      const line = new THREE.Line(geom, weak);
       scene.add(line);
-      gridLinesRef.current.push(line);
+      gridRef.current.lines.push(line);
+    }
+  }, [timeWindow, channelsToRender.length]);
+
+  /* =======================
+     CHANNEL COLOR RESOLUTION
+  ======================= */
+  const resolveChannelColor = useCallback(
+    (label: string, chIndex: number) => {
+      if (channelColors[chIndex]) return parseColorToHex(channelColors[chIndex]);
+      const colorInfo = getChannelColor(label);
+      const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
+      return (
+        CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] ??
+        DEFAULT_CHANNEL_PALETTE[chIndex % DEFAULT_CHANNEL_PALETTE.length]
+      );
+    },
+    [channelColors, theme],
+  );
+
+  /* =======================
+     OVERLAY DOM (artifacts + marker labels + time labels + channel labels)
+     - we rebuild these only on dependency changes, not per frame
+  ======================= */
+  const rebuildOverlays = useCallback(() => {
+    if (!containerRef.current || !overlayRef.current || !labelsRef.current) return;
+
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+
+    overlayRef.current.innerHTML = "";
+    labelsRef.current.innerHTML = "";
+
+    const n = channelsToRender.length || 1;
+    const pad = 4;
+    const laneH = (height - (n + 1) * pad) / n;
+
+    // Channel labels
+    for (let di = 0; di < channelsToRender.length; di++) {
+      const chIndex = channelsToRender[di];
+      const label = channelLabels[chIndex] || `Ch${chIndex + 1}`;
+      const c = resolveChannelColor(label, chIndex);
+      const cStr = `#${c.toString(16).padStart(6, "0")}`;
+
+      const top = pad + di * (laneH + pad);
+      const el = document.createElement("div");
+      el.style.cssText = `
+        position:absolute;left:8px;top:${top + 4}px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+        font-size:10px;font-weight:600;color:${colors.text};
+        background:${theme === "dark" ? "rgba(10,10,10,0.85)" : "rgba(250,250,250,0.9)"};
+        padding:2px 6px;border-radius:3px;border-left:3px solid ${cStr};
+        pointer-events:none;
+      `;
+      el.textContent = label;
+      labelsRef.current.appendChild(el);
     }
 
-    // Draw each channel with clinical-grade processing
-    channelsToRender.forEach((channelIndex, displayIndex) => {
-      const rawSignal = signals[channelIndex];
-      if (!rawSignal) return;
+    // Artifact overlays (red)
+    const bg = colors.artifactBgRed;
+    const bd = colors.artifactBorderRed;
 
-      // Extract window (IMMUTABLE - never modify rawSignal)
-      const endSample = Math.min(startSample + samplesToShow, rawSignal.length);
-      const windowSignal = rawSignal.slice(startSample, endSample);
-      
-      if (windowSignal.length === 0) return;
-      
-      // Apply bandpass filter
-      const filteredSignal = applyBandpassFilter(windowSignal, sampleRate, 0.5, 40);
+    for (const a of artifactIntervals) {
+      // Expect window-local coords
+      const a0 = clamp(a.start_sec, 0, timeWindow);
+      const a1 = clamp(a.end_sec, 0, timeWindow);
+      if (a1 <= a0) continue;
 
-      // === CLINICAL DISPLAY TRANSFORM ===
-      // 1. Compute baseline = median of window
-      const baseline = median(filteredSignal);
-      
-      // 2. Subtract baseline (display only, immutable source)
-      const centered = filteredSignal.map(v => v - baseline);
+      const x1 = (a0 / timeWindow) * width;
+      const x2 = (a1 / timeWindow) * width;
 
-      // 3. Robust autoscale using 95th percentile of |centered|
-      const p95 = percentileAbs(centered, 95);
-      // Target: traces fill ~65% of lane height with minimal clipping
-      // autoGain makes p95 map to usableHeight/2
-      const autoGain = (usableHeight / 2) / Math.max(p95, 1e-10);
+      const affected = a.channel != null ? [a.channel] : channelsToRender;
+      for (const chIdx of affected) {
+        const di = channelsToRender.indexOf(chIdx);
+        if (di === -1) continue;
 
-      // Smooth the auto-gain to avoid jumpy rendering
-      const prevGain = smoothedGainsRef.current.get(channelIndex) ?? autoGain;
-      const smoothedGain = prevGain * 0.85 + autoGain * 0.15;
-      smoothedGainsRef.current.set(channelIndex, smoothedGain);
+        const top = pad + di * (laneH + pad);
 
-      // Final gain = smoothed auto-gain * user amplitudeScale multiplier
-      const finalGain = smoothedGain * amplitudeScale;
-
-      // Lane position (inverted Y for Three.js)
-      const laneTop = height - LANE_PADDING - displayIndex * (channelHeight + LANE_PADDING);
-      const baselineY = laneTop - channelHeight / 2;
-
-      const label = channelLabels[channelIndex] || `Ch${channelIndex + 1}`;
-      
-      // Get channel color
-      let channelColorHex: number;
-      if (channelColors[channelIndex]) {
-        channelColorHex = parseColorToHex(channelColors[channelIndex]);
-      } else {
-        const colorInfo = getChannelColor(label);
-        const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
-        channelColorHex = CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] || 
-                          DEFAULT_CHANNEL_PALETTE[channelIndex % DEFAULT_CHANNEL_PALETTE.length];
-      }
-
-      // === MIN/MAX ENVELOPE RENDERING ===
-      // For each pixel column, compute min and max of samples mapping to that column
-      // This eliminates aliasing and the "blocky" look
-      const pixelCount = Math.min(width, 2000); // Cap for performance
-      const samplesPerPixel = centered.length / pixelCount;
-
-      const points: THREE.Vector3[] = [];
-
-      if (samplesPerPixel <= 1.5) {
-        // Low density: just draw the line normally
-        for (let i = 0; i < centered.length; i++) {
-          const x = (i / samplesToShow) * width;
-          const value = centered[i] * finalGain;
-          const clampedValue = Math.max(-channelHeight * 0.48, Math.min(channelHeight * 0.48, value));
-          const y = baselineY - clampedValue;
-          points.push(new THREE.Vector3(x, y, 0));
-        }
-      } else {
-        // High density: min/max envelope for alias-free rendering
-        for (let px = 0; px < pixelCount; px++) {
-          const sampleStart = Math.floor(px * samplesPerPixel);
-          const sampleEnd = Math.min(Math.ceil((px + 1) * samplesPerPixel), centered.length);
-          
-          let minVal = Infinity;
-          let maxVal = -Infinity;
-          
-          for (let s = sampleStart; s < sampleEnd; s++) {
-            const v = centered[s];
-            if (v < minVal) minVal = v;
-            if (v > maxVal) maxVal = v;
-          }
-          
-          if (minVal === Infinity) continue;
-
-          const x = (px / pixelCount) * width;
-          
-          // Scale and clamp
-          const scaledMin = Math.max(-channelHeight * 0.48, Math.min(channelHeight * 0.48, minVal * finalGain));
-          const scaledMax = Math.max(-channelHeight * 0.48, Math.min(channelHeight * 0.48, maxVal * finalGain));
-          
-          // Draw vertical segment from min to max (envelope)
-          // For a continuous polyline, we alternate: max, min, max, min...
-          // This creates a "filled" appearance without needing actual triangles
-          if (px % 2 === 0) {
-            points.push(new THREE.Vector3(x, baselineY - scaledMax, 0));
-            points.push(new THREE.Vector3(x, baselineY - scaledMin, 0));
-          } else {
-            points.push(new THREE.Vector3(x, baselineY - scaledMin, 0));
-            points.push(new THREE.Vector3(x, baselineY - scaledMax, 0));
-          }
-        }
-      }
-
-      if (points.length > 1) {
-        const material = new THREE.LineBasicMaterial({
-          color: channelColorHex,
-          linewidth: 1,
-        });
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geometry, material);
-        scene.add(line);
-        linesRef.current.set(channelIndex, line);
-      }
-
-      // Add channel label
-      if (labelsRef.current) {
-        const screenY = height - laneTop + channelHeight / 2 - 10;
-        const colorHexStr = `#${channelColorHex.toString(16).padStart(6, "0")}`;
-        const labelEl = document.createElement("div");
-        labelEl.style.cssText = `
-          position: absolute; left: 8px;
-          top: ${screenY}px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 10px; font-weight: 600;
-          color: ${colors.text};
-          display: flex; align-items: center; gap: 5px;
-          background: ${theme === "dark" ? "rgba(10,10,10,0.9)" : "rgba(250,250,250,0.9)"};
-          padding: 2px 6px; border-radius: 3px;
-          border-left: 3px solid ${colorHexStr};
+        const el = document.createElement("div");
+        el.style.cssText = `
+          position:absolute;left:${x1}px;top:${top}px;width:${Math.max(2, x2 - x1)}px;height:${laneH}px;
+          background:${showArtifactsAsRed ? bg : bg};
+          border-left:1px solid ${bd};border-right:1px solid ${bd};
+          box-sizing:border-box;
         `;
-        labelEl.textContent = label;
-        labelsRef.current.appendChild(labelEl);
+        overlayRef.current.appendChild(el);
       }
-    });
+    }
 
-    // Draw markers
-    const markerColors: Record<string, number> = {
-      event: theme === "dark" ? 0x3b82f6 : 0x2563eb,
-      seizure: theme === "dark" ? 0xef4444 : 0xdc2626,
-      artifact: theme === "dark" ? 0xf59e0b : 0xd97706,
-      sleep: theme === "dark" ? 0x8b5cf6 : 0x7c3aed,
+    // Marker verticals + labels (use overlay for lines, labels for chips)
+    const markerColor: Record<string, string> = {
+      event: theme === "dark" ? "#3b82f6" : "#2563eb",
+      seizure: theme === "dark" ? "#ef4444" : "#dc2626",
+      artifact: theme === "dark" ? "#f59e0b" : "#d97706",
+      sleep: theme === "dark" ? "#8b5cf6" : "#7c3aed",
     };
 
-    markers.forEach((marker) => {
-      const markerTime = marker.timestamp_sec - currentTime;
-      if (markerTime >= 0 && markerTime <= timeWindow) {
-        const x = (markerTime / timeWindow) * width;
-        const markerColor = markerColors[marker.marker_type] || (theme === "dark" ? 0x888888 : 0x666666);
+    for (const m of markers) {
+      const t = m.timestamp_sec; // window-local expected
+      if (t < 0 || t > timeWindow) continue;
+      const x = (t / timeWindow) * width;
 
-        const markerMaterial = new THREE.LineBasicMaterial({
-          color: markerColor,
-          linewidth: 2,
-        });
+      const line = document.createElement("div");
+      line.style.cssText = `
+        position:absolute;left:${x}px;top:0;height:100%;width:2px;
+        background:${markerColor[m.marker_type] ?? (theme === "dark" ? "#888" : "#666")};
+        opacity:0.9;
+      `;
+      overlayRef.current.appendChild(line);
 
-        const points = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, height, 0)];
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const line = new THREE.Line(geometry, markerMaterial);
+      const chip = document.createElement("div");
+      const c = markerColor[m.marker_type] ?? (theme === "dark" ? "#888" : "#666");
+      chip.style.cssText = `
+        position:absolute;left:${Math.min(x + 4, width - 140)}px;top:6px;
+        max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+        font-size:9px;font-weight:700;color:${c};
+        background:${theme === "dark" ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.9)"};
+        border:1px solid ${c};
+        padding:2px 6px;border-radius:3px;
+      `;
+      chip.textContent = m.label ?? m.marker_type;
+      labelsRef.current.appendChild(chip);
+    }
+
+    // Time labels (bottom)
+    const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
+    for (let s = 0; s <= timeWindow + 1e-6; s += interval) {
+      const x = (s / timeWindow) * width;
+
+      const el = document.createElement("div");
+      el.style.cssText = `
+        position:absolute;left:${x + 2}px;bottom:4px;
+        font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+        font-size:9px;color:${colors.textMuted};
+        background:${theme === "dark" ? "rgba(10,10,10,0.7)" : "rgba(250,250,250,0.7)"};
+        padding:1px 3px;border-radius:2px;
+      `;
+      el.textContent = `${s.toFixed(0)}s`;
+      labelsRef.current.appendChild(el);
+    }
+  }, [
+    artifactIntervals,
+    markers,
+    channelLabels,
+    channelsToRender,
+    colors.artifactBgRed,
+    colors.artifactBorderRed,
+    colors.text,
+    colors.textMuted,
+    resolveChannelColor,
+    showArtifactsAsRed,
+    theme,
+    timeWindow,
+  ]);
+
+  /* =======================
+     WAVEFORM UPDATE (no teardown)
+  ======================= */
+  const renderWaveforms = useCallback(() => {
+    if (!signals || signals.length === 0) return;
+    if (!sceneRef.current || !cameraRef.current || !rendererRef.current || !containerRef.current) return;
+
+    const scene = sceneRef.current;
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+
+    const n = channelsToRender.length || 1;
+    const pad = 4;
+    const laneH = (height - (n + 1) * pad) / n;
+    const usable = laneH * 0.65;
+    const clampAbs = laneH * 0.48;
+
+    // Pixel budget (cap for perf)
+    const pixelCount = Math.min(Math.floor(width), 1800);
+
+    // For deterministic raw rendering, only user gain applies.
+    const gain = amplitudeScale;
+
+    // Ensure each channel line exists and update its buffer
+    for (let di = 0; di < channelsToRender.length; di++) {
+      const chIndex = channelsToRender[di];
+      const sig = signals[chIndex];
+      if (!sig || sig.length === 0) continue;
+
+      const label = channelLabels[chIndex] || `Ch${chIndex + 1}`;
+      const colorHex = resolveChannelColor(label, chIndex);
+
+      // envelope y values (window-local)
+      const envY = buildEnvelopeY(sig, pixelCount, gain, clampAbs);
+
+      // Build/update positions: x mapped to [0,width], y around lane baseline
+      // positions length = envY.length * 3
+      const baselineY = pad + di * (laneH + pad) + laneH / 2;
+
+      const neededVerts = envY.length;
+      const neededFloats = neededVerts * 3;
+
+      let entry = channelLineRef.current.get(chIndex);
+      if (!entry) {
+        const pos = new Float32Array(neededFloats);
+        const geom = new THREE.BufferGeometry();
+        geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.LineBasicMaterial({ color: colorHex });
+        const line = new THREE.Line(geom, mat);
         scene.add(line);
-        gridLinesRef.current.push(line);
-
-        // Marker label
-        if (labelsRef.current) {
-          const labelEl = document.createElement("div");
-          const colorStr = `#${markerColor.toString(16).padStart(6, "0")}`;
-          labelEl.style.cssText = `
-            position: absolute; left: ${x + 4}px; top: 4px;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 9px; font-weight: 600;
-            color: ${colorStr};
-            background: ${theme === "dark" ? "rgba(0,0,0,0.85)" : "rgba(255,255,255,0.9)"};
-            padding: 2px 5px; border-radius: 3px;
-            border: 1px solid ${colorStr};
-          `;
-          labelEl.textContent = marker.label || marker.marker_type;
-          labelsRef.current.appendChild(labelEl);
+        entry = { line, geom, mat, pos };
+        channelLineRef.current.set(chIndex, entry);
+      } else {
+        // If buffer size changed (resize), recreate buffer attribute (cheap)
+        if (entry.pos.length !== neededFloats) {
+          entry.pos = new Float32Array(neededFloats);
+          entry.geom.setAttribute("position", new THREE.BufferAttribute(entry.pos, 3));
         }
+        // Update color if needed
+        if (entry.mat.color.getHex() !== colorHex) entry.mat.color.setHex(colorHex);
       }
-    });
 
-    // Add time labels at bottom
-    if (labelsRef.current) {
-      const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
-      for (let i = 0; i <= timeWindow; i += interval) {
-        const x = (i / timeWindow) * width;
-        const time = currentTime + i;
-        const minutes = Math.floor(time / 60);
-        const seconds = Math.floor(time % 60);
+      const pos = entry.pos;
 
-        const labelEl = document.createElement("div");
-        labelEl.style.cssText = `
-          position: absolute; left: ${x + 2}px; bottom: 4px;
-          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-          font-size: 9px; color: ${colors.textMuted};
-          background: ${theme === "dark" ? "rgba(10,10,10,0.7)" : "rgba(250,250,250,0.7)"};
-          padding: 1px 3px; border-radius: 2px;
-        `;
-        labelEl.textContent = `${minutes}:${seconds.toString().padStart(2, "0")}`;
-        labelsRef.current.appendChild(labelEl);
+      for (let i = 0; i < neededVerts; i++) {
+        const px = Math.floor(i / 2);
+        const x = (px / pixelCount) * width;
+
+        // y in signal space (μV*gain), screen y goes down, so subtract
+        const y = baselineY - envY[i];
+
+        const j = i * 3;
+        pos[j] = x;
+        pos[j + 1] = y;
+        pos[j + 2] = 0;
+      }
+
+      (entry.geom.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
+    }
+
+    // Remove lines for channels no longer visible
+    for (const [chIndex, entry] of channelLineRef.current.entries()) {
+      if (!channelsToRender.includes(chIndex)) {
+        scene.remove(entry.line);
+        entry.geom.dispose();
+        entry.mat.dispose();
+        channelLineRef.current.delete(chIndex);
       }
     }
 
-    // Render
     rendererRef.current.render(scene, cameraRef.current);
-  }, [signals, channelLabels, sampleRate, currentTime, timeWindow, amplitudeScale, visibleChannels, theme, markers, artifactIntervals, channelColors, colors, showArtifactsAsRed]);
+  }, [signals, channelsToRender, amplitudeScale, channelLabels, resolveChannelColor]);
 
-  // Run update on dependency changes with requestAnimationFrame
+  /* =======================
+     EFFECTS: rebuild grid/overlays on structural changes
+  ======================= */
   useEffect(() => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    
-    animationFrameRef.current = requestAnimationFrame(() => {
-      updateWaveforms();
-    });
-    
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [updateWaveforms]);
+    rebuildGrid();
+    rebuildOverlays();
+    // We also render once after rebuild
+    requestAnimationFrame(() => renderWaveforms());
+  }, [rebuildGrid, rebuildOverlays, renderWaveforms]);
+
+  // Render whenever waveform inputs change (signals, gain, visible channels)
+  useEffect(() => {
+    requestAnimationFrame(() => renderWaveforms());
+  }, [renderWaveforms]);
+
+  /* =======================
+     NOTE ABOUT currentTime
+     We intentionally do NOT use currentTime to reslice signals.
+     EEGViewer.tsx should pass window-local data and set currentTime=0.
+  ======================= */
 
   return (
     <div
@@ -732,6 +734,7 @@ function WebGLEEGViewerComponent({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
+      aria-label="EEG viewer"
     />
   );
 }
