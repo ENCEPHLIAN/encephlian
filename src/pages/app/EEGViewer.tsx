@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
@@ -7,11 +7,19 @@ import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 
 /* =======================
-   CONFIG — MVP LOCK
+   MVP LOCK
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
+
+// Prefer env. Keep your fallback only if you insist.
+// If you want zero surprises: remove fallbacks and force env.
+const API_BASE =
+  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
+  "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
+
+const API_KEY =
+  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ??
+  "REPLACE_WITH_ENV_ONLY";
 
 /* =======================
    TYPES
@@ -37,24 +45,19 @@ type Annotation = {
   channel?: number;
 };
 
-/* =======================
-   HELPERS
-======================= */
+type Marker = {
+  id: string;
+  timestamp_sec: number; // LOCAL within window [0..timeWindow]
+  marker_type: string;
+  label?: string;
+};
+
 function authHeaders() {
   return { "X-API-KEY": API_KEY ?? "" };
 }
 
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
-}
-
-function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
-  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
-  for (let ch = 0; ch < nCh; ch++) {
-    const base = ch * nSamp;
-    for (let i = 0; i < nSamp; i++) out[ch][i] = f32[base + i];
-  }
-  return out;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000) {
@@ -67,103 +70,75 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000) {
   }
 }
 
-/* =======================
-   CHANNEL ORDERING
-   Standard 10-20: FP1, FP2, F7... then aux, then photic/ref last
-======================= */
-const EEG_PRIORITY: string[] = [
-  "FP1", "FP2", "F7", "F3", "FZ", "F4", "F8",
-  "T7", "T3", "C3", "CZ", "C4", "T4", "T8",
-  "P7", "T5", "P3", "PZ", "P4", "T6", "P8",
-  "O1", "O2",
-];
-
-function normLabel(s: string) {
-  return s.trim().toUpperCase().replace(/\s+/g, "");
+function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
+  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
+  for (let ch = 0; ch < nCh; ch++) {
+    const base = ch * nSamp;
+    for (let i = 0; i < nSamp; i++) out[ch][i] = f32[base + i];
+  }
+  return out;
 }
 
-function channelRank(label: string): number {
-  const L = normLabel(label);
-
-  // Photic/stim/trigger go last
-  if (L.includes("PHOTIC") || L.includes("STIM") || L.includes("TRIGGER")) return 9000;
-  if (L === "REF" || L.includes("REFERENCE")) return 9500;
-
-  // Aux channels after EEG
-  if (L.includes("EKG") || L.includes("ECG")) return 8000;
-  if (L.includes("EMG")) return 8100;
-  if (L.includes("EOG")) return 8200;
-  if (L.includes("RESP") || L.includes("AIRFLOW")) return 8300;
-
-  // Standard 10-20 priority
-  const base = EEG_PRIORITY.indexOf(L);
-  if (base >= 0) return base;
-
-  // Scalp-like labels
-  if (/^(FP|AF|F|FC|C|CP|P|PO|O|T)\d{1,2}$/.test(L)) return 200 + L.charCodeAt(0);
-
-  // Unknown but before aux
-  return 5000;
+function keyFor(startSample: number, length: number) {
+  return ${startSample}:${length};
 }
 
-function keyFor(start: number, length: number) {
-  return `${start}:${length}`;
-}
-
-/* =======================
-   MAIN COMPONENT
-======================= */
 export default function EEGViewer() {
   const { theme } = useTheme();
 
-  // Data state
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [signals, setSignals] = useState<number[][] | null>(null);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [fatalError, setFatalError] = useState<string | null>(null);
 
-  // Playback state
-  const [playheadSec, setPlayheadSec] = useState(0);
-  const [windowStartSec, setWindowStartSec] = useState(0);
+  // Window scheduler (global time = windowStartSec + cursorSec)
   const [windowSec, setWindowSec] = useState(10);
+  const [windowStartSec, setWindowStartSec] = useState(0); // global start of rendered buffer
+  const [cursorSec, setCursorSec] = useState(0); // local time within window [0..windowSec]
   const [playing, setPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
-  // Display state
+  // Viewer controls
   const [amplitude, setAmplitude] = useState(1.0);
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
 
-  // Loading state
+  // Canonical overlays
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+
+  // Data buffer for current window (this is what WebGLEEGViewer renders)
+  const [signals, setSignals] = useState<number[][] | null>(null);
+
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [loadingChunk, setLoadingChunk] = useState(false);
-  const [fatalError, setFatalError] = useState<string | null>(null);
+  const [loadingWindow, setLoadingWindow] = useState(true);
 
-  // Refs for non-reactive state
-  const lastReqId = useRef(0);
-  const hasPaintedOnce = useRef(false);
+  // Perf + cache
   const cacheRef = useRef<Map<string, number[][]>>(new Map());
-  const playheadRef = useRef(playheadSec);
-  playheadRef.current = playheadSec;
+  const lastReqId = useRef(0);
+  const lastFetchMs = useRef<number | null>(null);
+  const lastFetchMode = useRef<"cache" | "net" | null>(null);
 
-  /* ---------- FETCH META ---------- */
+  // Hard sanity: env must exist
   useEffect(() => {
-    let alive = true;
-
     if (!API_BASE || !API_KEY) {
       setFatalError(
-        `Missing env vars. Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY.`
+        Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n +
+          Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.,
       );
       setLoadingMeta(false);
-      return;
+      setLoadingWindow(false);
     }
+  }, []);
+
+  /* ---------- META ---------- */
+  useEffect(() => {
+    if (!API_BASE || !API_KEY) return;
+    let alive = true;
 
     setLoadingMeta(true);
     setFatalError(null);
 
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() })
+    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/meta?root=., { headers: authHeaders() }, 20000)
       .then((r) => {
-        if (!r.ok) throw new Error(`meta ${r.status}`);
+        if (!r.ok) throw new Error(meta ${r.status} ${r.statusText});
         return r.json();
       })
       .then((j) => {
@@ -178,311 +153,313 @@ export default function EEGViewer() {
         if (alive) setLoadingMeta(false);
       });
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  /* ---------- FETCH ARTIFACTS ---------- */
+  /* ---------- ARTIFACTS + ANNOTATIONS ---------- */
   useEffect(() => {
     if (!API_BASE || !API_KEY) return;
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() })
+
+    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/artifacts?root=., { headers: authHeaders() }, 20000)
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
-  }, []);
 
-  /* ---------- FETCH ANNOTATIONS ---------- */
-  useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/annotations?root=.`, { headers: authHeaders() })
+    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/annotations?root=., { headers: authHeaders() }, 20000)
       .then((r) => (r.ok ? r.json() : { annotations: [] }))
       .then((j) => setAnnotations(j.annotations ?? []))
       .catch(() => setAnnotations([]));
   }, []);
 
-  /* ---------- DERIVED VALUES ---------- */
+  /* ---------- WINDOW FETCH (ONLY when windowStartSec/windowSec changes) ---------- */
+  useEffect(() => {
+    if (!API_BASE || !API_KEY || !meta) return;
+
+    const fs = meta.sampling_rate_hz;
+    const durationSec = meta.n_samples / fs;
+
+    // Clamp windowStart within file
+    const maxStart = Math.max(0, durationSec - windowSec);
+    const ws = clamp(windowStartSec, 0, maxStart);
+    if (ws !== windowStartSec) {
+      setWindowStartSec(ws);
+      return;
+    }
+
+    // Clamp cursor inside window
+    const c = clamp(cursorSec, 0, windowSec);
+    if (c !== cursorSec) {
+      setCursorSec(c);
+      return;
+    }
+
+    const startSample = Math.floor(ws * fs);
+    const length = Math.max(1, Math.floor(windowSec * fs));
+    const k = keyFor(startSample, length);
+
+    // Cache hit
+    const cached = cacheRef.current.get(k);
+    if (cached) {
+      lastFetchMode.current = "cache";
+      setSignals(cached);
+      setLoadingWindow(false);
+      return;
+    }
+
+    // Network
+    setLoadingWindow(true);
+    lastFetchMode.current = "net";
+    const reqId = ++lastReqId.current;
+    const t0 = performance.now();
+
+    fetchWithTimeout(
+      ${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${startSample}&length=${length},
+      { headers: authHeaders() },
+      30000,
+    )
+      .then((r) => {
+        if (!r.ok) throw new Error(chunk.bin ${r.status} ${r.statusText});
+
+        const nCh = Number(r.headers.get("x-eeg-nchannels"));
+        const nSamp = Number(r.headers.get("x-eeg-length"));
+        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
+          throw new Error("Missing x-eeg-* headers in browser. Fix CORS expose_headers / proxy stripping.");
+        }
+
+        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+      })
+      .then(({ buf, nCh, nSamp }) => {
+        if (reqId !== lastReqId.current) return;
+
+        const f32 = new Float32Array(buf);
+        if (f32.length !== nCh * nSamp) {
+          throw new Error(Bad payload length: got ${f32.length}, expected ${nCh * nSamp});
+        }
+
+        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
+        cacheRef.current.set(k, reshaped);
+        setSignals(reshaped);
+
+        lastFetchMs.current = Math.round(performance.now() - t0);
+      })
+      .catch((e) => {
+        if (reqId !== lastReqId.current) return;
+        // keep last signals if any; only fatal if nothing rendered yet
+        if (!signals) setFatalError(String(e));
+      })
+      .finally(() => {
+        if (reqId === lastReqId.current) setLoadingWindow(false);
+      });
+
+    // Prefetch next window (stride = windowSec/2) during playback
+    if (playing) {
+      const stride = windowSec / 2;
+      const nextWs = clamp(ws + stride, 0, maxStart);
+      const nextStart = Math.floor(nextWs * fs);
+      const nk = keyFor(nextStart, length);
+      if (!cacheRef.current.has(nk)) {
+        fetchWithTimeout(
+          ${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStart}&length=${length},
+          { headers: authHeaders() },
+          30000,
+        )
+          .then((r) => {
+            if (!r.ok) return null;
+            const nCh = Number(r.headers.get("x-eeg-nchannels"));
+            const nSamp = Number(r.headers.get("x-eeg-length"));
+            if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) return null;
+            return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+          })
+          .then((x) => {
+            if (!x) return;
+            const f32 = new Float32Array(x.buf);
+            if (f32.length !== x.nCh * x.nSamp) return;
+            cacheRef.current.set(nk, reshapeF32ToChannels(f32, x.nCh, x.nSamp));
+          })
+          .catch(() => {});
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta, windowStartSec, windowSec, playing]);
+
+  /* ---------- PLAYBACK (smooth: move cursor locally, shift window with stride) ---------- */
+  useEffect(() => {
+    if (!playing || !meta) return;
+
+    const fs = meta.sampling_rate_hz;
+    const durationSec = meta.n_samples / fs;
+    const maxStart = Math.max(0, durationSec - windowSec);
+    const stride = windowSec / 2;
+
+    // 60fps-ish cursor motion; zero fetch thrash because window fetch is decoupled
+    let raf = 0;
+    let last = performance.now();
+
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+
+      setCursorSec((c) => {
+        let nc = c + dt;
+        if (nc < windowSec * 0.75) return nc;
+
+        // shift window forward by stride; keep cursor stable relative to newly shifted window
+        setWindowStartSec((ws) => {
+          const nws = clamp(ws + stride, 0, maxStart);
+          return nws;
+        });
+
+        return nc - stride;
+      });
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, meta, windowSec]);
+
+  /* ---------- DERIVED TIMES ---------- */
+  const globalTime = windowStartSec + cursorSec;
+
   const durationSec = useMemo(() => {
     if (!meta) return 0;
     return meta.n_samples / meta.sampling_rate_hz;
   }, [meta]);
 
-  /* ---------- CHANNEL ORDERING ---------- */
-  const orderedChannelIndices = useMemo(() => {
-    if (!meta) return [];
-    const entries = meta.channel_map.map((c) => ({ idx: c.index, label: c.canonical_id }));
-    entries.sort((a, b) => channelRank(a.label) - channelRank(b.label));
-    return entries.map((e) => e.idx);
-  }, [meta]);
-
-  const orderedChannelLabels = useMemo(() => {
-    if (!meta) return [];
-    const map = new Map<number, string>(meta.channel_map.map((c) => [c.index, c.canonical_id]));
-    return orderedChannelIndices.map((i) => map.get(i) ?? `Ch${i + 1}`);
-  }, [meta, orderedChannelIndices]);
-
-  /* ---------- WINDOW ALIGNMENT ---------- */
-  useEffect(() => {
-    if (!meta) return;
-    const maxStart = Math.max(0, durationSec - windowSec);
-    const p = clamp(playheadSec, 0, durationSec);
-
-    // Clamp playhead
-    if (p !== playheadSec) {
-      setPlayheadSec(p);
-      return;
-    }
-
-    // Keep playhead within visible window with guard band
-    const GUARD = Math.min(1.0, windowSec * 0.1);
-    if (p < windowStartSec + GUARD) {
-      setWindowStartSec(clamp(p - GUARD, 0, maxStart));
-    } else if (p > windowStartSec + windowSec - GUARD) {
-      setWindowStartSec(clamp(p - (windowSec - GUARD), 0, maxStart));
-    }
-  }, [meta, playheadSec, windowStartSec, windowSec, durationSec]);
-
-  /* ---------- CHUNK FETCHING ---------- */
-  useEffect(() => {
-    if (!API_BASE || !API_KEY || !meta) return;
-
-    const fs = meta.sampling_rate_hz;
-    const maxStart = Math.max(0, durationSec - windowSec);
-    const startSec = clamp(windowStartSec, 0, maxStart);
-
-    if (startSec !== windowStartSec) {
-      setWindowStartSec(startSec);
-      return;
-    }
-
-    const start = Math.max(0, Math.floor(startSec * fs));
-    const length = Math.max(1, Math.floor(windowSec * fs));
-    const k = keyFor(start, length);
-
-    // Use cache if available
-    const cached = cacheRef.current.get(k);
-    if (cached) {
-      setSignals(cached);
-      setLoadingChunk(false);
-      hasPaintedOnce.current = true;
-      return;
-    }
-
-    // Fetch chunk
-    setLoadingChunk(true);
-    const reqId = ++lastReqId.current;
-
-    fetchWithTimeout(
-      `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${start}&length=${length}`,
-      { headers: authHeaders() }
-    )
-      .then((r) => {
-        if (!r.ok) throw new Error(`chunk.bin ${r.status}`);
-        const nCh = Number(r.headers.get("x-eeg-nchannels"));
-        const nSamp = Number(r.headers.get("x-eeg-length"));
-        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-          throw new Error("Missing x-eeg-* headers");
-        }
-        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
-      })
-      .then(({ buf, nCh, nSamp }) => {
-        if (reqId !== lastReqId.current) return;
-        const f32 = new Float32Array(buf);
-        if (f32.length !== nCh * nSamp) {
-          throw new Error(`Bad payload: got ${f32.length}, expected ${nCh * nSamp}`);
-        }
-        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
-        cacheRef.current.set(k, reshaped);
-        setSignals(reshaped);
-        hasPaintedOnce.current = true;
-      })
-      .catch((e) => {
-        if (!hasPaintedOnce.current) setFatalError(String(e));
-      })
-      .finally(() => {
-        if (reqId === lastReqId.current) setLoadingChunk(false);
-      });
-
-    // Prefetch next 2 windows
-    for (let i = 1; i <= 2; i++) {
-      const pStart = start + i * length;
-      const pk = keyFor(pStart, length);
-      if (cacheRef.current.has(pk)) continue;
-
-      fetchWithTimeout(
-        `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${pStart}&length=${length}`,
-        { headers: authHeaders() }
-      )
-        .then((r) => {
-          if (!r.ok) return null;
-          const nCh = Number(r.headers.get("x-eeg-nchannels"));
-          const nSamp = Number(r.headers.get("x-eeg-length"));
-          if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) return null;
-          return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
-        })
-        .then((x) => {
-          if (!x) return;
-          const f32 = new Float32Array(x.buf);
-          if (f32.length !== x.nCh * x.nSamp) return;
-          cacheRef.current.set(pk, reshapeF32ToChannels(f32, x.nCh, x.nSamp));
-        })
-        .catch(() => {});
-    }
-  }, [meta, windowStartSec, windowSec, durationSec]);
-
-  /* ---------- SMOOTH PLAYBACK VIA RAF ---------- */
-  useEffect(() => {
-    if (!playing || !meta) return;
-
-    let rafId: number;
-    let lastTime = performance.now();
-
-    const tick = (now: number) => {
-      const dt = Math.min(0.1, (now - lastTime) / 1000) * playbackSpeed;
-      lastTime = now;
-
-      setPlayheadSec((prev) => {
-        const next = prev + dt;
-        if (next >= durationSec) {
-          setPlaying(false);
-          return durationSec;
-        }
-        return next;
-      });
-
-      rafId = requestAnimationFrame(tick);
-    };
-
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [playing, meta, durationSec, playbackSpeed]);
-
-  /* ---------- COMPUTED WINDOW DATA ---------- */
-  const localCursorSec = playheadSec - windowStartSec;
-
+  /* ---------- WINDOW-LOCAL OVERLAYS ---------- */
   const windowArtifacts = useMemo(() => {
     if (!showArtifacts) return [];
+    const ws = windowStartSec;
+    const we = windowStartSec + windowSec;
+
     return artifacts
-      .filter((a) => a.end_sec > windowStartSec && a.start_sec < windowStartSec + windowSec)
+      .filter((a) => a.end_sec > ws && a.start_sec < we)
       .map((a) => ({
-        start_sec: Math.max(0, a.start_sec - windowStartSec),
-        end_sec: Math.min(windowSec, a.end_sec - windowStartSec),
+        start_sec: a.start_sec - ws,
+        end_sec: a.end_sec - ws,
         label: a.label,
         channel: a.channel,
       }));
   }, [artifacts, showArtifacts, windowStartSec, windowSec]);
 
-  const windowMarkers = useMemo(() => {
+  const windowMarkers: Marker[] = useMemo(() => {
+    const ws = windowStartSec;
+    const we = windowStartSec + windowSec;
+
     return annotations
-      .filter((m) => m.start_sec >= windowStartSec && m.start_sec <= windowStartSec + windowSec)
+      .filter((m) => m.start_sec >= ws && m.start_sec <= we)
       .map((m, idx) => ({
-        id: `ann-${idx}`,
-        timestamp_sec: m.start_sec - windowStartSec,
+        id: ${m.label ?? "ann"}-${idx}-${m.start_sec},
+        timestamp_sec: m.start_sec - ws,
         marker_type: "event",
         label: m.label ?? "annotation",
       }));
   }, [annotations, windowStartSec, windowSec]);
 
-  /* ---------- HANDLERS ---------- */
-  const handleTimeClick = useCallback((localT: number) => {
-    const globalT = windowStartSec + localT;
-    setPlaying(false);
-    setPlayheadSec(clamp(globalT, 0, durationSec));
-  }, [windowStartSec, durationSec]);
+  /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
+  // NOTE: suppressArtifacts is a display-only transform in the renderer.
+  // We pass the raw window buffer and let WebGLEEGViewer apply display-only suppression.
+  const renderSignals = signals;
 
-  const handleSeek = useCallback((t: number) => {
-    setPlaying(false);
-    setPlayheadSec(t);
-    const maxStart = Math.max(0, durationSec - windowSec);
-    setWindowStartSec(clamp(t - windowSec * 0.25, 0, maxStart));
-  }, [durationSec, windowSec]);
-
-  const handleSkipBackward = useCallback(() => {
-    const t = Math.max(0, playheadRef.current - windowSec);
-    handleSeek(t);
-  }, [windowSec, handleSeek]);
-
-  const handleSkipForward = useCallback(() => {
-    const t = Math.min(durationSec, playheadRef.current + windowSec);
-    handleSeek(t);
-  }, [durationSec, windowSec, handleSeek]);
-
-  /* ---------- RENDER ---------- */
   if (fatalError) {
     return (
       <div className="h-full w-full p-4 space-y-2">
-        <div className="text-sm font-semibold text-destructive">EEGViewer Error</div>
-        <pre className="text-xs whitespace-pre-wrap break-words text-muted-foreground">{fatalError}</pre>
+        <div className="text-sm font-semibold text-red-500">EEGViewer failed</div>
+        <pre className="text-xs whitespace-pre-wrap break-words text-red-400">{fatalError}</pre>
       </div>
     );
   }
 
-  if (loadingMeta || !meta || (!hasPaintedOnce.current && !signals)) {
+  if (loadingMeta || !meta || !renderSignals) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Loader2 className="animate-spin text-muted-foreground" />
+        <Loader2 className="animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="h-full flex flex-col bg-background">
-      {/* Header */}
-      <div className="p-2 flex flex-wrap gap-3 items-center border-b border-border">
-        <Badge variant="outline">{meta.n_channels} ch</Badge>
-        <Badge variant="outline">{meta.sampling_rate_hz} Hz</Badge>
-        <Badge variant={loadingChunk ? "secondary" : "outline"}>
-          {loadingChunk ? "Loading…" : "Ready"}
-        </Badge>
-        <Badge variant="secondary" className="font-mono text-xs">
-          {playheadSec.toFixed(1)}s / {durationSec.toFixed(1)}s
-        </Badge>
+    <div className="h-full flex flex-col">
+      <div className="p-2 flex flex-wrap gap-3 items-center border-b">
+        <Badge>{meta.n_channels} ch</Badge>
+        <Badge>{meta.sampling_rate_hz} Hz</Badge>
+        {loadingWindow && <Badge variant="secondary">Loading…</Badge>}
+        {lastFetchMs.current != null && <Badge variant="secondary">{lastFetchMs.current}ms</Badge>}
+        {lastFetchMode.current && <Badge variant="secondary">{lastFetchMode.current}</Badge>}
 
-        <div className="flex items-center gap-2 ml-auto">
-          <Switch checked={showArtifacts} onCheckedChange={setShowArtifacts} />
-          <span className="text-sm text-muted-foreground">Artifacts</span>
+        <Switch checked={showArtifacts} onCheckedChange={setShowArtifacts} />
+        <span>Artifacts</span>
 
-          <Switch checked={suppressArtifacts} onCheckedChange={setSuppressArtifacts} />
-          <span className="text-sm text-muted-foreground">Suppress</span>
-        </div>
+        <Switch checked={suppressArtifacts} onCheckedChange={setSuppressArtifacts} />
+        <span>Suppress</span>
       </div>
 
-      {/* Controls */}
       <EEGControls
         isPlaying={playing}
         onPlayPause={() => setPlaying((p) => !p)}
-        currentTime={playheadSec}
+        currentTime={globalTime}
         duration={durationSec}
-        onTimeChange={handleSeek}
+        onTimeChange={(t) => {
+          setPlaying(false);
+          const tt = clamp(t, 0, Math.max(0, durationSec - 1e-6));
+          // snap windowStart so seek doesn't stutter
+          const stride = windowSec / 2;
+          const ws = Math.floor(tt / stride) * stride;
+          setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
+          setCursorSec(clamp(tt - ws, 0, windowSec));
+        }}
         timeWindow={windowSec}
         onTimeWindowChange={(w) => {
+          setPlaying(false);
           setWindowSec(w);
-          const maxStart = Math.max(0, durationSec - w);
-          setWindowStartSec((s) => clamp(s, 0, maxStart));
+          // keep global time stable
+          const tt = globalTime;
+          const stride = w / 2;
+          const ws = Math.floor(tt / stride) * stride;
+          setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - w)));
+          setCursorSec(clamp(tt - ws, 0, w));
         }}
         amplitudeScale={amplitude}
         onAmplitudeScaleChange={setAmplitude}
-        playbackSpeed={playbackSpeed}
-        onPlaybackSpeedChange={setPlaybackSpeed}
-        onSkipBackward={handleSkipBackward}
-        onSkipForward={handleSkipForward}
+        playbackSpeed={1}
+        onPlaybackSpeedChange={() => {}}
+        onSkipBackward={() => {
+          setPlaying(false);
+          const tt = clamp(globalTime - windowSec, 0, durationSec);
+          const stride = windowSec / 2;
+          const ws = Math.floor(tt / stride) * stride;
+          setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
+          setCursorSec(clamp(tt - ws, 0, windowSec));
+        }}
+        onSkipForward={() => {
+          setPlaying(false);
+          const tt = clamp(globalTime + windowSec, 0, durationSec);
+          const stride = windowSec / 2;
+          const ws = Math.floor(tt / stride) * stride;
+          setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
+          setCursorSec(clamp(tt - ws, 0, windowSec));
+        }}
         onExport={() => {}}
       />
 
-      {/* EEG Canvas */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1">
         <WebGLEEGViewer
-          signals={signals}
-          channelLabels={orderedChannelLabels}
-          channelIndexOrder={orderedChannelIndices}
+          signals={renderSignals}
+          channelLabels={meta.channel_map.map((c) => c.canonical_id)}
           sampleRate={meta.sampling_rate_hz}
-          currentTime={localCursorSec}
+          // IMPORTANT: currentTime is LOCAL cursor within window
+          currentTime={cursorSec}
           timeWindow={windowSec}
           amplitudeScale={amplitude}
-          visibleChannels={new Set(orderedChannelIndices)}
+          visibleChannels={new Set([...Array(meta.n_channels).keys()])}
           theme={theme ?? "dark"}
           markers={windowMarkers}
           artifactIntervals={windowArtifacts}
-          showArtifactsAsRed={showArtifacts}
-          onTimeClick={handleTimeClick}
+          showArtifactsAsRed={true}
+          suppressArtifacts={suppressArtifacts}
         />
       </div>
     </div>
