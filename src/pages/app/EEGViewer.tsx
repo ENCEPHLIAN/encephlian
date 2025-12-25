@@ -14,7 +14,8 @@ const API_BASE =
   (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
   "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
 
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ?? "dev-secret";
+const API_KEY =
+  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ?? "e3sg_bdNyNfP5LIaDP75Ko4d7JybGTJnMCCBNHgXMEM";
 
 /* =======================
    TYPES
