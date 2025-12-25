@@ -17,9 +17,7 @@ const API_BASE =
   (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
   "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
 
-const API_KEY =
-  (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ??
-  "REPLACE_WITH_ENV_ONLY";
+const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ?? "REPLACE_WITH_ENV_ONLY";
 
 /* =======================
    TYPES
@@ -80,7 +78,7 @@ function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): nu
 }
 
 function keyFor(startSample: number, length: number) {
-  return ${startSample}:${length};
+  return `${startSample}:${length}`;
 }
 
 export default function EEGViewer() {
@@ -120,8 +118,8 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!API_BASE || !API_KEY) {
       setFatalError(
-        Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n +
-          Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.,
+        `Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n` +
+          `Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.`,
       );
       setLoadingMeta(false);
       setLoadingWindow(false);
@@ -136,9 +134,9 @@ export default function EEGViewer() {
     setLoadingMeta(true);
     setFatalError(null);
 
-    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/meta?root=., { headers: authHeaders() }, 20000)
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() }, 20000)
       .then((r) => {
-        if (!r.ok) throw new Error(meta ${r.status} ${r.statusText});
+        if (!r.ok) throw new Error(`meta ${r.status} ${r.statusText}`);
         return r.json();
       })
       .then((j) => {
@@ -162,12 +160,12 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!API_BASE || !API_KEY) return;
 
-    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/artifacts?root=., { headers: authHeaders() }, 20000)
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() }, 20000)
       .then((r) => (r.ok ? r.json() : { artifacts: [] }))
       .then((j) => setArtifacts(j.artifacts ?? []))
       .catch(() => setArtifacts([]));
 
-    fetchWithTimeout(${API_BASE}/studies/${STUDY_ID}/annotations?root=., { headers: authHeaders() }, 20000)
+    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/annotations?root=.`, { headers: authHeaders() }, 20000)
       .then((r) => (r.ok ? r.json() : { annotations: [] }))
       .then((j) => setAnnotations(j.annotations ?? []))
       .catch(() => setAnnotations([]));
@@ -215,12 +213,12 @@ export default function EEGViewer() {
     const t0 = performance.now();
 
     fetchWithTimeout(
-      ${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${startSample}&length=${length},
+      `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${startSample}&length=${length}`,
       { headers: authHeaders() },
       30000,
     )
       .then((r) => {
-        if (!r.ok) throw new Error(chunk.bin ${r.status} ${r.statusText});
+        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
 
         const nCh = Number(r.headers.get("x-eeg-nchannels"));
         const nSamp = Number(r.headers.get("x-eeg-length"));
@@ -235,7 +233,7 @@ export default function EEGViewer() {
 
         const f32 = new Float32Array(buf);
         if (f32.length !== nCh * nSamp) {
-          throw new Error(Bad payload length: got ${f32.length}, expected ${nCh * nSamp});
+          throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
         }
 
         const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
@@ -261,7 +259,7 @@ export default function EEGViewer() {
       const nk = keyFor(nextStart, length);
       if (!cacheRef.current.has(nk)) {
         fetchWithTimeout(
-          ${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStart}&length=${length},
+          `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStart}&length=${length}`,
           { headers: authHeaders() },
           30000,
         )
@@ -352,7 +350,7 @@ export default function EEGViewer() {
     return annotations
       .filter((m) => m.start_sec >= ws && m.start_sec <= we)
       .map((m, idx) => ({
-        id: ${m.label ?? "ann"}-${idx}-${m.start_sec},
+        id: `${m.label ?? "ann"}-${idx}-${m.start_sec}`,
         timestamp_sec: m.start_sec - ws,
         marker_type: "event",
         label: m.label ?? "annotation",
