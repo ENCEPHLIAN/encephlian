@@ -1,7 +1,9 @@
 import { useEffect, useRef, useCallback, memo, useState, useMemo } from "react";
 import * as THREE from "three";
-import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
+/* =======================
+   TYPES
+======================= */
 interface Marker {
   id: string;
   timestamp_sec: number;
@@ -24,9 +26,9 @@ interface Selection {
 interface WebGLEEGViewerProps {
   signals: number[][] | null;
   channelLabels: string[];
-  channelIndexOrder?: number[]; // IMPORTANT: stable channel ordering
+  channelIndexOrder?: number[];
   sampleRate: number;
-  currentTime: number; // cursor time within window
+  currentTime: number;
   timeWindow: number;
   amplitudeScale: number;
   visibleChannels: Set<number>;
@@ -39,47 +41,54 @@ interface WebGLEEGViewerProps {
   onSelectionChange?: (selection: Selection | null) => void;
 }
 
+/* =======================
+   THEME COLORS (HSL-based, matching index.css)
+======================= */
 const THEME_COLORS = {
   dark: {
-    bg: 0x0a0a0a,
-    grid: 0x1a1a1a,
-    gridStrong: 0x262626,
-    text: "#e5e5e5",
-    textMuted: "#737373",
-    selection: "rgba(59, 130, 246, 0.2)",
-    selectionBorder: "rgba(59, 130, 246, 0.6)",
-    artifactBgRed: "rgba(239, 68, 68, 0.18)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.55)",
+    bg: 0x0f0f0f,           // --background: 0 0% 6%
+    grid: 0x1a1a1a,         // --border: 0 0% 16%
+    gridStrong: 0x292929,   // slightly stronger
+    text: "hsl(30, 5%, 92%)",        // --foreground
+    textMuted: "hsl(0, 0%, 55%)",    // --muted-foreground
+    selection: "hsla(210, 65%, 50%, 0.2)",
+    selectionBorder: "hsla(210, 65%, 50%, 0.6)",
+    artifactBg: "hsla(0, 65%, 55%, 0.15)",
+    artifactBorder: "hsla(0, 65%, 55%, 0.5)",
   },
   light: {
-    bg: 0xfafafa,
-    grid: 0xf0f0f0,
-    gridStrong: 0xe0e0e0,
-    text: "#171717",
-    textMuted: "#525252",
-    selection: "rgba(59, 130, 246, 0.15)",
-    selectionBorder: "rgba(59, 130, 246, 0.5)",
-    artifactBgRed: "rgba(239, 68, 68, 0.16)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.55)",
+    bg: 0xfaf9f7,           // --background: 30 10% 98%
+    grid: 0xe8e5e0,         // --border: 30 15% 88%
+    gridStrong: 0xd4d0c8,   // slightly stronger
+    text: "hsl(220, 10%, 15%)",      // --foreground
+    textMuted: "hsl(220, 10%, 45%)", // --muted-foreground
+    selection: "hsla(210, 65%, 50%, 0.15)",
+    selectionBorder: "hsla(210, 65%, 50%, 0.5)",
+    artifactBg: "hsla(0, 65%, 55%, 0.12)",
+    artifactBorder: "hsla(0, 65%, 55%, 0.45)",
   },
 };
 
-const DEFAULT_CHANNEL_PALETTE = [
-  0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171,
-  0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8,
-  0xa3e635, 0xe879f9, 0xfcd34d, 0x6ee7b7, 0x93c5fd,
-  0xc084fc, 0xfdba74, 0x86efac, 0xfca5a5, 0x67e8f9,
-];
-
-const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }> = {
-  frontal: { dark: 0x60a5fa, light: 0x2563eb },
-  central: { dark: 0x4ade80, light: 0x16a34a },
-  temporal: { dark: 0xfbbf24, light: 0xd97706 },
-  occipital: { dark: 0xa78bfa, light: 0x7c3aed },
-  other: { dark: 0x94a3b8, light: 0x64748b },
+/* Channel color palette for EEG traces */
+const CHANNEL_COLORS = {
+  dark: [
+    0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171,
+    0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8,
+    0xa3e635, 0xe879f9, 0xfcd34d, 0x6ee7b7, 0x93c5fd,
+    0xc084fc, 0xfdba74, 0x86efac, 0xfca5a5, 0x67e8f9,
+  ],
+  light: [
+    0x2563eb, 0x16a34a, 0xd97706, 0x7c3aed, 0xdc2626,
+    0x059669, 0xea580c, 0x4f46e5, 0xdb2777, 0x0891b2,
+    0x65a30d, 0xc026d3, 0xca8a04, 0x10b981, 0x3b82f6,
+    0x9333ea, 0xf97316, 0x22c55e, 0xef4444, 0x06b6d4,
+  ],
 };
 
-function clamp(n: number, lo: number, hi: number) {
+/* =======================
+   UTILITY FUNCTIONS
+======================= */
+function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
@@ -88,7 +97,7 @@ function parseColorToHex(color: string): number {
   return 0x808080;
 }
 
-/** Robust scale: compute p95(|x - median|) */
+/** Robust scale: compute p95(|x - median|) for auto-gain */
 function robustP95Scale(xs: number[]): number {
   if (!xs.length) return 1;
   const sorted = [...xs].sort((a, b) => a - b);
@@ -99,6 +108,9 @@ function robustP95Scale(xs: number[]): number {
   return abs[idx] || 1;
 }
 
+/* =======================
+   MAIN COMPONENT
+======================= */
 function WebGLEEGViewerComponent({
   signals,
   channelLabels,
@@ -132,12 +144,12 @@ function WebGLEEGViewerComponent({
 
   const animationFrameRef = useRef<number | null>(null);
 
-  // Selection state
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<{ x: number; time: number } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
 
   const colors = useMemo(() => (theme === "dark" ? THEME_COLORS.dark : THEME_COLORS.light), [theme]);
+  const channelPalette = useMemo(() => (theme === "dark" ? CHANNEL_COLORS.dark : CHANNEL_COLORS.light), [theme]);
 
   const requestRender = useCallback(() => {
     const r = rendererRef.current;
@@ -392,9 +404,9 @@ function WebGLEEGViewerComponent({
             top:${top}px;
             width:${Math.max(2, x2 - x1)}px;
             height:${laneH}px;
-            background:${showArtifactsAsRed ? colors.artifactBgRed : "transparent"};
-            border-left:1px solid ${colors.artifactBorderRed};
-            border-right:1px solid ${colors.artifactBorderRed};
+            background:${showArtifactsAsRed ? colors.artifactBg : "transparent"};
+            border-left:1px solid ${colors.artifactBorder};
+            border-right:1px solid ${colors.artifactBorder};
             pointer-events:none;
             box-sizing:border-box;
           `;
@@ -428,7 +440,7 @@ function WebGLEEGViewerComponent({
     }
 
     requestRender();
-  }, [artifactIntervals, channelIndexOrder, colors.artifactBgRed, colors.artifactBorderRed, colors.grid, colors.gridStrong, markers, requestRender, showArtifactsAsRed, signals, theme, timeWindow, visibleChannels]);
+  }, [artifactIntervals, channelIndexOrder, colors.artifactBg, colors.artifactBorder, colors.grid, colors.gridStrong, markers, requestRender, showArtifactsAsRed, signals, theme, timeWindow, visibleChannels]);
 
   // Update waveforms (only when signals/scaling/order changes)
   const updateWaveforms = useCallback(() => {
@@ -473,17 +485,12 @@ function WebGLEEGViewerComponent({
       const laneTop = PAD + laneIdx * (laneH + PAD);
       const midY = laneTop + laneH / 2;
 
-      // pick color
+      // pick color from palette or custom
       let col: number;
       if (channelColors[chIdx]) {
         col = parseColorToHex(channelColors[chIdx]);
       } else {
-        const label = channelLabels[laneIdx] || `Ch${chIdx + 1}`;
-        const info = getChannelColor(label);
-        const groupKey = (info.label?.toLowerCase?.() ?? "other") as ChannelGroup;
-        col =
-          CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] ??
-          DEFAULT_CHANNEL_PALETTE[chIdx % DEFAULT_CHANNEL_PALETTE.length];
+        col = channelPalette[laneIdx % channelPalette.length];
       }
 
       const mat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.95 });
@@ -547,7 +554,7 @@ function WebGLEEGViewerComponent({
     }
 
     requestRender();
-  }, [amplitudeScale, channelColors, channelIndexOrder, channelLabels, colors.text, requestRender, sampleRate, signals, theme, timeWindow, visibleChannels]);
+  }, [amplitudeScale, channelColors, channelIndexOrder, channelLabels, channelPalette, colors.text, requestRender, sampleRate, signals, theme, timeWindow, visibleChannels]);
 
   // Rebuild layout when these change
   useEffect(() => {
