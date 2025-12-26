@@ -39,6 +39,9 @@ import Files from "./pages/app/Files";
 import Wallet from "./pages/app/Wallet";
 import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
+import Lanes from "./pages/app/Lanes";
+import ReportDetail from "./pages/app/ReportDetail";
+import Reports from "./pages/app/Reports";
 import TFASetup from "./pages/app/TFASetup";
 import Notes from "./pages/app/Notes";
 import Support from "./pages/app/Support";
@@ -106,6 +109,9 @@ function App() {
                     <Route path="studies/:id" element={<StudyDetail />} />
                     <Route path="studies/:id/review" element={<StudyReview />} />
                     <Route path="studies/:id/viewer" element={<EEGViewer />} />
+<Route path="lanes" element={<Lanes />} />
+<Route path="reports" element={<Reports />} />
+<Route path="reports/:id" element={<ReportDetail />} />
                     <Route path="viewer" element={<EEGViewer />} />
                     <Route path="notes" element={<Notes />} />
                     <Route path="files" element={<Files />} />
