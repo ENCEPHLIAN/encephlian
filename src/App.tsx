@@ -24,6 +24,7 @@ import AdminRoute from "./components/admin/AdminRoute";
 import AdminLayout from "./components/admin/AdminLayout";
 import AppLayout from "./components/AppLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminControl from "./pages/admin/AdminControl";
 import AdminStudies from "./pages/admin/AdminStudies";
 import AdminStudyDetail from "./pages/admin/AdminStudyDetail";
 import AdminClinics from "./pages/admin/AdminClinics";
@@ -78,6 +79,7 @@ function App() {
                 {/* Admin Routes - OUTSIDE of ProtectedRoute */}
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminLayout />}>
+                    <Route path="control" element={<AdminControl />} />
                     <Route index element={<AdminDashboard />} />
                     <Route path="studies" element={<AdminStudies />} />
                     <Route path="studies/:id" element={<AdminStudyDetail />} />

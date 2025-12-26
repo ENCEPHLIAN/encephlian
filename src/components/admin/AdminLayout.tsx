@@ -37,6 +37,7 @@ export default function AdminLayout() {
   // Build nav items dynamically
   const adminNav = useMemo(() => [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
+    { name: "Control", href: "/admin/control", icon: Shield },
     { name: "Studies", href: "/admin/studies", icon: FileText },
     { name: "Clinics", href: "/admin/clinics", icon: Building2 },
     { name: "Users", href: "/admin/users", icon: Users },
@@ -55,6 +56,53 @@ export default function AdminLayout() {
     { name: "Settings", href: "/admin/settings", icon: Settings },
     { name: "Account", href: "/admin/account", icon: Shield },
   ], [isSuperAdmin]);
+
+
+  const groupedNav = useMemo(() => {
+    const byHref = (h) => adminNav.find((x) => x.href === h);
+
+    const sections = [
+      {
+        title: "Core",
+        items: ["/admin", "/admin/control", "/admin/studies"],
+      },
+      {
+        title: "Tenant",
+        items: ["/admin/clinics", "/admin/users", "/admin/team", "/admin/account"],
+      },
+      {
+        title: "Finance",
+        items: ["/admin/wallets", "/admin/tickets"],
+      },
+      {
+        title: "Operations",
+        items: ["/admin/health", "/admin/eeg-push", "/admin/read-api", "/admin/scheduler", "/admin/integrations"],
+      },
+      {
+        title: "Compliance & Insights",
+        items: ["/admin/audit", "/admin/analytics"],
+      },
+      {
+        title: "System",
+        items: ["/admin/cleanup", "/admin/restore", "/admin/settings"],
+      },
+    ];
+
+    // Build final groups: include only items that exist and are permitted by adminNav
+    const groups = sections
+      .map((sec) => ({
+        title: sec.title,
+        items: sec.items.map(byHref).filter(Boolean),
+      }))
+      .filter((g) => g.items.length > 0);
+
+    // Add any “unclassified” items to the end (safety net)
+    const known = new Set(groups.flatMap((g) => g.items.map((x) => x.href)));
+    const extras = adminNav.filter((x) => !known.has(x.href));
+    if (extras.length) groups.push({ title: "More", items: extras });
+
+    return groups;
+  }, [adminNav]);
 
   const handleLogout = async () => {
     sessionStorage.removeItem("encephlian_admin_tfa");
@@ -89,7 +137,12 @@ export default function AdminLayout() {
       <div className="flex flex-1">
         {/* Sidebar */}
         <aside className="w-52 border-r bg-sidebar/50 p-3 space-y-1 overflow-y-auto">
-          {adminNav.map((item) => {
+          {groupedNav.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 font-montserrat">
+                {group.title}
+              </div>
+              {group.items.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -108,7 +161,9 @@ export default function AdminLayout() {
                 <span className="truncate">{item.name}</span>
               </NavLink>
             );
-          })}
+              })}
+            </div>
+          ))}
         </aside>
 
         {/* Main Content */}
