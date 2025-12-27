@@ -1,3 +1,4 @@
+// src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +12,13 @@ import { useTheme } from "next-themes";
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
 
-// Prefer env. Keep your fallback only if you insist.
-// If you want zero surprises: remove fallbacks and force env.
-const API_BASE =
-  (import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined) ??
-  "https://enceph-readapi--envfix102934.happywater-07f1abab.centralindia.azurecontainerapps.io";
-
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined) ?? "REPLACE_WITH_ENV_ONLY";
+/**
+ * HARD RULE:
+ * - No fallbacks. If env is missing, we fail loudly and deterministically.
+ * - Viewer correctness > convenience.
+ */
+const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
+const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
 /* =======================
    TYPES
@@ -27,6 +28,9 @@ type Meta = {
   sampling_rate_hz: number;
   n_samples: number;
   channel_map: { index: number; canonical_id: string; unit: string }[];
+  // Optional variants (if your backend ever changes shape)
+  channel_names?: string[];
+  channels?: { name: string }[];
 };
 
 type Artifact = {
@@ -50,8 +54,9 @@ type Marker = {
   label?: string;
 };
 
-function authHeaders() {
-  return { "X-API-KEY": API_KEY ?? "" };
+function authHeaders(): HeadersInit {
+  // Your Read API expects x-api-key (lowercase) per your own notes and CORS config.
+  return { "x-api-key": API_KEY ?? "" };
 }
 
 function clamp(n: number, lo: number, hi: number) {
@@ -68,7 +73,24 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000) {
   }
 }
 
-function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): number[][] {
+function keyFor(startSample: number, length: number) {
+  return `${startSample}:${length}`;
+}
+
+/**
+ * Binary layout ambiguity guard:
+ * Some pipelines serve chunk.bin as:
+ *  A) channel-major: [ch0...ch0][ch1...][chN...]
+ *  B) sample-major:  [s0ch0,s0ch1..][s1ch0..]...
+ *
+ * You were assuming A. If the backend ever serves B, the viewer looks "clinically wrong"
+ * (channels scrambled, faint, garbage).
+ *
+ * We:
+ * - Implement both reshape variants
+ * - Auto-pick via a deterministic heuristic (no randomness)
+ */
+function reshapeChannelMajor(f32: Float32Array, nCh: number, nSamp: number): number[][] {
   const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
   for (let ch = 0; ch < nCh; ch++) {
     const base = ch * nSamp;
@@ -77,8 +99,56 @@ function reshapeF32ToChannels(f32: Float32Array, nCh: number, nSamp: number): nu
   return out;
 }
 
-function keyFor(startSample: number, length: number) {
-  return `${startSample}:${length}`;
+function reshapeSampleMajor(f32: Float32Array, nCh: number, nSamp: number): number[][] {
+  const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
+  let p = 0;
+  for (let i = 0; i < nSamp; i++) {
+    for (let ch = 0; ch < nCh; ch++) {
+      out[ch][i] = f32[p++];
+    }
+  }
+  return out;
+}
+
+function scoreContinuity(channels: number[][], probeSamples = 2048) {
+  // Lower score = smoother temporal continuity (what EEG should look like).
+  // Deterministic and cheap.
+  const nCh = channels.length;
+  if (nCh === 0) return Number.POSITIVE_INFINITY;
+  const nSamp = channels[0]?.length ?? 0;
+  const n = Math.min(nSamp, probeSamples);
+  if (n < 8) return Number.POSITIVE_INFINITY;
+
+  let acc = 0;
+  let count = 0;
+
+  // sample a few channels deterministically: first, middle, last
+  const idxs = [0, Math.floor(nCh / 2), nCh - 1].filter((x, i, a) => x >= 0 && x < nCh && a.indexOf(x) === i);
+
+  for (const ch of idxs) {
+    const x = channels[ch];
+    let s = 0;
+    for (let i = 1; i < n; i++) {
+      const d = x[i] - x[i - 1];
+      s += Math.abs(d);
+    }
+    acc += s / (n - 1);
+    count++;
+  }
+  return acc / Math.max(1, count);
+}
+
+function reshapeAuto(f32: Float32Array, nCh: number, nSamp: number) {
+  const a = reshapeChannelMajor(f32, nCh, nSamp);
+  const b = reshapeSampleMajor(f32, nCh, nSamp);
+
+  const sa = scoreContinuity(a);
+  const sb = scoreContinuity(b);
+
+  // Deterministic tie-breaker: prefer channel-major if equal
+  return sa <= sb
+    ? { signals: a, layout: "channel-major" as const, score: sa }
+    : { signals: b, layout: "sample-major" as const, score: sb };
 }
 
 export default function EEGViewer() {
@@ -114,12 +184,17 @@ export default function EEGViewer() {
   const lastFetchMs = useRef<number | null>(null);
   const lastFetchMode = useRef<"cache" | "net" | null>(null);
 
+  // Debug: what layout did we detect?
+  const lastLayoutRef = useRef<string | null>(null);
+
   // Hard sanity: env must exist
   useEffect(() => {
     if (!API_BASE || !API_KEY) {
       setFatalError(
-        `Missing env vars. base=${String(API_BASE)} key=${API_KEY ? "present" : "missing"}.\n` +
-          `Set VITE_ENCEPH_READ_API_BASE and VITE_ENCEPH_READ_API_KEY and redeploy.`,
+        `Missing env vars.\n` +
+          `VITE_ENCEPH_READ_API_BASE=${API_BASE ? "present" : "missing"}\n` +
+          `VITE_ENCEPH_READ_API_KEY=${API_KEY ? "present" : "missing"}\n\n` +
+          `Fix: set .env.local and restart "npm run dev".`,
       );
       setLoadingMeta(false);
       setLoadingWindow(false);
@@ -141,7 +216,7 @@ export default function EEGViewer() {
       })
       .then((j) => {
         if (!alive) return;
-        setMeta(j.meta ?? j);
+        setMeta((j?.meta ?? j) as Meta);
       })
       .catch((e) => {
         if (!alive) return;
@@ -170,6 +245,28 @@ export default function EEGViewer() {
       .then((j) => setAnnotations(j.annotations ?? []))
       .catch(() => setAnnotations([]));
   }, []);
+
+  /* ---------- DERIVED (channel order is canonical, no sorting) ---------- */
+  const channelLabels = useMemo(() => {
+    if (!meta) return [];
+    // Prefer explicit ordered map
+    if (Array.isArray(meta.channel_map) && meta.channel_map.length > 0) {
+      // Ensure stable order by channel_map.index
+      return [...meta.channel_map].sort((a, b) => a.index - b.index).map((c) => c.canonical_id);
+    }
+    // Fallbacks (if backend shape changes)
+    if (Array.isArray(meta.channel_names)) return meta.channel_names;
+    if (Array.isArray(meta.channels)) return meta.channels.map((c) => c.name);
+    return [];
+  }, [meta]);
+
+  const visibleChannels = useMemo(() => {
+    // Stable Set instance (avoids rerender thrash in renderer)
+    if (!meta) return new Set<number>();
+    const s = new Set<number>();
+    for (let i = 0; i < meta.n_channels; i++) s.add(i);
+    return s;
+  }, [meta]);
 
   /* ---------- WINDOW FETCH (ONLY when windowStartSec/windowSec changes) ---------- */
   useEffect(() => {
@@ -236,9 +333,17 @@ export default function EEGViewer() {
           throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
         }
 
-        const reshaped = reshapeF32ToChannels(f32, nCh, nSamp);
-        cacheRef.current.set(k, reshaped);
-        setSignals(reshaped);
+        if (import.meta.env.DEV) {
+          const preview = Array.from(f32.slice(0, 24)).map((v) => Number(v.toFixed(3)));
+          // eslint-disable-next-line no-console
+          console.log("[chunk.bin] f32[0..24):", preview, "nCh=", nCh, "nSamp=", nSamp);
+        }
+
+        const reshaped = reshapeAuto(f32, nCh, nSamp);
+        lastLayoutRef.current = `${reshaped.layout} (score=${reshaped.score.toFixed(3)})`;
+
+        cacheRef.current.set(k, reshaped.signals);
+        setSignals(reshaped.signals);
 
         lastFetchMs.current = Math.round(performance.now() - t0);
       })
@@ -255,11 +360,12 @@ export default function EEGViewer() {
     if (playing) {
       const stride = windowSec / 2;
       const nextWs = clamp(ws + stride, 0, maxStart);
-      const nextStart = Math.floor(nextWs * fs);
-      const nk = keyFor(nextStart, length);
+      const nextStartSample = Math.floor(nextWs * fs);
+      const nk = keyFor(nextStartSample, length);
+
       if (!cacheRef.current.has(nk)) {
         fetchWithTimeout(
-          `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStart}&length=${length}`,
+          `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStartSample}&length=${length}`,
           { headers: authHeaders() },
           30000,
         )
@@ -274,7 +380,8 @@ export default function EEGViewer() {
             if (!x) return;
             const f32 = new Float32Array(x.buf);
             if (f32.length !== x.nCh * x.nSamp) return;
-            cacheRef.current.set(nk, reshapeF32ToChannels(f32, x.nCh, x.nSamp));
+            const reshaped = reshapeAuto(f32, x.nCh, x.nSamp);
+            cacheRef.current.set(nk, reshaped.signals);
           })
           .catch(() => {});
       }
@@ -282,7 +389,7 @@ export default function EEGViewer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, windowStartSec, windowSec, playing]);
 
-  /* ---------- PLAYBACK (smooth: move cursor locally, shift window with stride) ---------- */
+  /* ---------- PLAYBACK (smooth + deterministic) ---------- */
   useEffect(() => {
     if (!playing || !meta) return;
 
@@ -291,7 +398,6 @@ export default function EEGViewer() {
     const maxStart = Math.max(0, durationSec - windowSec);
     const stride = windowSec / 2;
 
-    // 60fps-ish cursor motion; zero fetch thrash because window fetch is decoupled
     let raf = 0;
     let last = performance.now();
 
@@ -301,14 +407,11 @@ export default function EEGViewer() {
 
       setCursorSec((c) => {
         let nc = c + dt;
+
+        // Keep cursor moving locally; shift window in coarse strides
         if (nc < windowSec * 0.75) return nc;
 
-        // shift window forward by stride; keep cursor stable relative to newly shifted window
-        setWindowStartSec((ws) => {
-          const nws = clamp(ws + stride, 0, maxStart);
-          return nws;
-        });
-
+        setWindowStartSec((ws) => clamp(ws + stride, 0, maxStart));
         return nc - stride;
       });
 
@@ -327,7 +430,7 @@ export default function EEGViewer() {
     return meta.n_samples / meta.sampling_rate_hz;
   }, [meta]);
 
-  /* ---------- WINDOW-LOCAL OVERLAYS ---------- */
+  /* ---------- WINDOW-LOCAL OVERLAYS (C-plane only) ---------- */
   const windowArtifacts = useMemo(() => {
     if (!showArtifacts) return [];
     const ws = windowStartSec;
@@ -358,8 +461,6 @@ export default function EEGViewer() {
   }, [annotations, windowStartSec, windowSec]);
 
   /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
-  // NOTE: suppressArtifacts is a display-only transform in the renderer.
-  // We pass the raw window buffer and let WebGLEEGViewer apply display-only suppression.
   const renderSignals = signals;
 
   if (fatalError) {
@@ -387,6 +488,7 @@ export default function EEGViewer() {
         {loadingWindow && <Badge variant="secondary">Loading…</Badge>}
         {lastFetchMs.current != null && <Badge variant="secondary">{lastFetchMs.current}ms</Badge>}
         {lastFetchMode.current && <Badge variant="secondary">{lastFetchMode.current}</Badge>}
+        {lastLayoutRef.current && <Badge variant="secondary">{lastLayoutRef.current}</Badge>}
 
         <Switch checked={showArtifacts} onCheckedChange={setShowArtifacts} />
         <span>Artifacts</span>
@@ -403,7 +505,6 @@ export default function EEGViewer() {
         onTimeChange={(t) => {
           setPlaying(false);
           const tt = clamp(t, 0, Math.max(0, durationSec - 1e-6));
-          // snap windowStart so seek doesn't stutter
           const stride = windowSec / 2;
           const ws = Math.floor(tt / stride) * stride;
           setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
@@ -413,7 +514,6 @@ export default function EEGViewer() {
         onTimeWindowChange={(w) => {
           setPlaying(false);
           setWindowSec(w);
-          // keep global time stable
           const tt = globalTime;
           const stride = w / 2;
           const ws = Math.floor(tt / stride) * stride;
@@ -446,13 +546,13 @@ export default function EEGViewer() {
       <div className="flex-1">
         <WebGLEEGViewer
           signals={renderSignals}
-          channelLabels={meta.channel_map.map((c) => c.canonical_id)}
+          channelLabels={channelLabels}
           sampleRate={meta.sampling_rate_hz}
           // IMPORTANT: currentTime is LOCAL cursor within window
           currentTime={cursorSec}
           timeWindow={windowSec}
           amplitudeScale={amplitude}
-          visibleChannels={new Set([...Array(meta.n_channels).keys()])}
+          visibleChannels={visibleChannels}
           theme={theme ?? "dark"}
           markers={windowMarkers}
           artifactIntervals={windowArtifacts}
