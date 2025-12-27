@@ -51,7 +51,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
   const { data: clinicContext } = useQuery({
     queryKey: ["clinic-context"],
     queryFn: async () => {
-      const { data } = await supabase.from("user_clinic_context").select("*").single();
+      const { data } = await supabase.from("user_clinic_context").select("*").maybeSingle();
       return data;
     },
   });
@@ -61,7 +61,7 @@ export function MissionPanel({ open, onOpenChange }: MissionPanelProps) {
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data } = await supabase.from("profiles").select("company_name").eq("id", user.id).single();
+      const { data } = await supabase.from("profiles").select("company_name").eq("id", user.id).maybeSingle();
       return data;
     },
   });
