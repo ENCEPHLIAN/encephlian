@@ -28,38 +28,38 @@ import {
 export default function AdminLayout() {
   const navigate = useNavigate();
   const { roles, signOut } = useUserSession();
-  
-  const isSuperAdmin = useMemo(() => 
-    roles.includes("super_admin"), 
-    [roles]
-  );
+
+  const isSuperAdmin = useMemo(() => roles.includes("super_admin"), [roles]);
 
   // Build nav items dynamically
-  const adminNav = useMemo(() => [
-    { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
-    { name: "Control", href: "/admin/control", icon: Shield },
-    { name: "Studies", href: "/admin/studies", icon: FileText },
-    { name: "Clinics", href: "/admin/clinics", icon: Building2 },
-    { name: "Users", href: "/admin/users", icon: Users },
-    { name: "Wallets", href: "/admin/wallets", icon: Coins },
-    ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
-    { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
-    { name: "Health", href: "/admin/health", icon: Activity },
-    
-    { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
-    { name: "Restore", href: "/admin/restore", icon: RotateCcw },
-    { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-    { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-    { name: "Scheduler", href: "/admin/scheduler", icon: Calendar },
-    { name: "Integrations", href: "/admin/integrations", icon: Plug },
-    { name: "Team", href: "/admin/team", icon: UserCog },
-    { name: "Settings", href: "/admin/settings", icon: Settings },
-    { name: "Account", href: "/admin/account", icon: Shield },
-  ], [isSuperAdmin]);
+  const adminNav = useMemo(
+    () => [
+      { name: "Dashboard", href: "/admin", icon: LayoutDashboard, end: true },
+      { name: "Control", href: "/admin/control", icon: Shield },
+      { name: "Studies", href: "/admin/studies", icon: FileText },
+      { name: "Clinics", href: "/admin/clinics", icon: Building2 },
+      { name: "Users", href: "/admin/users", icon: Users },
+      { name: "Wallets", href: "/admin/wallets", icon: Coins },
+      ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
+      { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
+      { name: "Health", href: "/admin/health", icon: Activity },
+      { name: "Diagnostics", href: "/admin/diagnostics", icon: Activity },
 
+      { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
+      { name: "Restore", href: "/admin/restore", icon: RotateCcw },
+      { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+      { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
+      { name: "Scheduler", href: "/admin/scheduler", icon: Calendar },
+      { name: "Integrations", href: "/admin/integrations", icon: Plug },
+      { name: "Team", href: "/admin/team", icon: UserCog },
+      { name: "Settings", href: "/admin/settings", icon: Settings },
+      { name: "Account", href: "/admin/account", icon: Shield },
+    ],
+    [isSuperAdmin],
+  );
 
   const groupedNav = useMemo(() => {
-    const byHref = (h) => adminNav.find((x) => x.href === h);
+    const byHref = (h: string) => adminNav.find((x) => x.href === h);
 
     const sections = [
       {
@@ -75,11 +75,11 @@ export default function AdminLayout() {
         items: ["/admin/wallets", "/admin/tickets"],
       },
       {
-        title: "Operations",
-        items: ["/admin/health", "/admin/eeg-push", "/admin/read-api", "/admin/scheduler", "/admin/integrations"],
+        title: "Ops",
+        items: ["/admin/health", "/admin/diagnostics", "/admin/eeg-push", "/admin/read-api", "/admin/scheduler", "/admin/integrations"],
       },
       {
-        title: "Compliance & Insights",
+        title: "Insights",
         items: ["/admin/audit", "/admin/analytics"],
       },
       {
@@ -88,96 +88,75 @@ export default function AdminLayout() {
       },
     ];
 
-    // Build final groups: include only items that exist and are permitted by adminNav
     const groups = sections
-      .map((sec) => ({
-        title: sec.title,
-        items: sec.items.map(byHref).filter(Boolean),
-      }))
-      .filter((g) => g.items.length > 0);
+      .map((sec) => ({ title: sec.title, items: sec.items.map(byHref).filter(Boolean) }))
+      .filter((sec) => sec.items.length > 0);
 
-    // Add any “unclassified” items to the end (safety net)
-    const known = new Set(groups.flatMap((g) => g.items.map((x) => x.href)));
-    const extras = adminNav.filter((x) => !known.has(x.href));
-    if (extras.length) groups.push({ title: "More", items: extras });
+    // Any ungrouped routes are dumped into "More"
+    const groupedHrefs = new Set(sections.flatMap((s) => s.items));
+    const extras = adminNav.filter((x) => !groupedHrefs.has(x.href)).map((x) => x.href);
+    if (extras.length) groups.push({ title: "More", items: extras.map(byHref).filter(Boolean) });
 
-    return groups;
+    return groups as { title: string; items: any[] }[];
   }, [adminNav]);
 
-  const handleLogout = async () => {
-    sessionStorage.removeItem("encephlian_admin_tfa");
-    sessionStorage.removeItem("encephlian_admin_tfa_time");
-    await signOut();
-    navigate("/login", { replace: true });
-  };
-
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Top Bar */}
-      <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
-        <div className="flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              <span className="font-montserrat text-sm font-semibold tracking-tight">
-                OPERATIONS CONTROL
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={handleLogout} className="h-8 w-8">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
+    <div className="flex min-h-screen bg-background">
+      <aside className="w-64 border-r bg-background/60 backdrop-blur">
+        <div className="flex h-16 items-center justify-between px-4 border-b">
+          <div className="font-semibold tracking-tight">Admin</div>
+          <ThemeToggle />
         </div>
-      </header>
 
-      {/* Body */}
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <aside className="w-52 border-r bg-sidebar/50 p-3 space-y-1 overflow-y-auto">
+        <div className="p-3 space-y-4">
           {groupedNav.map((group) => (
-            <div key={group.title} className="space-y-1">
-              <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground/70 font-montserrat">
+            <div key={group.title}>
+              <div className="px-2 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                 {group.title}
               </div>
-              {group.items.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink
-                key={item.name}
-                to={item.href}
-                end={item.end}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-                    "hover:bg-secondary hover:text-foreground",
-                    isActive && "bg-secondary text-foreground font-medium"
-                  )
-                }
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{item.name}</span>
-              </NavLink>
-            );
-              })}
+
+              <nav className="space-y-1">
+                {group.items.map((item: any) => (
+                  <NavLink
+                    key={item.href}
+                    to={item.href}
+                    end={item.end}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
+                        isActive ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+                      )
+                    }
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.name}</span>
+                  </NavLink>
+                ))}
+              </nav>
             </div>
           ))}
-        </aside>
+        </div>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">
+        <div className="mt-auto p-3 border-t">
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={async () => {
+              await signOut();
+              navigate("/login");
+            }}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign out
+          </Button>
+        </div>
+      </aside>
+
+      <main className="flex-1">
+        <div className="p-6">
           <Outlet />
-        </main>
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t py-2 px-4">
-        <p className="text-[10px] text-muted-foreground/50 text-center font-montserrat">
-          ENCEPHLIAN™ ADMIN • INTERNAL USE ONLY
-        </p>
-      </footer>
+        </div>
+      </main>
     </div>
   );
 }
