@@ -14,13 +14,20 @@ export class ApiError extends Error {
     public status: number,
     public details: string,
   ) {
-    super(`API Error ${status}: ${details}`);
-    this.name = "ApiError";
+    super(details);
   }
 }
 
-function buildUrl(path: string, params?: Params) {
-  const url = new URL(path, API_BASE);
+export type CanonicalMeta = {
+  n_channels?: number;
+  sampling_rate_hz?: number;
+  duration_s?: number;
+  channel_names?: string[];
+  channel_map?: Array<{ index: number; canonical_id?: string; original_label?: string }>;
+};
+
+function buildUrl(endpoint: string, params?: Params) {
+  const url = new URL(endpoint, API_BASE);
   if (params) {
     Object.entries(params).forEach(([k, v]) => {
       if (v === undefined) return;
@@ -40,52 +47,27 @@ async function apiFetch(
     if (!API_KEY) throw new Error("Missing VITE_ENCEPH_READ_API_KEY");
     headers["X-API-KEY"] = API_KEY;
   }
-  const r = await fetch(buildUrl(endpoint, opts.params), { headers });
-  if (!r.ok) throw new ApiError(r.status, await r.text());
+
+  const r = await fetch(buildUrl(endpoint, opts.params), {
+    method: "GET",
+    headers,
+  });
+
+  if (!r.ok) {
+    const details = await r.text().catch(() => "");
+    throw new ApiError(r.status, details || `HTTP ${r.status}`);
+  }
   return r;
 }
 
-/* ---------- Types ---------- */
-export interface CanonicalMeta {
-  study_id: string;
-  n_channels: number;
-  sampling_rate_hz: number;
-  n_samples: number;
-  channel_map?: Array<{ index: number; canonical_id: string; original_label?: string; unit?: string }>;
-}
-
-export interface StudyMetaResponse {
-  meta?: CanonicalMeta; // old server shape
-  study_id?: string; // new server shape
-  n_channels?: number;
-  sampling_rate_hz?: number;
-  n_samples?: number;
-  channel_map?: CanonicalMeta["channel_map"];
-}
-
-export interface HealthResponse {
-  ok?: boolean;
-  status?: string;
-  root?: string;
-}
-
-/* ---------- Minimal API ---------- */
-export function isApiConfigured() {
-  return Boolean(API_BASE && API_KEY);
-}
-export function getApiBase() {
-  return API_BASE;
-}
-
-export async function checkHealth(): Promise<HealthResponse> {
+export async function checkHealth(): Promise<{ ok: boolean }> {
   const r = await apiFetch("/health", { skipAuth: true });
   return r.json();
 }
 
 export async function fetchStudyMeta(studyId: string): Promise<CanonicalMeta> {
   const r = await apiFetch(`/studies/${studyId}/meta`, { params: { root: "." } });
-  const j: StudyMetaResponse = await r.json();
-  return (j.meta ?? j) as CanonicalMeta;
+  return r.json();
 }
 
 export async function fetchArtifacts(studyId: string): Promise<any> {
@@ -94,19 +76,23 @@ export async function fetchArtifacts(studyId: string): Promise<any> {
 }
 
 /**
- * Binary chunk: float32, channel-major, headers include x-eeg-*
+ * Binary chunk: float32, channel-major (planar), headers include x-eeg-*
  * Returns Float32Array + header info.
  */
 export async function fetchChunkBin(studyId: string, start: number, length: number) {
   const r = await apiFetch(`/studies/${studyId}/chunk.bin`, { params: { root: ".", start, length } });
 
-  const nCh = Number(r.headers.get("x-eeg-nchannels"));
-  const nSamp = Number(r.headers.get("x-eeg-length"));
-  const sr = Number(r.headers.get("x-eeg-samplerate"));
-  const dtype = r.headers.get("x-eeg-dtype");
+  const h = (name: string) => r.headers.get(name) ?? r.headers.get(name.toLowerCase()) ?? r.headers.get(name.toUpperCase());
+  const nCh = Number(h("x-eeg-channel-count") ?? h("x-eeg-nchannels") ?? h("X-EEG-NCHANNELS") ?? "0");
+  const nSamp = Number(h("x-eeg-samples-per-channel") ?? h("x-eeg-length") ?? h("X-EEG-LENGTH") ?? "0");
+  const sr = Number(h("x-eeg-sample-rate-hz") ?? h("x-eeg-samplerate") ?? h("X-EEG-SAMPLERATE") ?? "0");
+  const dtype = h("x-eeg-dtype") ?? h("X-EEG-DTYPE") ?? "f32le";
+  const layout = h("x-eeg-layout") ?? "planar";
+  const channelIds = (h("x-eeg-channel-ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  const sha256 = h("x-eeg-content-sha256") ?? "";
 
   const buf = await r.arrayBuffer();
   const data = new Float32Array(buf);
 
-  return { data, nCh, nSamp, sr, dtype };
+  return { data, nCh, nSamp, sr, dtype, layout, channelIds, sha256 };
 }

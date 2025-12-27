@@ -21,8 +21,21 @@ import { UserSessionProvider } from "@/contexts/UserSessionContext";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
-import AdminLayout from "./components/admin/AdminLayout";
 import AppLayout from "./components/AppLayout";
+import AdminLayout from "./components/admin/AdminLayout";
+import Dashboard from "./pages/app/Dashboard";
+import Studies from "./pages/app/Studies";
+import StudyDetail from "./pages/app/StudyDetail";
+import StudyReview from "./pages/app/StudyReview";
+import EEGViewer from "./pages/app/EEGViewer";
+import Notes from "./pages/app/Notes";
+import Files from "./pages/app/Files";
+import Wallet from "./pages/app/Wallet";
+import Lanes from "./pages/app/Lanes";
+import Reports from "./pages/app/Reports";
+import ReportDetail from "./pages/app/ReportDetail";
+import NotFound from "./pages/NotFound";
+import ComingSoon from "./pages/app/ComingSoon";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminControl from "./pages/admin/AdminControl";
 import AdminStudies from "./pages/admin/AdminStudies";
@@ -30,34 +43,12 @@ import AdminStudyDetail from "./pages/admin/AdminStudyDetail";
 import AdminClinics from "./pages/admin/AdminClinics";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminHealth from "./pages/admin/AdminHealth";
+import AdminDiagnostics from "./pages/admin/AdminDiagnostics";
 import AdminEegPush from "./pages/admin/AdminEegPush";
-import Dashboard from "./pages/app/Dashboard";
-import Studies from "./pages/app/Studies";
-import StudyDetail from "./pages/app/StudyDetail";
-import StudyReview from "./pages/app/StudyReview";
-import EEGViewer from "./pages/app/EEGViewer";
-import Files from "./pages/app/Files";
-import Wallet from "./pages/app/Wallet";
-import Profile from "./pages/app/Profile";
-import Settings from "./pages/app/Settings";
-import Lanes from "./pages/app/Lanes";
-import ReportDetail from "./pages/app/ReportDetail";
-import Reports from "./pages/app/Reports";
-import TFASetup from "./pages/app/TFASetup";
-import Notes from "./pages/app/Notes";
-import Support from "./pages/app/Support";
-import Documentation from "./pages/app/Documentation";
-import ComingSoon from "./pages/app/ComingSoon";
-import NotFound from "./pages/NotFound";
-import "./App.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30000,
-      gcTime: 120000,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
       retry: 1,
     },
   },
@@ -74,6 +65,8 @@ function App() {
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Routes>
                 <Route path="/login" element={<Login />} />
+
+                {/* Redirect base to /app */}
                 <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
                 {/* Admin Routes - OUTSIDE of ProtectedRoute */}
@@ -86,15 +79,16 @@ function App() {
                     <Route path="clinics" element={<AdminClinics />} />
                     <Route path="users" element={<AdminUsers />} />
                     <Route path="health" element={<AdminHealth />} />
+                    <Route path="diagnostics" element={<AdminDiagnostics />} />
                     <Route path="wallets" element={<AdminWallets />} />
                     <Route path="tickets" element={<AdminTickets />} />
                     <Route path="cleanup" element={<AdminCleanup />} />
                     <Route path="restore" element={<AdminRestore />} />
                     <Route path="audit" element={<AdminAuditLogs />} />
-                    <Route path="analytics" element={<AdminAnalytics />} />
-                    <Route path="scheduler" element={<AdminScheduler />} />
-                    <Route path="integrations" element={<AdminIntegrations />} />
-                    <Route path="team" element={<AdminTeam />} />
+                    <Route path="analytics" element={<ComingSoon />} />
+                    <Route path="scheduler" element={<ComingSoon />} />
+                    <Route path="integrations" element={<ComingSoon />} />
+                    <Route path="team" element={<ComingSoon />} />
                     <Route path="settings" element={<AdminSettings />} />
                     <Route path="eeg-push" element={<AdminEegPush />} />
                     <Route path="read-api" element={<AdminReadApi />} />
@@ -111,22 +105,14 @@ function App() {
                     <Route path="studies/:id" element={<StudyDetail />} />
                     <Route path="studies/:id/review" element={<StudyReview />} />
                     <Route path="studies/:id/viewer" element={<EEGViewer />} />
-<Route path="lanes" element={<Lanes />} />
-<Route path="reports" element={<Reports />} />
-<Route path="reports/:id" element={<ReportDetail />} />
+                    <Route path="lanes" element={<Lanes />} />
+                    <Route path="reports" element={<Reports />} />
+                    <Route path="reports/:id" element={<ReportDetail />} />
                     <Route path="viewer" element={<EEGViewer />} />
                     <Route path="notes" element={<Notes />} />
                     <Route path="files" element={<Files />} />
                     <Route path="wallet" element={<Wallet />} />
-                    <Route path="profile" element={<Profile />} />
-                    <Route path="settings" element={<Settings />} />
-                    <Route path="tfa-setup" element={<TFASetup />} />
-                    <Route path="support" element={<Support />} />
-                    <Route path="documentation" element={<Documentation />} />
-                    <Route path="analytics" element={<ComingSoon />} />
-                    <Route path="scheduler" element={<ComingSoon />} />
-                    <Route path="integrations" element={<ComingSoon />} />
-                    <Route path="team" element={<ComingSoon />} />
+                    <Route path="coming-soon" element={<ComingSoon />} />
                   </Route>
                 </Route>
 
