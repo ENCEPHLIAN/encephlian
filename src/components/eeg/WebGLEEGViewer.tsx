@@ -226,7 +226,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     renderer.setClearColor(colors.background);
 
     const scene = new THREE.Scene();
-    const cam = new THREE.OrthographicCamera(0, w, h, 0, 0.1, 10);
+    const cam = new THREE.OrthographicCamera(0, w, 0, h, 0.1, 10);
     cam.position.z = 5;
 
     rendererRef.current = renderer;
@@ -255,7 +255,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const hh = c.clientHeight;
       r.setSize(ww, hh);
       cam2.right = ww;
-      cam2.top = hh;
+      cam2.top = 0;
+      cam2.bottom = hh;
       cam2.updateProjectionMatrix();
     };
 
