@@ -4,12 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { CheckCircle, XCircle, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 
-const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE as string) || "";
+const ENV_API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE as string) || "";
 const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string) || "";
 const STUDY_ID = "TUH_CANON_001";
+
+const LS_KEY = "enceph.admin.readApiBase.override";
+const LOCAL_BASE = "http://127.0.0.1:8787"\;
 
 type CheckRow = {
   name: string;
@@ -25,7 +29,6 @@ async function sha256Hex(buf: ArrayBuffer): Promise<string> {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
-  // Fallback: keep UI functional even if hashing is unavailable.
   return "";
 }
 
@@ -51,22 +54,54 @@ async function timedFetch(url: string): Promise<{ r: Response; ms: number }> {
   return { r, ms: Math.round(ms) };
 }
 
+function extractCount(j: any): number {
+  if (Array.isArray(j)) return j.length;
+  if (!j || typeof j !== "object") return 0;
+  if (Array.isArray(j.items)) return j.items.length;
+  if (Array.isArray(j.events)) return j.events.length;
+  if (Array.isArray(j.annotations)) return j.annotations.length;
+  if (Array.isArray(j.intervals)) return j.intervals.length;
+  if (Array.isArray(j.segments)) return j.segments.length;
+  return 0;
+}
+
+function extractRunId(j: any): string {
+  if (!j || typeof j !== "object") return "";
+  const rid = j.run_id;
+  return typeof rid === "string" ? rid : "";
+}
+
 export default function AdminDiagnostics() {
   const [running, setRunning] = useState(false);
   const [rows, setRows] = useState<CheckRow[]>([]);
   const [lastRunAt, setLastRunAt] = useState<string>("");
 
-  const canRun = useMemo(() => Boolean(API_BASE), []);
+  const initialBase = useMemo(() => {
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(LS_KEY) : null;
+    return (saved || ENV_API_BASE || "").trim();
+  }, []);
+
+  const [apiBase, setApiBase] = useState<string>(initialBase);
+  const [editBase, setEditBase] = useState<string>(initialBase);
+
   const missingEnv = useMemo(() => {
     const issues: string[] = [];
-    if (!API_BASE) issues.push("Missing VITE_ENCEPH_READ_API_BASE");
+    if (!apiBase) issues.push("Missing Read API base URL (set env or override below)");
     if (!API_KEY) issues.push("Missing VITE_ENCEPH_READ_API_KEY (requests will 401)");
     return issues;
+  }, [apiBase]);
+
+  const applyBase = useCallback((next: string) => {
+    const v = next.trim();
+    setApiBase(v);
+    setEditBase(v);
+    if (typeof window !== "undefined") window.localStorage.setItem(LS_KEY, v);
+    toast.success("Read API base updated");
   }, []);
 
   const run = useCallback(async () => {
-    if (!API_BASE) {
-      toast.error("Missing VITE_ENCEPH_READ_API_BASE");
+    if (!apiBase) {
+      toast.error("Missing Read API base URL");
       return;
     }
 
@@ -77,7 +112,7 @@ export default function AdminDiagnostics() {
     try {
       // 1) Health
       {
-        const { r, ms } = await timedFetch(`${API_BASE}/health`);
+        const { r, ms } = await timedFetch(`${apiBase}/health`);
         const ok = r.ok;
         out.push({ name: "Read API /health", ok, latencyMs: ms, notes: ok ? "" : `HTTP ${r.status}` });
       }
@@ -85,7 +120,7 @@ export default function AdminDiagnostics() {
       // 2) Meta
       let metaJson: any = null;
       {
-        const { r, ms } = await timedFetch(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`);
+        const { r, ms } = await timedFetch(`${apiBase}/studies/${STUDY_ID}/meta?root=.`);
         const ok = r.ok;
         if (ok) metaJson = await r.json();
         const notes = ok
@@ -94,10 +129,9 @@ export default function AdminDiagnostics() {
         out.push({ name: "Meta (C-plane)", ok, latencyMs: ms, notes });
       }
 
-      // Helper for chunk request (MVP lock)
-      const chunkUrl = `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=0&length=250`;
+      const chunkUrl = `${apiBase}/studies/${STUDY_ID}/chunk.bin?root=.&start=0&length=250`;
 
-      // 3) Chunk #1 (headers + sha256)
+      // 3) Chunk #1 (binary + headers)
       let c1Buf: ArrayBuffer | null = null;
       let c1HdrSha = "";
       let c1CalcSha = "";
@@ -119,7 +153,7 @@ export default function AdminDiagnostics() {
         out.push({ name: "Chunk #1 (binary + headers)", ok, latencyMs: ms, notes });
       }
 
-      // 4) Chunk #2 (determinism)
+      // 4) Chunk determinism (same request twice)
       {
         const { r, ms } = await timedFetch(chunkUrl);
         let ok = r.ok;
@@ -132,7 +166,6 @@ export default function AdminDiagnostics() {
           const hdrMatches = c1HdrSha && hdrSha2 ? c1HdrSha === hdrSha2 : true;
           const calcMatches = c1CalcSha && calcSha2 ? c1CalcSha === calcSha2 : true;
 
-          // Strongest check: byte-for-byte equality (when we have the first buffer)
           let bytesMatch = true;
           if (c1Buf) {
             const a = new Uint8Array(c1Buf);
@@ -149,37 +182,72 @@ export default function AdminDiagnostics() {
           }
 
           ok = ok && hdrMatches && calcMatches && bytesMatch;
-          notes = `hdr_sha=${hdrMatches ? "match" : "DIFF"}, calc_sha=${calcMatches ? "match" : "n/a/DIFF"}, bytes=${bytesMatch ? "match" : "DIFF"}`;
+          notes = `hdr_sha=${hdrMatches ? "match" : "DIFF"}, calc_sha=${calcMatches ? "match" : "DIFF"}, bytes=${bytesMatch ? "match" : "DIFF"}`;
         } else {
           notes = `HTTP ${r.status}`;
         }
         out.push({ name: "Chunk determinism (same request twice)", ok, latencyMs: ms, notes });
       }
 
-      // 5) Artifacts
+      let artifactsRunId = "";
+      let annotationsRunId = "";
+      let segmentsRunId = "";
+
+      // 5) Artifacts (derived)
       {
-        const { r, ms } = await timedFetch(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`);
+        const { r, ms } = await timedFetch(`${apiBase}/studies/${STUDY_ID}/artifacts?root=.`);
         const ok = r.ok;
         let notes = ok ? "" : `HTTP ${r.status}`;
         if (ok) {
           const j = await r.json();
-          const n = Array.isArray(j) ? j.length : (j?.intervals?.length ?? j?.artifacts?.length ?? 0);
-          notes = `items=${n}`;
+          artifactsRunId = extractRunId(j);
+          notes = `items=${extractCount(j)}${artifactsRunId ? `, run_id=${artifactsRunId.slice(0, 12)}…` : ""}`;
         }
         out.push({ name: "Artifacts (derived)", ok, latencyMs: ms, notes });
       }
 
-      // 6) Annotations
+      // 6) Annotations (derived)
       {
-        const { r, ms } = await timedFetch(`${API_BASE}/studies/${STUDY_ID}/annotations?root=.`);
+        const { r, ms } = await timedFetch(`${apiBase}/studies/${STUDY_ID}/annotations?root=.`);
         const ok = r.ok;
         let notes = ok ? "" : `HTTP ${r.status}`;
         if (ok) {
           const j = await r.json();
-          const n = Array.isArray(j) ? j.length : (j?.events?.length ?? j?.annotations?.length ?? 0);
-          notes = `items=${n}`;
+          annotationsRunId = extractRunId(j);
+          notes = `items=${extractCount(j)}${annotationsRunId ? `, run_id=${annotationsRunId.slice(0, 12)}…` : ""}`;
         }
         out.push({ name: "Annotations (derived)", ok, latencyMs: ms, notes });
+      }
+
+      // 7) Segments (derived)
+      {
+        const { r, ms } = await timedFetch(`${apiBase}/studies/${STUDY_ID}/segments?root=.`);
+        const ok = r.ok;
+        let notes = ok ? "" : `HTTP ${r.status}`;
+        if (ok) {
+          const j = await r.json();
+          segmentsRunId = extractRunId(j);
+          notes = `items=${extractCount(j)}${segmentsRunId ? `, run_id=${segmentsRunId.slice(0, 12)}…` : ""}`;
+        }
+        out.push({ name: "Segments (derived)", ok, latencyMs: ms, notes });
+      }
+
+      // 8) I-plane publish consistency (run_id match)
+      {
+        const haveAny = Boolean(artifactsRunId || annotationsRunId || segmentsRunId);
+        const allPresent = Boolean(artifactsRunId && annotationsRunId && segmentsRunId);
+        const allEqual = allPresent && artifactsRunId === annotationsRunId && annotationsRunId === segmentsRunId;
+
+        const ok = haveAny && allPresent && allEqual;
+        const notes = !haveAny
+          ? "no run_id fields found"
+          : !allPresent
+            ? `missing run_id: artifacts=${artifactsRunId ? "yes" : "no"}, annotations=${annotationsRunId ? "yes" : "no"}, segments=${segmentsRunId ? "yes" : "no"}`
+            : allEqual
+              ? `run_id consistent: ${artifactsRunId.slice(0, 12)}…`
+              : `DIFF: art=${artifactsRunId.slice(0, 8)}…, ann=${annotationsRunId.slice(0, 8)}…, seg=${segmentsRunId.slice(0, 8)}…`;
+
+        out.push({ name: "I-plane publish consistency (run_id match)", ok, latencyMs: 0, notes });
       }
 
       setRows(out);
@@ -196,11 +264,11 @@ export default function AdminDiagnostics() {
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [apiBase]);
 
   useEffect(() => {
-    if (canRun) run();
-  }, [canRun, run]);
+    if (apiBase) run();
+  }, [apiBase, run]);
 
   const passCount = rows.filter((r) => r.ok).length;
   const failCount = rows.filter((r) => !r.ok).length;
@@ -211,21 +279,45 @@ export default function AdminDiagnostics() {
         <CardHeader>
           <CardTitle>Diagnostics</CardTitle>
           <CardDescription>
-            Validates Read API health, meta, binary chunk determinism, and derived endpoints. Target:{" "}
-            <span className="font-mono">{API_BASE || "(missing)"}</span>
+            Validates Read API health, meta, binary chunk determinism, derived endpoints, and I-plane publish consistency.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center gap-3">
-          <Button onClick={run} disabled={running || !API_BASE}>
-            {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Run Diagnostics
-          </Button>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2">
+            <div className="text-xs text-muted-foreground">Read API base</div>
+            <div className="flex gap-2">
+              <Input value={editBase} onChange={(e) => setEditBase(e.target.value)} placeholder="http://127.0.0.1:8787" />
+              <Button variant="secondary" onClick={() => applyBase(editBase)} disabled={!editBase.trim()}>
+                Apply
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => applyBase(LOCAL_BASE)}>
+                Use Local
+              </Button>
+              {ENV_API_BASE && (
+                <Button variant="outline" onClick={() => applyBase(ENV_API_BASE)}>
+                  Use Env Default
+                </Button>
+              )}
+            </div>
+            <div className="text-xs">
+              Target: <span className="font-mono">{apiBase || "(missing)"}</span>
+            </div>
+          </div>
 
-          <Badge variant={failCount ? "destructive" : "secondary"}>
-            {rows.length ? (failCount ? `FAIL (${failCount})` : `PASS (${passCount})`) : "Not run"}
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Button onClick={run} disabled={running || !apiBase}>
+              {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              Run Diagnostics
+            </Button>
 
-          {lastRunAt && <span className="text-sm text-muted-foreground">Last run: {lastRunAt}</span>}
+            <Badge variant={failCount ? "destructive" : "secondary"}>
+              {rows.length ? (failCount ? `FAIL (${failCount})` : `PASS (${passCount})`) : "Not run"}
+            </Badge>
+
+            {lastRunAt && <span className="text-sm text-muted-foreground">Last run: {lastRunAt}</span>}
+          </div>
         </CardContent>
       </Card>
 
@@ -246,7 +338,7 @@ export default function AdminDiagnostics() {
       <Card>
         <CardHeader>
           <CardTitle>Checks</CardTitle>
-          <CardDescription>Each row includes PASS/FAIL and measured latency.</CardDescription>
+          <CardDescription>Each row includes PASS/FAIL and measured latency (ms). Consistency is a hard gate.</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
