@@ -7,6 +7,14 @@ import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 
+const LS_KEY = "enceph.admin.readApiBase.override";
+function getReadApiBase(): string {
+  const envBase = (import.meta as any).env?.VITE_ENCEPH_READ_API_BASE as string | undefined;
+  const lsBase = (typeof window !== "undefined") ? window.localStorage.getItem("enceph.admin.readApiBase.override") : null;
+  return (lsBase || envBase || "");
+}
+
+
 /* =======================
    MVP LOCK
 ======================= */
@@ -18,7 +26,7 @@ const STUDY_ID = "TUH_CANON_001";
  * - We do NOT rely on response headers for correctness (proxies can strip visibility).
  * - We still validate payload length strictly.
  */
-const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
+const API_BASE = getReadApiBase();
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
 /* =======================
