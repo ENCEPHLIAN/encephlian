@@ -13,9 +13,10 @@ import { useTheme } from "next-themes";
 const STUDY_ID = "TUH_CANON_001";
 
 /**
- * HARD RULE:
- * - No fallbacks. If env is missing, we fail loudly and deterministically.
- * - Viewer correctness > convenience.
+ * HARD RULE (updated):
+ * - Determinism > everything.
+ * - We do NOT rely on response headers for correctness (proxies can strip visibility).
+ * - We still validate payload length strictly.
  */
 const API_BASE = import.meta.env.VITE_ENCEPH_READ_API_BASE as string | undefined;
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
@@ -55,7 +56,7 @@ type Marker = {
 };
 
 function authHeaders(): HeadersInit {
-  // Your Read API expects x-api-key (lowercase) per your own notes and CORS config.
+  // Read API expects x-api-key (lowercase)
   return { "x-api-key": API_KEY ?? "" };
 }
 
@@ -83,9 +84,6 @@ function keyFor(startSample: number, length: number) {
  *  A) channel-major: [ch0...ch0][ch1...][chN...]
  *  B) sample-major:  [s0ch0,s0ch1..][s1ch0..]...
  *
- * You were assuming A. If the backend ever serves B, the viewer looks "clinically wrong"
- * (channels scrambled, faint, garbage).
- *
  * We:
  * - Implement both reshape variants
  * - Auto-pick via a deterministic heuristic (no randomness)
@@ -112,7 +110,6 @@ function reshapeSampleMajor(f32: Float32Array, nCh: number, nSamp: number): numb
 
 function scoreContinuity(channels: number[][], probeSamples = 2048) {
   // Lower score = smoother temporal continuity (what EEG should look like).
-  // Deterministic and cheap.
   const nCh = channels.length;
   if (nCh === 0) return Number.POSITIVE_INFINITY;
   const nSamp = channels[0]?.length ?? 0;
@@ -149,6 +146,18 @@ function reshapeAuto(f32: Float32Array, nCh: number, nSamp: number) {
   return sa <= sb
     ? { signals: a, layout: "channel-major" as const, score: sa }
     : { signals: b, layout: "sample-major" as const, score: sb };
+}
+
+// header helper: prefer multiple possible names (legacy + new)
+function hdrNum(r: Response, names: string[]): number {
+  for (const n of names) {
+    const v = r.headers.get(n);
+    if (v != null) {
+      const x = Number(v);
+      if (Number.isFinite(x)) return x;
+    }
+  }
+  return Number.NaN;
 }
 
 export default function EEGViewer() {
@@ -317,10 +326,18 @@ export default function EEGViewer() {
       .then((r) => {
         if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
 
-        const nCh = Number(r.headers.get("x-eeg-nchannels"));
-        const nSamp = Number(r.headers.get("x-eeg-length"));
-        if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) {
-          throw new Error("Missing x-eeg-* headers in browser. Fix CORS expose_headers / proxy stripping.");
+        // Headers may be invisible in browser depending on proxy/CORS behavior.
+        // We treat them as *optional* and derive dimensions deterministically.
+        const hdrNCh = hdrNum(r, ["x-eeg-nchannels", "x-eeg-channel-count"]);
+        const hdrNSamp = hdrNum(r, ["x-eeg-length", "x-eeg-samples-per-channel"]);
+
+        const nCh = Number.isFinite(hdrNCh) ? hdrNCh : meta.n_channels;
+        const nSamp = Number.isFinite(hdrNSamp) ? hdrNSamp : length;
+
+        // Optional consistency check (doesn't block rendering)
+        if (Number.isFinite(hdrNCh) && hdrNCh !== meta.n_channels && import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn("[chunk.bin] header nCh != meta.n_channels:", hdrNCh, meta.n_channels);
         }
 
         return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
@@ -329,8 +346,14 @@ export default function EEGViewer() {
         if (reqId !== lastReqId.current) return;
 
         const f32 = new Float32Array(buf);
-        if (f32.length !== nCh * nSamp) {
-          throw new Error(`Bad payload length: got ${f32.length}, expected ${nCh * nSamp}`);
+        const expected = nCh * nSamp;
+
+        // Hard gate: payload must match computed dimensions
+        if (f32.length !== expected) {
+          throw new Error(
+            `Bad payload length: got ${f32.length}, expected ${expected}. ` +
+              `nCh=${nCh}, nSamp=${nSamp}, meta.n_channels=${meta.n_channels}, req.length=${length}`,
+          );
         }
 
         if (import.meta.env.DEV) {
@@ -349,7 +372,6 @@ export default function EEGViewer() {
       })
       .catch((e) => {
         if (reqId !== lastReqId.current) return;
-        // keep last signals if any; only fatal if nothing rendered yet
         if (!signals) setFatalError(String(e));
       })
       .finally(() => {
@@ -371,15 +393,20 @@ export default function EEGViewer() {
         )
           .then((r) => {
             if (!r.ok) return null;
-            const nCh = Number(r.headers.get("x-eeg-nchannels"));
-            const nSamp = Number(r.headers.get("x-eeg-length"));
-            if (!Number.isFinite(nCh) || !Number.isFinite(nSamp)) return null;
+
+            const hdrNCh = hdrNum(r, ["x-eeg-nchannels", "x-eeg-channel-count"]);
+            const hdrNSamp = hdrNum(r, ["x-eeg-length", "x-eeg-samples-per-channel"]);
+
+            const nCh = Number.isFinite(hdrNCh) ? hdrNCh : meta.n_channels;
+            const nSamp = Number.isFinite(hdrNSamp) ? hdrNSamp : length;
+
             return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
           })
           .then((x) => {
             if (!x) return;
             const f32 = new Float32Array(x.buf);
-            if (f32.length !== x.nCh * x.nSamp) return;
+            const expected = x.nCh * x.nSamp;
+            if (f32.length !== expected) return;
             const reshaped = reshapeAuto(f32, x.nCh, x.nSamp);
             cacheRef.current.set(nk, reshaped.signals);
           })
