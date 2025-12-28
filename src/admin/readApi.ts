@@ -1,10 +1,23 @@
+
+
+const READ_API_OVERRIDE_LS_KEY = "enceph.admin.readApiBase.override";
+const LOCAL_READ_API_DEFAULT = "http://127.0.0.1:8787";
+const AZURE_READ_API_DEFAULT = "https://enceph-readapi.happywater-07f1abab.centralindia.azurecontainerapps.io";
+
+export function resolveReadApiBase(): string {
+  const envBase = (import.meta as any).env?.VITE_ENCEPH_READ_API_BASE as string | undefined;
+  const lsBase = (typeof window !== "undefined") ? window.localStorage.getItem(READ_API_OVERRIDE_LS_KEY) : null;
+  const isLocalhost = (typeof window !== "undefined") && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+  return (lsBase || envBase || (isLocalhost ? LOCAL_READ_API_DEFAULT : AZURE_READ_API_DEFAULT));
+}
+
 /**
  * Read API client (MVP lock: TUH_CANON_001)
  * - Uses VITE_ENCEPH_READ_API_BASE + VITE_ENCEPH_READ_API_KEY
  * - Supports JSON meta/artifacts + BINARY chunk.bin
  */
 
-const API_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE as string) || "";
+const API_BASE = resolveReadApiBase();
 const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string) || "";
 
 type Params = Record<string, string | number | boolean | undefined>;
