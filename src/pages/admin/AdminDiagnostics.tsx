@@ -13,7 +13,7 @@ const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string) || "";
 const STUDY_ID = "TUH_CANON_001";
 
 const LS_KEY = "enceph.admin.readApiBase.override";
-const LOCAL_BASE = "http://127.0.0.1:8787"\;
+const LOCAL_BASE = "http://127.0.0.1:8787";
 
 type CheckRow = {
   name: string;
