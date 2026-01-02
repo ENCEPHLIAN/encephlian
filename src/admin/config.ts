@@ -1,9 +1,10 @@
 export const READ_API_OVERRIDE_LS_KEY = "enceph.admin.readApiBase.override";
 
-// Local dev Read API
+// Local default (dev Read API)
 export const LOCAL_READ_API_DEFAULT = "http://127.0.0.1:8787";
 
-// ✅ Current Azure Read API FQDN (update if it changes)
+// ✅ Production default (Azure Container App FQDN)
+// IMPORTANT: must be a resolvable hostname from the client network.
 export const PROD_READ_API_DEFAULT =
   "https://enceph-readapi.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io";
 
@@ -18,7 +19,7 @@ export function resolveReadApiBase(): string {
     if (ls) return ls;
   } catch {}
 
-  // 2) env default next
+  // 2) env default next (Lovable should inject these)
   const envBase = trimSlashes((import.meta as any).env?.VITE_ENCEPH_READ_API_BASE || "");
   if (envBase) return envBase;
 
