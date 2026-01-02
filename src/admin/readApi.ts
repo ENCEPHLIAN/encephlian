@@ -1,111 +1,97 @@
+import { getReadApiKey, resolveReadApiBase } from "./config";
 
+export type ReadApiResult<T> =
+  | { ok: true; data: T; ms: number }
+  | { ok: false; error: string; ms: number };
 
-const READ_API_OVERRIDE_LS_KEY = "enceph.admin.readApiBase.override";
-const LOCAL_READ_API_DEFAULT = "http://127.0.0.1:8787";
-const AZURE_READ_API_DEFAULT = "https://enceph-readapi.happywater-07f1abab.centralindia.azurecontainerapps.io";
-
-export function resolveReadApiBase(): string {
-  const envBase = (import.meta as any).env?.VITE_ENCEPH_READ_API_BASE as string | undefined;
-  const lsBase = (typeof window !== "undefined") ? window.localStorage.getItem(READ_API_OVERRIDE_LS_KEY) : null;
-  const isLocalhost = (typeof window !== "undefined") && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-  return (lsBase || envBase || (isLocalhost ? LOCAL_READ_API_DEFAULT : AZURE_READ_API_DEFAULT));
+function nowMs(): number {
+  return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
 }
 
-/**
- * Read API client (MVP lock: TUH_CANON_001)
- * - Uses VITE_ENCEPH_READ_API_BASE + VITE_ENCEPH_READ_API_KEY
- * - Supports JSON meta/artifacts + BINARY chunk.bin
- */
+function base(): string {
+  const b = resolveReadApiBase();
+  if (!b) throw new Error("Missing Read API base URL");
+  return b.replace(/\/+$/, "");
+}
 
-const API_BASE = resolveReadApiBase();
-const API_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY as string) || "";
+function key(): string {
+  return getReadApiKey();
+}
 
-type Params = Record<string, string | number | boolean | undefined>;
+async function req<T>(path: string, init?: RequestInit): Promise<ReadApiResult<T>> {
+  const t0 = nowMs();
+  try {
+    const url = `${base()}${path}`;
+    const headers: Record<string, string> = { ...(init?.headers as any) };
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public details: string,
-  ) {
-    super(details);
+    const k = key();
+    if (k) headers["x-api-key"] = k;
+
+    const res = await fetch(url, { ...init, headers });
+    const ms = Math.round(nowMs() - t0);
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { ok: false, error: `${res.status} ${res.statusText}${txt ? ` — ${txt}` : ""}`, ms };
+    }
+
+    const data = (await res.json()) as T;
+    return { ok: true, data, ms };
+  } catch (e: any) {
+    const ms = Math.round(nowMs() - t0);
+    return { ok: false, error: e?.message || String(e), ms };
   }
 }
 
-export type CanonicalMeta = {
-  n_channels?: number;
-  sampling_rate_hz?: number;
-  duration_s?: number;
-  channel_names?: string[];
-  channel_map?: Array<{ index: number; canonical_id?: string; original_label?: string }>;
-};
+export async function getHealth() {
+  return req<{ ok: boolean }>("/health");
+}
 
-function buildUrl(endpoint: string, params?: Params) {
-  const url = new URL(endpoint, API_BASE);
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => {
-      if (v === undefined) return;
-      url.searchParams.set(k, String(v));
-    });
+export async function getMeta(studyId: string, root = ".") {
+  return req<any>(`/studies/${encodeURIComponent(studyId)}/meta?root=${encodeURIComponent(root)}`);
+}
+
+export async function getArtifacts(studyId: string, root = ".") {
+  return req<any>(`/studies/${encodeURIComponent(studyId)}/artifacts?root=${encodeURIComponent(root)}`);
+}
+
+export async function getAnnotations(studyId: string, root = ".") {
+  return req<any>(`/studies/${encodeURIComponent(studyId)}/annotations?root=${encodeURIComponent(root)}`);
+}
+
+export async function getSegments(studyId: string, root = ".") {
+  return req<any>(`/studies/${encodeURIComponent(studyId)}/segments?root=${encodeURIComponent(root)}`);
+}
+
+export async function getChunkHeaders(studyId: string, start: number, length: number, root = ".") {
+  const t0 = nowMs();
+  try {
+    const url = `${base()}/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`;
+    const headers: Record<string, string> = {};
+    const k = key();
+    if (k) headers["x-api-key"] = k;
+
+    const res = await fetch(url, { method: "GET", headers });
+    const ms = Math.round(nowMs() - t0);
+
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      return { ok: false as const, error: `${res.status} ${res.statusText}${txt ? ` — ${txt}` : ""}`, ms };
+    }
+
+    const h: Record<string, string> = {};
+    res.headers.forEach((v, k) => (h[k.toLowerCase()] = v));
+    return { ok: true as const, headers: h, ms };
+  } catch (e: any) {
+    const ms = Math.round(nowMs() - t0);
+    return { ok: false as const, error: e?.message || String(e), ms };
   }
-  return url.toString();
 }
 
-async function apiFetch(
-  endpoint: string,
-  opts: { params?: Params; skipAuth?: boolean; headers?: Record<string, string> } = {},
-) {
-  if (!API_BASE) throw new Error("Missing VITE_ENCEPH_READ_API_BASE");
-  const headers: Record<string, string> = { ...(opts.headers || {}) };
-  if (!opts.skipAuth) {
-    if (!API_KEY) throw new Error("Missing VITE_ENCEPH_READ_API_KEY");
-    headers["X-API-KEY"] = API_KEY;
-  }
-
-  const r = await fetch(buildUrl(endpoint, opts.params), {
-    method: "GET",
-    headers,
-  });
-
-  if (!r.ok) {
-    const details = await r.text().catch(() => "");
-    throw new ApiError(r.status, details || `HTTP ${r.status}`);
-  }
-  return r;
+export function getResolvedBaseForUI(): string {
+  return resolveReadApiBase();
 }
 
-export async function checkHealth(): Promise<{ ok: boolean }> {
-  const r = await apiFetch("/health", { skipAuth: true });
-  return r.json();
-}
-
-export async function fetchStudyMeta(studyId: string): Promise<CanonicalMeta> {
-  const r = await apiFetch(`/studies/${studyId}/meta`, { params: { root: "." } });
-  return r.json();
-}
-
-export async function fetchArtifacts(studyId: string): Promise<any> {
-  const r = await apiFetch(`/studies/${studyId}/artifacts`, { params: { root: "." } });
-  return r.json();
-}
-
-/**
- * Binary chunk: float32, channel-major (planar), headers include x-eeg-*
- * Returns Float32Array + header info.
- */
-export async function fetchChunkBin(studyId: string, start: number, length: number) {
-  const r = await apiFetch(`/studies/${studyId}/chunk.bin`, { params: { root: ".", start, length } });
-
-  const h = (name: string) => r.headers.get(name) ?? r.headers.get(name.toLowerCase()) ?? r.headers.get(name.toUpperCase());
-  const nCh = Number(h("x-eeg-channel-count") ?? h("x-eeg-nchannels") ?? h("X-EEG-NCHANNELS") ?? "0");
-  const nSamp = Number(h("x-eeg-samples-per-channel") ?? h("x-eeg-length") ?? h("X-EEG-LENGTH") ?? "0");
-  const sr = Number(h("x-eeg-sample-rate-hz") ?? h("x-eeg-samplerate") ?? h("X-EEG-SAMPLERATE") ?? "0");
-  const dtype = h("x-eeg-dtype") ?? h("X-EEG-DTYPE") ?? "f32le";
-  const layout = h("x-eeg-layout") ?? "planar";
-  const channelIds = (h("x-eeg-channel-ids") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-  const sha256 = h("x-eeg-content-sha256") ?? "";
-
-  const buf = await r.arrayBuffer();
-  const data = new Float32Array(buf);
-
-  return { data, nCh, nSamp, sr, dtype, layout, channelIds, sha256 };
+export function getResolvedKeyPresent(): boolean {
+  return !!getReadApiKey();
 }
