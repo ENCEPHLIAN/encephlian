@@ -18,9 +18,9 @@ export async function runReadApiSmoke(studyId: string, root = "."): Promise<Smok
   steps.push({
     name: "health",
     ok: health.ok,
-    status: health.ok ? health.status : health.status,
+    status: health.status ?? null,
     ms: health.ms,
-    note: health.ok ? "" : health.error,
+    note: health.ok ? "" : (health as any).error,
   });
 
   const meta = await fetchJson<any>(`/studies/${studyId}/meta?root=${encodeURIComponent(root)}`, {
@@ -30,9 +30,9 @@ export async function runReadApiSmoke(studyId: string, root = "."): Promise<Smok
   steps.push({
     name: "meta",
     ok: meta.ok,
-    status: meta.ok ? meta.status : meta.status,
+    status: meta.status ?? null,
     ms: meta.ms,
-    note: meta.ok ? "" : meta.error,
+    note: meta.ok ? "" : (meta as any).error,
   });
 
   const chunk = await fetchBinary(
@@ -42,9 +42,9 @@ export async function runReadApiSmoke(studyId: string, root = "."): Promise<Smok
   steps.push({
     name: "chunk.bin",
     ok: chunk.ok,
-    status: chunk.ok ? chunk.status : chunk.status,
+    status: chunk.status ?? null,
     ms: chunk.ms,
-    note: chunk.ok ? `bytes=${chunk.data.byteLength}` : chunk.error,
+    note: chunk.ok ? `bytes=${chunk.data.byteLength}` : (chunk as any).error,
   });
 
   const artifacts = await fetchJson<any>(
@@ -54,9 +54,9 @@ export async function runReadApiSmoke(studyId: string, root = "."): Promise<Smok
   steps.push({
     name: "artifacts",
     ok: artifacts.ok,
-    status: artifacts.ok ? artifacts.status : artifacts.status,
+    status: artifacts.status ?? null,
     ms: artifacts.ms,
-    note: artifacts.ok ? "" : artifacts.error,
+    note: artifacts.ok ? "" : (artifacts as any).error,
   });
 
   const annotations = await fetchJson<any>(
@@ -66,9 +66,9 @@ export async function runReadApiSmoke(studyId: string, root = "."): Promise<Smok
   steps.push({
     name: "annotations",
     ok: annotations.ok,
-    status: annotations.ok ? annotations.status : annotations.status,
+    status: annotations.status ?? null,
     ms: annotations.ms,
-    note: annotations.ok ? "" : annotations.error,
+    note: annotations.ok ? "" : (annotations as any).error,
   });
 
   return {
