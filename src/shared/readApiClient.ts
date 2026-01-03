@@ -14,19 +14,41 @@ function toHeaderMap(h: Headers): Record<string, string> {
   return out;
 }
 
+export function getReadApiProxyBase(): string | null {
+  const supabaseUrl = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+  if (!supabaseUrl) return null;
+  return `${supabaseUrl}/functions/v1/read_api_proxy`;
+}
+
+function join(base: string, path: string): string {
+  return `${base.replace(/\/+$/, "")}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
+function getGatewayHeaders(): Record<string, string> {
+  const anon = String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+  if (!anon) return {};
+  return {
+    apikey: anon,
+    Authorization: `Bearer ${anon}`,
+  };
+}
+
 export async function fetchJson<T>(
   path: string,
   opts?: { timeoutMs?: number; base?: string; requireKey?: boolean }
 ): Promise<FetchResult<T>> {
   const t0 = nowMs();
-  const base = (opts?.base || resolveReadApiBase()).replace(/\/+$/, "");
-  const url = `${base}${path.startsWith("/") ? "" : "/"}${path}`;
 
   const key = getReadApiKey();
   const requireKey = opts?.requireKey ?? false;
+  const proxyBase = getReadApiProxyBase();
 
-  if (requireKey && !key) {
-    return { ok: false, status: null, ms: 0, error: "Missing VITE_ENCEPH_READ_API_KEY" };
+  const directBase = (opts?.base || resolveReadApiBase()).replace(/\/+$/, "");
+  const baseToUse = (requireKey && !key && proxyBase) ? proxyBase : directBase;
+  const url = join(baseToUse, path);
+
+  if (requireKey && !key && !proxyBase) {
+    return { ok: false, status: null, ms: 0, error: "Missing Read API key (no proxy available)" };
   }
 
   const controller = new AbortController();
@@ -34,11 +56,14 @@ export async function fetchJson<T>(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const usingProxy = !!proxyBase && baseToUse === proxyBase;
+
     const res = await fetch(url, {
       method: "GET",
       signal: controller.signal,
       headers: {
-        ...(key ? { "X-API-KEY": key } : {}),
+        ...(usingProxy ? getGatewayHeaders() : {}),
+        ...(!usingProxy && key ? { "X-API-KEY": key } : {}),
       },
     });
 
@@ -64,14 +89,17 @@ export async function fetchBinary(
   opts?: { timeoutMs?: number; base?: string; requireKey?: boolean }
 ): Promise<FetchResult<ArrayBuffer>> {
   const t0 = nowMs();
-  const base = (opts?.base || resolveReadApiBase()).replace(/\/+$/, "");
-  const url = `${base}${path.startsWith("/") ? "" : "/"}${path}`;
 
   const key = getReadApiKey();
   const requireKey = opts?.requireKey ?? false;
+  const proxyBase = getReadApiProxyBase();
 
-  if (requireKey && !key) {
-    return { ok: false, status: null, ms: 0, error: "Missing VITE_ENCEPH_READ_API_KEY" };
+  const directBase = (opts?.base || resolveReadApiBase()).replace(/\/+$/, "");
+  const baseToUse = (requireKey && !key && proxyBase) ? proxyBase : directBase;
+  const url = join(baseToUse, path);
+
+  if (requireKey && !key && !proxyBase) {
+    return { ok: false, status: null, ms: 0, error: "Missing Read API key (no proxy available)" };
   }
 
   const controller = new AbortController();
@@ -79,11 +107,14 @@ export async function fetchBinary(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const usingProxy = !!proxyBase && baseToUse === proxyBase;
+
     const res = await fetch(url, {
       method: "GET",
       signal: controller.signal,
       headers: {
-        ...(key ? { "X-API-KEY": key } : {}),
+        ...(usingProxy ? getGatewayHeaders() : {}),
+        ...(!usingProxy && key ? { "X-API-KEY": key } : {}),
       },
     });
 
@@ -103,3 +134,4 @@ export async function fetchBinary(
     clearTimeout(timer);
   }
 }
+
