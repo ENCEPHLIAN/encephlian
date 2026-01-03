@@ -24,18 +24,45 @@ function base(): string {
   return b.replace(/\/+$/, "");
 }
 
+function proxyBase(): string {
+  const s = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+  return s ? `${s}/functions/v1/read_api_proxy` : "";
+}
+
+function anonKey(): string {
+  return String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+}
+
+function addProxyAuth(headers: Record<string, string>) {
+  const anon = anonKey();
+  if (!anon) return;
+  headers["apikey"] = anon;
+  headers["authorization"] = `Bearer ${anon}`;
+}
+
 function key(): string {
   return getReadApiKey();
+}
+
+function resolveUrl(path: string): string {
+  const k = key();
+  if (k) return `${base()}${path}`;
+  const p = proxyBase();
+  if (p) return `${p}${path}`;
+  return `${base()}${path}`;
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<ReadApiResult<T>> {
   const t0 = nowMs();
   try {
-    const url = `${base()}${path}`;
+    const url = resolveUrl(path);
     const headers: Record<string, string> = { ...(init?.headers as any) };
 
     const k = key();
     if (k) headers["x-api-key"] = k;
+
+    const p = proxyBase();
+    if (!k && p && url.startsWith(p)) addProxyAuth(headers);
 
     const res = await fetch(url, { ...init, headers });
     const ms = Math.round(nowMs() - t0);
@@ -76,10 +103,15 @@ export async function getSegments(studyId: string, root = ".") {
 export async function getChunkHeaders(studyId: string, start: number, length: number, root = ".") {
   const t0 = nowMs();
   try {
-    const url = `${base()}/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`;
+    const path = `/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`;
+    const url = resolveUrl(path);
+
     const headers: Record<string, string> = {};
     const k = key();
     if (k) headers["x-api-key"] = k;
+
+    const p = proxyBase();
+    if (!k && p && url.startsWith(p)) addProxyAuth(headers);
 
     const res = await fetch(url, { method: "GET", headers });
     const ms = Math.round(nowMs() - t0);
@@ -103,5 +135,6 @@ export function getResolvedBaseForUI(): string {
 }
 
 export function getResolvedKeyPresent(): boolean {
-  return !!getReadApiKey();
+  // The key is stored server-side; if we can use the proxy, treat it as present.
+  return !!getReadApiKey() || !!proxyBase();
 }

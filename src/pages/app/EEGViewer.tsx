@@ -1,4 +1,4 @@
-import { resolveReadApiBase } from "@/shared/readApiConfig";
+import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 // src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
@@ -7,7 +7,6 @@ import { Loader2 } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
-
 
 /* =======================
    MVP LOCK
@@ -20,8 +19,16 @@ const STUDY_ID = "TUH_CANON_001";
  * - We do NOT rely on response headers for correctness (proxies can strip visibility).
  * - We still validate payload length strictly.
  */
-const API_BASE = resolveReadApiBase();
-const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
+const DIRECT_BASE = resolveReadApiBase();
+const DIRECT_KEY = getReadApiKey();
+const PROXY_BASE = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "")
+  ? `${String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "")}/functions/v1/read_api_proxy`
+  : "";
+
+const IS_LOCAL_BASE = DIRECT_BASE.includes("127.0.0.1") || DIRECT_BASE.includes("localhost");
+const USING_PROXY = !DIRECT_KEY && !IS_LOCAL_BASE && !!PROXY_BASE;
+const API_BASE = (DIRECT_KEY || IS_LOCAL_BASE) ? DIRECT_BASE : PROXY_BASE;
+const API_KEY = DIRECT_KEY;
 
 /* =======================
    TYPES
@@ -58,8 +65,18 @@ type Marker = {
 };
 
 function authHeaders(): HeadersInit {
-  // Read API expects x-api-key (lowercase)
-  return { "x-api-key": API_KEY ?? "" };
+  // Proxy mode: backend function gateway requires anon headers
+  if (USING_PROXY) {
+    const anon = String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+    if (!anon) return {};
+    return { apikey: anon, Authorization: `Bearer ${anon}` };
+  }
+
+  // Direct mode: Read API expects x-api-key (lowercase)
+  if (API_KEY) return { "x-api-key": API_KEY };
+
+  // Local / unauthenticated mode
+  return {};
 }
 
 function clamp(n: number, lo: number, hi: number) {
@@ -198,13 +215,26 @@ export default function EEGViewer() {
   // Debug: what layout did we detect?
   const lastLayoutRef = useRef<string | null>(null);
 
-  // Hard sanity: env must exist
+  // Hard sanity
   useEffect(() => {
-    if (!API_BASE || !API_KEY) {
+    const usingProxy = !DIRECT_KEY;
+
+    if (usingProxy) {
+      if (!PROXY_BASE) {
+        setFatalError(
+          "Read API proxy is unavailable (missing backend base URL).",
+        );
+        setLoadingMeta(false);
+        setLoadingWindow(false);
+      }
+      return;
+    }
+
+    // Direct mode (not recommended): key must be available in the browser env
+    if (!DIRECT_BASE || !API_KEY) {
       setFatalError(
         `Missing env vars.\n` +
-          `VITE_ENCEPH_READ_API_KEY=${API_KEY ? "present" : "missing"}\n\n` +
-          `Fix: set .env.local and restart "npm run dev".`,
+          `VITE_ENCEPH_READ_API_KEY=${API_KEY ? "present" : "missing"}`,
       );
       setLoadingMeta(false);
       setLoadingWindow(false);
