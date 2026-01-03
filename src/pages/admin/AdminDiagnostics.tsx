@@ -113,10 +113,10 @@ export default function AdminDiagnostics() {
     const push = (name: string, ok: boolean, ms: number, notes?: string) => out.push({ name, ok, ms, notes });
 
     const h = await getHealth();
-    push("Read API /health", h.ok, h.ms, h.ok ? "" : h.error);
+    push("Read API /health", h.ok, h.ms, h.ok ? "" : (h as any).error);
     if (!h.ok) {
       setRows(out);
-      setBackend({ base, keyPresent, err: h.error, ts });
+      setBackend({ base, keyPresent, err: (h as any).error, ts });
       setRunning(false);
       setLastRun(new Date().toISOString());
       return;
@@ -133,7 +133,7 @@ export default function AdminDiagnostics() {
     }
 
     const m = await getMeta(STUDY_ID, ROOT);
-    push("Meta (C-plane)", m.ok, m.ms, m.ok ? `channels=${m.data?.channels?.length ?? "?"}, sr=${m.data?.sample_rate_hz ?? "?"}` : m.error);
+    push("Meta (C-plane)", m.ok, m.ms, m.ok ? `channels=${m.data?.channels?.length ?? "?"}, sr=${m.data?.sample_rate_hz ?? "?"}` : (m as any).error);
 
     const c1 = await getChunkHeaders(STUDY_ID, 0, 256, ROOT);
     push("Chunk #1 (binary + headers)", c1.ok, c1.ms, c1.ok ? `sha=${(c1.headers["x-eeg-content-sha256"] || "").slice(0, 10)}…, dtype=${c1.headers["x-eeg-dtype"] || "?"}` : c1.error);
@@ -153,13 +153,13 @@ export default function AdminDiagnostics() {
     push("Chunk determinism (same request twice)", detOk, c2.ok ? c2.ms : 0, detNotes);
 
     const a = await getArtifacts(STUDY_ID, ROOT);
-    push("Artifacts (derived)", a.ok, a.ms, a.ok ? `items=${(a.data?.items?.length ?? a.data?.length ?? 0)}, run_id=${a.data?.run_id ? String(a.data.run_id).slice(0, 12) + "…" : "?"}` : a.error);
+    push("Artifacts (derived)", a.ok, a.ms, a.ok ? `items=${(a.data?.items?.length ?? a.data?.length ?? 0)}, run_id=${a.data?.run_id ? String(a.data.run_id).slice(0, 12) + "…" : "?"}` : (a as any).error);
 
     const an = await getAnnotations(STUDY_ID, ROOT);
-    push("Annotations (derived)", an.ok, an.ms, an.ok ? `items=${(an.data?.items?.length ?? an.data?.length ?? 0)}, run_id=${an.data?.run_id ? String(an.data.run_id).slice(0, 12) + "…" : "?"}` : an.error);
+    push("Annotations (derived)", an.ok, an.ms, an.ok ? `items=${(an.data?.items?.length ?? an.data?.length ?? 0)}, run_id=${an.data?.run_id ? String(an.data.run_id).slice(0, 12) + "…" : "?"}` : (an as any).error);
 
     const s = await getSegments(STUDY_ID, ROOT);
-    push("Segments (derived)", s.ok, s.ms, s.ok ? `schema=${s.data?.schema_version || s.data?.schema || "?"}, run_id=${s.data?.run_id ? String(s.data.run_id).slice(0, 12) + "…" : "?"}` : s.error);
+    push("Segments (derived)", s.ok, s.ms, s.ok ? `schema=${s.data?.schema_version || s.data?.schema || "?"}, run_id=${s.data?.run_id ? String(s.data.run_id).slice(0, 12) + "…" : "?"}` : (s as any).error);
 
     let runOk = false;
     let runNotes = "";

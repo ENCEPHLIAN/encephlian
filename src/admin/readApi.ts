@@ -4,6 +4,16 @@ export type ReadApiResult<T> =
   | { ok: true; data: T; ms: number }
   | { ok: false; error: string; ms: number };
 
+// Canonical meta type for EEG study metadata
+export interface CanonicalMeta {
+  sampling_rate_hz: number;
+  n_samples: number;
+  n_channels: number;
+  channel_map?: Array<{ index: number; canonical_id: string; original_label?: string }>;
+  duration_sec?: number;
+  [key: string]: any;
+}
+
 function nowMs(): number {
   return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
 }
