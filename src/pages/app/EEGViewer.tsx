@@ -1,3 +1,4 @@
+import { resolveReadApiBase } from "@/shared/readApiConfig";
 // src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
@@ -6,13 +7,6 @@ import { Loader2 } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
-
-const LS_KEY = "enceph.admin.readApiBase.override";
-function getReadApiBase(): string {
-  const envBase = (import.meta as any).env?.VITE_ENCEPH_READ_API_BASE as string | undefined;
-  const lsBase = (typeof window !== "undefined") ? window.localStorage.getItem("enceph.admin.readApiBase.override") : null;
-  return (lsBase || envBase || "");
-}
 
 
 /* =======================
@@ -26,7 +20,7 @@ const STUDY_ID = "TUH_CANON_001";
  * - We do NOT rely on response headers for correctness (proxies can strip visibility).
  * - We still validate payload length strictly.
  */
-const API_BASE = getReadApiBase();
+const API_BASE = resolveReadApiBase();
 const API_KEY = import.meta.env.VITE_ENCEPH_READ_API_KEY as string | undefined;
 
 /* =======================
@@ -209,7 +203,6 @@ export default function EEGViewer() {
     if (!API_BASE || !API_KEY) {
       setFatalError(
         `Missing env vars.\n` +
-          `VITE_ENCEPH_READ_API_BASE=${API_BASE ? "present" : "missing"}\n` +
           `VITE_ENCEPH_READ_API_KEY=${API_KEY ? "present" : "missing"}\n\n` +
           `Fix: set .env.local and restart "npm run dev".`,
       );
