@@ -20,7 +20,10 @@ import {
   LOCAL_READ_API_DEFAULT,
   PROD_READ_API_DEFAULT,
   resolveReadApiBase,
-} from "@/admin/config";
+  setReadApiBaseOverride,
+  clearReadApiBaseOverride,
+  getEnvReadApiBase,
+} from "@/shared/readApiConfig";
 
 type CheckRow = {
   name: string;
@@ -32,22 +35,22 @@ type CheckRow = {
 const STUDY_ID = "TUH_CANON_001";
 const ROOT = ".";
 
-function trimSlashes(s: string): string {
-  return (s || "").trim().replace(/\/+$/, "");
-}
-
 function setOverrideBase(v: string) {
-  const trimmed = trimSlashes(v);
-  if (!trimmed) localStorage.removeItem(READ_API_OVERRIDE_LS_KEY);
-  else localStorage.setItem(READ_API_OVERRIDE_LS_KEY, trimmed);
+  const trimmed = v.trim().replace(/\/+$/, "");
+  if (!trimmed) clearReadApiBaseOverride();
+  else setReadApiBaseOverride(trimmed);
 }
 
 function getOverrideBase(): string {
-  return trimSlashes(localStorage.getItem(READ_API_OVERRIDE_LS_KEY) || "");
+  try {
+    return (localStorage.getItem(READ_API_OVERRIDE_LS_KEY) || "").trim().replace(/\/+$/, "");
+  } catch {
+    return "";
+  }
 }
 
 function getEnvBase(): string {
-  return trimSlashes((import.meta as any).env?.VITE_ENCEPH_READ_API_BASE || "");
+  return getEnvReadApiBase();
 }
 
 export default function AdminDiagnostics() {

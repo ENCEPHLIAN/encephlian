@@ -1,4 +1,4 @@
-import { getReadApiKey, resolveReadApiBase } from "./config";
+import { getReadApiKey, resolveReadApiBase } from "@/shared/readApiConfig";
 
 export type ReadApiResult<T> =
   | { ok: true; data: T; ms: number }
