@@ -15,6 +15,7 @@ import {
   getResolvedKeyPresent,
   getSegments,
 } from "@/admin/readApi";
+import { getReadApiKey } from "@/shared/readApiConfig";
 import {
   READ_API_OVERRIDE_LS_KEY,
   LOCAL_READ_API_DEFAULT,
@@ -253,6 +254,9 @@ export default function AdminDiagnostics() {
             <Button onClick={runDiagnostics} disabled={running}>
               {running ? "Running…" : "Run Diagnostics"}
             </Button>
+            <Badge variant={getReadApiKey() ? "default" : "secondary"}>
+              {getReadApiKey() ? "DIRECT" : "PROXY"}
+            </Badge>
             <Badge variant={failCount > 0 ? "destructive" : "default"}>
               {failCount > 0 ? `FAIL (${failCount})` : `PASS (${passCount})`}
             </Badge>
