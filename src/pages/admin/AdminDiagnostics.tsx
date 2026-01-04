@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -26,6 +26,8 @@ import {
   clearReadApiBaseOverride,
   getEnvReadApiBase,
 } from "@/shared/readApiConfig";
+import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
+import { Activity } from "lucide-react";
 
 type CheckRow = {
   name: string;
@@ -34,6 +36,30 @@ type CheckRow = {
   notes?: string;
   mode?: "direct" | "proxy";
 };
+
+type BenchmarkResult = {
+  endpoint: string;
+  directMs: number | null;
+  proxyMs: number | null;
+  diff: number | null;
+  winner: "direct" | "proxy" | "tie" | null;
+};
+
+// Latency thresholds (ms)
+const LATENCY_GOOD = 200;
+const LATENCY_WARN = 500;
+
+function getLatencyColor(ms: number): string {
+  if (ms <= LATENCY_GOOD) return "text-green-500";
+  if (ms <= LATENCY_WARN) return "text-yellow-500";
+  return "text-red-500";
+}
+
+function getLatencyBadge(ms: number): { variant: "default" | "secondary" | "destructive"; label: string } {
+  if (ms <= LATENCY_GOOD) return { variant: "default", label: "Fast" };
+  if (ms <= LATENCY_WARN) return { variant: "secondary", label: "Moderate" };
+  return { variant: "destructive", label: "Slow" };
+}
 
 const STUDY_ID = "TUH_CANON_001";
 const ROOT = ".";
@@ -62,6 +88,8 @@ export default function AdminDiagnostics() {
   const [running, setRunning] = useState(false);
   const [rows, setRows] = useState<CheckRow[]>([]);
   const [lastRun, setLastRun] = useState<string | null>(null);
+  const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
+  const [benchmarkRunning, setBenchmarkRunning] = useState(false);
 
   const [backend, setBackend] = useState<{
     base: string;
@@ -197,6 +225,108 @@ export default function AdminDiagnostics() {
     setRunning(false);
   }
 
+  async function runBenchmark() {
+    setBenchmarkRunning(true);
+    setBenchmarkResults([]);
+
+    const key = getReadApiKey();
+    const proxyBase = getReadApiProxyBase();
+    const directBase = resolveReadApiBase();
+
+    if (!key) {
+      setBenchmarkResults([{
+        endpoint: "N/A",
+        directMs: null,
+        proxyMs: null,
+        diff: null,
+        winner: null,
+      }]);
+      setBenchmarkRunning(false);
+      return;
+    }
+
+    if (!proxyBase) {
+      setBenchmarkResults([{
+        endpoint: "N/A",
+        directMs: null,
+        proxyMs: null,
+        diff: null,
+        winner: null,
+      }]);
+      setBenchmarkRunning(false);
+      return;
+    }
+
+    const results: BenchmarkResult[] = [];
+    const studyId = STUDY_ID;
+    const root = ROOT;
+
+    // Benchmark endpoints
+    const endpoints = [
+      { name: "Health", path: "/health", requireKey: false },
+      { name: "Meta", path: `/studies/${studyId}/meta?root=${encodeURIComponent(root)}`, requireKey: true },
+      { name: "Chunk (1KB)", path: `/studies/${studyId}/chunk.bin?root=${encodeURIComponent(root)}&start=0&length=1024`, requireKey: true, binary: true },
+    ];
+
+    for (const ep of endpoints) {
+      // Direct request
+      const directStart = performance.now();
+      let directMs: number | null = null;
+      try {
+        if (ep.binary) {
+          const res = await fetch(`${directBase}${ep.path}`, {
+            headers: { "X-API-KEY": key },
+          });
+          if (res.ok) await res.arrayBuffer();
+          directMs = Math.round(performance.now() - directStart);
+        } else {
+          const res = await fetch(`${directBase}${ep.path}`, {
+            headers: ep.requireKey ? { "X-API-KEY": key } : {},
+          });
+          if (res.ok) await res.json();
+          directMs = Math.round(performance.now() - directStart);
+        }
+      } catch {
+        directMs = null;
+      }
+
+      // Proxy request
+      const proxyStart = performance.now();
+      let proxyMs: number | null = null;
+      try {
+        const anon = String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+        const proxyUrl = `${proxyBase}${ep.path}`;
+        if (ep.binary) {
+          const res = await fetch(proxyUrl, {
+            headers: { apikey: anon, Authorization: `Bearer ${anon}` },
+          });
+          if (res.ok) await res.arrayBuffer();
+          proxyMs = Math.round(performance.now() - proxyStart);
+        } else {
+          const res = await fetch(proxyUrl, {
+            headers: ep.requireKey ? { apikey: anon, Authorization: `Bearer ${anon}` } : {},
+          });
+          if (res.ok) await res.json();
+          proxyMs = Math.round(performance.now() - proxyStart);
+        }
+      } catch {
+        proxyMs = null;
+      }
+
+      const diff = directMs !== null && proxyMs !== null ? proxyMs - directMs : null;
+      let winner: BenchmarkResult["winner"] = null;
+      if (directMs !== null && proxyMs !== null) {
+        if (Math.abs(directMs - proxyMs) < 20) winner = "tie";
+        else winner = directMs < proxyMs ? "direct" : "proxy";
+      }
+
+      results.push({ endpoint: ep.name, directMs, proxyMs, diff, winner });
+    }
+
+    setBenchmarkResults(results);
+    setBenchmarkRunning(false);
+  }
+
   useEffect(() => {
     syncResolved();
     runDiagnostics();
@@ -295,13 +425,28 @@ export default function AdminDiagnostics() {
               </TableRow>
             </TableHeader>
             <TableBody>
-            {rows.map((r) => (
+              {rows.map((r) => (
                 <TableRow key={r.name}>
                   <TableCell>
                     {r.ok ? <span className="text-green-500">PASS</span> : <span className="text-red-500">FAIL</span>}
                   </TableCell>
                   <TableCell>{r.name}</TableCell>
-                  <TableCell className="text-right">{r.ms}</TableCell>
+                  <TableCell className="text-right">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`font-mono ${getLatencyColor(r.ms)} cursor-help`}>
+                          {r.ms}ms
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="text-xs space-y-1">
+                          <div>≤{LATENCY_GOOD}ms = <span className="text-green-500">Good</span></div>
+                          <div>{LATENCY_GOOD}-{LATENCY_WARN}ms = <span className="text-yellow-500">Moderate</span></div>
+                          <div>≥{LATENCY_WARN}ms = <span className="text-red-500">Slow</span></div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableCell>
                   <TableCell>
                     {r.mode && (
                       <Badge variant={r.mode === "direct" ? "default" : "secondary"} className="text-xs">
@@ -314,6 +459,88 @@ export default function AdminDiagnostics() {
               ))}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+
+      {/* Latency Benchmark Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Latency Benchmark
+          </CardTitle>
+          <CardDescription>
+            Compare response times between DIRECT (browser → API) and PROXY (browser → Edge Function → API) modes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button onClick={runBenchmark} disabled={benchmarkRunning || !getReadApiKey() || !getReadApiProxyBase()}>
+              {benchmarkRunning ? "Running Benchmark…" : "Run Benchmark"}
+            </Button>
+            {!getReadApiKey() && (
+              <span className="text-xs text-muted-foreground">API key required for benchmark</span>
+            )}
+            {getReadApiKey() && !getReadApiProxyBase() && (
+              <span className="text-xs text-muted-foreground">Proxy not available</span>
+            )}
+          </div>
+
+          {benchmarkResults.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Endpoint</TableHead>
+                  <TableHead className="text-right">Direct (ms)</TableHead>
+                  <TableHead className="text-right">Proxy (ms)</TableHead>
+                  <TableHead className="text-right">Δ (ms)</TableHead>
+                  <TableHead>Faster</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {benchmarkResults.map((r) => (
+                  <TableRow key={r.endpoint}>
+                    <TableCell className="font-medium">{r.endpoint}</TableCell>
+                    <TableCell className="text-right">
+                      {r.directMs !== null ? (
+                        <span className={getLatencyColor(r.directMs)}>{r.directMs}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.proxyMs !== null ? (
+                        <span className={getLatencyColor(r.proxyMs)}>{r.proxyMs}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {r.diff !== null ? (
+                        <span className={r.diff > 0 ? "text-green-500" : r.diff < 0 ? "text-red-500" : ""}>
+                          {r.diff > 0 ? "+" : ""}{r.diff}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {r.winner === "direct" && <Badge variant="default">DIRECT</Badge>}
+                      {r.winner === "proxy" && <Badge variant="secondary">PROXY</Badge>}
+                      {r.winner === "tie" && <Badge variant="outline">TIE</Badge>}
+                      {r.winner === null && <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+
+          <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+            <p><strong>DIRECT:</strong> Request goes directly from browser to Read API (requires API key in browser).</p>
+            <p><strong>PROXY:</strong> Request routes through Edge Function which injects API key server-side (more secure, adds latency).</p>
+            <p><strong>Δ (Delta):</strong> Positive = DIRECT is faster by that amount. Negative = PROXY is faster.</p>
+          </div>
         </CardContent>
       </Card>
     </div>
