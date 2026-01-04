@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BackendStatusCard } from "@/admin/components/BackendStatusCard";
 import {
   getAnnotations,
@@ -31,6 +32,7 @@ type CheckRow = {
   ok: boolean;
   ms: number;
   notes?: string;
+  mode?: "direct" | "proxy";
 };
 
 const STUDY_ID = "TUH_CANON_001";
@@ -114,7 +116,8 @@ export default function AdminDiagnostics() {
     setBackend({ base, keyPresent, ts });
 
     const out: CheckRow[] = [];
-    const push = (name: string, ok: boolean, ms: number, notes?: string) => out.push({ name, ok, ms, notes });
+    const mode: "direct" | "proxy" = keyPresent ? "direct" : "proxy";
+    const push = (name: string, ok: boolean, ms: number, notes?: string) => out.push({ name, ok, ms, notes, mode });
 
     const h = await getHealth();
     push("Read API /health", h.ok, h.ms, h.ok ? "" : (h as any).error);
@@ -254,9 +257,20 @@ export default function AdminDiagnostics() {
             <Button onClick={runDiagnostics} disabled={running}>
               {running ? "Running…" : "Run Diagnostics"}
             </Button>
-            <Badge variant={getReadApiKey() ? "default" : "secondary"}>
-              {getReadApiKey() ? "DIRECT" : "PROXY"}
-            </Badge>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant={getReadApiKey() ? "default" : "secondary"} className="cursor-help">
+                  {getReadApiKey() ? "DIRECT" : "PROXY"}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                {getReadApiKey() ? (
+                  <p><strong>DIRECT mode:</strong> API key is available in browser. Requests go directly to Read API with lower latency.</p>
+                ) : (
+                  <p><strong>PROXY mode:</strong> API key is injected server-side via Edge Function. Adds ~50-100ms latency but keeps key secure.</p>
+                )}
+              </TooltipContent>
+            </Tooltip>
             <Badge variant={failCount > 0 ? "destructive" : "default"}>
               {failCount > 0 ? `FAIL (${failCount})` : `PASS (${passCount})`}
             </Badge>
@@ -276,17 +290,25 @@ export default function AdminDiagnostics() {
                 <TableHead>Status</TableHead>
                 <TableHead>Check</TableHead>
                 <TableHead className="text-right">Latency (ms)</TableHead>
+                <TableHead>Mode</TableHead>
                 <TableHead>Notes</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((r) => (
+            {rows.map((r) => (
                 <TableRow key={r.name}>
                   <TableCell>
                     {r.ok ? <span className="text-green-500">PASS</span> : <span className="text-red-500">FAIL</span>}
                   </TableCell>
                   <TableCell>{r.name}</TableCell>
                   <TableCell className="text-right">{r.ms}</TableCell>
+                  <TableCell>
+                    {r.mode && (
+                      <Badge variant={r.mode === "direct" ? "default" : "secondary"} className="text-xs">
+                        {r.mode.toUpperCase()}
+                      </Badge>
+                    )}
+                  </TableCell>
                   <TableCell className="text-xs opacity-80">{r.notes || ""}</TableCell>
                 </TableRow>
               ))}
