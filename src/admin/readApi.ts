@@ -1,3 +1,5 @@
+// Consolidated Read API wrapper using shared client
+import { fetchJson, fetchBinary, getReadApiProxyBase, type FetchResult } from "@/shared/readApiClient";
 import { getReadApiKey, resolveReadApiBase } from "@/shared/readApiConfig";
 
 export type ReadApiResult<T> =
@@ -14,120 +16,84 @@ export interface CanonicalMeta {
   [key: string]: any;
 }
 
-function nowMs(): number {
-  return (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
-}
-
-function base(): string {
-  const b = resolveReadApiBase();
-  if (!b) throw new Error("Missing Read API base URL");
-  return b.replace(/\/+$/, "");
-}
-
-function proxyBase(): string {
-  const s = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
-  return s ? `${s}/functions/v1/read_api_proxy` : "";
-}
-
-function anonKey(): string {
-  return String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
-}
-
-function addProxyAuth(headers: Record<string, string>) {
-  const anon = anonKey();
-  if (!anon) return;
-  headers["apikey"] = anon;
-  headers["authorization"] = `Bearer ${anon}`;
-}
-
-function key(): string {
-  return getReadApiKey();
-}
-
-function resolveUrl(path: string): string {
-  const k = key();
-  if (k) return `${base()}${path}`;
-  const p = proxyBase();
-  if (p) return `${p}${path}`;
-  return `${base()}${path}`;
-}
-
-async function req<T>(path: string, init?: RequestInit): Promise<ReadApiResult<T>> {
-  const t0 = nowMs();
-  try {
-    const url = resolveUrl(path);
-    const headers: Record<string, string> = { ...(init?.headers as any) };
-
-    const k = key();
-    if (k) headers["x-api-key"] = k;
-
-    const p = proxyBase();
-    if (!k && p && url.startsWith(p)) addProxyAuth(headers);
-
-    const res = await fetch(url, { ...init, headers });
-    const ms = Math.round(nowMs() - t0);
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      return { ok: false, error: `${res.status} ${res.statusText}${txt ? ` — ${txt}` : ""}`, ms };
-    }
-
-    const data = (await res.json()) as T;
-    return { ok: true, data, ms };
-  } catch (e: any) {
-    const ms = Math.round(nowMs() - t0);
-    return { ok: false, error: e?.message || String(e), ms };
+function toReadApiResult<T>(result: FetchResult<T>): ReadApiResult<T> {
+  if (result.ok === true) {
+    return { ok: true, data: result.data, ms: Math.round(result.ms) };
   }
+  // TypeScript now knows result.ok === false
+  const errorResult = result as { ok: false; error: string; ms: number };
+  return { ok: false, error: errorResult.error, ms: Math.round(result.ms) };
 }
 
-export async function getHealth() {
-  return req<{ ok: boolean }>("/health");
+export async function getHealth(): Promise<ReadApiResult<{ ok: boolean }>> {
+  const result = await fetchJson<{ ok: boolean }>("/health", { timeoutMs: 8000 });
+  return toReadApiResult(result);
 }
 
-export async function getMeta(studyId: string, root = ".") {
-  return req<any>(`/studies/${encodeURIComponent(studyId)}/meta?root=${encodeURIComponent(root)}`);
+export async function getMeta(studyId: string, root = "."): Promise<ReadApiResult<any>> {
+  const result = await fetchJson<any>(
+    `/studies/${encodeURIComponent(studyId)}/meta?root=${encodeURIComponent(root)}`,
+    { timeoutMs: 20000, requireKey: true }
+  );
+  return toReadApiResult(result);
 }
 
-export async function getArtifacts(studyId: string, root = ".") {
-  return req<any>(`/studies/${encodeURIComponent(studyId)}/artifacts?root=${encodeURIComponent(root)}`);
+export async function getArtifacts(studyId: string, root = "."): Promise<ReadApiResult<any>> {
+  const result = await fetchJson<any>(
+    `/studies/${encodeURIComponent(studyId)}/artifacts?root=${encodeURIComponent(root)}`,
+    { timeoutMs: 20000, requireKey: true }
+  );
+  return toReadApiResult(result);
 }
 
-export async function getAnnotations(studyId: string, root = ".") {
-  return req<any>(`/studies/${encodeURIComponent(studyId)}/annotations?root=${encodeURIComponent(root)}`);
+export async function getAnnotations(studyId: string, root = "."): Promise<ReadApiResult<any>> {
+  const result = await fetchJson<any>(
+    `/studies/${encodeURIComponent(studyId)}/annotations?root=${encodeURIComponent(root)}`,
+    { timeoutMs: 20000, requireKey: true }
+  );
+  return toReadApiResult(result);
 }
 
-export async function getSegments(studyId: string, root = ".") {
-  return req<any>(`/studies/${encodeURIComponent(studyId)}/segments?root=${encodeURIComponent(root)}`);
+export async function getSegments(studyId: string, root = "."): Promise<ReadApiResult<any>> {
+  const result = await fetchJson<any>(
+    `/studies/${encodeURIComponent(studyId)}/segments?root=${encodeURIComponent(root)}`,
+    { timeoutMs: 20000, requireKey: true }
+  );
+  return toReadApiResult(result);
 }
 
-export async function getChunkHeaders(studyId: string, start: number, length: number, root = ".") {
-  const t0 = nowMs();
-  try {
-    const path = `/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`;
-    const url = resolveUrl(path);
-
-    const headers: Record<string, string> = {};
-    const k = key();
-    if (k) headers["x-api-key"] = k;
-
-    const p = proxyBase();
-    if (!k && p && url.startsWith(p)) addProxyAuth(headers);
-
-    const res = await fetch(url, { method: "GET", headers });
-    const ms = Math.round(nowMs() - t0);
-
-    if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      return { ok: false as const, error: `${res.status} ${res.statusText}${txt ? ` — ${txt}` : ""}`, ms };
-    }
-
-    const h: Record<string, string> = {};
-    res.headers.forEach((v, k) => (h[k.toLowerCase()] = v));
-    return { ok: true as const, headers: h, ms };
-  } catch (e: any) {
-    const ms = Math.round(nowMs() - t0);
-    return { ok: false as const, error: e?.message || String(e), ms };
+export async function getChunkHeaders(
+  studyId: string,
+  start: number,
+  length: number,
+  root = "."
+): Promise<{ ok: true; headers: Record<string, string>; ms: number } | { ok: false; error: string; ms: number }> {
+  const result = await fetchBinary(
+    `/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`,
+    { timeoutMs: 20000, requireKey: true }
+  );
+  if (result.ok === true) {
+    return { ok: true, headers: result.headers, ms: Math.round(result.ms) };
   }
+  const errorResult = result as { ok: false; error: string; ms: number };
+  return { ok: false, error: errorResult.error, ms: Math.round(result.ms) };
+}
+
+export async function getChunkBinary(
+  studyId: string,
+  start: number,
+  length: number,
+  root = "."
+): Promise<{ ok: true; data: ArrayBuffer; headers: Record<string, string>; ms: number } | { ok: false; error: string; ms: number }> {
+  const result = await fetchBinary(
+    `/studies/${encodeURIComponent(studyId)}/chunk.bin?start=${start}&length=${length}&root=${encodeURIComponent(root)}`,
+    { timeoutMs: 30000, requireKey: true }
+  );
+  if (result.ok === true) {
+    return { ok: true, data: result.data, headers: result.headers, ms: Math.round(result.ms) };
+  }
+  const errorResult = result as { ok: false; error: string; ms: number };
+  return { ok: false, error: errorResult.error, ms: Math.round(result.ms) };
 }
 
 export function getResolvedBaseForUI(): string {
@@ -135,6 +101,5 @@ export function getResolvedBaseForUI(): string {
 }
 
 export function getResolvedKeyPresent(): boolean {
-  // The key is stored server-side; if we can use the proxy, treat it as present.
-  return !!getReadApiKey() || !!proxyBase();
+  return !!getReadApiKey() || !!getReadApiProxyBase();
 }

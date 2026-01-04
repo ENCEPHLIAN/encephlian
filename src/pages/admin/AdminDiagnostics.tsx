@@ -171,7 +171,7 @@ export default function AdminDiagnostics() {
     push("Meta (C-plane)", m.ok, m.ms, m.ok ? `channels=${m.data?.channels?.length ?? "?"}, sr=${m.data?.sample_rate_hz ?? "?"}` : (m as any).error);
 
     const c1 = await getChunkHeaders(STUDY_ID, 0, 256, ROOT);
-    push("Chunk #1 (binary + headers)", c1.ok, c1.ms, c1.ok ? `sha=${(c1.headers["x-eeg-content-sha256"] || "").slice(0, 10)}…, dtype=${c1.headers["x-eeg-dtype"] || "?"}` : c1.error);
+    push("Chunk #1 (binary + headers)", c1.ok, c1.ms, c1.ok ? `sha=${(c1.headers["x-eeg-content-sha256"] || "").slice(0, 10)}…, dtype=${c1.headers["x-eeg-dtype"] || "?"}` : (c1 as any).error);
 
     const c2 = await getChunkHeaders(STUDY_ID, 0, 256, ROOT);
     let detOk = false;

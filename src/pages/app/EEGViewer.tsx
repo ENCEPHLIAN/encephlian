@@ -1,4 +1,3 @@
-import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 // src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Switch } from "@/components/ui/switch";
@@ -7,28 +6,21 @@ import { Loader2 } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
+import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
+import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 
 /* =======================
    MVP LOCK
 ======================= */
 const STUDY_ID = "TUH_CANON_001";
 
-/**
- * HARD RULE (updated):
- * - Determinism > everything.
- * - We do NOT rely on response headers for correctness (proxies can strip visibility).
- * - We still validate payload length strictly.
- */
 const DIRECT_BASE = resolveReadApiBase();
 const DIRECT_KEY = getReadApiKey();
-const PROXY_BASE = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "")
-  ? `${String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "")}/functions/v1/read_api_proxy`
-  : "";
+const PROXY_BASE = getReadApiProxyBase() || "";
 
 const IS_LOCAL_BASE = DIRECT_BASE.includes("127.0.0.1") || DIRECT_BASE.includes("localhost");
 const USING_PROXY = !DIRECT_KEY && !IS_LOCAL_BASE && !!PROXY_BASE;
-const API_BASE = (DIRECT_KEY || IS_LOCAL_BASE) ? DIRECT_BASE : PROXY_BASE;
-const API_KEY = DIRECT_KEY;
+const API_AVAILABLE = !!(DIRECT_KEY || IS_LOCAL_BASE || PROXY_BASE);
 
 /* =======================
    TYPES
@@ -38,7 +30,6 @@ type Meta = {
   sampling_rate_hz: number;
   n_samples: number;
   channel_map: { index: number; canonical_id: string; unit: string }[];
-  // Optional variants (if your backend ever changes shape)
   channel_names?: string[];
   channels?: { name: string }[];
 };
@@ -59,38 +50,13 @@ type Annotation = {
 
 type Marker = {
   id: string;
-  timestamp_sec: number; // LOCAL within window [0..timeWindow]
+  timestamp_sec: number;
   marker_type: string;
   label?: string;
 };
 
-function authHeaders(): HeadersInit {
-  // Proxy mode: backend function gateway requires anon headers
-  if (USING_PROXY) {
-    const anon = String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
-    if (!anon) return {};
-    return { apikey: anon, Authorization: `Bearer ${anon}` };
-  }
-
-  // Direct mode: Read API expects x-api-key (lowercase)
-  if (API_KEY) return { "x-api-key": API_KEY };
-
-  // Local / unauthenticated mode
-  return {};
-}
-
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
-}
-
-async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000) {
-  const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), ms);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(id);
-  }
 }
 
 function keyFor(startSample: number, length: number) {
@@ -168,15 +134,33 @@ function reshapeAuto(f32: Float32Array, nCh: number, nSamp: number) {
 }
 
 // header helper: prefer multiple possible names (legacy + new)
-function hdrNum(r: Response, names: string[]): number {
+function hdrNum(headers: Record<string, string>, names: string[]): number {
   for (const n of names) {
-    const v = r.headers.get(n);
+    const v = headers[n.toLowerCase()];
     if (v != null) {
       const x = Number(v);
       if (Number.isFinite(x)) return x;
     }
   }
   return Number.NaN;
+}
+
+// Helper to fetch chunk.bin using shared client
+async function fetchChunkBin(studyId: string, startSample: number, length: number): Promise<{
+  ok: true;
+  data: ArrayBuffer;
+  headers: Record<string, string>;
+  ms: number;
+} | {
+  ok: false;
+  error: string;
+  ms: number;
+}> {
+  const result = await fetchBinary(
+    `/studies/${encodeURIComponent(studyId)}/chunk.bin?root=.&start=${startSample}&length=${length}`,
+    { timeoutMs: 30000, requireKey: true }
+  );
+  return result;
 }
 
 export default function EEGViewer() {
@@ -217,25 +201,8 @@ export default function EEGViewer() {
 
   // Hard sanity
   useEffect(() => {
-    const usingProxy = !DIRECT_KEY;
-
-    if (usingProxy) {
-      if (!PROXY_BASE) {
-        setFatalError(
-          "Read API proxy is unavailable (missing backend base URL).",
-        );
-        setLoadingMeta(false);
-        setLoadingWindow(false);
-      }
-      return;
-    }
-
-    // Direct mode (not recommended): key must be available in the browser env
-    if (!DIRECT_BASE || !API_KEY) {
-      setFatalError(
-        `Missing env vars.\n` +
-          `VITE_ENCEPH_READ_API_KEY=${API_KEY ? "present" : "missing"}`,
-      );
+    if (!API_AVAILABLE) {
+      setFatalError("Read API is unavailable (no API key and no proxy configured).");
       setLoadingMeta(false);
       setLoadingWindow(false);
     }
@@ -243,24 +210,22 @@ export default function EEGViewer() {
 
   /* ---------- META ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
+    if (!API_AVAILABLE) return;
     let alive = true;
 
     setLoadingMeta(true);
     setFatalError(null);
 
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/meta?root=.`, { headers: authHeaders() }, 20000)
-      .then((r) => {
-        if (!r.ok) throw new Error(`meta ${r.status} ${r.statusText}`);
-        return r.json();
-      })
-      .then((j) => {
+    fetchJson<any>(`/studies/${STUDY_ID}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
+      .then((result) => {
         if (!alive) return;
+        if (result.ok === false) throw new Error(result.error);
+        const j = result.data;
         setMeta((j?.meta ?? j) as Meta);
       })
       .catch((e) => {
         if (!alive) return;
-        setFatalError(String(e));
+        setFatalError(String(e?.message || e));
       })
       .finally(() => {
         if (alive) setLoadingMeta(false);
@@ -273,16 +238,14 @@ export default function EEGViewer() {
 
   /* ---------- ARTIFACTS + ANNOTATIONS ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY) return;
+    if (!API_AVAILABLE) return;
 
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/artifacts?root=.`, { headers: authHeaders() }, 20000)
-      .then((r) => (r.ok ? r.json() : { artifacts: [] }))
-      .then((j) => setArtifacts(j.artifacts ?? []))
+    fetchJson<any>(`/studies/${STUDY_ID}/artifacts?root=.`, { timeoutMs: 20000, requireKey: true })
+      .then((result) => setArtifacts(result.ok ? (result.data?.artifacts ?? []) : []))
       .catch(() => setArtifacts([]));
 
-    fetchWithTimeout(`${API_BASE}/studies/${STUDY_ID}/annotations?root=.`, { headers: authHeaders() }, 20000)
-      .then((r) => (r.ok ? r.json() : { annotations: [] }))
-      .then((j) => setAnnotations(j.annotations ?? []))
+    fetchJson<any>(`/studies/${STUDY_ID}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
+      .then((result) => setAnnotations(result.ok ? (result.data?.annotations ?? []) : []))
       .catch(() => setAnnotations([]));
   }, []);
 
@@ -310,7 +273,7 @@ export default function EEGViewer() {
 
   /* ---------- WINDOW FETCH (ONLY when windowStartSec/windowSec changes) ---------- */
   useEffect(() => {
-    if (!API_BASE || !API_KEY || !meta) return;
+    if (!API_AVAILABLE || !meta) return;
 
     const fs = meta.sampling_rate_hz;
     const durationSec = meta.n_samples / fs;
@@ -349,18 +312,14 @@ export default function EEGViewer() {
     const reqId = ++lastReqId.current;
     const t0 = performance.now();
 
-    fetchWithTimeout(
-      `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${startSample}&length=${length}`,
-      { headers: authHeaders() },
-      30000,
-    )
-      .then((r) => {
-        if (!r.ok) throw new Error(`chunk.bin ${r.status} ${r.statusText}`);
+    fetchChunkBin(STUDY_ID, startSample, length)
+      .then((result) => {
+        if (result.ok === false) throw new Error(result.error);
 
         // Headers may be invisible in browser depending on proxy/CORS behavior.
         // We treat them as *optional* and derive dimensions deterministically.
-        const hdrNCh = hdrNum(r, ["x-eeg-nchannels", "x-eeg-channel-count"]);
-        const hdrNSamp = hdrNum(r, ["x-eeg-length", "x-eeg-samples-per-channel"]);
+        const hdrNCh = hdrNum(result.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]);
+        const hdrNSamp = hdrNum(result.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]);
 
         const nCh = Number.isFinite(hdrNCh) ? hdrNCh : meta.n_channels;
         const nSamp = Number.isFinite(hdrNSamp) ? hdrNSamp : length;
@@ -371,7 +330,7 @@ export default function EEGViewer() {
           console.warn("[chunk.bin] header nCh != meta.n_channels:", hdrNCh, meta.n_channels);
         }
 
-        return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+        return { buf: result.data, nCh, nSamp };
       })
       .then(({ buf, nCh, nSamp }) => {
         if (reqId !== lastReqId.current) return;
@@ -417,21 +376,17 @@ export default function EEGViewer() {
       const nk = keyFor(nextStartSample, length);
 
       if (!cacheRef.current.has(nk)) {
-        fetchWithTimeout(
-          `${API_BASE}/studies/${STUDY_ID}/chunk.bin?root=.&start=${nextStartSample}&length=${length}`,
-          { headers: authHeaders() },
-          30000,
-        )
-          .then((r) => {
-            if (!r.ok) return null;
+        fetchChunkBin(STUDY_ID, nextStartSample, length)
+          .then((result) => {
+            if (result.ok === false) return null;
 
-            const hdrNCh = hdrNum(r, ["x-eeg-nchannels", "x-eeg-channel-count"]);
-            const hdrNSamp = hdrNum(r, ["x-eeg-length", "x-eeg-samples-per-channel"]);
+            const hdrNCh = hdrNum(result.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]);
+            const hdrNSamp = hdrNum(result.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]);
 
             const nCh = Number.isFinite(hdrNCh) ? hdrNCh : meta.n_channels;
             const nSamp = Number.isFinite(hdrNSamp) ? hdrNSamp : length;
 
-            return r.arrayBuffer().then((buf) => ({ buf, nCh, nSamp }));
+            return { buf: result.data, nCh, nSamp };
           })
           .then((x) => {
             if (!x) return;
