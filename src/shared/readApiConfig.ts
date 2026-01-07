@@ -2,55 +2,54 @@ export const READ_API_OVERRIDE_LS_KEY = "enceph.readApiBase.override.v3";
 const READ_API_OVERRIDE_LS_KEY_OLD_ADMIN = "enceph.admin.readApiBase.override.v2";
 const READ_API_OVERRIDE_LS_KEY_OLD_APP = "enceph.admin.readApiBase.override";
 
-export const LOCAL_READ_API_DEFAULT = "http://127.0.0.1:8787";
+export const LOCAL_READ_API_DEFAULT = "http://127.0.0.1:8787"\;
 
-// ✅ Your current Azure Read API FQDN (whitecoast)
 export const PROD_READ_API_DEFAULT =
-  "https://enceph-readapi.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io";
+  "https://enceph-readapi.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io"\;
 
-export function trimSlashes(s: string): string {
+function trimSlashes(s: string) {
   return (s || "").trim().replace(/\/+$/, "");
 }
 
-export function getEnvReadApiBase(): string {
+export function getEnvBase(): string {
   return trimSlashes((import.meta as any).env?.VITE_ENCEPH_READ_API_BASE || "");
 }
 
-export function resolveReadApiBase(): string {
-  // 1) localStorage override wins
-  try {
-    const ls = trimSlashes(localStorage.getItem(READ_API_OVERRIDE_LS_KEY) || "");
-    if (ls) return ls;
-  } catch {}
+function isProbablyValidBase(base: string): boolean {
+  const b = trimSlashes(base);
+  if (!b) return false;
 
-  // 2) env default next
-  const envBase = getEnvReadApiBase();
-  if (envBase) return envBase;
+  // Kill legacy drift explicitly
+  if (b.includes("happywater")) return false;
 
-  // 3) fallback based on host
-  const host =
-    typeof window !== "undefined" && window.location?.hostname
-      ? window.location.hostname
-      : "";
-  const isLocal = host === "localhost" || host === "127.0.0.1";
+  // If it's localhost, accept http. Otherwise require https.
+  if (b.startsWith("http://127.0.0.1") || b.startsWith("http://localhost")) return true;
+  return b.startsWith("https://");
+}
 
+export function getReadApiBase(): string {
+  // Highest priority: explicit env base
+  const envBase = getEnvBase();
+  if (isProbablyValidBase(envBase)) return envBase;
+
+  // Next: user override, but only if sane
+  const ls = trimSlashes(localStorage.getItem(READ_API_OVERRIDE_LS_KEY) || "");
+  if (isProbablyValidBase(ls)) return ls;
+
+  // Fallback: local vs prod
+  const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
   return isLocal ? LOCAL_READ_API_DEFAULT : PROD_READ_API_DEFAULT;
 }
 
-export function setReadApiBaseOverride(base: string) {
+export function setReadApiOverride(base: string) {
   const v = trimSlashes(base);
-  if (!v) return;
-  try {
-    localStorage.setItem(READ_API_OVERRIDE_LS_KEY, v);
-  } catch {}
+  if (v) localStorage.setItem(READ_API_OVERRIDE_LS_KEY, v);
 }
 
-export function clearReadApiBaseOverride() {
-  try {
-    localStorage.removeItem(READ_API_OVERRIDE_LS_KEY);
-    localStorage.removeItem(READ_API_OVERRIDE_LS_KEY_OLD_ADMIN);
-    localStorage.removeItem(READ_API_OVERRIDE_LS_KEY_OLD_APP);
-  } catch {}
+export function clearReadApiOverride() {
+  localStorage.removeItem(READ_API_OVERRIDE_LS_KEY);
+  localStorage.removeItem(READ_API_OVERRIDE_LS_KEY_OLD_ADMIN);
+  localStorage.removeItem(READ_API_OVERRIDE_LS_KEY_OLD_APP);
 }
 
 export function getReadApiKey(): string {
