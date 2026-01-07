@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BackendStatusCard } from "@/admin/components/BackendStatusCard";
+import AdminSegmentsPanel from "@/admin/components/AdminSegmentsPanel";
 import {
   getAnnotations,
   getArtifacts,
@@ -543,6 +544,12 @@ export default function AdminDiagnostics() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Segments Panel */}
+      <AdminSegmentsPanel 
+        studyId="TUH_CANON_001" 
+        root="/app/data"
+      />
     </div>
   );
 }
