@@ -25,6 +25,16 @@ interface HighlightInterval {
   start_sec: number; // window-relative seconds
   end_sec: number;   // window-relative seconds
   label?: string;
+  color?: string;    // CSS color for the overlay
+}
+
+interface SegmentOverlay {
+  start_sec: number; // window-relative seconds
+  end_sec: number;   // window-relative seconds
+  label: string;
+  color: string;     // CSS background color
+  borderColor: string; // CSS border color
+  isFocused?: boolean;
 }
 
 export interface WebGLEEGViewerProps {
@@ -38,7 +48,8 @@ export interface WebGLEEGViewerProps {
   theme: string;
   markers?: Marker[];
   artifactIntervals?: ArtifactInterval[];
-  highlightInterval?: HighlightInterval | null; // focused segment highlight
+  highlightInterval?: HighlightInterval | null; // focused segment highlight (deprecated, use segmentOverlays)
+  segmentOverlays?: SegmentOverlay[]; // colored segment overlays
   channelColors?: string[];
   showArtifactsAsRed?: boolean;
   suppressArtifacts?: boolean; // display-only (dims segments)
@@ -179,6 +190,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     markers = [],
     artifactIntervals = [],
     highlightInterval = null,
+    segmentOverlays = [],
     channelColors = [],
     showArtifactsAsRed = true,
     suppressArtifacts = false,
@@ -386,8 +398,34 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       }
     }
 
-    // focused segment highlight overlay (blue)
-    if (highlightInterval) {
+    // Segment overlays (colored by label type)
+    for (const seg of segmentOverlays) {
+      const s0 = clamp(seg.start_sec, 0, timeWindow);
+      const s1 = clamp(seg.end_sec, 0, timeWindow);
+      if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
+      
+      const x1 = (s0 / timeWindow) * w;
+      const x2 = (s1 / timeWindow) * w;
+      
+      const el = document.createElement("div");
+      el.style.cssText = [
+        "position:absolute",
+        `left:${x1}px`,
+        `top:0`,
+        `width:${Math.max(2, x2 - x1)}px`,
+        `height:100%`,
+        `background:${seg.color}`,
+        `border-left:2px solid ${seg.borderColor}`,
+        `border-right:2px solid ${seg.borderColor}`,
+        "pointer-events:none",
+        "box-sizing:border-box",
+        seg.isFocused ? "z-index:10" : "z-index:1",
+      ].join(";");
+      artifactRef.current?.appendChild(el);
+    }
+
+    // Legacy focused segment highlight overlay (blue) - for backwards compatibility
+    if (highlightInterval && segmentOverlays.length === 0) {
       const s0 = clamp(highlightInterval.start_sec, 0, timeWindow);
       const s1 = clamp(highlightInterval.end_sec, 0, timeWindow);
       if (s1 > 0 && s0 < timeWindow && s1 > s0) {
@@ -558,6 +596,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     markers,
     artifactIntervals,
     highlightInterval,
+    segmentOverlays,
     channelColors,
     showArtifactsAsRed,
     suppressArtifacts,

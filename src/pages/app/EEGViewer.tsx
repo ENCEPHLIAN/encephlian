@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, X, Focus } from "lucide-react";
+import { Loader2, X, Focus, PanelRightOpen } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
+import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
@@ -223,6 +224,8 @@ export default function EEGViewer() {
   const [amplitude, setAmplitude] = useState(1.0);
   const [showArtifacts, setShowArtifacts] = useState(true);
   const [suppressArtifacts, setSuppressArtifacts] = useState(false);
+  const [showSegmentOverlays, setShowSegmentOverlays] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Canonical overlays
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -555,9 +558,35 @@ export default function EEGViewer() {
       }));
   }, [annotations, windowStartSec, windowSec]);
 
-  // Focused segment highlight (window-relative)
+  // Segment overlays for the current window (color-coded by label)
+  const windowSegmentOverlays = useMemo(() => {
+    if (!showSegmentOverlays || segments.length === 0) return [];
+    
+    const ws = windowStartSec;
+    const we = windowStartSec + windowSec;
+    
+    return segments
+      .filter(seg => seg.t_end_s > ws && seg.t_start_s < we)
+      .map(seg => {
+        const color = getSegmentColor(seg.label);
+        const isFocused = focusedSegment && 
+          seg.t_start_s === focusedSegment.t_start_s && 
+          seg.label === focusedSegment.label;
+        
+        return {
+          start_sec: Math.max(0, seg.t_start_s - ws),
+          end_sec: Math.min(windowSec, seg.t_end_s - ws),
+          label: seg.label,
+          color: isFocused ? "rgba(59, 130, 246, 0.25)" : color.bg,
+          borderColor: isFocused ? "rgba(59, 130, 246, 0.8)" : color.border,
+          isFocused: !!isFocused,
+        };
+      });
+  }, [segments, showSegmentOverlays, windowStartSec, windowSec, focusedSegment]);
+
+  // Legacy focused segment highlight (window-relative) - used when segment overlays are disabled
   const windowHighlight = useMemo(() => {
-    if (!focusedSegment) return null;
+    if (!focusedSegment || showSegmentOverlays) return null;
     const ws = windowStartSec;
     const we = windowStartSec + windowSec;
     
@@ -569,7 +598,7 @@ export default function EEGViewer() {
       end_sec: Math.min(windowSec, focusedSegment.t_end_s - ws),
       label: focusedSegment.label,
     };
-  }, [focusedSegment, windowStartSec, windowSec]);
+  }, [focusedSegment, showSegmentOverlays, windowStartSec, windowSec]);
 
   // Navigate to a specific segment
   const navigateToSegment = (seg: Segment) => {
@@ -707,11 +736,30 @@ export default function EEGViewer() {
         {lastFetchMode.current && <Badge variant="secondary">{lastFetchMode.current}</Badge>}
         {lastLayoutRef.current && <Badge variant="secondary">{lastLayoutRef.current}</Badge>}
 
+        <div className="h-4 border-l mx-1" />
+
         <Switch checked={showArtifacts} onCheckedChange={setShowArtifacts} />
-        <span>Artifacts</span>
+        <span className="text-sm">Artifacts</span>
 
         <Switch checked={suppressArtifacts} onCheckedChange={setSuppressArtifacts} />
-        <span>Suppress</span>
+        <span className="text-sm">Suppress</span>
+
+        <Switch checked={showSegmentOverlays} onCheckedChange={setShowSegmentOverlays} />
+        <span className="text-sm">Segments</span>
+
+        <div className="flex-1" />
+
+        {!sidebarOpen && segments.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSidebarOpen(true)}
+            className="h-7 gap-1"
+          >
+            <PanelRightOpen className="h-3.5 w-3.5" />
+            <span className="text-xs">{segments.length} segments</span>
+          </Button>
+        )}
       </div>
 
       <EEGControls
@@ -760,23 +808,36 @@ export default function EEGViewer() {
         onExport={() => {}}
       />
 
-      <div className="flex-1">
-        <WebGLEEGViewer
-          signals={renderSignals}
-          channelLabels={channelLabels}
-          sampleRate={meta.sampling_rate_hz}
-          // IMPORTANT: currentTime is LOCAL cursor within window
-          currentTime={cursorSec}
-          timeWindow={windowSec}
-          amplitudeScale={amplitude}
-          visibleChannels={visibleChannels}
-          theme={theme ?? "dark"}
-          markers={windowMarkers}
-          artifactIntervals={windowArtifacts}
-          highlightInterval={windowHighlight}
-          showArtifactsAsRed={true}
-          suppressArtifacts={suppressArtifacts}
-        />
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 min-w-0">
+          <WebGLEEGViewer
+            signals={renderSignals}
+            channelLabels={channelLabels}
+            sampleRate={meta.sampling_rate_hz}
+            // IMPORTANT: currentTime is LOCAL cursor within window
+            currentTime={cursorSec}
+            timeWindow={windowSec}
+            amplitudeScale={amplitude}
+            visibleChannels={visibleChannels}
+            theme={theme ?? "dark"}
+            markers={windowMarkers}
+            artifactIntervals={windowArtifacts}
+            highlightInterval={windowHighlight}
+            segmentOverlays={windowSegmentOverlays}
+            showArtifactsAsRed={true}
+            suppressArtifacts={suppressArtifacts}
+          />
+        </div>
+
+        {segments.length > 0 && (
+          <SegmentSidebar
+            segments={segments}
+            currentSegmentIndex={currentSegmentIndex}
+            isOpen={sidebarOpen}
+            onToggle={() => setSidebarOpen(!sidebarOpen)}
+            onSegmentClick={(seg) => navigateToSegment(seg)}
+          />
+        )}
       </div>
     </div>
   );
