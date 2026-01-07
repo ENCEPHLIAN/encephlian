@@ -1,13 +1,15 @@
 // src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Loader2, X, Focus } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
+import { Button } from "@/components/ui/button";
 
 /* =======================
    MVP LOCK
@@ -53,6 +55,14 @@ type Marker = {
   timestamp_sec: number;
   marker_type: string;
   label?: string;
+};
+
+type FocusedSegment = {
+  label: string;
+  t_start_s: number;
+  t_end_s: number;
+  channel_index?: number;
+  score?: number;
 };
 
 function clamp(n: number, lo: number, hi: number) {
@@ -165,6 +175,32 @@ async function fetchChunkBin(studyId: string, startSample: number, length: numbe
 
 export default function EEGViewer() {
   const { theme } = useTheme();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Parse query params for focused segment
+  const focusedSegment = useMemo<FocusedSegment | null>(() => {
+    const focus = searchParams.get("focus");
+    const t = searchParams.get("t");
+    const tEnd = searchParams.get("t_end");
+    const label = searchParams.get("label");
+    
+    if (focus !== "segment" || !t || !label) return null;
+    
+    const tStart = parseFloat(t);
+    const tEndVal = tEnd ? parseFloat(tEnd) : tStart;
+    const ch = searchParams.get("ch");
+    const score = searchParams.get("score");
+    
+    if (!Number.isFinite(tStart)) return null;
+    
+    return {
+      label,
+      t_start_s: tStart,
+      t_end_s: Number.isFinite(tEndVal) ? tEndVal : tStart,
+      channel_index: ch ? parseInt(ch, 10) : undefined,
+      score: score ? parseFloat(score) : undefined,
+    };
+  }, [searchParams]);
 
   const [meta, setMeta] = useState<Meta | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -189,6 +225,9 @@ export default function EEGViewer() {
 
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingWindow, setLoadingWindow] = useState(true);
+  
+  // Track if we've done initial seek from query param
+  const didInitialSeek = useRef(false);
 
   // Perf + cache
   const cacheRef = useRef<Map<string, number[][]>>(new Map());
@@ -236,6 +275,27 @@ export default function EEGViewer() {
     };
   }, []);
 
+  /* ---------- AUTO-SEEK FROM QUERY PARAM ---------- */
+  useEffect(() => {
+    if (!meta || didInitialSeek.current) return;
+    
+    const tParam = searchParams.get("t");
+    if (!tParam) return;
+    
+    const targetSec = parseFloat(tParam);
+    if (!Number.isFinite(targetSec)) return;
+    
+    const fs = meta.sampling_rate_hz;
+    const durationSec = meta.n_samples / fs;
+    const tt = clamp(targetSec, 0, Math.max(0, durationSec - 1e-6));
+    const stride = windowSec / 2;
+    const ws = Math.floor(tt / stride) * stride;
+    
+    setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
+    setCursorSec(clamp(tt - ws, 0, windowSec));
+    didInitialSeek.current = true;
+  }, [meta, searchParams, windowSec]);
+
   /* ---------- ARTIFACTS + ANNOTATIONS ---------- */
   useEffect(() => {
     if (!API_AVAILABLE) return;
@@ -248,6 +308,7 @@ export default function EEGViewer() {
       .then((result) => setAnnotations(result.ok ? (result.data?.annotations ?? []) : []))
       .catch(() => setAnnotations([]));
   }, []);
+
 
   /* ---------- DERIVED (channel order is canonical, no sorting) ---------- */
   const channelLabels = useMemo(() => {
@@ -476,6 +537,18 @@ export default function EEGViewer() {
   /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
   const renderSignals = signals;
 
+  // Handler to dismiss focused segment banner
+  const dismissFocusedSegment = () => {
+    const params = new URLSearchParams(searchParams);
+    params.delete("focus");
+    params.delete("t");
+    params.delete("t_end");
+    params.delete("label");
+    params.delete("ch");
+    params.delete("score");
+    setSearchParams(params, { replace: true });
+  };
+
   if (fatalError) {
     return (
       <div className="h-full w-full p-4 space-y-2">
@@ -495,6 +568,38 @@ export default function EEGViewer() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Focused Segment Banner */}
+      {focusedSegment && (
+        <div className="px-3 py-2 bg-primary/10 border-b border-primary/20 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 text-sm">
+            <Focus className="h-4 w-4 text-primary" />
+            <span className="font-medium text-primary">Focused Segment</span>
+            <Badge variant="secondary">{focusedSegment.label}</Badge>
+            <span className="text-muted-foreground font-mono text-xs">
+              {focusedSegment.t_start_s.toFixed(2)}s – {focusedSegment.t_end_s.toFixed(2)}s
+            </span>
+            {focusedSegment.channel_index != null && (
+              <span className="text-muted-foreground text-xs">
+                Ch: {focusedSegment.channel_index}
+              </span>
+            )}
+            {focusedSegment.score != null && (
+              <span className="text-muted-foreground text-xs">
+                Score: {focusedSegment.score.toFixed(3)}
+              </span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={dismissFocusedSegment}
+            className="h-6 w-6 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       <div className="p-2 flex flex-wrap gap-3 items-center border-b">
         <Badge>{meta.n_channels} ch</Badge>
         <Badge>{meta.sampling_rate_hz} Hz</Badge>

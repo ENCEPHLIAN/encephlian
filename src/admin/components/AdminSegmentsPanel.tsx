@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,14 +26,13 @@ interface SegmentsResponse {
 interface AdminSegmentsPanelProps {
   studyId?: string;
   root?: string;
-  onSeek?: (timeSec: number) => void;
 }
 
 export default function AdminSegmentsPanel({ 
   studyId = "TUH_CANON_001",
-  root = "/app/data",
-  onSeek 
+  root = "/app/data"
 }: AdminSegmentsPanelProps) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<SegmentsResponse | null>(null);
@@ -53,10 +53,22 @@ export default function AdminSegmentsPanel({
     setLoading(false);
   };
 
-  const handleSeek = (startSec: number) => {
-    if (onSeek) {
-      onSeek(startSec);
+  const handleSeekToViewer = (seg: Segment) => {
+    const effectiveStudyId = data?.study_id ?? studyId;
+    const params = new URLSearchParams({
+      study_id: effectiveStudyId,
+      t: String(seg.t_start_s),
+      t_end: String(seg.t_end_s),
+      focus: "segment",
+      label: seg.label,
+    });
+    if (seg.channel_index != null) {
+      params.set("ch", String(seg.channel_index));
     }
+    if (seg.score != null) {
+      params.set("score", String(seg.score));
+    }
+    navigate(`/app/viewer?${params.toString()}`);
   };
 
   const resolvedBase = resolveReadApiBase();
@@ -129,7 +141,7 @@ export default function AdminSegmentsPanel({
                       <TableHead>label</TableHead>
                       <TableHead className="w-[100px]">channel_index</TableHead>
                       <TableHead className="w-[80px]">score</TableHead>
-                      {onSeek && <TableHead className="w-[80px]">Action</TableHead>}
+                      <TableHead className="w-[80px]">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -150,19 +162,17 @@ export default function AdminSegmentsPanel({
                         <TableCell className="font-mono text-sm">
                           {seg.score != null ? seg.score.toFixed(3) : "—"}
                         </TableCell>
-                        {onSeek && (
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleSeek(seg.t_start_s)}
-                              className="h-7 px-2"
-                            >
-                              <Play className="h-3 w-3 mr-1" />
-                              Seek
-                            </Button>
-                          </TableCell>
-                        )}
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSeekToViewer(seg)}
+                            className="h-7 px-2"
+                          >
+                            <Play className="h-3 w-3 mr-1" />
+                            Seek
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
