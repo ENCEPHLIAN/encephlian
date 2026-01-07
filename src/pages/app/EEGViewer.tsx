@@ -558,7 +558,7 @@ export default function EEGViewer() {
       }));
   }, [annotations, windowStartSec, windowSec]);
 
-  // Segment overlays for the current window (color-coded by label)
+  // Segment overlays for the current window (color-coded by label, channel-specific)
   const windowSegmentOverlays = useMemo(() => {
     if (!showSegmentOverlays || segments.length === 0) return [];
     
@@ -580,6 +580,7 @@ export default function EEGViewer() {
           color: isFocused ? "rgba(59, 130, 246, 0.25)" : color.bg,
           borderColor: isFocused ? "rgba(59, 130, 246, 0.8)" : color.border,
           isFocused: !!isFocused,
+          channel: seg.channel_index ?? undefined,
         };
       });
   }, [segments, showSegmentOverlays, windowStartSec, windowSec, focusedSegment]);

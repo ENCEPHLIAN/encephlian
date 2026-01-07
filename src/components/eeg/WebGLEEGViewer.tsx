@@ -35,6 +35,7 @@ interface SegmentOverlay {
   color: string;     // CSS background color
   borderColor: string; // CSS border color
   isFocused?: boolean;
+  channel?: number;  // specific channel index, or undefined for all
 }
 
 export interface WebGLEEGViewerProps {
@@ -398,7 +399,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       }
     }
 
-    // Segment overlays (colored by label type)
+    // Segment overlays (colored by label type) - thin border box on specific channel
     for (const seg of segmentOverlays) {
       const s0 = clamp(seg.start_sec, 0, timeWindow);
       const s1 = clamp(seg.end_sec, 0, timeWindow);
@@ -407,21 +408,44 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const x1 = (s0 / timeWindow) * w;
       const x2 = (s1 / timeWindow) * w;
       
-      const el = document.createElement("div");
-      el.style.cssText = [
-        "position:absolute",
-        `left:${x1}px`,
-        `top:0`,
-        `width:${Math.max(2, x2 - x1)}px`,
-        `height:100%`,
-        `background:${seg.color}`,
-        `border-left:2px solid ${seg.borderColor}`,
-        `border-right:2px solid ${seg.borderColor}`,
-        "pointer-events:none",
-        "box-sizing:border-box",
-        seg.isFocused ? "z-index:10" : "z-index:1",
-      ].join(";");
-      artifactRef.current?.appendChild(el);
+      // If segment has a specific channel, render only on that channel lane
+      if (seg.channel != null) {
+        const di = channels.indexOf(seg.channel);
+        if (di < 0) continue; // channel not visible
+        
+        const top = PAD + di * laneH;
+        const el = document.createElement("div");
+        el.style.cssText = [
+          "position:absolute",
+          `left:${x1}px`,
+          `top:${top}px`,
+          `width:${Math.max(2, x2 - x1)}px`,
+          `height:${laneH}px`,
+          "background:transparent",
+          `border:2px solid ${seg.borderColor}`,
+          "border-radius:3px",
+          "pointer-events:none",
+          "box-sizing:border-box",
+          seg.isFocused ? "z-index:10;box-shadow:0 0 8px " + seg.borderColor : "z-index:1",
+        ].join(";");
+        artifactRef.current?.appendChild(el);
+      } else {
+        // No specific channel - render thin vertical lines at segment boundaries
+        for (const xPos of [x1, x2]) {
+          const el = document.createElement("div");
+          el.style.cssText = [
+            "position:absolute",
+            `left:${xPos - 1}px`,
+            `top:0`,
+            `width:2px`,
+            `height:100%`,
+            `background:${seg.borderColor}`,
+            "pointer-events:none",
+            seg.isFocused ? "z-index:10" : "z-index:1",
+          ].join(";");
+          artifactRef.current?.appendChild(el);
+        }
+      }
     }
 
     // Legacy focused segment highlight overlay (blue) - for backwards compatibility
