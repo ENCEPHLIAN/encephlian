@@ -16,7 +16,6 @@ import {
   getResolvedKeyPresent,
   getSegments,
 } from "@/admin/readApi";
-import { getReadApiKey } from "@/shared/readApiConfig";
 import {
   READ_API_OVERRIDE_LS_KEY,
   LOCAL_READ_API_DEFAULT,
@@ -25,6 +24,7 @@ import {
   setReadApiOverride,
   clearReadApiOverride,
   getEnvBase as getEnvReadApiBase,
+  getReadApiKey,
 } from "@/shared/readApiConfig";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { Activity } from "lucide-react";
