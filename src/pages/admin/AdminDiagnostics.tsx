@@ -22,9 +22,9 @@ import {
   LOCAL_READ_API_DEFAULT,
   PROD_READ_API_DEFAULT,
   resolveReadApiBase,
-  setReadApiBaseOverride,
-  clearReadApiBaseOverride,
-  getEnvReadApiBase,
+  setReadApiOverride,
+  clearReadApiOverride,
+  getEnvBase as getEnvReadApiBase,
 } from "@/shared/readApiConfig";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { Activity } from "lucide-react";
@@ -66,8 +66,8 @@ const ROOT = ".";
 
 function setOverrideBase(v: string) {
   const trimmed = v.trim().replace(/\/+$/, "");
-  if (!trimmed) clearReadApiBaseOverride();
-  else setReadApiBaseOverride(trimmed);
+  if (!trimmed) clearReadApiOverride();
+  else setReadApiOverride(trimmed);
 }
 
 function getOverrideBase(): string {
