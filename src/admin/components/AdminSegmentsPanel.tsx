@@ -8,8 +8,8 @@ import { getSegments } from "@/admin/readApi";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 
 interface Segment {
-  start_s: number;
-  end_s: number;
+  t_start_s: number;
+  t_end_s: number;
   label: string;
   channel_index?: number | null;
   score?: number | null;
@@ -24,11 +24,13 @@ interface SegmentsResponse {
 
 interface AdminSegmentsPanelProps {
   studyId?: string;
+  root?: string;
   onSeek?: (timeSec: number) => void;
 }
 
 export default function AdminSegmentsPanel({ 
-  studyId = "TUH_CANON_001", 
+  studyId = "TUH_CANON_001",
+  root = "/app/data",
   onSeek 
 }: AdminSegmentsPanelProps) {
   const [loading, setLoading] = useState(false);
@@ -39,7 +41,7 @@ export default function AdminSegmentsPanel({
     setLoading(true);
     setError(null);
     
-    const result = await getSegments(studyId);
+    const result = await getSegments(studyId, root);
     
     if (result.ok) {
       setData(result.data as SegmentsResponse);
@@ -67,7 +69,7 @@ export default function AdminSegmentsPanel({
           <div>
             <CardTitle className="text-lg">Segments</CardTitle>
             <CardDescription className="text-xs font-mono mt-1">
-              Source: {resolvedBase}
+              GET {resolvedBase}/studies/{studyId}/segments?root={root}
             </CardDescription>
           </div>
           <Button 
@@ -87,7 +89,7 @@ export default function AdminSegmentsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {error && (
-          <div className="p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-sm">
+          <div className="p-3 rounded bg-destructive/10 border border-destructive/30 text-destructive text-sm font-mono">
             {error}
           </div>
         )}
@@ -110,7 +112,7 @@ export default function AdminSegmentsPanel({
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">run_id:</span>
-                <Badge variant="outline" className="font-mono text-xs max-w-[200px] truncate">
+                <Badge variant="outline" className="font-mono text-xs max-w-[300px] truncate" title={data.run_id}>
                   {data.run_id ?? "—"}
                 </Badge>
               </div>
@@ -118,12 +120,12 @@ export default function AdminSegmentsPanel({
 
             {/* Segments table */}
             {segments.length > 0 ? (
-              <div className="border rounded-md overflow-hidden">
+              <div className="border rounded-md overflow-hidden max-h-[400px] overflow-y-auto">
                 <Table>
-                  <TableHeader>
+                  <TableHeader className="sticky top-0 bg-background">
                     <TableRow>
-                      <TableHead className="w-[100px]">start_s</TableHead>
-                      <TableHead className="w-[100px]">end_s</TableHead>
+                      <TableHead className="w-[100px]">t_start_s</TableHead>
+                      <TableHead className="w-[100px]">t_end_s</TableHead>
                       <TableHead>label</TableHead>
                       <TableHead className="w-[100px]">channel_index</TableHead>
                       <TableHead className="w-[80px]">score</TableHead>
@@ -134,10 +136,10 @@ export default function AdminSegmentsPanel({
                     {segments.map((seg, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="font-mono text-sm">
-                          {seg.start_s.toFixed(2)}
+                          {seg.t_start_s.toFixed(2)}
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          {seg.end_s.toFixed(2)}
+                          {seg.t_end_s.toFixed(2)}
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{seg.label}</Badge>
@@ -153,7 +155,7 @@ export default function AdminSegmentsPanel({
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleSeek(seg.start_s)}
+                              onClick={() => handleSeek(seg.t_start_s)}
                               className="h-7 px-2"
                             >
                               <Play className="h-3 w-3 mr-1" />
