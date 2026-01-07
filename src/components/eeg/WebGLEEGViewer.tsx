@@ -21,6 +21,12 @@ interface Selection {
   endTime: number;
 }
 
+interface HighlightInterval {
+  start_sec: number; // window-relative seconds
+  end_sec: number;   // window-relative seconds
+  label?: string;
+}
+
 export interface WebGLEEGViewerProps {
   signals: number[][] | null; // IMPORTANT: expected to be WINDOWED already (length ≈ timeWindow*fs)
   channelLabels: string[];
@@ -32,6 +38,7 @@ export interface WebGLEEGViewerProps {
   theme: string;
   markers?: Marker[];
   artifactIntervals?: ArtifactInterval[];
+  highlightInterval?: HighlightInterval | null; // focused segment highlight
   channelColors?: string[];
   showArtifactsAsRed?: boolean;
   suppressArtifacts?: boolean; // display-only (dims segments)
@@ -49,6 +56,8 @@ const THEME_COLORS = {
     cursor: "#e5e5e5",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
     artifactBorderRed: "rgba(239, 68, 68, 0.55)",
+    highlightBg: "rgba(59, 130, 246, 0.15)",
+    highlightBorder: "rgba(59, 130, 246, 0.6)",
   },
   light: {
     background: 0xfafafa,
@@ -59,6 +68,8 @@ const THEME_COLORS = {
     cursor: "#171717",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
     artifactBorderRed: "rgba(239, 68, 68, 0.55)",
+    highlightBg: "rgba(59, 130, 246, 0.15)",
+    highlightBorder: "rgba(59, 130, 246, 0.6)",
   },
 };
 
@@ -167,6 +178,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers = [],
     artifactIntervals = [],
+    highlightInterval = null,
     channelColors = [],
     showArtifactsAsRed = true,
     suppressArtifacts = false,
@@ -374,7 +386,30 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       }
     }
 
-    // grid rebuild (only if missing or timeWindow changed) – simplest: clear + rebuild
+    // focused segment highlight overlay (blue)
+    if (highlightInterval) {
+      const s0 = clamp(highlightInterval.start_sec, 0, timeWindow);
+      const s1 = clamp(highlightInterval.end_sec, 0, timeWindow);
+      if (s1 > 0 && s0 < timeWindow && s1 > s0) {
+        const x1 = (s0 / timeWindow) * w;
+        const x2 = (s1 / timeWindow) * w;
+        
+        const el = document.createElement("div");
+        el.style.cssText = [
+          "position:absolute",
+          `left:${x1}px`,
+          `top:0`,
+          `width:${Math.max(2, x2 - x1)}px`,
+          `height:100%`,
+          `background:${colors.highlightBg}`,
+          `border-left:2px solid ${colors.highlightBorder}`,
+          `border-right:2px solid ${colors.highlightBorder}`,
+          "pointer-events:none",
+          "box-sizing:border-box",
+        ].join(";");
+        artifactRef.current?.appendChild(el);
+      }
+    }
     gridRef.current.forEach((l) => {
       scene.remove(l);
       l.geometry.dispose();
@@ -522,6 +557,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers,
     artifactIntervals,
+    highlightInterval,
     channelColors,
     showArtifactsAsRed,
     suppressArtifacts,

@@ -65,6 +65,14 @@ type FocusedSegment = {
   score?: number;
 };
 
+type Segment = {
+  t_start_s: number;
+  t_end_s: number;
+  label: string;
+  channel_index?: number | null;
+  score?: number | null;
+};
+
 function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
@@ -219,6 +227,7 @@ export default function EEGViewer() {
   // Canonical overlays
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [segments, setSegments] = useState<Segment[]>([]);
 
   // Data buffer for current window (this is what WebGLEEGViewer renders)
   const [signals, setSignals] = useState<number[][] | null>(null);
@@ -228,6 +237,14 @@ export default function EEGViewer() {
   
   // Track if we've done initial seek from query param
   const didInitialSeek = useRef(false);
+  
+  // Current segment index for keyboard navigation
+  const currentSegmentIndex = useMemo(() => {
+    if (!focusedSegment || segments.length === 0) return -1;
+    return segments.findIndex(
+      s => s.t_start_s === focusedSegment.t_start_s && s.label === focusedSegment.label
+    );
+  }, [focusedSegment, segments]);
 
   // Perf + cache
   const cacheRef = useRef<Map<string, number[][]>>(new Map());
@@ -296,7 +313,7 @@ export default function EEGViewer() {
     didInitialSeek.current = true;
   }, [meta, searchParams, windowSec]);
 
-  /* ---------- ARTIFACTS + ANNOTATIONS ---------- */
+  /* ---------- ARTIFACTS + ANNOTATIONS + SEGMENTS ---------- */
   useEffect(() => {
     if (!API_AVAILABLE) return;
 
@@ -307,6 +324,10 @@ export default function EEGViewer() {
     fetchJson<any>(`/studies/${STUDY_ID}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setAnnotations(result.ok ? (result.data?.annotations ?? []) : []))
       .catch(() => setAnnotations([]));
+
+    fetchJson<any>(`/studies/${STUDY_ID}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: true })
+      .then((result) => setSegments(result.ok ? (result.data?.segments ?? []) : []))
+      .catch(() => setSegments([]));
   }, []);
 
 
@@ -534,8 +555,81 @@ export default function EEGViewer() {
       }));
   }, [annotations, windowStartSec, windowSec]);
 
+  // Focused segment highlight (window-relative)
+  const windowHighlight = useMemo(() => {
+    if (!focusedSegment) return null;
+    const ws = windowStartSec;
+    const we = windowStartSec + windowSec;
+    
+    // Check if segment overlaps with current window
+    if (focusedSegment.t_end_s <= ws || focusedSegment.t_start_s >= we) return null;
+    
+    return {
+      start_sec: Math.max(0, focusedSegment.t_start_s - ws),
+      end_sec: Math.min(windowSec, focusedSegment.t_end_s - ws),
+      label: focusedSegment.label,
+    };
+  }, [focusedSegment, windowStartSec, windowSec]);
+
+  // Navigate to a specific segment
+  const navigateToSegment = (seg: Segment) => {
+    if (!meta) return;
+    
+    const fs = meta.sampling_rate_hz;
+    const dur = meta.n_samples / fs;
+    const tt = clamp(seg.t_start_s, 0, Math.max(0, dur - 1e-6));
+    const stride = windowSec / 2;
+    const ws = Math.floor(tt / stride) * stride;
+    
+    setPlaying(false);
+    setWindowStartSec(clamp(ws, 0, Math.max(0, dur - windowSec)));
+    setCursorSec(clamp(tt - ws, 0, windowSec));
+    
+    // Update URL with new segment
+    const params = new URLSearchParams(searchParams);
+    params.set("t", String(seg.t_start_s));
+    params.set("t_end", String(seg.t_end_s));
+    params.set("focus", "segment");
+    params.set("label", seg.label);
+    if (seg.channel_index != null) {
+      params.set("ch", String(seg.channel_index));
+    } else {
+      params.delete("ch");
+    }
+    if (seg.score != null) {
+      params.set("score", String(seg.score));
+    } else {
+      params.delete("score");
+    }
+    setSearchParams(params, { replace: true });
+  };
+
+  // Keyboard navigation for segments
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      if (segments.length === 0) return;
+      
+      if (e.key.toLowerCase() === "n") {
+        // Next segment
+        const nextIdx = currentSegmentIndex < segments.length - 1 ? currentSegmentIndex + 1 : 0;
+        navigateToSegment(segments[nextIdx]);
+      } else if (e.key.toLowerCase() === "p") {
+        // Previous segment
+        const prevIdx = currentSegmentIndex > 0 ? currentSegmentIndex - 1 : segments.length - 1;
+        navigateToSegment(segments[prevIdx]);
+      }
+    };
+    
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [segments, currentSegmentIndex, meta, windowSec, searchParams]);
+
   /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
   const renderSignals = signals;
+
 
   // Handler to dismiss focused segment banner
   const dismissFocusedSegment = () => {
@@ -571,7 +665,7 @@ export default function EEGViewer() {
       {/* Focused Segment Banner */}
       {focusedSegment && (
         <div className="px-3 py-2 bg-primary/10 border-b border-primary/20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3 text-sm flex-wrap">
             <Focus className="h-4 w-4 text-primary" />
             <span className="font-medium text-primary">Focused Segment</span>
             <Badge variant="secondary">{focusedSegment.label}</Badge>
@@ -586,6 +680,11 @@ export default function EEGViewer() {
             {focusedSegment.score != null && (
               <span className="text-muted-foreground text-xs">
                 Score: {focusedSegment.score.toFixed(3)}
+              </span>
+            )}
+            {segments.length > 0 && (
+              <span className="text-muted-foreground text-xs border-l pl-3 ml-2">
+                {currentSegmentIndex + 1}/{segments.length} • <kbd className="px-1 py-0.5 bg-muted rounded text-xs">P</kbd> prev <kbd className="px-1 py-0.5 bg-muted rounded text-xs">N</kbd> next
               </span>
             )}
           </div>
@@ -674,6 +773,7 @@ export default function EEGViewer() {
           theme={theme ?? "dark"}
           markers={windowMarkers}
           artifactIntervals={windowArtifacts}
+          highlightInterval={windowHighlight}
           showArtifactsAsRed={true}
           suppressArtifacts={suppressArtifacts}
         />
