@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, FileText, Eye, Download, Upload } from "lucide-react";
+import { Loader2, Search, FileText, Eye, Download, Upload, Lock, Unlock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -99,19 +99,38 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             </TooltipTrigger>
             <TooltipContent>View Details</TooltipContent>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => onNavigate(`/app/viewer?studyId=${study.id}`)}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Open in Viewer</TooltipContent>
-          </Tooltip>
+          
+          {/* EEG Viewer - gated by token deduction */}
+          {study.tokens_deducted && study.tokens_deducted > 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 text-primary"
+                  onClick={() => onNavigate(`/app/viewer?studyId=${study.id}`)}
+                >
+                  <Unlock className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open EEG Viewer (Unlocked)</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground"
+                  onClick={() => onNavigate(`/app/studies/${study.id}`)}
+                >
+                  <Lock className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Select SLA to unlock viewer</TooltipContent>
+            </Tooltip>
+          )}
+          
           {study.state === 'signed' && (
             <Tooltip>
               <TooltipTrigger asChild>

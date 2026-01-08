@@ -11,6 +11,8 @@ export interface StudyListItem {
   meta: any;
   indication: string | null;
   sample: boolean | null;
+  tokens_deducted: number | null;
+  triage_status: string | null;
   clinics: { name: string } | null;
 }
 
@@ -24,7 +26,7 @@ export function useStudiesData(stateFilter: string) {
       // RLS handles user filtering automatically
       let query = supabase
         .from("studies")
-        .select("id, created_at, state, sla, meta, indication, sample, clinics(name)")
+        .select("id, created_at, state, sla, meta, indication, sample, tokens_deducted, triage_status, clinics(name)")
         .order("created_at", { ascending: false })
         .limit(100);
 
