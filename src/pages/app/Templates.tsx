@@ -1,8 +1,11 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, FileCheck } from "lucide-react";
+import { FileText, Download, FileCheck, FlaskConical } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDemoMode } from "@/contexts/DemoModeContext";
+import { DemoModeToggle } from "@/components/DemoModeToggle";
 
 const templates = [
   {
@@ -41,6 +44,7 @@ const templates = [
 
 export default function Templates() {
   const { toast } = useToast();
+  const { isDemoMode } = useDemoMode();
 
   const handleDownload = async (templateId: string, format: "pdf" | "docx") => {
     try {
@@ -82,12 +86,25 @@ export default function Templates() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Report Templates</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">
-          Download standardized EEG report templates for consistent clinical documentation.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Report Templates</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            Download standardized EEG report templates for consistent clinical documentation.
+          </p>
+        </div>
+        <DemoModeToggle />
       </div>
+
+      {isDemoMode && (
+        <Alert className="bg-amber-500/10 border-amber-500/30">
+          <FlaskConical className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-700 dark:text-amber-400">Demo Mode</AlertTitle>
+          <AlertDescription className="text-amber-600/80 dark:text-amber-400/80">
+            Templates are available in both demo and regular mode. These are standardized report formats.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {templates.map((template) => {

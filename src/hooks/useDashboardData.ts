@@ -191,6 +191,30 @@ export function useDashboardData() {
       .filter(s => dayjs(s.created_at).isAfter(monthStart))
       .reduce((sum, s) => sum + (s.tokens_deducted || 0), 0);
     
+    // Calculate actual average turnaround time from completed studies
+    let avgTurnaround = "--";
+    if (completedStudies.length > 0) {
+      const turnaroundTimes = completedStudies
+        .filter(s => s.triage_completed_at && s.created_at)
+        .map(s => {
+          const start = dayjs(s.created_at);
+          const end = dayjs(s.triage_completed_at);
+          return end.diff(start, 'minute');
+        })
+        .filter(t => t > 0 && t < 10080); // Filter out invalid values (< 1 week)
+      
+      if (turnaroundTimes.length > 0) {
+        const avgMinutes = turnaroundTimes.reduce((a, b) => a + b, 0) / turnaroundTimes.length;
+        if (avgMinutes < 60) {
+          avgTurnaround = `${Math.round(avgMinutes)}m`;
+        } else if (avgMinutes < 1440) {
+          avgTurnaround = `${(avgMinutes / 60).toFixed(1)}h`;
+        } else {
+          avgTurnaround = `${(avgMinutes / 1440).toFixed(1)}d`;
+        }
+      }
+    }
+
     return {
       completedToday,
       completedWeek,
@@ -198,7 +222,7 @@ export function useDashboardData() {
       pendingCount: pendingStudies.length,
       processingCount: processingStudies.length,
       statCases,
-      avgTurnaround: completedStudies.length > 0 ? "4.2h" : "--",
+      avgTurnaround,
       tokensUsedMonth,
       totalStudies: studies.length,
       completedTotal: completedStudies.length,

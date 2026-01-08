@@ -7,8 +7,11 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pin, Download, Trash2, Search, Loader2, StickyNote } from "lucide-react";
+import { Plus, Pin, Download, Trash2, Search, Loader2, StickyNote, FlaskConical } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDemoMode } from "@/contexts/DemoModeContext";
+import { DemoModeToggle } from "@/components/DemoModeToggle";
 import dayjs from "dayjs";
 
 interface Note {
@@ -29,6 +32,7 @@ export default function Notes() {
   const [editContent, setEditContent] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isDemoMode } = useDemoMode();
 
   const { data: notes, isLoading } = useQuery({
     queryKey: ["notes"],
@@ -155,6 +159,37 @@ export default function Notes() {
     );
   }
 
+  // In demo mode, notes are personal - show notice
+  if (isDemoMode) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Notes</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Your private notes and annotations</p>
+          </div>
+          <DemoModeToggle />
+        </div>
+        
+        <Alert className="bg-amber-500/10 border-amber-500/30">
+          <FlaskConical className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-700 dark:text-amber-400">Demo Mode Active</AlertTitle>
+          <AlertDescription className="text-amber-600/80 dark:text-amber-400/80">
+            Notes are personal and private. Switch to your account to view and create your own notes.
+          </AlertDescription>
+        </Alert>
+        
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <StickyNote className="h-12 w-12 text-muted-foreground mb-4" />
+            <p className="text-lg font-medium">Notes are disabled in demo mode</p>
+            <p className="text-sm text-muted-foreground mb-4">Toggle off demo mode to access your personal notes</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -162,10 +197,13 @@ export default function Notes() {
           <h1 className="text-2xl sm:text-3xl font-bold">Notes</h1>
           <p className="text-sm sm:text-base text-muted-foreground">Your private notes and annotations</p>
         </div>
-        <Button onClick={handleCreateNew} size="sm" className="w-full sm:w-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          New Note
-        </Button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <DemoModeToggle />
+          <Button onClick={handleCreateNew} size="sm" className="flex-1 sm:flex-none">
+            <Plus className="h-4 w-4 mr-2" />
+            New Note
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
