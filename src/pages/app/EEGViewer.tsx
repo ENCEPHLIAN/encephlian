@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, X, Focus, PanelRightOpen } from "lucide-react";
+import { Loader2, X, Focus, PanelRightOpen, FlaskConical } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
@@ -11,11 +11,14 @@ import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 /* =======================
-   MVP LOCK
+   MVP LOCK - Demo study ID
+   Real study loading requires canonical_eeg_records to be populated by the pipeline
 ======================= */
-const STUDY_ID = "TUH_CANON_001";
+const DEMO_STUDY_ID = "TUH_CANON_001";
 
 const DIRECT_BASE = resolveReadApiBase();
 const DIRECT_KEY = getReadApiKey();
@@ -275,7 +278,7 @@ export default function EEGViewer() {
     setLoadingMeta(true);
     setFatalError(null);
 
-    fetchJson<any>(`/studies/${STUDY_ID}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => {
         if (!alive) return;
         if (result.ok === false) throw new Error(result.error);
@@ -320,15 +323,15 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!API_AVAILABLE) return;
 
-    fetchJson<any>(`/studies/${STUDY_ID}/artifacts?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/artifacts?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setArtifacts(result.ok ? (result.data?.artifacts ?? []) : []))
       .catch(() => setArtifacts([]));
 
-    fetchJson<any>(`/studies/${STUDY_ID}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setAnnotations(result.ok ? (result.data?.annotations ?? []) : []))
       .catch(() => setAnnotations([]));
 
-    fetchJson<any>(`/studies/${STUDY_ID}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setSegments(result.ok ? (result.data?.segments ?? []) : []))
       .catch(() => setSegments([]));
   }, []);
@@ -397,7 +400,7 @@ export default function EEGViewer() {
     const reqId = ++lastReqId.current;
     const t0 = performance.now();
 
-    fetchChunkBin(STUDY_ID, startSample, length)
+    fetchChunkBin(DEMO_STUDY_ID, startSample, length)
       .then((result) => {
         if (result.ok === false) throw new Error(result.error);
 
@@ -461,7 +464,7 @@ export default function EEGViewer() {
       const nk = keyFor(nextStartSample, length);
 
       if (!cacheRef.current.has(nk)) {
-        fetchChunkBin(STUDY_ID, nextStartSample, length)
+        fetchChunkBin(DEMO_STUDY_ID, nextStartSample, length)
           .then((result) => {
             if (result.ok === false) return null;
 

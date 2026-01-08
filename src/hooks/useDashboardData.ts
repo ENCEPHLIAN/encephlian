@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import dayjs from "dayjs";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 export interface Study {
   id: string;
@@ -18,23 +19,35 @@ export interface Study {
   refund_requested?: boolean;
   tokens_deducted?: number;
   duration_min?: number;
+  sample?: boolean;
 }
 
 export function useDashboardData() {
   const { userId, isAuthenticated } = useUserSession();
+  const { isDemoMode } = useDemoMode();
   const navigate = useNavigate();
   const previousBalanceRef = useRef<number | undefined>(undefined);
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Studies query - RLS handles user filtering
+  // Studies query - filtered by demo mode
   const { data: studies, isLoading: studiesLoading, refetch: refetchStudies } = useQuery({
-    queryKey: ["dashboard-studies", userId],
+    queryKey: ["dashboard-studies", userId, isDemoMode],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("studies")
-        .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min")
+        .select("id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min, sample")
         .order("created_at", { ascending: false })
         .limit(100);
+      
+      // Filter by demo mode
+      if (isDemoMode) {
+        query = query.eq("sample", true);
+      } else {
+        // Show user's own studies (RLS handles this) but exclude sample studies
+        query = query.or(`sample.is.null,sample.eq.false`);
+      }
+      
+      const { data, error } = await query;
       
       if (error) {
         console.error("Studies fetch error:", error);
