@@ -34,6 +34,11 @@ import Wallet from "./pages/app/Wallet";
 import Lanes from "./pages/app/Lanes";
 import Reports from "./pages/app/Reports";
 import ReportDetail from "./pages/app/ReportDetail";
+import Profile from "./pages/app/Profile";
+import Settings from "./pages/app/Settings";
+import TFASetup from "./pages/app/TFASetup";
+import Support from "./pages/app/Support";
+import Templates from "./pages/app/Templates";
 import NotFound from "./pages/NotFound";
 import ComingSoon from "./pages/app/ComingSoon";
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -115,6 +120,11 @@ function App() {
                     <Route path="notes" element={<Notes />} />
                     <Route path="files" element={<Files />} />
                     <Route path="wallet" element={<Wallet />} />
+                    <Route path="profile" element={<Profile />} />
+                    <Route path="settings" element={<Settings />} />
+                    <Route path="settings/tfa" element={<TFASetup />} />
+                    <Route path="support" element={<Support />} />
+                    <Route path="templates" element={<Templates />} />
                     <Route path="coming-soon" element={<ComingSoon />} />
                   </Route>
                 </Route>

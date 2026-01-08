@@ -13,7 +13,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, FileStack } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -29,26 +29,51 @@ import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 import { useUserSession } from "@/contexts/UserSessionContext";
 
 // --------------- NAV DATA ---------------
-// Streamlined navigation focused on core EEG triage workflow
-// Files/Notes/Viewer accessible via context (studies page, dashboard quick actions)
+// Full navigation with logical grouping for EEG triage PaaS
+// Core workflow: Dashboard → Studies → Lanes → Reports
+// Supporting: Files, Notes, Templates, Wallet, Support, Settings
 
-const navigation = [
+const mainNavigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Studies", href: "/app/studies", icon: Activity },
   { name: "Lanes", href: "/app/lanes", icon: Layers },
   { name: "Reports", href: "/app/reports", icon: FileText },
+];
+
+const resourceNavigation = [
+  { name: "Files", href: "/app/files", icon: FolderOpen },
+  { name: "Notes", href: "/app/notes", icon: StickyNote },
+  { name: "Templates", href: "/app/templates", icon: FileStack },
+];
+
+const accountNavigation = [
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
 // --------------- SHARED SIDEBAR NAV ---------------
 
-function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
+function NavSection({ 
+  title, 
+  items, 
+  collapsed, 
+  onNavigate 
+}: { 
+  title?: string; 
+  items: typeof mainNavigation; 
+  collapsed?: boolean; 
+  onNavigate?: () => void;
+}) {
   const location = useLocation();
 
   return (
-    <div className="flex flex-col gap-1.5">
-      {navigation.map((item) => {
+    <div className="space-y-1">
+      {title && !collapsed && (
+        <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+          {title}
+        </div>
+      )}
+      {items.map((item) => {
         const active = location.pathname.startsWith(item.href);
         const Icon = item.icon;
 
@@ -80,6 +105,16 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
         return navLink;
       })}
+    </div>
+  );
+}
+
+function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
+  return (
+    <div className="flex flex-col gap-4">
+      <NavSection items={mainNavigation} collapsed={collapsed} onNavigate={onNavigate} />
+      <NavSection title="Resources" items={resourceNavigation} collapsed={collapsed} onNavigate={onNavigate} />
+      <NavSection title="Account" items={accountNavigation} collapsed={collapsed} onNavigate={onNavigate} />
     </div>
   );
 }
