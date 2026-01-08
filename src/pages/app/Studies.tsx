@@ -12,6 +12,8 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
+import { DemoModeToggle } from "@/components/DemoModeToggle";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 const stateColors: Record<string, string> = {
   awaiting_sla: "bg-amber-500",
@@ -157,6 +159,7 @@ StudyRow.displayName = "StudyRow";
 export default function Studies() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isDemoMode } = useDemoMode();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -289,16 +292,19 @@ export default function Studies() {
             <h1 className="text-2xl sm:text-3xl font-bold">Studies</h1>
             <p className="text-muted-foreground text-sm">Manage EEG studies, upload files, and track progress</p>
           </div>
-          <div className="flex gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button onClick={() => fileInputRef.current?.click()} size="sm">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload EEG
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
-            </Tooltip>
+          <div className="flex items-center gap-3">
+            <DemoModeToggle />
+            {!isDemoMode && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => fileInputRef.current?.click()} size="sm">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Upload EEG
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
+              </Tooltip>
+            )}
             <input
               ref={fileInputRef}
               type="file"

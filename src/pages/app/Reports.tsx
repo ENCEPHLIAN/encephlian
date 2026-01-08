@@ -32,6 +32,8 @@ import {
 import { Loader2, FileText, Download, Eye, Search, Filter, CheckCircle2, Clock, XCircle } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
+import { DemoModeToggle } from "@/components/DemoModeToggle";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 type Report = {
   id: string;
@@ -135,25 +137,37 @@ const ReportRow = memo(function ReportRow({
 
 export default function Reports() {
   const navigate = useNavigate();
+  const { isDemoMode } = useDemoMode();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
 
   const { data: reports, isLoading, refetch } = useQuery({
-    queryKey: ["reports-list"],
+    queryKey: ["reports-list", isDemoMode],
     queryFn: async () => {
+      // Join with studies to filter by sample flag
       const { data, error } = await supabase
         .from("reports")
         .select(`
           id, study_id, status, created_at, signed_at, pdf_path, interpreter,
-          studies(id, sla, meta, clinics(name)),
+          studies!inner(id, sla, meta, sample, clinics(name)),
           profiles:interpreter(full_name)
         `)
         .order("created_at", { ascending: false })
         .limit(500);
       
       if (error) throw error;
-      return (data || []) as Report[];
+      
+      // Filter by demo mode
+      const filtered = (data || []).filter((report: any) => {
+        if (isDemoMode) {
+          return report.studies?.sample === true;
+        } else {
+          return !report.studies?.sample;
+        }
+      });
+      
+      return filtered as Report[];
     },
     staleTime: 30000,
   });
@@ -239,16 +253,21 @@ export default function Reports() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
           <p className="text-sm text-muted-foreground">
             View and manage generated reports
           </p>
         </div>
-        <Button onClick={() => navigate("/app/report-v0")}>
-          Generate Report
-        </Button>
+        <div className="flex items-center gap-3">
+          <DemoModeToggle />
+          {!isDemoMode && (
+            <Button onClick={() => navigate("/app/report-v0")}>
+              Generate Report
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}

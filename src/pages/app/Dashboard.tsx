@@ -10,6 +10,7 @@ import RecentReportsSection from "@/components/dashboard/RecentReportsSection";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import TokenBalanceHeader from "@/components/dashboard/TokenBalanceHeader";
 import { CalendarWidget } from "@/components/CalendarWidget";
+import { DemoModeToggle } from "@/components/DemoModeToggle";
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 // Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);
@@ -85,17 +87,20 @@ export default function Dashboard() {
       )}
 
       {/* Header with Token Balance */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {dayjs().format("dddd, MMMM D, YYYY")}
           </p>
         </div>
-        <TokenBalanceHeader 
-          balance={tokenBalance} 
-          previousBalance={previousBalance}
-        />
+        <div className="flex items-center gap-4">
+          <DemoModeToggle />
+          <TokenBalanceHeader 
+            balance={tokenBalance} 
+            previousBalance={previousBalance}
+          />
+        </div>
       </div>
 
       {/* Pending Triage Section - Shows when there are uploads awaiting SLA */}
