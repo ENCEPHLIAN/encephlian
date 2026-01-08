@@ -30,14 +30,18 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 
 // --------------- NAV DATA ---------------
 // Full navigation with logical grouping for EEG triage PaaS
-// Core workflow: Dashboard → Studies → Lanes → Reports
-// Supporting: Files, Notes, Templates, Wallet, Support, Settings
+// Core workflow: Dashboard → Studies → Lanes → Reports → EEG Viewer
+// The EEG Viewer is the VALUE DELIVERY tool - where users see AI-accelerated triage results
+// Access is metered: users pay tokens to unlock viewer access per study
+
+import { Braces } from "lucide-react";
 
 const mainNavigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { name: "Studies", href: "/app/studies", icon: Activity },
   { name: "Lanes", href: "/app/lanes", icon: Layers },
   { name: "Reports", href: "/app/reports", icon: FileText },
+  { name: "EEG Viewer", href: "/app/viewer", icon: Braces },
 ];
 
 const resourceNavigation = [
