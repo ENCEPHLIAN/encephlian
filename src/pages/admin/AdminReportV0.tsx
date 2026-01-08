@@ -15,8 +15,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Loader2, Download, ExternalLink, FileText, Activity, Clock, AlertTriangle, Layers } from "lucide-react";
+import { Loader2, Download, ExternalLink, FileText, Activity, Clock, AlertTriangle, Layers, FileDown } from "lucide-react";
 import { fetchJson } from "@/shared/readApiClient";
+import { jsPDF } from "jspdf";
+import EvidenceTableFilters, { type EvidenceFilters } from "@/components/report/EvidenceTableFilters";
+import SegmentMiniWaveform from "@/components/report/SegmentMiniWaveform";
 
 type Meta = {
   n_channels: number;
@@ -88,6 +91,17 @@ export default function AdminReportV0() {
 
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filters state
+  const [filters, setFilters] = useState<EvidenceFilters>({
+    label: "",
+    minScore: 0,
+    maxScore: 1,
+    minTime: 0,
+    maxTime: Infinity,
+    search: "",
+  });
 
   // Load notes from localStorage on mount or study change
   useEffect(() => {
@@ -148,6 +162,14 @@ export default function AdminReportV0() {
       .finally(() => setLoadingAnnotations(false));
   }, [studyId]);
 
+  // Reset filters when duration changes
+  useEffect(() => {
+    if (meta) {
+      const dur = meta.duration_sec ?? meta.n_samples / meta.sampling_rate_hz;
+      setFilters((f) => ({ ...f, maxTime: dur }));
+    }
+  }, [meta]);
+
   // Derived data
   const durationSec = useMemo(() => {
     if (!meta) return 0;
@@ -172,6 +194,8 @@ export default function AdminReportV0() {
       .sort((a, b) => b.duration - a.duration);
   }, [segments]);
 
+  const availableLabels = useMemo(() => labelBreakdown.map((l) => l.label), [labelBreakdown]);
+
   const channelBreakdown = useMemo(() => {
     const counts: Record<number, { count: number; duration: number }> = {};
     for (const seg of segments) {
@@ -195,6 +219,25 @@ export default function AdminReportV0() {
   const sortedSegments = useMemo(() => {
     return [...segments].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }, [segments]);
+
+  // Filtered segments
+  const filteredSegments = useMemo(() => {
+    return sortedSegments.filter((seg) => {
+      // Label filter
+      if (filters.label && seg.label !== filters.label) return false;
+      // Score filter
+      const score = seg.score ?? 0;
+      if (score < filters.minScore || score > filters.maxScore) return false;
+      // Time filter
+      if (seg.t_start_s < filters.minTime || seg.t_end_s > filters.maxTime) return false;
+      // Search filter
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        if (!seg.label.toLowerCase().includes(searchLower)) return false;
+      }
+      return true;
+    });
+  }, [sortedSegments, filters]);
 
   function getChannelId(idx: number): string {
     if (idx < 0) return "global";
@@ -226,7 +269,7 @@ export default function AdminReportV0() {
     navigate(`/app/viewer?${params.toString()}`);
   };
 
-  const handleExport = () => {
+  const handleExportJSON = () => {
     const report = {
       schema: "cplane.report.v0",
       generated_at: new Date().toISOString(),
@@ -269,6 +312,168 @@ export default function AdminReportV0() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportPDF = () => {
+    if (!meta) return;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 20;
+    const lineHeight = 7;
+    const margin = 15;
+
+    // Title
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("EEG Analysis Report", pageWidth / 2, y, { align: "center" });
+    y += lineHeight * 2;
+
+    // Study info
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Study ID: ${studyId}`, margin, y);
+    y += lineHeight;
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
+    y += lineHeight;
+    if (runId) {
+      doc.text(`Run ID: ${runId}`, margin, y);
+      y += lineHeight;
+    }
+    y += lineHeight;
+
+    // Meta section
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Recording Details", margin, y);
+    y += lineHeight;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Sample Rate: ${meta.sampling_rate_hz} Hz`, margin, y);
+    y += lineHeight;
+    doc.text(`Channels: ${meta.n_channels}`, margin, y);
+    y += lineHeight;
+    doc.text(`Duration: ${formatDuration(durationSec)}`, margin, y);
+    y += lineHeight * 2;
+
+    // Summary section
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Summary", margin, y);
+    y += lineHeight;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Total Segments: ${segments.length}`, margin, y);
+    y += lineHeight;
+    doc.text(`Total Flagged Time: ${totalFlaggedSeconds.toFixed(1)}s (${((totalFlaggedSeconds / durationSec) * 100).toFixed(1)}%)`, margin, y);
+    y += lineHeight * 2;
+
+    // Label breakdown
+    if (labelBreakdown.length > 0) {
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Findings by Label", margin, y);
+      y += lineHeight;
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      for (const row of labelBreakdown) {
+        if (y > 270) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(`• ${row.label}: ${row.count} segments, ${row.duration.toFixed(2)}s`, margin + 5, y);
+        y += lineHeight;
+      }
+      y += lineHeight;
+    }
+
+    // Top segments table
+    if (sortedSegments.length > 0) {
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Top Findings (by score)", margin, y);
+      y += lineHeight;
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      const colX = [margin, margin + 35, margin + 60, margin + 85, margin + 115, margin + 145];
+      doc.text("Label", colX[0], y);
+      doc.text("Start", colX[1], y);
+      doc.text("End", colX[2], y);
+      doc.text("Duration", colX[3], y);
+      doc.text("Channel", colX[4], y);
+      doc.text("Score", colX[5], y);
+      y += lineHeight;
+
+      doc.setFont("helvetica", "normal");
+      const maxRows = 30;
+      for (let i = 0; i < Math.min(sortedSegments.length, maxRows); i++) {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        const seg = sortedSegments[i];
+        doc.text(seg.label.substring(0, 15), colX[0], y);
+        doc.text(seg.t_start_s.toFixed(2), colX[1], y);
+        doc.text(seg.t_end_s.toFixed(2), colX[2], y);
+        doc.text((seg.t_end_s - seg.t_start_s).toFixed(2), colX[3], y);
+        doc.text(getChannelId(seg.channel_index ?? -1), colX[4], y);
+        doc.text(seg.score != null ? seg.score.toFixed(3) : "—", colX[5], y);
+        y += lineHeight;
+      }
+
+      if (sortedSegments.length > maxRows) {
+        y += lineHeight / 2;
+        doc.setFontSize(8);
+        doc.text(`... and ${sortedSegments.length - maxRows} more segments`, margin, y);
+      }
+      y += lineHeight * 2;
+    }
+
+    // Clinician notes
+    if (notes.trim()) {
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("Clinician Notes", margin, y);
+      y += lineHeight;
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      const splitNotes = doc.splitTextToSize(notes, pageWidth - margin * 2);
+      for (const line of splitNotes) {
+        if (y > 280) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(line, margin, y);
+        y += lineHeight;
+      }
+    }
+
+    // Footer
+    const totalPages = doc.getNumberOfPages();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, 290, { align: "center" });
+      doc.text("Generated by Enceph Report v0", pageWidth - margin, 290, { align: "right" });
+    }
+
+    doc.save(`report-v0-${studyId}-${Date.now()}.pdf`);
+  };
+
   const isLoading = loadingMeta || loadingSegments;
 
   if (error) {
@@ -287,8 +492,8 @@ export default function AdminReportV0() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       {/* Study ID Input */}
-      <div className="flex items-end gap-4">
-        <div className="flex-1 max-w-md">
+      <div className="flex items-end gap-4 flex-wrap">
+        <div className="flex-1 min-w-[200px] max-w-md">
           <Label htmlFor="study_id">Study ID</Label>
           <Input
             id="study_id"
@@ -302,9 +507,13 @@ export default function AdminReportV0() {
           {isLoading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Load
         </Button>
-        <Button variant="outline" onClick={handleExport} disabled={!meta}>
+        <Button variant="outline" onClick={handleExportJSON} disabled={!meta}>
           <Download className="h-4 w-4 mr-2" />
-          Export JSON
+          JSON
+        </Button>
+        <Button variant="outline" onClick={handleExportPDF} disabled={!meta}>
+          <FileDown className="h-4 w-4 mr-2" />
+          PDF
         </Button>
       </div>
 
@@ -458,29 +667,59 @@ export default function AdminReportV0() {
           {/* Evidence Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Evidence (Segments by Score)</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Evidence (Segments by Score)</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                >
+                  {showFilters ? "Hide Filters" : "Show Filters"}
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              {sortedSegments.length === 0 ? (
-                <p className="text-muted-foreground">No segments found.</p>
+            <CardContent className="space-y-4">
+              {showFilters && (
+                <EvidenceTableFilters
+                  filters={filters}
+                  onChange={setFilters}
+                  availableLabels={availableLabels}
+                  maxDuration={durationSec}
+                />
+              )}
+
+              {filteredSegments.length === 0 ? (
+                <p className="text-muted-foreground">
+                  {segments.length === 0 ? "No segments found." : "No segments match the current filters."}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[130px]">Preview</TableHead>
                         <TableHead>Label</TableHead>
                         <TableHead className="text-right">Start (s)</TableHead>
                         <TableHead className="text-right">End (s)</TableHead>
                         <TableHead className="text-right">Duration (s)</TableHead>
-                        <TableHead className="text-right">Ch Index</TableHead>
-                        <TableHead>Ch ID</TableHead>
+                        <TableHead>Channel</TableHead>
                         <TableHead className="text-right">Score</TableHead>
                         <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {sortedSegments.slice(0, 50).map((seg, idx) => (
+                      {filteredSegments.slice(0, 50).map((seg, idx) => (
                         <TableRow key={idx}>
+                          <TableCell>
+                            <SegmentMiniWaveform
+                              studyId={studyId}
+                              tStartS={seg.t_start_s}
+                              tEndS={seg.t_end_s}
+                              channelIndex={seg.channel_index}
+                              samplingRate={meta.sampling_rate_hz}
+                              label={seg.label}
+                            />
+                          </TableCell>
                           <TableCell>
                             <Badge variant="secondary">{seg.label}</Badge>
                           </TableCell>
@@ -489,7 +728,6 @@ export default function AdminReportV0() {
                           <TableCell className="text-right font-mono">
                             {(seg.t_end_s - seg.t_start_s).toFixed(2)}
                           </TableCell>
-                          <TableCell className="text-right">{seg.channel_index ?? "—"}</TableCell>
                           <TableCell className="font-mono">
                             {getChannelId(seg.channel_index ?? -1)}
                           </TableCell>
@@ -511,9 +749,9 @@ export default function AdminReportV0() {
                       ))}
                     </TableBody>
                   </Table>
-                  {sortedSegments.length > 50 && (
+                  {filteredSegments.length > 50 && (
                     <p className="text-sm text-muted-foreground mt-2">
-                      Showing top 50 of {sortedSegments.length} segments
+                      Showing top 50 of {filteredSegments.length} filtered segments
                     </p>
                   )}
                 </div>
