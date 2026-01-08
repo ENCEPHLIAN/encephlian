@@ -90,14 +90,14 @@ export default function ReportReadyCard({ study, onRequestRefund, hideRefundButt
             <Button
               variant="outline"
               size="sm"
-              onClick={() => navigate(`/app/studies/${study.id}`)}
+              onClick={() => navigate(`/app/reports/${study.id}`)}
             >
               <Eye className="h-4 w-4 mr-1.5" />
               View Report
             </Button>
             <Button
               size="sm"
-              onClick={() => navigate(`/app/studies/${study.id}/viewer`)}
+              onClick={() => navigate(`/app/eeg-viewer?studyId=${study.id}`)}
             >
               <Activity className="h-4 w-4 mr-1.5" />
               Open Viewer

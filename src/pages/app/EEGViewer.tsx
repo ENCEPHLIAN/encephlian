@@ -13,6 +13,7 @@ import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useDemoMode } from "@/contexts/DemoModeContext";
+import { DemoBanner } from "@/components/eeg/DemoBanner";
 
 /* =======================
    MVP LOCK - Demo study ID
@@ -187,6 +188,7 @@ async function fetchChunkBin(studyId: string, startSample: number, length: numbe
 
 export default function EEGViewer() {
   const { theme } = useTheme();
+  const { isDemoMode } = useDemoMode();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse query params for focused segment
@@ -673,6 +675,10 @@ export default function EEGViewer() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* Demo Mode Banner */}
+      {isDemoMode && (
+        <DemoBanner studyId={DEMO_STUDY_ID} meta={meta} />
+      )}
       {/* Focused Segment Banner */}
       {focusedSegment && (
         <div className="px-3 py-2 bg-primary/10 border-b border-primary/20 flex items-center justify-between gap-4">

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 export interface StudyFile {
   id: string;
@@ -15,18 +16,29 @@ export interface StudyFile {
 
 export function useStudyFiles(enabled: boolean = true) {
   const { userId, isAuthenticated } = useUserSession();
+  const { isDemoMode } = useDemoMode();
   
   return useQuery({
-    queryKey: ["user-study-files", userId],
+    queryKey: ["user-study-files", userId, isDemoMode],
     queryFn: async () => {
-      // RLS handles user filtering automatically
-      const { data: studies, error } = await supabase
+      // Build query with demo mode filter
+      let query = supabase
         .from('studies')
-        .select('id, state, study_files(*)')
+        .select('id, state, sample, study_files(*)')
         .not('state', 'eq', 'awaiting_sla')
         .not('sla', 'eq', 'pending')
         .order('created_at', { ascending: false })
         .limit(50);
+      
+      // Filter by demo mode
+      if (isDemoMode) {
+        query = query.eq('sample', true);
+      } else {
+        // User mode: exclude sample studies
+        query = query.or('sample.is.null,sample.eq.false');
+      }
+      
+      const { data: studies, error } = await query;
       
       if (error) throw error;
       if (!studies || studies.length === 0) return [];
@@ -57,6 +69,7 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
       if (bucket === 'study-files') return null;
 
       if (bucket === 'notes') {
+        // Notes are personal - don't show in demo mode (handled by Files.tsx)
         // Notes are filtered by RLS automatically
         const { data, error } = await supabase
           .from('notes')
