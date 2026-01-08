@@ -118,6 +118,7 @@ function App() {
                     <Route path="reports" element={<Reports />} />
                     <Route path="reports/:id" element={<ReportDetail />} />
                     <Route path="viewer" element={<EEGViewer />} />
+                    <Route path="eeg-viewer" element={<EEGViewer />} />
                     <Route path="report-v0" element={<AdminReportV0 />} />
                     <Route path="notes" element={<Notes />} />
                     <Route path="files" element={<Files />} />

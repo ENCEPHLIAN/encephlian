@@ -403,13 +403,13 @@ export default function ReportDetail() {
 
       {/* Actions Footer */}
       <div className="flex items-center justify-between pt-4 border-t">
-        <Button variant="outline" onClick={() => navigate(`/app/viewer?study_id=${report.study_id}`)}>
+        <Button variant="outline" onClick={() => navigate(`/app/eeg-viewer?studyId=${report.study_id}`)}>
           <Activity className="h-4 w-4 mr-2" />
           Open in EEG Viewer
         </Button>
-        <Button variant="outline" onClick={() => navigate(`/app/report-v0?study_id=${report.study_id}`)}>
-          <Send className="h-4 w-4 mr-2" />
-          View Report v0
+        <Button variant="outline" onClick={() => navigate(`/app/studies/${report.study_id}`)}>
+          <FileText className="h-4 w-4 mr-2" />
+          View Study Details
         </Button>
       </div>
     </div>
