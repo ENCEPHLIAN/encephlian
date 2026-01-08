@@ -1,6 +1,6 @@
 import { useState, useCallback, memo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, StickyNote, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
@@ -106,11 +106,11 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Quick Actions */}
+      {/* Quick Actions - Core workflow focused */}
       <Card className="openai-card border-2">
         <CardHeader className="pb-4">
           <CardTitle className="text-xl">Quick Actions</CardTitle>
-          <CardDescription className="text-sm">Get started with your most common tasks</CardDescription>
+          <CardDescription className="text-sm">Your most common tasks</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -119,13 +119,13 @@ export default function Dashboard() {
                 <Button
                   size="lg"
                   className="quick-action-btn h-20 flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/studies?filter=uploaded")}
+                  onClick={() => navigate("/app/lanes")}
                 >
                   <Activity className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">Start Review</span>
+                  <span className="text-sm">Triage Queue</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Review pending EEG studies</TooltipContent>
+              <TooltipContent>View STAT/TAT triage lanes</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -134,13 +134,13 @@ export default function Dashboard() {
                   size="lg"
                   variant="outline"
                   className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/files")}
+                  onClick={() => navigate("/app/studies")}
                 >
                   <Upload className="h-5 w-5 shrink-0" />
                   <span className="text-sm">Upload Study</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Upload new EEG files</TooltipContent>
+              <TooltipContent>Upload new EEG study</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -149,13 +149,13 @@ export default function Dashboard() {
                   size="lg"
                   variant="outline"
                   className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/notes")}
+                  onClick={() => navigate("/app/reports")}
                 >
-                  <StickyNote className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">My Notes</span>
+                  <TrendingUp className="h-5 w-5 shrink-0" />
+                  <span className="text-sm">View Reports</span>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>View and edit your notes</TooltipContent>
+              <TooltipContent>See completed reports</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -359,7 +359,7 @@ export default function Dashboard() {
                 <div className="text-center py-8 text-muted-foreground">
                   <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <p>No studies yet</p>
-                  <Button variant="link" size="sm" onClick={() => navigate("/app/files")}>
+                  <Button variant="link" size="sm" onClick={() => navigate("/app/studies")}>
                     Upload your first study
                   </Button>
                 </div>
