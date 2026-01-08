@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Clock, ArrowRight } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 
 dayjs.extend(relativeTime);
 
@@ -24,56 +23,10 @@ interface UrgentQueueProps {
 
 export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProps) {
   const navigate = useNavigate();
-  const [studies, setStudies] = useState<Study[]>(initialStudies);
-
-  // Update local state when prop changes
-  useEffect(() => {
-    setStudies(initialStudies);
-  }, [initialStudies]);
-
-  // Real-time subscription for study updates
-  useEffect(() => {
-    const channel = supabase
-      .channel("urgent-queue-updates")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "studies",
-        },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const newStudy = payload.new as Study;
-            // Only add if pending or processing
-            if (["pending", "processing", "awaiting_sla"].includes(newStudy.state)) {
-              setStudies((prev) => [...prev, newStudy]);
-            }
-          } else if (payload.eventType === "UPDATE") {
-            const updated = payload.new as Study;
-            setStudies((prev) => {
-              // Remove if completed or not relevant
-              if (["completed", "signed", "cancelled"].includes(updated.state)) {
-                return prev.filter((s) => s.id !== updated.id);
-              }
-              // Update existing
-              return prev.map((s) => (s.id === updated.id ? updated : s));
-            });
-          } else if (payload.eventType === "DELETE") {
-            const deleted = payload.old as { id: string };
-            setStudies((prev) => prev.filter((s) => s.id !== deleted.id));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  const { isDemoMode } = useDemoMode();
   
-  // Sort: STAT first, then by age
-  const sortedStudies = [...studies]
+  // Sort: STAT first, then by age - no realtime subscription needed as parent handles updates
+  const sortedStudies = [...initialStudies]
     .sort((a, b) => {
       if (a.sla === 'STAT' && b.sla !== 'STAT') return -1;
       if (a.sla !== 'STAT' && b.sla === 'STAT') return 1;
@@ -91,7 +44,12 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-destructive" />
-            <CardTitle>Urgent Queue</CardTitle>
+            <CardTitle>
+              Urgent Queue
+              {isDemoMode && (
+                <Badge variant="outline" className="ml-2 text-xs font-normal">Demo</Badge>
+              )}
+            </CardTitle>
           </div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies")}>
             View All <ArrowRight className="ml-2 h-4 w-4" />
@@ -102,9 +60,9 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
         <div className="space-y-3">
           {sortedStudies.map((study) => {
             const meta = study.meta || {};
-            const patientId = meta.patient_id || 'Unknown';
-            const age = meta.age || 'N/A';
-            const gender = meta.gender || 'N/A';
+            const patientId = meta.patient_id || meta.patient_name || 'Unknown';
+            const age = meta.patient_age || meta.age || 'N/A';
+            const gender = meta.patient_gender || meta.gender || 'N/A';
             
             return (
               <div
@@ -119,7 +77,7 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
                   <div className="flex-1">
                     <div className="font-medium">{patientId}</div>
                     <div className="text-sm text-muted-foreground">
-                      {age}y {gender} • {study.state.replace('_', ' ')}
+                      {age !== 'N/A' ? `${age}y` : ''} {gender !== 'N/A' ? gender.charAt(0).toUpperCase() : ''} • {study.state.replace('_', ' ')}
                     </div>
                   </div>
                 </div>
