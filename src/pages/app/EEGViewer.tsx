@@ -634,28 +634,6 @@ export default function EEGViewer() {
     setSearchParams(params, { replace: true });
   };
 
-  // Keyboard navigation for segments
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Skip if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      
-      if (segments.length === 0) return;
-      
-      if (e.key.toLowerCase() === "n") {
-        // Next segment
-        const nextIdx = currentSegmentIndex < segments.length - 1 ? currentSegmentIndex + 1 : 0;
-        navigateToSegment(segments[nextIdx]);
-      } else if (e.key.toLowerCase() === "p") {
-        // Previous segment
-        const prevIdx = currentSegmentIndex > 0 ? currentSegmentIndex - 1 : segments.length - 1;
-        navigateToSegment(segments[prevIdx]);
-      }
-    };
-    
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [segments, currentSegmentIndex, meta, windowSec, searchParams]);
 
   /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
   const renderSignals = signals;
@@ -714,7 +692,7 @@ export default function EEGViewer() {
             )}
             {segments.length > 0 && (
               <span className="text-muted-foreground text-xs border-l pl-3 ml-2">
-                {currentSegmentIndex + 1}/{segments.length} • <kbd className="px-1 py-0.5 bg-muted rounded text-xs">P</kbd> prev <kbd className="px-1 py-0.5 bg-muted rounded text-xs">N</kbd> next
+                {currentSegmentIndex + 1}/{segments.length}
               </span>
             )}
           </div>

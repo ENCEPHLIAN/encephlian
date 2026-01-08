@@ -23,6 +23,7 @@ import {
   Plug,
   UserCog,
   RotateCcw,
+  ClipboardList,
 } from "lucide-react";
 
 export default function AdminLayout() {
@@ -44,6 +45,7 @@ export default function AdminLayout() {
       { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
       { name: "Health", href: "/admin/health", icon: Activity },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Activity },
+      { name: "Report v0", href: "/admin/report-v0", icon: ClipboardList },
 
       { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
       { name: "Restore", href: "/admin/restore", icon: RotateCcw },
@@ -76,7 +78,7 @@ export default function AdminLayout() {
       },
       {
         title: "Ops",
-        items: ["/admin/health", "/admin/diagnostics", "/admin/eeg-push", "/admin/read-api", "/admin/scheduler", "/admin/integrations"],
+        items: ["/admin/health", "/admin/diagnostics", "/admin/eeg-push", "/admin/read-api", "/admin/report-v0", "/admin/scheduler", "/admin/integrations"],
       },
       {
         title: "Insights",
