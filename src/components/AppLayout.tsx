@@ -13,7 +13,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, FolderOpen, StickyNote, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -29,15 +29,14 @@ import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 import { useUserSession } from "@/contexts/UserSessionContext";
 
 // --------------- NAV DATA ---------------
+// Streamlined navigation focused on core EEG triage workflow
+// Files/Notes/Viewer accessible via context (studies page, dashboard quick actions)
 
 const navigation = [
   { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Studies", href: "/app/studies", icon: FileText },
+  { name: "Studies", href: "/app/studies", icon: Activity },
   { name: "Lanes", href: "/app/lanes", icon: Layers },
   { name: "Reports", href: "/app/reports", icon: FileText },
-  { name: "EEG Viewer", href: "/app/viewer", icon: Activity },
-  { name: "Files", href: "/app/files", icon: FolderOpen },
-  { name: "Notes", href: "/app/notes", icon: StickyNote },
   { name: "Wallet", href: "/app/wallet", icon: Wallet },
   { name: "Support", href: "/app/support", icon: HelpCircle },
 ];

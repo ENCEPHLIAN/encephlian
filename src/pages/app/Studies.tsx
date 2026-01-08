@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, FileText, Eye, FolderOpen, Download, Upload } from "lucide-react";
+import { Loader2, Search, FileText, Eye, Download, Upload } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -268,17 +268,17 @@ export default function Studies() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Studies</h1>
-            <p className="text-muted-foreground text-sm">View and manage all EEG studies</p>
+            <p className="text-muted-foreground text-sm">Manage EEG studies, upload files, and track progress</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button onClick={() => fileInputRef.current?.click()} size="sm">
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload
+                  Upload EEG
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Upload EDF/BDF file</TooltipContent>
+              <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
             </Tooltip>
             <input
               ref={fileInputRef}
@@ -287,24 +287,6 @@ export default function Studies() {
               className="hidden"
               onChange={(e) => handleFileUpload(e.target.files)}
             />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => navigate('/app/viewer')}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Viewer
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Open EEG Viewer</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="sm" onClick={() => navigate('/app/files')}>
-                  <FolderOpen className="h-4 w-4 mr-2" />
-                  Files
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Browse all files</TooltipContent>
-            </Tooltip>
           </div>
         </div>
 
