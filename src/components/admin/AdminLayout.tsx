@@ -18,10 +18,6 @@ import {
   Coins,
   MessageSquare,
   SendHorizontal,
-  BarChart3,
-  Calendar,
-  Plug,
-  UserCog,
   RotateCcw,
   ClipboardList,
 } from "lucide-react";
@@ -46,14 +42,9 @@ export default function AdminLayout() {
       { name: "Health", href: "/admin/health", icon: Activity },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Activity },
       { name: "Report v0", href: "/admin/report-v0", icon: ClipboardList },
-
       { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
       { name: "Restore", href: "/admin/restore", icon: RotateCcw },
       { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
-      { name: "Analytics", href: "/admin/analytics", icon: BarChart3 },
-      { name: "Scheduler", href: "/admin/scheduler", icon: Calendar },
-      { name: "Integrations", href: "/admin/integrations", icon: Plug },
-      { name: "Team", href: "/admin/team", icon: UserCog },
       { name: "Settings", href: "/admin/settings", icon: Settings },
       { name: "Account", href: "/admin/account", icon: Shield },
     ],
@@ -70,7 +61,7 @@ export default function AdminLayout() {
       },
       {
         title: "Tenant",
-        items: ["/admin/clinics", "/admin/users", "/admin/team", "/admin/account"],
+        items: ["/admin/clinics", "/admin/users", "/admin/account"],
       },
       {
         title: "Finance",
@@ -78,11 +69,11 @@ export default function AdminLayout() {
       },
       {
         title: "Ops",
-        items: ["/admin/health", "/admin/diagnostics", "/admin/eeg-push", "/admin/read-api", "/admin/report-v0", "/admin/scheduler", "/admin/integrations"],
+        items: ["/admin/health", "/admin/diagnostics", "/admin/eeg-push", "/admin/read-api", "/admin/report-v0"],
       },
       {
         title: "Insights",
-        items: ["/admin/audit", "/admin/analytics"],
+        items: ["/admin/audit"],
       },
       {
         title: "System",
