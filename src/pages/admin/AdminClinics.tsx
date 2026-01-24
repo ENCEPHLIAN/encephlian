@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -40,7 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Building2, Pencil, Plus, Trash2, Users, FileText } from "lucide-react";
+import { Loader2, Building2, Pencil, Plus, Trash2, Users, FileText, Coins, User, Mail, Phone } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SKU_LABELS, SKU_TIERS, SkuTier } from "@/shared/skuPolicy";
@@ -56,30 +56,35 @@ type ClinicRow = {
   sku: string;
 };
 
-type UserOption = {
-  id: string;
-  email: string;
-  full_name: string | null;
-};
-
 const SKU_BADGE_STYLES: Record<SkuTier, { variant: "default" | "secondary" | "outline"; className?: string }> = {
   internal: { variant: "outline", className: "border-blue-500/50 text-blue-600 dark:text-blue-400" },
   pilot: { variant: "secondary" },
   prod: { variant: "default" },
 };
 
-
+/**
+ * AdminClinics - Value Unit Management
+ * 
+ * In the value unit model:
+ * - 1 Clinic = 1 Neurologist (the value unit)
+ * - Onboarding creates both clinic + clinician in one flow
+ * - Simple, focused on getting clinics to triage EEGs
+ */
 export default function AdminClinics() {
   const queryClient = useQueryClient();
   const [editingClinic, setEditingClinic] = useState<ClinicRow | null>(null);
   const [formData, setFormData] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showOnboardDialog, setShowOnboardDialog] = useState(false);
   const [deleteClinic, setDeleteClinic] = useState<ClinicRow | null>(null);
 
-  const [createForm, setCreateForm] = useState({
-    name: "",
+  // Unified onboarding form - creates clinic + neurologist together
+  const [onboardForm, setOnboardForm] = useState({
+    clinic_name: "",
     city: "",
-    admin_user_id: "",
+    clinician_name: "",
+    clinician_email: "",
+    clinician_password: "",
+    initial_tokens: 10,
   });
 
   // Fetch clinics
@@ -89,19 +94,6 @@ export default function AdminClinics() {
       const { data, error } = await supabase.rpc("admin_get_all_clinics");
       if (error) throw error;
       return data as ClinicRow[];
-    },
-  });
-
-  // Fetch users for admin selection
-  const { data: users } = useQuery<UserOption[]>({
-    queryKey: ["admin-users-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, full_name")
-        .order("email");
-      if (error) throw error;
-      return data;
     },
   });
 
@@ -122,22 +114,36 @@ export default function AdminClinics() {
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Create clinic mutation
-  const createClinicMutation = useMutation({
-    mutationFn: async (form: typeof createForm) => {
-      const { data, error } = await supabase.rpc("admin_create_clinic", {
-        p_name: form.name,
-        p_city: form.city || null,
-        p_admin_user_id: form.admin_user_id || null,
+  // Onboard value unit - creates clinic + neurologist in one go
+  const onboardMutation = useMutation({
+    mutationFn: async (form: typeof onboardForm) => {
+      const { data, error } = await supabase.functions.invoke("admin_onboard_value_unit", {
+        body: {
+          clinic_name: form.clinic_name,
+          city: form.city,
+          clinician_name: form.clinician_name,
+          clinician_email: form.clinician_email,
+          clinician_password: form.clinician_password,
+          initial_tokens: form.initial_tokens,
+        },
       });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
-      toast.success("Clinic created");
-      setShowCreateDialog(false);
-      setCreateForm({ name: "", city: "", admin_user_id: "" });
+      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
+      toast.success("Value unit onboarded successfully!");
+      setShowOnboardDialog(false);
+      setOnboardForm({
+        clinic_name: "",
+        city: "",
+        clinician_name: "",
+        clinician_email: "",
+        clinician_password: "",
+        initial_tokens: 10,
+      });
     },
     onError: (error: any) => toast.error(error.message),
   });
@@ -202,59 +208,59 @@ export default function AdminClinics() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Clinics</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Value Units</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Manage value units and their SKU tiers
+            Each clinic = 1 neurologist. Onboard them together as a value unit.
           </p>
         </div>
-        <Button size="sm" onClick={() => setShowCreateDialog(true)}>
+        <Button onClick={() => setShowOnboardDialog(true)}>
           <Plus className="h-4 w-4 mr-1.5" />
-          New Clinic
+          Onboard Clinic
         </Button>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="dashboard-card--neutral">
+        <Card className="bg-card border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
+              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                 <Building2 className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-2xl font-semibold">{totalClinics}</p>
-                <p className="text-xs text-muted-foreground">Total Clinics</p>
+                <p className="text-xs text-muted-foreground">Value Units</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="dashboard-card--info">
+        <Card className="bg-card border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
+              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                 <Users className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-2xl font-semibold">{totalUsers}</p>
-                <p className="text-xs text-muted-foreground">Total Users</p>
+                <p className="text-xs text-muted-foreground">Clinicians</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="dashboard-card--success">
+        <Card className="bg-card border">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
+              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-2xl font-semibold">{totalStudies}</p>
-                <p className="text-xs text-muted-foreground">Total Studies</p>
+                <p className="text-xs text-muted-foreground">Studies</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="dashboard-card--warning">
+        <Card className="bg-card border">
           <CardContent className="p-4">
             <div className="flex flex-wrap gap-2">
               {SKU_TIERS.map((tier) => (
@@ -279,10 +285,10 @@ export default function AdminClinics() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[200px]">Name</TableHead>
+                <TableHead className="w-[200px]">Clinic</TableHead>
                 <TableHead>City</TableHead>
                 <TableHead>SKU</TableHead>
-                <TableHead className="text-center">Users</TableHead>
+                <TableHead className="text-center">Clinicians</TableHead>
                 <TableHead className="text-center">Studies</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Active</TableHead>
@@ -347,7 +353,7 @@ export default function AdminClinics() {
               {(!clinics || clinics.length === 0) && (
                 <TableRow>
                   <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    No clinics found. Create your first clinic to get started.
+                    No value units yet. Onboard your first clinic to get started.
                   </TableCell>
                 </TableRow>
               )}
@@ -402,9 +408,9 @@ export default function AdminClinics() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {formData.sku === "internal" && "Full access for internal testing and development."}
-                {formData.sku === "pilot" && "Limited features, proxy-only API access. Best for paid pilots."}
-                {formData.sku === "prod" && "Full production access with all features enabled."}
+                {formData.sku === "internal" && "Full access for internal testing."}
+                {formData.sku === "pilot" && "Pilot tier with proxy-only API access."}
+                {formData.sku === "prod" && "Full production access."}
               </p>
             </div>
           </div>
@@ -420,74 +426,138 @@ export default function AdminClinics() {
         </DialogContent>
       </Dialog>
 
-      {/* Create Clinic Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent>
+      {/* Onboard Value Unit Dialog */}
+      <Dialog open={showOnboardDialog} onOpenChange={setShowOnboardDialog}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create Clinic</DialogTitle>
-            <DialogDescription>Add a new value unit to the platform. Default SKU is Pilot.</DialogDescription>
+            <DialogTitle>Onboard Value Unit</DialogTitle>
+            <DialogDescription>
+              Create a clinic and its primary neurologist in one step. 
+              They'll be ready to upload EEGs and run triage immediately.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="create-name">Clinic Name</Label>
-              <Input
-                id="create-name"
-                value={createForm.name}
-                onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="Magna Neurology"
-              />
+          <div className="space-y-6 py-4">
+            {/* Clinic Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Building2 className="h-4 w-4" />
+                Clinic Details
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="clinic-name">Clinic Name *</Label>
+                  <Input
+                    id="clinic-name"
+                    value={onboardForm.clinic_name}
+                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinic_name: e.target.value }))}
+                    placeholder="Magna Neurology"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clinic-city">City</Label>
+                  <Input
+                    id="clinic-city"
+                    value={onboardForm.city}
+                    onChange={(e) => setOnboardForm((f) => ({ ...f, city: e.target.value }))}
+                    placeholder="Mumbai"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-city">City</Label>
-              <Input
-                id="create-city"
-                value={createForm.city}
-                onChange={(e) => setCreateForm((f) => ({ ...f, city: e.target.value }))}
-                placeholder="Mumbai"
-              />
+
+            {/* Clinician Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <User className="h-4 w-4" />
+                Primary Neurologist
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="clinician-name">Full Name *</Label>
+                  <Input
+                    id="clinician-name"
+                    value={onboardForm.clinician_name}
+                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_name: e.target.value }))}
+                    placeholder="Dr. Priya Sharma"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="clinician-email">Email *</Label>
+                    <Input
+                      id="clinician-email"
+                      type="email"
+                      value={onboardForm.clinician_email}
+                      onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_email: e.target.value }))}
+                      placeholder="dr.sharma@clinic.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="clinician-password">Temp Password *</Label>
+                    <Input
+                      id="clinician-password"
+                      type="password"
+                      value={onboardForm.clinician_password}
+                      onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_password: e.target.value }))}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Assign Clinician (optional)</Label>
-              <Select
-                value={createForm.admin_user_id}
-                onValueChange={(v) => setCreateForm((f) => ({ ...f, admin_user_id: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select clinician..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {users?.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.full_name || user.email}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {/* Tokens Section */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Coins className="h-4 w-4" />
+                Initial Setup
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="initial-tokens">Starting Tokens</Label>
+                <Input
+                  id="initial-tokens"
+                  type="number"
+                  value={onboardForm.initial_tokens}
+                  onChange={(e) => setOnboardForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
+                  min={0}
+                  className="w-32"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Tokens for initial EEG triage runs
+                </p>
+              </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setShowOnboardDialog(false)}>
               Cancel
             </Button>
             <Button
-              onClick={() => createClinicMutation.mutate(createForm)}
-              disabled={createClinicMutation.isPending || !createForm.name}
+              onClick={() => onboardMutation.mutate(onboardForm)}
+              disabled={
+                onboardMutation.isPending ||
+                !onboardForm.clinic_name ||
+                !onboardForm.clinician_name ||
+                !onboardForm.clinician_email ||
+                !onboardForm.clinician_password
+              }
             >
-              {createClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create
+              {onboardMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Onboard Clinic
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       <AlertDialog open={!!deleteClinic} onOpenChange={(open) => !open && setDeleteClinic(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Clinic?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete "{deleteClinic?.name}", all studies ({deleteClinic?.study_count}), 
-              and all associated memberships. This action cannot be undone.
+              This will permanently delete {deleteClinic?.name} and all associated data. 
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -497,7 +567,7 @@ export default function AdminClinics() {
               onClick={() => deleteClinic && deleteClinicMutation.mutate(deleteClinic.id)}
             >
               {deleteClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete Clinic
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -50,20 +50,18 @@ import {
   Loader2,
   Search,
   User,
-  UserPlus,
   MoreHorizontal,
-  Shield,
-  Building2,
   Ban,
   CheckCircle,
   KeyRound,
   Users,
-  FileText,
+  Building2,
   Trash2,
   ShieldOff,
   Coins,
 } from "lucide-react";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
 
 type UserRow = {
   id: string;
@@ -82,71 +80,22 @@ type ClinicOption = {
   name: string;
 };
 
-// Roles that require clinic assignment
-const CLINIC_ROLES = ["clinician"] as const;
-// Roles that should NOT have clinic assignment  
-const SYSTEM_ROLES = ["management", "super_admin"] as const;
-
-
+/**
+ * AdminUsers - Simplified User Management
+ * 
+ * In the value unit model:
+ * - Clinicians are created via the "Onboard Clinic" flow (AdminClinics)
+ * - This page is for viewing/managing existing users
+ * - Management users are rare (internal only)
+ */
 export default function AdminUsers() {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
   const [clinicFilter, setClinicFilter] = useState<string>("all");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showRoleDialog, setShowRoleDialog] = useState(false);
-  const [showClinicDialog, setShowClinicDialog] = useState(false);
   const [showTokenDialog, setShowTokenDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
   const [tokenAmount, setTokenAmount] = useState("");
-  const [isSuperAdminUser, setIsSuperAdminUser] = useState(false);
-
-  // Check if current user is super_admin
-  useEffect(() => {
-    const checkSuperAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data: roles } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-        setIsSuperAdminUser(roles?.some(r => r.role === "super_admin") || false);
-      }
-    };
-    checkSuperAdmin();
-  }, []);
-
-  // Dynamic role list based on current user's permissions
-  // Only super_admin can create/assign management roles
-  const availableRoles = useMemo(() => {
-    if (isSuperAdminUser) {
-      return ["clinician", "management"] as const;
-    }
-    return ["clinician"] as const;
-  }, [isSuperAdminUser]);
-
-  // For role filters
-  const filterRoles = availableRoles;
-
-  const [createForm, setCreateForm] = useState({
-    email: "",
-    full_name: "",
-    password: "",
-    role: "clinician" as string,
-    clinic_id: "",
-  });
-
-  const [roleForm, setRoleForm] = useState({
-    role: "clinician" as string,
-    clinic_id: "",
-  });
-
-  const [clinicForm, setClinicForm] = useState({
-    clinic_id: "",
-    action: "assign" as "assign" | "unassign",
-    role: "clinician",
-  });
 
   // Fetch users
   const { data: users, isLoading } = useQuery<UserRow[]>({
@@ -158,7 +107,7 @@ export default function AdminUsers() {
     },
   });
 
-  // Fetch clinics for dropdowns using admin RPC to bypass RLS
+  // Fetch clinics for filter
   const { data: clinics } = useQuery<ClinicOption[]>({
     queryKey: ["admin-clinics-list"],
     queryFn: async () => {
@@ -170,53 +119,13 @@ export default function AdminUsers() {
 
   // Calculate stats
   const stats = useMemo(() => {
-    if (!users) return { total: 0, clinicsCount: 0, activeStudies: 0 };
-    const uniqueClinics = new Set<string>();
-    users.forEach((u) => u.clinics?.forEach((c) => uniqueClinics.add(c.clinic_id)));
+    if (!users) return { total: 0, clinicians: 0, management: 0 };
     return {
       total: users.length,
-      clinicsCount: uniqueClinics.size,
-      activeStudies: 0, // Placeholder
+      clinicians: users.filter(u => u.app_roles?.some(r => r.role === 'clinician')).length,
+      management: users.filter(u => u.app_roles?.some(r => r.role === 'management' || r.role === 'super_admin')).length,
     };
   }, [users]);
-
-  // Check if selected role requires clinic
-  const roleRequiresClinic = (role: string) => {
-    return CLINIC_ROLES.includes(role as any);
-  };
-
-  // Create user mutation
-  const createUserMutation = useMutation({
-    mutationFn: async (form: typeof createForm) => {
-      // Validate clinic requirement
-      if (roleRequiresClinic(form.role) && !form.clinic_id) {
-        throw new Error("Clinic assignment is required for clinician role");
-      }
-      if (!roleRequiresClinic(form.role) && form.clinic_id) {
-        throw new Error("Management roles should not be assigned to a clinic");
-      }
-
-      const { data, error } = await supabase.functions.invoke("admin_create_user", {
-        body: {
-          email: form.email,
-          password: form.password,
-          full_name: form.full_name,
-          role: form.role,
-          clinic_id: roleRequiresClinic(form.role) ? form.clinic_id : null,
-        },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("User created successfully");
-      setShowCreateDialog(false);
-      setCreateForm({ email: "", full_name: "", password: "", role: "clinician", clinic_id: "" });
-    },
-    onError: (error: any) => toast.error(error.message),
-  });
 
   // Send password reset mutation
   const sendResetMutation = useMutation({
@@ -227,42 +136,6 @@ export default function AdminUsers() {
       if (error) throw error;
     },
     onSuccess: () => toast.success("Password reset link sent"),
-    onError: (error: any) => toast.error(error.message),
-  });
-
-  // Grant role mutation
-  const grantRoleMutation = useMutation({
-    mutationFn: async ({ userId, role, clinicId }: { userId: string; role: string; clinicId?: string }) => {
-      const { data, error } = await supabase.rpc("admin_grant_role", {
-        p_user_id: userId,
-        p_role: role as "clinician" | "management" | "super_admin",
-        p_clinic_id: clinicId || null,
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Role assigned");
-      setShowRoleDialog(false);
-    },
-    onError: (error: any) => toast.error(error.message),
-  });
-
-  // Revoke role mutation
-  const revokeRoleMutation = useMutation({
-    mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const { data, error } = await supabase.rpc("admin_revoke_role", {
-        p_user_id: userId,
-        p_role: role as "clinician" | "management" | "super_admin",
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Role revoked");
-    },
     onError: (error: any) => toast.error(error.message),
   });
 
@@ -283,26 +156,6 @@ export default function AdminUsers() {
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Manage clinic membership mutation
-  const clinicMembershipMutation = useMutation({
-    mutationFn: async (params: { userId: string; clinicId: string; action: string; role: string }) => {
-      const { data, error } = await supabase.rpc("admin_manage_clinic_membership", {
-        p_user_id: params.userId,
-        p_clinic_id: params.clinicId,
-        p_action: params.action,
-        p_role: params.role,
-      });
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Clinic membership updated");
-      setShowClinicDialog(false);
-    },
-    onError: (error: any) => toast.error(error.message),
-  });
-
   // Delete user mutation
   const deleteUserMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -314,7 +167,7 @@ export default function AdminUsers() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success(`User ${data?.deleted_email || ""} deleted`);
+      toast.success(`User deleted`);
       setDeleteUser(null);
     },
     onError: (error: any) => toast.error(error.message),
@@ -329,9 +182,7 @@ export default function AdminUsers() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      toast.success("TFA reset successfully");
-    },
+    onSuccess: () => toast.success("TFA reset successfully"),
     onError: (error: any) => toast.error(error.message),
   });
 
@@ -348,33 +199,22 @@ export default function AdminUsers() {
     },
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success(`Tokens updated: ${data?.old_balance} → ${data?.new_balance}`);
+      toast.success(`Tokens: ${data?.old_balance} → ${data?.new_balance}`);
       setShowTokenDialog(false);
       setTokenAmount("");
     },
     onError: (error: any) => toast.error(error.message),
   });
 
-  // Helper to check if user is super_admin
-  const isSuperAdmin = (user: UserRow) => {
-    return user.app_roles?.some((r) => r.role === "super_admin");
-  };
-
-  // Helper to check if user is management or super_admin (system role)
-  const isSystemRole = (user: UserRow) => {
-    return user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
-  };
-
-  // Helper to check if user is clinician only
-  const isClinician = (user: UserRow) => {
-    return !isSystemRole(user);
-  };
+  // Helper functions
+  const isSuperAdmin = (user: UserRow) => user.app_roles?.some((r) => r.role === "super_admin");
+  const isSystemRole = (user: UserRow) => user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
+  const isClinician = (user: UserRow) => !isSystemRole(user);
 
   // Filter users
   const filteredUsers = useMemo(() => {
     if (!users) return [];
     return users.filter((user) => {
-      // Search filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchesSearch =
@@ -382,46 +222,21 @@ export default function AdminUsers() {
           user.full_name?.toLowerCase().includes(query);
         if (!matchesSearch) return false;
       }
-
-      // Role filter
-      if (roleFilter !== "all") {
-        const hasRole = user.app_roles?.some((r) => r.role === roleFilter);
-        if (!hasRole) return false;
-      }
-
-      // Clinic filter
       if (clinicFilter !== "all") {
         const inClinic = user.clinics?.some((c) => c.clinic_id === clinicFilter);
         if (!inClinic) return false;
       }
-
       return true;
     });
-  }, [users, searchQuery, roleFilter, clinicFilter]);
+  }, [users, searchQuery, clinicFilter]);
 
   const getRoleBadgeVariant = (role: string) => {
     switch (role) {
-      case "super_admin":
-        return "destructive";
-      case "management":
-        return "default";
-      case "clinician":
-        return "secondary";
-      default:
-        return "outline";
+      case "super_admin": return "destructive";
+      case "management": return "default";
+      case "clinician": return "secondary";
+      default: return "outline";
     }
-  };
-
-  const handleOpenRoleDialog = (user: UserRow) => {
-    setSelectedUser(user);
-    setRoleForm({ role: "clinician", clinic_id: "" });
-    setShowRoleDialog(true);
-  };
-
-  const handleOpenClinicDialog = (user: UserRow) => {
-    setSelectedUser(user);
-    setClinicForm({ clinic_id: "", action: "assign", role: "clinician" });
-    setShowClinicDialog(true);
   };
 
   const handleOpenTokenDialog = (user: UserRow) => {
@@ -433,81 +248,69 @@ export default function AdminUsers() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-mono font-bold tracking-tight">Users</h1>
-          <p className="text-sm text-muted-foreground font-mono">
-            Manage platform users, roles, and clinic assignments
-          </p>
-        </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Create User
-        </Button>
+    <div className="space-y-6 max-w-6xl">
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">Users</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Manage clinicians and their tokens. To add new clinicians, use "Onboard Clinic".
+        </p>
       </div>
 
-      {/* Quick Stats */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-muted/30">
+        <Card className="bg-card border">
           <CardContent className="p-4 flex items-center gap-3">
-            <Users className="h-8 w-8 text-primary" />
+            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </div>
             <div>
-              <p className="text-2xl font-mono font-bold">{stats.total}</p>
+              <p className="text-2xl font-semibold">{stats.total}</p>
               <p className="text-xs text-muted-foreground">Total Users</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-muted/30">
+        <Card className="bg-card border">
           <CardContent className="p-4 flex items-center gap-3">
-            <Building2 className="h-8 w-8 text-primary" />
+            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
+              <User className="h-4 w-4 text-muted-foreground" />
+            </div>
             <div>
-              <p className="text-2xl font-mono font-bold">{clinics?.length || 0}</p>
-              <p className="text-xs text-muted-foreground">Active Clinics</p>
+              <p className="text-2xl font-semibold">{stats.clinicians}</p>
+              <p className="text-xs text-muted-foreground">Clinicians</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-muted/30">
+        <Card className="bg-card border">
           <CardContent className="p-4 flex items-center gap-3">
-            <FileText className="h-8 w-8 text-primary" />
+            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+            </div>
             <div>
-              <p className="text-2xl font-mono font-bold">—</p>
-              <p className="text-xs text-muted-foreground">Active Studies</p>
+              <p className="text-2xl font-semibold">{clinics?.length || 0}</p>
+              <p className="text-xs text-muted-foreground">Clinics</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
+      <div className="flex gap-4">
+        <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by email or name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 font-mono"
+            className="pl-9"
           />
         </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Filter by role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            {filterRoles.map((role) => (
-              <SelectItem key={role} value={role}>
-                {role}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Select value={clinicFilter} onValueChange={setClinicFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by clinic" />
@@ -523,65 +326,57 @@ export default function AdminUsers() {
         </Select>
       </div>
 
+      {/* Users Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="font-mono">User</TableHead>
-                <TableHead className="font-mono">Clinics</TableHead>
-                <TableHead className="font-mono">App Roles</TableHead>
-                <TableHead className="font-mono">Tokens</TableHead>
-                <TableHead className="font-mono">Status</TableHead>
-                <TableHead className="font-mono">Created</TableHead>
-                <TableHead className="font-mono w-10"></TableHead>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>User</TableHead>
+                <TableHead>Clinic</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead className="text-center">Tokens</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
-                <TableRow key={user.id} className={user.is_disabled ? "opacity-50" : ""}>
+                <TableRow key={user.id} className={cn(user.is_disabled && "opacity-50")}>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
                         <User className="h-4 w-4 text-muted-foreground" />
                       </div>
                       <div>
-                        <p className="font-mono text-sm">{user.full_name || "—"}</p>
+                        <p className="font-medium text-sm">{user.full_name || "—"}</p>
                         <p className="text-xs text-muted-foreground">{user.email}</p>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {user.clinics?.length > 0 ? (
-                        user.clinics.map((c, i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {c.clinic_name}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </div>
+                    {user.clinics?.length > 0 ? (
+                      <Badge variant="outline" className="text-xs">
+                        {user.clinics[0].clinic_name}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {user.app_roles?.length > 0 ? (
-                        user.app_roles.map((r, i) => (
-                          <Badge
-                            key={i}
-                            variant={getRoleBadgeVariant(r.role) as any}
-                            className="font-mono text-xs"
-                          >
-                            {r.role}
-                          </Badge>
-                        ))
-                      ) : (
-                        <span className="text-muted-foreground text-xs">—</span>
-                      )}
-                    </div>
+                    {user.app_roles?.length > 0 ? (
+                      <Badge
+                        variant={getRoleBadgeVariant(user.app_roles[0].role) as any}
+                        className="text-xs"
+                      >
+                        {user.app_roles[0].role}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     <span className="font-mono text-sm">{user.tokens}</span>
                   </TableCell>
                   <TableCell>
@@ -591,7 +386,7 @@ export default function AdminUsers() {
                         Suspended
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-xs text-green-600">
+                      <Badge variant="outline" className="text-xs text-green-600 border-green-200">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Active
                       </Badge>
@@ -608,20 +403,6 @@ export default function AdminUsers() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {/* Only clinicians get Manage Roles - system roles managed by super_admin only */}
-                        {isClinician(user) && (
-                          <DropdownMenuItem onClick={() => handleOpenRoleDialog(user)}>
-                            <Shield className="h-4 w-4 mr-2" />
-                            Manage Roles
-                          </DropdownMenuItem>
-                        )}
-                        {/* Only clinicians get clinic management */}
-                        {isClinician(user) && (
-                          <DropdownMenuItem onClick={() => handleOpenClinicDialog(user)}>
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Manage Clinics
-                          </DropdownMenuItem>
-                        )}
                         <DropdownMenuItem
                           onClick={() => sendResetMutation.mutate(user.email)}
                           disabled={sendResetMutation.isPending}
@@ -636,7 +417,6 @@ export default function AdminUsers() {
                           <ShieldOff className="h-4 w-4 mr-2" />
                           Reset TFA
                         </DropdownMenuItem>
-                        {/* Only clinicians have wallets/tokens */}
                         {isClinician(user) && (
                           <DropdownMenuItem onClick={() => handleOpenTokenDialog(user)}>
                             <Coins className="h-4 w-4 mr-2" />
@@ -649,7 +429,7 @@ export default function AdminUsers() {
                             onClick={() => suspendMutation.mutate({ userId: user.id, suspend: false })}
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
-                            Reactivate User
+                            Reactivate
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem
@@ -657,7 +437,7 @@ export default function AdminUsers() {
                             className="text-destructive"
                           >
                             <Ban className="h-4 w-4 mr-2" />
-                            Suspend User
+                            Suspend
                           </DropdownMenuItem>
                         )}
                         {!isSuperAdmin(user) && (
@@ -679,7 +459,7 @@ export default function AdminUsers() {
               ))}
               {filteredUsers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -689,335 +469,65 @@ export default function AdminUsers() {
         </CardContent>
       </Card>
 
-      {/* Create User Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-md">
+      {/* Adjust Tokens Dialog */}
+      <Dialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-mono">Create New User</DialogTitle>
-            <DialogDescription>Add a new user to the platform</DialogDescription>
+            <DialogTitle>Adjust Tokens</DialogTitle>
+            <DialogDescription>
+              Set token balance for {selectedUser?.full_name || selectedUser?.email}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 pt-4">
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label>Current Balance</Label>
+              <p className="text-2xl font-mono font-bold">{selectedUser?.tokens || 0}</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-tokens">New Balance</Label>
               <Input
-                type="email"
-                value={createForm.email}
-                onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                id="new-tokens"
+                type="number"
+                value={tokenAmount}
+                onChange={(e) => setTokenAmount(e.target.value)}
+                min={0}
                 className="font-mono"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Full Name</Label>
-              <Input
-                value={createForm.full_name}
-                onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Temporary Password</Label>
-              <Input
-                type="password"
-                value={createForm.password}
-                onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                className="font-mono"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select
-                value={createForm.role}
-                onValueChange={(v) => setCreateForm((f) => ({ ...f, role: v, clinic_id: "" }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableRoles.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Only show clinic selection for clinic-bound roles */}
-            {roleRequiresClinic(createForm.role) && (
-              <div className="space-y-2">
-                <Label>
-                  Clinic <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={createForm.clinic_id}
-                  onValueChange={(v) => setCreateForm((f) => ({ ...f, clinic_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select clinic..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clinics?.map((clinic) => (
-                      <SelectItem key={clinic.id} value={clinic.id}>
-                        {clinic.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Required for {createForm.role} role
-                </p>
-              </div>
-            )}
-
-            {!roleRequiresClinic(createForm.role) && (
-              <p className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                Management roles are not assigned to clinics
-              </p>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => createUserMutation.mutate(createForm)}
-                disabled={
-                  createUserMutation.isPending ||
-                  !createForm.email ||
-                  !createForm.password ||
-                  (roleRequiresClinic(createForm.role) && !createForm.clinic_id)
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowTokenDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedUser) {
+                  const newAmount = parseInt(tokenAmount) || 0;
+                  const diff = newAmount - (selectedUser.tokens || 0);
+                  adjustTokensMutation.mutate({
+                    userId: selectedUser.id,
+                    amount: Math.abs(diff),
+                    operation: diff >= 0 ? "credit" : "debit",
+                  });
                 }
-              >
-                {createUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Create User
-              </Button>
-            </div>
+              }}
+              disabled={adjustTokensMutation.isPending}
+            >
+              {adjustTokensMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Update Tokens
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Manage Roles Dialog */}
-      <Dialog open={showRoleDialog} onOpenChange={setShowRoleDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-mono">Manage Roles</DialogTitle>
-            <DialogDescription>
-              {selectedUser?.email} - Current roles:{" "}
-              {selectedUser?.app_roles?.map((r) => r.role).join(", ") || "None"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            {/* Current roles with revoke option */}
-            {selectedUser?.app_roles && selectedUser.app_roles.length > 0 && (
-              <div className="space-y-2">
-                <Label>Current Roles</Label>
-                <div className="flex flex-wrap gap-2">
-                  {selectedUser.app_roles.map((r, i) => (
-                    <Badge
-                      key={i}
-                      variant={getRoleBadgeVariant(r.role) as any}
-                      className="pr-1"
-                    >
-                      {r.role}
-                      {r.role !== "super_admin" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 ml-1 hover:bg-destructive/20"
-                          onClick={() =>
-                            revokeRoleMutation.mutate({ userId: selectedUser.id, role: r.role })
-                          }
-                        >
-                          ×
-                        </Button>
-                      )}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Add Role</Label>
-              <Select
-                value={roleForm.role}
-                onValueChange={(v) => setRoleForm((f) => ({ ...f, role: v, clinic_id: "" }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableRoles.map((role) => (
-                    <SelectItem key={role} value={role}>
-                      {role}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {roleRequiresClinic(roleForm.role) && (
-              <div className="space-y-2">
-                <Label>
-                  Associated Clinic <span className="text-destructive">*</span>
-                </Label>
-                <Select
-                  value={roleForm.clinic_id}
-                  onValueChange={(v) => setRoleForm((f) => ({ ...f, clinic_id: v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select clinic..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clinics?.map((clinic) => (
-                      <SelectItem key={clinic.id} value={clinic.id}>
-                        {clinic.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowRoleDialog(false)}>
-                Done
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!selectedUser) return;
-                  if (roleRequiresClinic(roleForm.role) && !roleForm.clinic_id) {
-                    toast.error("Clinic is required for this role");
-                    return;
-                  }
-                  grantRoleMutation.mutate({
-                    userId: selectedUser.id,
-                    role: roleForm.role,
-                    clinicId: roleRequiresClinic(roleForm.role) ? roleForm.clinic_id : undefined,
-                  });
-                }}
-                disabled={grantRoleMutation.isPending}
-              >
-                {grantRoleMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Add Role
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Clinics Dialog */}
-      <Dialog open={showClinicDialog} onOpenChange={setShowClinicDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-mono">Manage Clinic Memberships</DialogTitle>
-            <DialogDescription>
-              {selectedUser?.email} - Current clinics:{" "}
-              {selectedUser?.clinics?.map((c) => c.clinic_name).join(", ") || "None"}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            {/* Current clinic memberships */}
-            {selectedUser?.clinics && selectedUser.clinics.length > 0 && (
-              <div className="space-y-2">
-                <Label>Current Clinics</Label>
-                <div className="flex flex-wrap gap-2">
-                  {selectedUser.clinics.map((c, i) => (
-                    <Badge key={i} variant="outline" className="pr-1">
-                      {c.clinic_name} ({c.role})
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-4 w-4 ml-1 hover:bg-destructive/20"
-                        onClick={() =>
-                          clinicMembershipMutation.mutate({
-                            userId: selectedUser.id,
-                            clinicId: c.clinic_id,
-                            action: "unassign",
-                            role: c.role,
-                          })
-                        }
-                      >
-                        ×
-                      </Button>
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label>Add to Clinic</Label>
-              <Select
-                value={clinicForm.clinic_id}
-                onValueChange={(v) => setClinicForm((f) => ({ ...f, clinic_id: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select clinic..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {clinics?.map((clinic) => (
-                    <SelectItem key={clinic.id} value={clinic.id}>
-                      {clinic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Role in Clinic</Label>
-              <Select
-                value={clinicForm.role}
-                onValueChange={(v) => setClinicForm((f) => ({ ...f, role: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="clinician">Clinician</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={() => setShowClinicDialog(false)}>
-                Done
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!selectedUser || !clinicForm.clinic_id) return;
-                  clinicMembershipMutation.mutate({
-                    userId: selectedUser.id,
-                    clinicId: clinicForm.clinic_id,
-                    action: "assign",
-                    role: clinicForm.role,
-                  });
-                }}
-                disabled={clinicMembershipMutation.isPending || !clinicForm.clinic_id}
-              >
-                {clinicMembershipMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Add to Clinic
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete User Confirmation Dialog */}
+      {/* Delete User Confirmation */}
       <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User Permanently?</AlertDialogTitle>
+            <AlertDialogTitle>Delete User?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>{deleteUser?.email}</strong> and all associated data including:
-              <ul className="list-disc list-inside mt-2 text-sm">
-                <li>Wallet and earnings</li>
-                <li>Notes and support tickets</li>
-                <li>Clinic memberships and roles</li>
-                <li>EEG markers</li>
-              </ul>
-              <span className="block mt-2 font-semibold text-destructive">This action cannot be undone.</span>
+              This will permanently delete {deleteUser?.email} and all their data.
+              This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1025,62 +535,13 @@ export default function AdminUsers() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.id)}
-              disabled={deleteUserMutation.isPending}
             >
               {deleteUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete User
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Adjust Tokens Dialog */}
-      <Dialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="font-mono">Adjust Tokens</DialogTitle>
-            <DialogDescription>
-              {selectedUser?.email} — Current: {selectedUser?.tokens} tokens
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>New Token Balance</Label>
-              <Input
-                type="number"
-                min="0"
-                value={tokenAmount}
-                onChange={(e) => setTokenAmount(e.target.value)}
-                className="font-mono"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowTokenDialog(false)}>
-                Cancel
-              </Button>
-              <Button
-                onClick={() => {
-                  if (!selectedUser) return;
-                  const newAmount = parseInt(tokenAmount) || 0;
-                  adjustTokensMutation.mutate({
-                    userId: selectedUser.id,
-                    amount: newAmount,
-                    operation: "set",
-                  });
-                }}
-                disabled={adjustTokensMutation.isPending}
-              >
-                {adjustTokensMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Set Tokens
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded">
-        <strong>Note:</strong> super_admin role can only be assigned via direct SQL for security. Management users cannot create other management users.
-      </div>
     </div>
   );
 }
