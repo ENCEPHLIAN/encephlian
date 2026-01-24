@@ -59,7 +59,6 @@ type ClinicRow = {
 const SKU_BADGE_STYLES: Record<SkuTier, { variant: "default" | "secondary" | "outline"; className?: string }> = {
   internal: { variant: "outline", className: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" },
   pilot: { variant: "secondary", className: "border-amber-500/50 text-amber-600 dark:text-amber-400" },
-  demo: { variant: "default", className: "border-blue-500/50 text-blue-600 dark:text-blue-400" },
 };
 
 /**
@@ -413,7 +412,6 @@ export default function AdminClinics() {
               <p className="text-xs text-muted-foreground">
                 {formData.sku === "internal" && "Internal: Full platform with all features (dev/ops)."}
                 {formData.sku === "pilot" && "Pilot: Production value unit (Upload → Triage → Report)."}
-                {formData.sku === "demo" && "Demo: Showcase mode with guided tutorials."}
               </p>
             </div>
           </div>

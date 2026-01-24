@@ -77,8 +77,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validate SKU
-    const validSkus = ['internal', 'pilot', 'demo'];
+    // Validate SKU (only pilot and internal, no demo)
+    const validSkus = ['internal', 'pilot'];
     if (!validSkus.includes(sku)) {
       return new Response(JSON.stringify({ 
         error: `Invalid SKU: ${sku}. Must be one of: ${validSkus.join(', ')}` 
