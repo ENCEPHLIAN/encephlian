@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { DemoModeToggle } from "@/components/DemoModeToggle";
 import { useDemoMode } from "@/contexts/DemoModeContext";
+import { useSku } from "@/hooks/useSku";
+import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 
 const stateColors: Record<string, string> = {
   awaiting_sla: "bg-amber-500",
@@ -157,6 +159,17 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
 StudyRow.displayName = "StudyRow";
 
 export default function Studies() {
+  const { isPilot } = useSku();
+
+  // Pilot SKU gets value-focused view
+  if (isPilot) {
+    return <PilotStudiesView />;
+  }
+
+  return <InternalStudiesView />;
+}
+
+function InternalStudiesView() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
