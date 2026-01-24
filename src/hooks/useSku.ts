@@ -1,6 +1,14 @@
 import { useMemo } from 'react';
 import { useUserSession } from '@/contexts/UserSessionContext';
-import { getSkuPolicy, hasCapability, SkuCapabilities, SkuCapability, SkuTier } from '@/shared/skuPolicy';
+import { 
+  getSkuPolicy, 
+  hasCapability, 
+  getVisibleNavItems,
+  SkuCapabilities, 
+  SkuCapability, 
+  SkuTier,
+  NavItemId 
+} from '@/shared/skuPolicy';
 
 interface UseSkuResult {
   /** Current SKU tier for the user's clinic */
@@ -9,12 +17,16 @@ interface UseSkuResult {
   capabilities: SkuCapabilities;
   /** Check if a specific capability is enabled */
   can: (capability: SkuCapability) => boolean;
-  /** Whether user is on internal SKU (dev/ops) */
+  /** Whether user is on internal SKU (enterprise) */
   isInternal: boolean;
-  /** Whether user is on pilot SKU */
+  /** Whether user is on pilot SKU (value unit) */
   isPilot: boolean;
-  /** Whether user is on production SKU */
-  isProd: boolean;
+  /** Whether user is on demo SKU (showcase) */
+  isDemo: boolean;
+  /** Navigation items visible for this SKU */
+  visibleNav: NavItemId[];
+  /** Check if a nav item is visible */
+  isNavVisible: (id: NavItemId) => boolean;
 }
 
 /**
@@ -33,6 +45,7 @@ export function useSku(): UseSkuResult {
     const rawSku = isAdmin ? 'internal' : (clinicContext?.sku as SkuTier | undefined);
     const sku: SkuTier = rawSku || 'pilot';
     const capabilities = getSkuPolicy(sku);
+    const visibleNav = getVisibleNavItems(sku);
     
     return {
       sku,
@@ -40,7 +53,9 @@ export function useSku(): UseSkuResult {
       can: (capability: SkuCapability) => hasCapability(sku, capability),
       isInternal: sku === 'internal',
       isPilot: sku === 'pilot',
-      isProd: sku === 'prod',
+      isDemo: sku === 'demo',
+      visibleNav,
+      isNavVisible: (id: NavItemId) => visibleNav.includes(id),
     };
   }, [clinicContext, isAdmin]);
 }

@@ -3,9 +3,14 @@
  * 
  * Defines clinic-level feature gating. Backend remains identical;
  * this controls what clinicians see/do at the E-plane (frontend).
+ * 
+ * Three tiers:
+ * - internal: Full enterprise version (dev/ops, growing clinics)
+ * - pilot: Minimal value unit (accelerated triage only, pay-per-use)
+ * - demo: Showcase mode with guided tutorials
  */
 
-export type SkuTier = 'internal' | 'pilot' | 'prod';
+export type SkuTier = 'internal' | 'pilot' | 'demo';
 
 export interface SkuCapabilities {
   // Admin/diagnostic features
@@ -23,16 +28,53 @@ export interface SkuCapabilities {
   
   // Billing
   enablePayments: boolean;
+  
+  // UI Experience
+  showGuidedTour: boolean;
+  showFullNavigation: boolean;
 }
 
 export type SkuCapability = keyof SkuCapabilities;
 
 /**
+ * Navigation items visible per SKU tier
+ * 
+ * - pilot: Absolute minimum for instant value (Dashboard, Studies, Wallet)
+ * - demo: Same as internal but with guided overlays
+ * - internal: Full enterprise navigation
+ */
+export type NavItemId = 
+  | 'dashboard' 
+  | 'studies' 
+  | 'lanes' 
+  | 'reports' 
+  | 'viewer' 
+  | 'files' 
+  | 'notes' 
+  | 'templates' 
+  | 'wallet' 
+  | 'support';
+
+const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'wallet'];
+const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'templates', 'wallet', 'support'];
+
+export function getVisibleNavItems(sku: SkuTier): NavItemId[] {
+  switch (sku) {
+    case 'pilot':
+      return PILOT_NAV;
+    case 'demo':
+    case 'internal':
+    default:
+      return FULL_NAV;
+  }
+}
+
+/**
  * SKU Policy Definitions
  * 
- * - internal: Full access, direct API, no payments (dev/ops)
- * - pilot: Limited features, proxy-only, payments enabled (paid pilots)
- * - prod: Full features, proxy recommended, payments enabled (production)
+ * - internal: Full access, direct API, no payments (dev/ops, enterprise)
+ * - pilot: Minimal features, proxy-only, payments enabled (paid pilots, value unit)
+ * - demo: Full features visible, guided tour, no real payments (showcase)
  */
 const SKU_POLICIES: Record<SkuTier, SkuCapabilities> = {
   internal: {
@@ -43,19 +85,23 @@ const SKU_POLICIES: Record<SkuTier, SkuCapabilities> = {
     canViewRawWaveforms: true,
     canSeeArtifactsOverlay: true,
     mustUseReadApiProxy: false,
-    enablePayments: false,
+    enablePayments: true,
+    showGuidedTour: false,
+    showFullNavigation: true,
   },
   pilot: {
     canSeeDiagnostics: false,
     canRunInference: true,
     canGenerateReport: true,
-    canExportReport: false,
+    canExportReport: true,
     canViewRawWaveforms: true,
     canSeeArtifactsOverlay: false,
     mustUseReadApiProxy: true,
     enablePayments: true,
+    showGuidedTour: false,
+    showFullNavigation: false,
   },
-  prod: {
+  demo: {
     canSeeDiagnostics: false,
     canRunInference: true,
     canGenerateReport: true,
@@ -63,7 +109,9 @@ const SKU_POLICIES: Record<SkuTier, SkuCapabilities> = {
     canViewRawWaveforms: true,
     canSeeArtifactsOverlay: true,
     mustUseReadApiProxy: true,
-    enablePayments: true,
+    enablePayments: false,
+    showGuidedTour: true,
+    showFullNavigation: true,
   },
 };
 
@@ -87,12 +135,21 @@ export function hasCapability(sku: SkuTier | string | null | undefined, capabili
  * SKU display labels for admin UI
  */
 export const SKU_LABELS: Record<SkuTier, string> = {
-  internal: 'Internal (Dev)',
+  internal: 'Enterprise',
   pilot: 'Pilot',
-  prod: 'Production',
+  demo: 'Demo',
+};
+
+/**
+ * SKU descriptions for admin UI
+ */
+export const SKU_DESCRIPTIONS: Record<SkuTier, string> = {
+  internal: 'Full platform access with all features enabled',
+  pilot: 'Focused value unit: Upload → Triage → Report (₹3000/10 tokens)',
+  demo: 'Showcase mode with guided tutorials and sample data',
 };
 
 /**
  * All available SKU tiers for dropdowns
  */
-export const SKU_TIERS: SkuTier[] = ['internal', 'pilot', 'prod'];
+export const SKU_TIERS: SkuTier[] = ['internal', 'pilot', 'demo'];
