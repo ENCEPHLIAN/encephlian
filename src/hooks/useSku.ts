@@ -17,9 +17,9 @@ interface UseSkuResult {
   capabilities: SkuCapabilities;
   /** Check if a specific capability is enabled */
   can: (capability: SkuCapability) => boolean;
-  /** Whether user is on internal SKU (enterprise) */
+  /** Whether user is on internal SKU (dev/ops) */
   isInternal: boolean;
-  /** Whether user is on pilot SKU (value unit) */
+  /** Whether user is on pilot SKU (production value unit) */
   isPilot: boolean;
   /** Whether user is on demo SKU (showcase) */
   isDemo: boolean;

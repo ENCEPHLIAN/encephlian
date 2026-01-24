@@ -60,6 +60,7 @@ Deno.serve(async (req) => {
     const { 
       clinic_name, 
       city, 
+      sku = 'pilot', // Accept explicit SKU, default to pilot only if not provided
       clinician_name, 
       clinician_email, 
       clinician_password,
@@ -76,7 +77,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    console.log('Onboarding value unit:', { clinic_name, clinician_email });
+    // Validate SKU
+    const validSkus = ['internal', 'pilot', 'demo'];
+    if (!validSkus.includes(sku)) {
+      return new Response(JSON.stringify({ 
+        error: `Invalid SKU: ${sku}. Must be one of: ${validSkus.join(', ')}` 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    console.log('Onboarding value unit:', { clinic_name, clinician_email, sku });
 
     // STEP 1: Check if email already exists
     const { data: existingProfile } = await supabaseAdmin
@@ -100,7 +112,7 @@ Deno.serve(async (req) => {
       .insert({
         name: clinic_name,
         city: city || null,
-        sku: 'pilot', // Default to pilot SKU for new clinics
+        sku: sku, // Use explicitly selected SKU
         is_active: true,
       })
       .select()
