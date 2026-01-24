@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Search, FileText, Eye, Download, Upload, Lock, Unlock } from "lucide-react";
+import { Search, FileText, Eye, Download, Upload, Lock, Unlock } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,7 @@ import { DemoModeToggle } from "@/components/DemoModeToggle";
 import { useDemoMode } from "@/contexts/DemoModeContext";
 import { useSku } from "@/hooks/useSku";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
+import logoSrc from "@/assets/logo.png";
 
 const stateColors: Record<string, string> = {
   awaiting_sla: "bg-amber-500",
@@ -292,7 +293,7 @@ function InternalStudiesView() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <img src={logoSrc} alt="Loading" className="h-10 w-10 animate-pulse" />
       </div>
     );
   }

@@ -1,19 +1,19 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Loader2, Upload, FileText, Coins, ArrowRight, 
-  CheckCircle2, Clock, Zap, Brain 
+  CheckCircle2, Clock, Zap 
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import { toast } from "sonner";
+import logoSrc from "@/assets/logo.png";
 
 /**
  * PilotDashboard: Value-focused, minimal cognitive load
@@ -58,7 +58,7 @@ export default function PilotDashboard() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-3">
-          <Brain className="h-12 w-12 text-primary mx-auto animate-pulse" />
+          <img src={logoSrc} alt="Loading" className="h-12 w-12 mx-auto animate-pulse" />
           <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function PilotDashboard() {
         <Card className="border-dashed border-2">
           <CardContent className="p-8 text-center">
             <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-              <Brain className="h-8 w-8 text-primary" />
+              <img src={logoSrc} alt="Encephlian" className="h-8 w-8" />
             </div>
             <h3 className="font-semibold text-lg mb-1">Start Your First Triage</h3>
             <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
