@@ -21,8 +21,12 @@ import {
   User,
   Building2,
   AlertCircle,
+  Play,
+  Download,
+  Database,
 } from "lucide-react";
 import { format } from "date-fns";
+import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 
 export default function AdminStudyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -138,14 +142,162 @@ export default function AdminStudyDetail() {
     toast.success("Canonicalization event logged (Azure endpoint TODO)");
   };
 
-  const handleRerunInference = async () => {
-    // Stub - placeholder for Azure inference
-    toast.info("Inference triggered (stub)");
-    await logEventMutation.mutateAsync({
-      event: "admin_rerun_inference",
-      payload: { status: "stub_triggered" },
-    });
-    toast.success("Inference event logged (Azure endpoint TODO)");
+  // Trigger inference via Read API
+  const handleRunInference = async () => {
+    const studyKey = study?.study_key || id;
+    if (!studyKey) {
+      toast.error("No study_key defined - cannot call Read API");
+      return;
+    }
+
+    const base = resolveReadApiBase();
+    const key = getReadApiKey();
+
+    toast.info(`Triggering inference on ${base}...`);
+
+    try {
+      const res = await fetch(`${base}/studies/${encodeURIComponent(studyKey)}/inference/run`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(key ? { "X-API-KEY": key } : {}),
+        },
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`HTTP ${res.status}: ${body}`);
+      }
+
+      const data = await res.json();
+      const runId = data.run_id || data.runId || null;
+
+      // Store run_id in Supabase
+      if (runId) {
+        await supabase
+          .from("studies")
+          .update({ latest_run_id: runId } as any)
+          .eq("id", id);
+      }
+
+      await logEventMutation.mutateAsync({
+        event: "admin_inference_triggered",
+        payload: { run_id: runId },
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["admin-study", id] });
+      toast.success(`Inference complete. Run ID: ${runId || "unknown"}`);
+    } catch (error: any) {
+      toast.error(`Inference failed: ${error.message}`);
+    }
+  };
+
+  // Generate report from Read API data
+  const handleGenerateReport = async () => {
+    const studyKey = study?.study_key || id;
+    if (!studyKey) {
+      toast.error("No study_key defined");
+      return;
+    }
+
+    const base = resolveReadApiBase();
+    const key = getReadApiKey();
+    const headers: Record<string, string> = key ? { "X-API-KEY": key } : {};
+
+    toast.info("Fetching data for report...");
+
+    try {
+      const [metaRes, artifactsRes, annotationsRes, segmentsRes] = await Promise.all([
+        fetch(`${base}/studies/${encodeURIComponent(studyKey)}/meta?root=.`, { headers }),
+        fetch(`${base}/studies/${encodeURIComponent(studyKey)}/artifacts?root=.`, { headers }).catch(() => null),
+        fetch(`${base}/studies/${encodeURIComponent(studyKey)}/annotations?root=.`, { headers }).catch(() => null),
+        fetch(`${base}/studies/${encodeURIComponent(studyKey)}/segments?root=.`, { headers }).catch(() => null),
+      ]);
+
+      const meta = metaRes.ok ? await metaRes.json() : null;
+      const artifacts = artifactsRes?.ok ? await artifactsRes.json() : null;
+      const annotations = annotationsRes?.ok ? await annotationsRes.json() : null;
+      const segments = segmentsRes?.ok ? await segmentsRes.json() : null;
+
+      // Build report content
+      const reportContent = {
+        study_id: id,
+        study_key: studyKey,
+        generated_at: new Date().toISOString(),
+        run_id: study?.latest_run_id || segments?.run_id || null,
+        meta,
+        artifacts,
+        annotations,
+        segments,
+      };
+
+      // Generate simple HTML
+      const reportHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <title>EEG Triage Report - ${studyKey}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+    h2 { color: #333; margin-top: 2rem; }
+    pre { background: #f5f5f5; padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+    .badge { display: inline-block; padding: 0.25rem 0.5rem; background: #e5e5e5; border-radius: 4px; font-size: 12px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+    .meta-item { background: #f9f9f9; padding: 0.5rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>EEG Triage Report</h1>
+  <div class="meta">
+    <div class="meta-item"><strong>Study Key:</strong> ${studyKey}</div>
+    <div class="meta-item"><strong>Study ID:</strong> ${id}</div>
+    <div class="meta-item"><strong>Run ID:</strong> ${reportContent.run_id || "N/A"}</div>
+    <div class="meta-item"><strong>Generated:</strong> ${new Date().toLocaleString()}</div>
+  </div>
+  
+  <h2>Metadata</h2>
+  <pre>${JSON.stringify(meta, null, 2)}</pre>
+  
+  <h2>Artifacts</h2>
+  <pre>${JSON.stringify(artifacts, null, 2)}</pre>
+  
+  <h2>Annotations</h2>
+  <pre>${JSON.stringify(annotations, null, 2)}</pre>
+  
+  <h2>Segments</h2>
+  <pre>${JSON.stringify(segments, null, 2)}</pre>
+</body>
+</html>`;
+
+      // Store in study_reports table
+      const { data: userData } = await supabase.auth.getUser();
+      await supabase.from("study_reports").insert({
+        study_id: id,
+        run_id: reportContent.run_id,
+        content: reportContent,
+        report_html: reportHtml,
+        created_by: userData?.user?.id,
+      } as any);
+
+      await logEventMutation.mutateAsync({
+        event: "admin_report_generated",
+        payload: { run_id: reportContent.run_id },
+      });
+
+      // Trigger download
+      const blob = new Blob([reportHtml], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `triage-report-${studyKey}-${Date.now()}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      queryClient.invalidateQueries({ queryKey: ["admin-study", id] });
+      toast.success("Report generated and downloaded!");
+    } catch (error: any) {
+      toast.error(`Report generation failed: ${error.message}`);
+    }
   };
 
   const handleToggleLock = async () => {
@@ -380,15 +532,21 @@ export default function AdminStudyDetail() {
                 </Button>
 
                 <Button
+                  variant="default"
+                  className="w-full justify-start font-mono"
+                  onClick={handleRunInference}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Run Inference
+                </Button>
+
+                <Button
                   variant="outline"
                   className="w-full justify-start font-mono"
-                  onClick={handleRerunInference}
+                  onClick={handleGenerateReport}
                 >
-                  <Brain className="h-4 w-4 mr-2" />
-                  Re-run Inference
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    STUB
-                  </Badge>
+                  <Download className="h-4 w-4 mr-2" />
+                  Generate Report
                 </Button>
               </div>
             </CardContent>
