@@ -27,6 +27,11 @@ import { MissionPanel } from "@/components/MissionPanel";
 import { FloatingCommandIsland } from "@/components/FloatingCommandIsland";
 import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { useSku } from "@/hooks/useSku";
+import { SkuBadge } from "@/components/sku/SkuBadge";
+import { DemoTourOverlay, DemoTourTrigger } from "@/components/sku/DemoTourOverlay";
+import { DemoTourProvider } from "@/contexts/DemoTourContext";
+import { NavItemId } from "@/shared/skuPolicy";
 
 // --------------- NAV DATA ---------------
 // Full navigation with logical grouping for EEG triage PaaS
@@ -36,23 +41,24 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 
 import { Braces } from "lucide-react";
 
-const mainNavigation = [
-  { name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
-  { name: "Studies", href: "/app/studies", icon: Activity },
-  { name: "Lanes", href: "/app/lanes", icon: Layers },
-  { name: "Reports", href: "/app/reports", icon: FileText },
-  { name: "EEG Viewer", href: "/app/viewer", icon: Braces },
+// Navigation items with IDs for SKU filtering
+const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
+  { id: "dashboard", name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
+  { id: "studies", name: "Studies", href: "/app/studies", icon: Activity },
+  { id: "lanes", name: "Lanes", href: "/app/lanes", icon: Layers },
+  { id: "reports", name: "Reports", href: "/app/reports", icon: FileText },
+  { id: "viewer", name: "EEG Viewer", href: "/app/viewer", icon: Braces },
 ];
 
-const resourceNavigation = [
-  { name: "Files", href: "/app/files", icon: FolderOpen },
-  { name: "Notes", href: "/app/notes", icon: StickyNote },
-  { name: "Templates", href: "/app/templates", icon: FileStack },
+const resourceNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
+  { id: "files", name: "Files", href: "/app/files", icon: FolderOpen },
+  { id: "notes", name: "Notes", href: "/app/notes", icon: StickyNote },
+  { id: "templates", name: "Templates", href: "/app/templates", icon: FileStack },
 ];
 
-const accountNavigation = [
-  { name: "Wallet", href: "/app/wallet", icon: Wallet },
-  { name: "Support", href: "/app/support", icon: HelpCircle },
+const accountNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
+  { id: "wallet", name: "Wallet", href: "/app/wallet", icon: Wallet },
+  { id: "support", name: "Support", href: "/app/support", icon: HelpCircle },
 ];
 
 // --------------- SHARED SIDEBAR NAV ---------------
@@ -61,23 +67,30 @@ function NavSection({
   title, 
   items, 
   collapsed, 
-  onNavigate 
+  onNavigate,
+  visibleNav,
 }: { 
   title?: string; 
-  items: typeof mainNavigation; 
+  items: Array<{ id: NavItemId; name: string; href: string; icon: any }>; 
   collapsed?: boolean; 
   onNavigate?: () => void;
+  visibleNav: NavItemId[];
 }) {
   const location = useLocation();
+  
+  // Filter items based on SKU
+  const filteredItems = items.filter(item => visibleNav.includes(item.id));
+
+  if (filteredItems.length === 0) return null;
 
   return (
     <div className="space-y-1">
-      {title && !collapsed && (
+      {title && !collapsed && filteredItems.length > 0 && (
         <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
           {title}
         </div>
       )}
-      {items.map((item) => {
+      {filteredItems.map((item) => {
         const active = location.pathname.startsWith(item.href);
         const Icon = item.icon;
 
@@ -114,11 +127,21 @@ function NavSection({
 }
 
 function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
+  const { visibleNav, isDemo } = useSku();
+  
   return (
     <div className="flex flex-col gap-4">
-      <NavSection items={mainNavigation} collapsed={collapsed} onNavigate={onNavigate} />
-      <NavSection title="Resources" items={resourceNavigation} collapsed={collapsed} onNavigate={onNavigate} />
-      <NavSection title="Account" items={accountNavigation} collapsed={collapsed} onNavigate={onNavigate} />
+      <NavSection items={mainNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
+      <NavSection title="Resources" items={resourceNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
+      <NavSection title="Account" items={accountNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
+      
+      {/* SKU Badge + Demo Tour Trigger at bottom */}
+      {!collapsed && (
+        <div className="px-3 pt-4 border-t border-border/30 space-y-2">
+          <SkuBadge />
+          {isDemo && <DemoTourTrigger />}
+        </div>
+      )}
     </div>
   );
 }
@@ -506,5 +529,10 @@ function AppLayoutContent() {
 }
 
 export default function AppLayout() {
-  return <AppLayoutContent />;
+  return (
+    <DemoTourProvider>
+      <AppLayoutContent />
+      <DemoTourOverlay />
+    </DemoTourProvider>
+  );
 }

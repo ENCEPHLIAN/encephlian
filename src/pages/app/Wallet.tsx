@@ -4,8 +4,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { TokenPurchase } from "@/components/TokenPurchase";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { useSku } from "@/hooks/useSku";
+import { PilotWalletCard } from "@/components/sku/PilotWalletCard";
 
 export default function Wallet() {
+  const { isPilot, isDemo } = useSku();
+  
   const { data: walletData, isLoading: walletLoading } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {
@@ -30,6 +34,22 @@ export default function Wallet() {
     );
   }
 
+  // Pilot SKU: Simplified wallet with subscription focus
+  if (isPilot) {
+    return (
+      <div className="space-y-6 max-w-lg mx-auto">
+        <div>
+          <h1 className="text-2xl font-bold">Wallet</h1>
+          <p className="text-muted-foreground text-sm">
+            Tokens power your AI triage reports
+          </p>
+        </div>
+        <PilotWalletCard />
+      </div>
+    );
+  }
+
+  // Demo/Internal SKU: Full wallet with all token packs
   return (
     <div className="space-y-6">
       <div>
@@ -50,7 +70,7 @@ export default function Wallet() {
         </CardContent>
       </Card>
 
-      {/* Token Purchase */}
+      {/* Token Purchase - full options for internal/demo */}
       <TokenPurchase />
     </div>
   );

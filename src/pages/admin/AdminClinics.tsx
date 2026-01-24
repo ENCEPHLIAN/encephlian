@@ -57,9 +57,9 @@ type ClinicRow = {
 };
 
 const SKU_BADGE_STYLES: Record<SkuTier, { variant: "default" | "secondary" | "outline"; className?: string }> = {
-  internal: { variant: "outline", className: "border-blue-500/50 text-blue-600 dark:text-blue-400" },
-  pilot: { variant: "secondary" },
-  prod: { variant: "default" },
+  internal: { variant: "outline", className: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" },
+  pilot: { variant: "secondary", className: "border-amber-500/50 text-amber-600 dark:text-amber-400" },
+  demo: { variant: "default", className: "border-blue-500/50 text-blue-600 dark:text-blue-400" },
 };
 
 /**
@@ -408,9 +408,9 @@ export default function AdminClinics() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {formData.sku === "internal" && "Full access for internal testing."}
-                {formData.sku === "pilot" && "Pilot tier with proxy-only API access."}
-                {formData.sku === "prod" && "Full production access."}
+                {formData.sku === "internal" && "Enterprise: Full platform access with all features."}
+                {formData.sku === "pilot" && "Pilot: Focused value unit (Upload → Triage → Report)."}
+                {formData.sku === "demo" && "Demo: Showcase mode with guided tutorials."}
               </p>
             </div>
           </div>
