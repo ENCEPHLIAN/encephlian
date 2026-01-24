@@ -170,12 +170,14 @@ Deno.serve(async (req) => {
     }
 
     // STEP 6: Create clinic membership
+    // NOTE: clinic_memberships.role is constrained to ('clinician', 'admin') in DB.
+    // The value-unit model uses clinician for the primary neurologist account.
     const { error: membershipError } = await supabaseAdmin
       .from('clinic_memberships')
       .insert({
         user_id: userId,
         clinic_id: clinic.id,
-        role: 'neurologist',
+        role: 'clinician',
       });
 
     if (membershipError) {
