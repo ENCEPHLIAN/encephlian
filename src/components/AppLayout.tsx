@@ -13,7 +13,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, FileStack } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, FileStack, Braces } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -29,18 +29,9 @@ import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
-import { DemoTourOverlay, DemoTourTrigger } from "@/components/sku/DemoTourOverlay";
-import { DemoTourProvider } from "@/contexts/DemoTourContext";
 import { NavItemId } from "@/shared/skuPolicy";
 
 // --------------- NAV DATA ---------------
-// Full navigation with logical grouping for EEG triage PaaS
-// Core workflow: Dashboard → Studies → Lanes → Reports → EEG Viewer
-// The EEG Viewer is the VALUE DELIVERY tool - where users see AI-accelerated triage results
-// Access is metered: users pay tokens to unlock viewer access per study
-
-import { Braces } from "lucide-react";
-
 // Navigation items with IDs for SKU filtering
 const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
   { id: "dashboard", name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
@@ -127,7 +118,7 @@ function NavSection({
 }
 
 function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate?: () => void }) {
-  const { visibleNav, isDemo } = useSku();
+  const { visibleNav } = useSku();
   
   return (
     <div className="flex flex-col gap-4">
@@ -135,11 +126,10 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
       <NavSection title="Resources" items={resourceNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
       <NavSection title="Account" items={accountNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
       
-      {/* SKU Badge + Demo Tour Trigger at bottom */}
+      {/* SKU Badge at bottom */}
       {!collapsed && (
         <div className="px-3 pt-4 border-t border-border/30 space-y-2">
           <SkuBadge />
-          {isDemo && <DemoTourTrigger />}
         </div>
       )}
     </div>
@@ -252,12 +242,12 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
 
 // --------------- MAIN LAYOUT ---------------
 
-function AppLayoutContent() {
+export default function AppLayout() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
-  // Use unified session context - no more individual queries
+  // Use unified session context
   const { profile, clinicContext, signOut } = useUserSession();
 
   const [commandOpen, setCommandOpen] = useState(false);
@@ -287,14 +277,6 @@ function AppLayoutContent() {
       title: "Signed out",
       description: "You have been successfully signed out.",
     });
-  };
-
-  const handleSidebarToggle = () => {
-    if (isMobile) {
-      setMobileNavOpen((v) => !v);
-    } else {
-      setSidebarCollapsed((v) => !v);
-    }
   };
 
   return (
@@ -525,14 +507,5 @@ function AppLayoutContent() {
       <MissionPanel open={missionOpen} onOpenChange={setMissionOpen} />
     </div>
     </TooltipProvider>
-  );
-}
-
-export default function AppLayout() {
-  return (
-    <DemoTourProvider>
-      <AppLayoutContent />
-      <DemoTourOverlay />
-    </DemoTourProvider>
   );
 }

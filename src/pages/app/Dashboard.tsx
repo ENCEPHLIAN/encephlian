@@ -10,7 +10,6 @@ import RecentReportsSection from "@/components/dashboard/RecentReportsSection";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import TokenBalanceHeader from "@/components/dashboard/TokenBalanceHeader";
 import { CalendarWidget } from "@/components/CalendarWidget";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
-import { useDemoMode } from "@/contexts/DemoModeContext";
+import { useSku } from "@/hooks/useSku";
+import PilotDashboard from "@/components/dashboard/PilotDashboard";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
 
@@ -103,7 +103,6 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <DemoModeToggle />
           <TokenBalanceHeader 
             balance={tokenBalance} 
             previousBalance={previousBalance}

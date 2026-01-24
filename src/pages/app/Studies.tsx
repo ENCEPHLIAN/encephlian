@@ -12,8 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
-import { useDemoMode } from "@/contexts/DemoModeContext";
+import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
@@ -173,7 +172,6 @@ export default function Studies() {
 function InternalStudiesView() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isDemoMode } = useDemoMode();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -307,18 +305,15 @@ function InternalStudiesView() {
             <p className="text-muted-foreground text-sm">Manage EEG studies, upload files, and track progress</p>
           </div>
           <div className="flex items-center gap-3">
-            <DemoModeToggle />
-            {!isDemoMode && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button onClick={() => fileInputRef.current?.click()} size="sm">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Upload EEG
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={() => fileInputRef.current?.click()} size="sm">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload EEG
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
+            </Tooltip>
             <input
               ref={fileInputRef}
               type="file"

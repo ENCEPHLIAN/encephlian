@@ -8,18 +8,40 @@ import { Activity, FileText, Clock, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useDemoFilteredStudies, Study } from "@/hooks/useDemoFilteredStudies";
-import { useDemoMode } from "@/contexts/DemoModeContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useUserSession } from "@/contexts/UserSessionContext";
+
+interface Study {
+  id: string;
+  created_at: string;
+  state: string;
+  sla: string;
+  meta: any;
+  triage_status?: string;
+}
 
 export function CalendarWidget() {
   const [date, setDate] = useState<Date | undefined>(new Date());
   const navigate = useNavigate();
-  const { isDemoMode } = useDemoMode();
+  const { userId, isAuthenticated } = useUserSession();
 
-  // Use demo-aware hook for proper data isolation
-  const { data: studies } = useDemoFilteredStudies({
-    queryKey: "calendar-studies",
-    limit: 200,
+  // Fetch studies directly (no demo filter)
+  const { data: studies } = useQuery({
+    queryKey: ["calendar-studies", userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("studies")
+        .select("id, created_at, state, sla, meta, triage_status")
+        .or("sample.is.null,sample.eq.false")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      
+      if (error) throw error;
+      return (data || []) as Study[];
+    },
+    enabled: isAuthenticated && !!userId,
+    staleTime: 30000,
   });
 
   // Memoized study dates
@@ -69,12 +91,7 @@ export function CalendarWidget() {
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary" />
-          <CardTitle className="text-lg">
-            Study Calendar
-            {isDemoMode && (
-              <Badge variant="outline" className="ml-2 text-xs">Demo</Badge>
-            )}
-          </CardTitle>
+          <CardTitle className="text-lg">Study Calendar</CardTitle>
         </div>
       </CardHeader>
       <CardContent className="p-4 pt-0">
@@ -154,7 +171,7 @@ export function CalendarWidget() {
                 <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground min-h-[180px]">
                   <FileText className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">No studies on this date</p>
-                  {date && !isDemoMode && (
+                  {date && (
                     <Button
                       variant="ghost"
                       size="sm"
