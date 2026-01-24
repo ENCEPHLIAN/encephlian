@@ -34,6 +34,7 @@ import {
 import { Loader2, Search, ExternalLink, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { useClinicSelector } from "@/hooks/useClinicSelector";
 
 type StudyWithClinic = {
   id: string;
@@ -46,17 +47,21 @@ type StudyWithClinic = {
   report_locked: boolean | null;
   clinic_name?: string;
   last_event_at?: string;
+  study_key?: string | null;
+  storage_backend?: string | null;
+  latest_run_id?: string | null;
 };
 
 export default function AdminStudies() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { selectedClinicId } = useClinicSelector();
   const [searchQuery, setSearchQuery] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
   const [deleteStudy, setDeleteStudy] = useState<StudyWithClinic | null>(null);
 
   const { data: studies, isLoading } = useQuery<StudyWithClinic[]>({
-    queryKey: ["admin-all-studies"],
+    queryKey: ["admin-all-studies", selectedClinicId],
     queryFn: async () => {
       // Get all studies via admin function
       const { data: studiesData, error: studiesError } = await supabase.rpc("admin_get_all_studies");
@@ -79,11 +84,18 @@ export default function AdminStudies() {
         }
       });
 
-      return (studiesData || []).map((s: any) => ({
+      let result = (studiesData || []).map((s: any) => ({
         ...s,
         clinic_name: clinicMap.get(s.clinic_id) || "Unknown",
         last_event_at: lastEventMap.get(s.id),
       }));
+
+      // Apply clinic filter if selected
+      if (selectedClinicId) {
+        result = result.filter((s: any) => s.clinic_id === selectedClinicId);
+      }
+
+      return result;
     },
   });
 
@@ -178,13 +190,13 @@ export default function AdminStudies() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead>ID / Key</TableHead>
                 <TableHead>Clinic</TableHead>
                 <TableHead>Patient ID</TableHead>
                 <TableHead>State</TableHead>
-                <TableHead>SLA</TableHead>
+                <TableHead>Backend</TableHead>
+                <TableHead>Run ID</TableHead>
                 <TableHead>Created</TableHead>
-                <TableHead>Last Event</TableHead>
                 <TableHead className="w-24">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -192,7 +204,10 @@ export default function AdminStudies() {
               {filteredStudies?.map((study) => (
                 <TableRow key={study.id} className="group">
                   <TableCell className="font-mono text-xs">
-                    {study.id.slice(0, 8)}...
+                    <div>{study.study_key || study.id.slice(0, 8)}</div>
+                    {study.study_key && (
+                      <div className="text-muted-foreground text-[10px]">{study.id.slice(0, 8)}...</div>
+                    )}
                   </TableCell>
                   <TableCell className="text-sm">
                     {study.clinic_name}
@@ -209,20 +224,15 @@ export default function AdminStudies() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge
-                      variant={study.sla === "STAT" ? "destructive" : "outline"}
-                      className="text-xs"
-                    >
-                      {study.sla}
+                    <Badge variant="outline" className="text-xs font-mono">
+                      {study.storage_backend || "supabase"}
                     </Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {study.latest_run_id ? study.latest_run_id.slice(0, 8) : "—"}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {format(new Date(study.created_at), "MMM d, HH:mm")}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {study.last_event_at
-                      ? format(new Date(study.last_event_at), "MMM d, HH:mm")
-                      : "—"}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">

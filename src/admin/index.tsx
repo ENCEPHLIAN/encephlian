@@ -1,6 +1,6 @@
 import EEGViewer, { decodeFloat32B64, decodeUint8B64 } from "./EEGViewer";
 import { useState, useEffect } from "react";
-import { AlertTriangle, Loader2, CheckCircle, Activity, XCircle, Save, Settings } from "lucide-react";
+import { AlertTriangle, Loader2, CheckCircle, Activity, XCircle, Save, Settings, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,16 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import EegMiniViewer, { type WindowDataForViewer } from "./components/EegMiniViewer";
 import type { CanonicalMeta } from "./readApi";
+import {
+  resolveReadApiBase,
+  setReadApiOverride,
+  clearReadApiOverride,
+  getReadApiKey,
+  READ_API_OVERRIDE_LS_KEY,
+} from "@/shared/readApiConfig";
 
 // Type for normal/abnormal result (optional from server)
 type NormalAbnormalResult = { decision?: string; score_abnormal?: number; label?: string; confidence?: number } | null;
-
-const STORAGE_KEY_BASE = "enceph_read_api_base";
-const STORAGE_KEY_KEY = "enceph_read_api_key";
-
-// Fallback from env
-const ENV_BASE = (import.meta.env.VITE_ENCEPH_READ_API_BASE || "").trim().replace(/\/+$/, "");
-const ENV_KEY = (import.meta.env.VITE_ENCEPH_READ_API_KEY || "").trim();
 
 interface WindowData {
   chunkShape: { n_channels: number; length: number };
@@ -36,7 +36,7 @@ function getMetaChannelLabel(meta: CanonicalMeta | null, i: number) {
 }
 
 export default function AdminReadApi() {
-  // Connection settings
+  // Connection settings - use shared config
   const [apiBase, setApiBase] = useState("");
   const [apiKey, setApiKey] = useState("");
 
@@ -61,12 +61,12 @@ export default function AdminReadApi() {
   const [error, setError] = useState<string | null>(null);
   const [healthResult, setHealthResult] = useState<{ status: number; body: string } | null>(null);
 
-  // Initialize from localStorage or env
+  // Initialize from shared config
   useEffect(() => {
-    const storedBase = localStorage.getItem(STORAGE_KEY_BASE);
-    const storedKey = localStorage.getItem(STORAGE_KEY_KEY);
-    setApiBase((storedBase ?? ENV_BASE).trim().replace(/\/+$/, ""));
-    setApiKey((storedKey ?? ENV_KEY).trim());
+    const resolved = resolveReadApiBase();
+    const key = getReadApiKey();
+    setApiBase(resolved);
+    setApiKey(key);
   }, []);
 
   const normalizedBase = apiBase.trim().replace(/\/+$/, "");
@@ -78,12 +78,20 @@ export default function AdminReadApi() {
     return headers;
   };
 
+  // Save uses shared config functions
   const handleSaveConnection = () => {
     const base = apiBase.trim().replace(/\/+$/, "");
-    const key = apiKey.trim();
-    localStorage.setItem(STORAGE_KEY_BASE, base);
-    localStorage.setItem(STORAGE_KEY_KEY, key);
-    toast.success("Connection settings saved");
+    if (base) {
+      setReadApiOverride(base);
+    }
+    toast.success(`Connection saved (key: ${READ_API_OVERRIDE_LS_KEY})`);
+  };
+
+  const handleClearOverride = () => {
+    clearReadApiOverride();
+    const resolved = resolveReadApiBase();
+    setApiBase(resolved);
+    toast.success("Override cleared, using default base");
   };
 
   // Compute bounds from meta with defensive checks
@@ -334,7 +342,11 @@ export default function AdminReadApi() {
             </div>
             <Button onClick={handleSaveConnection} variant="outline" size="sm">
               <Save className="h-4 w-4 mr-2" />
-              Save
+              Save Override
+            </Button>
+            <Button onClick={handleClearOverride} variant="ghost" size="sm">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset
             </Button>
             <Button variant="outline" size="sm" onClick={handleTestHealth} disabled={!configured || loadingHealth}>
               {loadingHealth ? (
@@ -344,6 +356,10 @@ export default function AdminReadApi() {
               )}
               Test /health
             </Button>
+          </div>
+          
+          <div className="mt-2 text-xs text-muted-foreground font-mono">
+            <span className="font-medium">Shared key:</span> {READ_API_OVERRIDE_LS_KEY}
           </div>
 
           {healthResult && (

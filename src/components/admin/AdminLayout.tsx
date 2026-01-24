@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { ClinicSelectorDropdown } from "./ClinicSelectorDropdown";
 import {
   LayoutDashboard,
   FileText,
@@ -39,6 +40,7 @@ export default function AdminLayout() {
       { name: "Wallets", href: "/admin/wallets", icon: Coins },
       ...(!isSuperAdmin ? [{ name: "Tickets", href: "/admin/tickets", icon: MessageSquare }] : []),
       { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
+      { name: "Read API", href: "/admin/read-api", icon: Activity },
       { name: "Health", href: "/admin/health", icon: Activity },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Activity },
       { name: "Report v0", href: "/admin/report-v0", icon: ClipboardList },
@@ -95,13 +97,18 @@ export default function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="w-64 border-r bg-background/60 backdrop-blur">
+      <aside className="w-64 border-r bg-background/60 backdrop-blur flex flex-col">
         <div className="flex h-16 items-center justify-between px-4 border-b">
           <div className="font-semibold tracking-tight">Admin</div>
           <ThemeToggle />
         </div>
+        
+        {/* Clinic Selector */}
+        <div className="px-3 py-2 border-b">
+          <ClinicSelectorDropdown />
+        </div>
 
-        <div className="p-3 space-y-4">
+        <div className="p-3 space-y-4 flex-1 overflow-y-auto">
           {groupedNav.map((group) => (
             <div key={group.title}>
               <div className="px-2 pb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">

@@ -627,6 +627,7 @@ export type Database = {
           duration_min: number | null
           id: string
           indication: string | null
+          latest_run_id: string | null
           meta: Json | null
           montage: string | null
           original_format: string | null
@@ -641,6 +642,9 @@ export type Database = {
           sla_selected_at: string | null
           srate_hz: number | null
           state: string | null
+          storage_backend: string | null
+          storage_ref: string | null
+          study_key: string | null
           tokens_deducted: number | null
           triage_completed_at: string | null
           triage_progress: number | null
@@ -656,6 +660,7 @@ export type Database = {
           duration_min?: number | null
           id?: string
           indication?: string | null
+          latest_run_id?: string | null
           meta?: Json | null
           montage?: string | null
           original_format?: string | null
@@ -670,6 +675,9 @@ export type Database = {
           sla_selected_at?: string | null
           srate_hz?: number | null
           state?: string | null
+          storage_backend?: string | null
+          storage_ref?: string | null
+          study_key?: string | null
           tokens_deducted?: number | null
           triage_completed_at?: string | null
           triage_progress?: number | null
@@ -685,6 +693,7 @@ export type Database = {
           duration_min?: number | null
           id?: string
           indication?: string | null
+          latest_run_id?: string | null
           meta?: Json | null
           montage?: string | null
           original_format?: string | null
@@ -699,6 +708,9 @@ export type Database = {
           sla_selected_at?: string | null
           srate_hz?: number | null
           state?: string | null
+          storage_backend?: string | null
+          storage_ref?: string | null
+          study_key?: string | null
           tokens_deducted?: number | null
           triage_completed_at?: string | null
           triage_progress?: number | null
@@ -754,6 +766,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "study_files_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_reports: {
+        Row: {
+          content: Json
+          created_at: string | null
+          created_by: string | null
+          id: string
+          report_html: string | null
+          run_id: string | null
+          study_id: string
+        }
+        Insert: {
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          report_html?: string | null
+          run_id?: string | null
+          study_id: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          report_html?: string | null
+          run_id?: string | null
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_reports_study_id_fkey"
             columns: ["study_id"]
             isOneToOne: false
             referencedRelation: "studies"
@@ -995,6 +1045,7 @@ export type Database = {
           duration_min: number | null
           id: string
           indication: string | null
+          latest_run_id: string | null
           meta: Json | null
           montage: string | null
           original_format: string | null
@@ -1009,6 +1060,9 @@ export type Database = {
           sla_selected_at: string | null
           srate_hz: number | null
           state: string | null
+          storage_backend: string | null
+          storage_ref: string | null
+          study_key: string | null
           tokens_deducted: number | null
           triage_completed_at: string | null
           triage_progress: number | null
