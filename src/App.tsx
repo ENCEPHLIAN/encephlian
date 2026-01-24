@@ -39,7 +39,7 @@ import Templates from "./pages/app/Templates";
 import NotFound from "./pages/NotFound";
 import ComingSoon from "./pages/app/ComingSoon";
 import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminControl from "./pages/admin/AdminControl";
+
 import AdminStudies from "./pages/admin/AdminStudies";
 import AdminStudyDetail from "./pages/admin/AdminStudyDetail";
 import AdminClinics from "./pages/admin/AdminClinics";
@@ -76,7 +76,7 @@ function App() {
                 {/* Admin Routes - OUTSIDE of ProtectedRoute */}
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminLayout />}>
-                    <Route path="control" element={<AdminControl />} />
+                    
                     <Route index element={<AdminDashboard />} />
                     <Route path="studies" element={<AdminStudies />} />
                     <Route path="studies/:id" element={<AdminStudyDetail />} />
