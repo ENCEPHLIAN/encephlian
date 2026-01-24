@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import { AlertCircle, Clock, ArrowRight } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { useDemoMode } from "@/contexts/DemoModeContext";
 
 dayjs.extend(relativeTime);
 
@@ -23,7 +22,6 @@ interface UrgentQueueProps {
 
 export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProps) {
   const navigate = useNavigate();
-  const { isDemoMode } = useDemoMode();
   
   // Sort: STAT first, then by age - no realtime subscription needed as parent handles updates
   const sortedStudies = [...initialStudies]
@@ -44,12 +42,7 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-destructive" />
-            <CardTitle>
-              Urgent Queue
-              {isDemoMode && (
-                <Badge variant="outline" className="ml-2 text-xs font-normal">Demo</Badge>
-              )}
-            </CardTitle>
+            <CardTitle>Urgent Queue</CardTitle>
           </div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies")}>
             View All <ArrowRight className="ml-2 h-4 w-4" />

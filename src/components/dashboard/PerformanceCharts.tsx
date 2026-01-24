@@ -1,8 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import dayjs from "dayjs";
-import { useDemoMode } from "@/contexts/DemoModeContext";
 import { useMemo } from "react";
 
 interface Study {
@@ -18,8 +16,6 @@ interface PerformanceChartsProps {
 }
 
 export default function PerformanceCharts({ studies }: PerformanceChartsProps) {
-  const { isDemoMode } = useDemoMode();
-
   // Prepare data for last 7 days - studies completed
   const last7Days = useMemo(() => {
     return Array.from({ length: 7 }, (_, i) => {
@@ -80,7 +76,6 @@ export default function PerformanceCharts({ studies }: PerformanceChartsProps) {
               <CardTitle>Studies Completed</CardTitle>
               <p className="text-sm text-muted-foreground">Last 7 days</p>
             </div>
-            {isDemoMode && <Badge variant="outline" className="text-xs">Demo</Badge>}
           </div>
         </CardHeader>
         <CardContent>
@@ -120,7 +115,6 @@ export default function PerformanceCharts({ studies }: PerformanceChartsProps) {
               <CardTitle>Avg Turnaround Time</CardTitle>
               <p className="text-sm text-muted-foreground">Last 7 days (hours)</p>
             </div>
-            {isDemoMode && <Badge variant="outline" className="text-xs">Demo</Badge>}
           </div>
         </CardHeader>
         <CardContent>

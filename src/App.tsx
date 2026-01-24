@@ -14,7 +14,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { UserSessionProvider } from "@/contexts/UserSessionContext";
-import { DemoModeProvider } from "@/contexts/DemoModeContext";
 import Login from "./pages/Login";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
@@ -62,73 +61,71 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
         <UserSessionProvider>
-          <DemoModeProvider>
-            <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-              <Routes>
-                <Route path="/login" element={<Login />} />
+          <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <Routes>
+              <Route path="/login" element={<Login />} />
 
-                {/* Redirect base to /app */}
-                <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
+              {/* Redirect base to /app */}
+              <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
-                {/* Admin Routes - OUTSIDE of ProtectedRoute */}
-                <Route element={<AdminRoute />}>
-                  <Route path="/admin" element={<AdminLayout />}>
-                    
-                    <Route index element={<AdminDashboard />} />
-                    <Route path="studies" element={<AdminStudies />} />
-                    <Route path="studies/:id" element={<AdminStudyDetail />} />
-                    <Route path="clinics" element={<AdminClinics />} />
-                    <Route path="users" element={<AdminUsers />} />
-                    <Route path="health" element={<AdminHealth />} />
-                    <Route path="diagnostics" element={<AdminDiagnostics />} />
-                    <Route path="wallets" element={<AdminWallets />} />
-                    <Route path="tickets" element={<AdminTickets />} />
-                    <Route path="cleanup" element={<AdminCleanup />} />
-                    <Route path="restore" element={<AdminRestore />} />
-                    <Route path="audit" element={<AdminAuditLogs />} />
-                    <Route path="settings" element={<AdminSettings />} />
-                    <Route path="eeg-push" element={<AdminEegPush />} />
-                    <Route path="read-api" element={<AdminReadApi />} />
-                    <Route path="report-v0" element={<AdminReportV0 />} />
-                    <Route path="account" element={<AdminAccount />} />
-                  </Route>
+              {/* Admin Routes - OUTSIDE of ProtectedRoute */}
+              <Route element={<AdminRoute />}>
+                <Route path="/admin" element={<AdminLayout />}>
+                  
+                  <Route index element={<AdminDashboard />} />
+                  <Route path="studies" element={<AdminStudies />} />
+                  <Route path="studies/:id" element={<AdminStudyDetail />} />
+                  <Route path="clinics" element={<AdminClinics />} />
+                  <Route path="users" element={<AdminUsers />} />
+                  <Route path="health" element={<AdminHealth />} />
+                  <Route path="diagnostics" element={<AdminDiagnostics />} />
+                  <Route path="wallets" element={<AdminWallets />} />
+                  <Route path="tickets" element={<AdminTickets />} />
+                  <Route path="cleanup" element={<AdminCleanup />} />
+                  <Route path="restore" element={<AdminRestore />} />
+                  <Route path="audit" element={<AdminAuditLogs />} />
+                  <Route path="settings" element={<AdminSettings />} />
+                  <Route path="eeg-push" element={<AdminEegPush />} />
+                  <Route path="read-api" element={<AdminReadApi />} />
+                  <Route path="report-v0" element={<AdminReportV0 />} />
+                  <Route path="account" element={<AdminAccount />} />
                 </Route>
+              </Route>
 
-                {/* PaaS Routes - blocks admin users */}
-                <Route element={<ProtectedRoute />}>
-                  <Route path="/app" element={<AppLayout />}>
-                    <Route index element={<Navigate to="/app/dashboard" replace />} />
-                    <Route path="dashboard" element={<Dashboard />} />
-                    <Route path="studies" element={<Studies />} />
-                    <Route path="studies/:id" element={<StudyDetail />} />
-                    <Route path="studies/:id/review" element={<StudyReview />} />
-                    <Route path="studies/:id/viewer" element={<EEGViewer />} />
-                    <Route path="lanes" element={<Lanes />} />
-                    <Route path="reports" element={<Reports />} />
-                    <Route path="reports/:id" element={<ReportDetail />} />
-                    <Route path="viewer" element={<EEGViewer />} />
-                    <Route path="eeg-viewer" element={<EEGViewer />} />
-                    <Route path="report-v0" element={<AdminReportV0 />} />
-                    <Route path="notes" element={<Notes />} />
-                    <Route path="files" element={<Files />} />
-                    <Route path="wallet" element={<Wallet />} />
-                    <Route path="profile" element={<Profile />} />
-                    <Route path="settings" element={<Settings />} />
-                    <Route path="settings/tfa" element={<TFASetup />} />
-                    <Route path="support" element={<Support />} />
-                    <Route path="templates" element={<Templates />} />
-                    <Route path="coming-soon" element={<ComingSoon />} />
-                  </Route>
+              {/* PaaS Routes - blocks admin users */}
+              <Route element={<ProtectedRoute />}>
+                <Route path="/app" element={<AppLayout />}>
+                  <Route index element={<Navigate to="/app/dashboard" replace />} />
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="studies" element={<Studies />} />
+                  <Route path="studies/:id" element={<StudyDetail />} />
+                  <Route path="studies/:id/review" element={<StudyReview />} />
+                  <Route path="studies/:id/viewer" element={<EEGViewer />} />
+                  <Route path="lanes" element={<Lanes />} />
+                  <Route path="reports" element={<Reports />} />
+                  <Route path="reports/:id" element={<ReportDetail />} />
+                  <Route path="viewer" element={<EEGViewer />} />
+                  <Route path="eeg-viewer" element={<EEGViewer />} />
+                  <Route path="report-v0" element={<AdminReportV0 />} />
+                  <Route path="notes" element={<Notes />} />
+                  <Route path="files" element={<Files />} />
+                  <Route path="wallet" element={<Wallet />} />
+                  <Route path="profile" element={<Profile />} />
+                  <Route path="settings" element={<Settings />} />
+                  <Route path="settings/tfa" element={<TFASetup />} />
+                  <Route path="support" element={<Support />} />
+                  <Route path="templates" element={<Templates />} />
+                  <Route path="coming-soon" element={<ComingSoon />} />
                 </Route>
+              </Route>
 
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-            </TooltipProvider>
-          </DemoModeProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+          </TooltipProvider>
         </UserSessionProvider>
       </ThemeProvider>
     </QueryClientProvider>

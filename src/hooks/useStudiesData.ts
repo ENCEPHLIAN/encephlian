@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useMemo, useRef, useEffect } from "react";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import { useDemoMode } from "@/contexts/DemoModeContext";
 
 export interface StudyListItem {
   id: string;
@@ -21,26 +20,18 @@ export interface StudyListItem {
 
 export function useStudiesData(stateFilter: string) {
   const { userId, isAuthenticated } = useUserSession();
-  const { isDemoMode } = useDemoMode();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const { data: studies, isLoading, refetch } = useQuery({
-    queryKey: ["studies-list", stateFilter, userId, isDemoMode],
+    queryKey: ["studies-list", stateFilter, userId],
     queryFn: async () => {
-      // In demo mode, show sample studies; otherwise show user's real studies
+      // Show user's real studies (RLS handles ownership), exclude sample studies
       let query = supabase
         .from("studies")
         .select("id, created_at, state, sla, meta, indication, sample, tokens_deducted, triage_status, triage_progress, triage_completed_at, clinics(name)")
+        .or(`sample.is.null,sample.eq.false`)
         .order("created_at", { ascending: false })
         .limit(100);
-
-      // Filter by demo mode
-      if (isDemoMode) {
-        query = query.eq("sample", true);
-      } else {
-        // Show user's own studies (RLS handles this) but exclude sample studies
-        query = query.or(`sample.is.null,sample.eq.false`);
-      }
 
       if (stateFilter !== "all") {
         query = query.eq("state", stateFilter as any);
