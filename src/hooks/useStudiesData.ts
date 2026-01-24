@@ -14,6 +14,8 @@ export interface StudyListItem {
   sample: boolean | null;
   tokens_deducted: number | null;
   triage_status: string | null;
+  triage_progress: number | null;
+  triage_completed_at: string | null;
   clinics: { name: string } | null;
 }
 
@@ -28,7 +30,7 @@ export function useStudiesData(stateFilter: string) {
       // In demo mode, show sample studies; otherwise show user's real studies
       let query = supabase
         .from("studies")
-        .select("id, created_at, state, sla, meta, indication, sample, tokens_deducted, triage_status, clinics(name)")
+        .select("id, created_at, state, sla, meta, indication, sample, tokens_deducted, triage_status, triage_progress, triage_completed_at, clinics(name)")
         .order("created_at", { ascending: false })
         .limit(100);
 
