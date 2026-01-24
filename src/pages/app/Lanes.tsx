@@ -10,9 +10,7 @@ import {
   ArrowRight, AlertTriangle, Zap 
 } from "lucide-react";
 import dayjs from "dayjs";
-import { useDemoFilteredStudies, Study } from "@/hooks/useDemoFilteredStudies";
-import { useDemoMode } from "@/contexts/DemoModeContext";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
+import { useStudiesData, Study } from "@/hooks/useStudiesData";
 
 const SLA_CONFIG = {
   STAT: { label: "STAT", color: "destructive", priority: 1, targetHours: 1 },
@@ -201,15 +199,9 @@ function KanbanColumn({ stage, studies }: { stage: typeof TRIAGE_STAGES[0]; stud
 
 export default function Lanes() {
   const navigate = useNavigate();
-  const { isDemoMode } = useDemoMode();
 
-  // Fetch studies with demo mode isolation
-  const { data: studies, isLoading } = useDemoFilteredStudies({
-    queryKey: "lanes-kanban",
-    stateFilter: ["uploaded", "awaiting_sla", "ai_draft", "in_review", "signed"],
-    limit: 200,
-    refetchInterval: 30000,
-  });
+  // Fetch all studies for kanban view
+  const { studies, isLoading } = useStudiesData("all");
 
   // Categorize studies by triage stage
   const stageStudies = useMemo(() => {
@@ -277,7 +269,6 @@ export default function Lanes() {
           <h1 className="text-2xl font-bold">Triage Lanes</h1>
           <p className="text-sm text-muted-foreground">
             {activeCount} active • {stageStudies.signed?.length || 0} completed
-            {isDemoMode && " • Viewing sample data"}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -287,13 +278,10 @@ export default function Lanes() {
               {overdueCount} overdue
             </Badge>
           )}
-          <DemoModeToggle />
-          {!isDemoMode && (
-            <Button onClick={() => navigate("/app/studies")}>
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Study
-            </Button>
-          )}
+          <Button onClick={() => navigate("/app/studies")}>
+            <Upload className="h-4 w-4 mr-2" />
+            Upload Study
+          </Button>
         </div>
       </div>
 

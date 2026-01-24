@@ -20,8 +20,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
-import { useSku } from "@/hooks/useSku";
-import PilotDashboard from "@/components/dashboard/PilotDashboard";
 
 // Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);

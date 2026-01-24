@@ -34,8 +34,6 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { FilePreviewDialog } from "@/components/FilePreviewDialog";
 import { supabase } from "@/integrations/supabase/client";
-import { useDemoMode } from "@/contexts/DemoModeContext";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
 import { 
   useStudyFiles, 
   useStorageFiles, 
@@ -151,7 +149,7 @@ FileRow.displayName = "FileRow";
 export default function Files() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { isDemoMode } = useDemoMode();
+  
   
   const [selectedBucket, setSelectedBucket] = useState("study-files");
   const [currentPath, setCurrentPath] = useState("");
@@ -287,16 +285,8 @@ export default function Files() {
 
   const isLoading = selectedBucket === 'study-files' ? studyFilesLoading : storageLoading;
 
-  // Notes bucket is personal - show notice in demo mode
-  const isPersonalBucket = selectedBucket === 'notes' || selectedBucket === 'eeg-uploads' || selectedBucket === 'eeg-reports';
-  const showDemoNotice = isDemoMode && isPersonalBucket;
-
   return (
     <div className="h-[calc(100vh-12rem)] flex flex-col gap-2">
-      {/* Demo mode toggle */}
-      <div className="flex justify-end">
-        <DemoModeToggle />
-      </div>
       
       <div className="flex-1 flex gap-0 rounded-lg overflow-hidden border border-border">
       {/* LEFT SIDEBAR - Finder-style */}
@@ -385,19 +375,7 @@ export default function Files() {
 
         {/* File list */}
         <ScrollArea className="flex-1">
-          {showDemoNotice ? (
-            <div className="p-4">
-              <Alert className="bg-amber-500/10 border-amber-500/30">
-                <FlaskConical className="h-4 w-4 text-amber-600" />
-                <AlertTitle className="text-amber-700 dark:text-amber-400">Demo Mode Active</AlertTitle>
-                <AlertDescription className="text-amber-600/80 dark:text-amber-400/80">
-                  {selectedBucket === 'notes' 
-                    ? "Notes are personal and private. Switch to your account to view your notes."
-                    : "Personal files are not shown in demo mode. Switch to your account to access your uploads and reports."}
-                </AlertDescription>
-              </Alert>
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="flex justify-center items-center py-20">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
@@ -406,9 +384,7 @@ export default function Files() {
               <FolderOpen className="h-16 w-16 text-muted-foreground/30 mb-4" />
               <p className="text-lg font-medium">No files here</p>
               <p className="text-sm text-muted-foreground mt-1">
-                {isDemoMode && selectedBucket === 'study-files'
-                  ? 'Sample study files will appear here'
-                  : selectedBucket === 'notes' 
+                {selectedBucket === 'notes' 
                   ? 'No notes available' 
                   : selectedBucket === 'study-files'
                   ? 'Upload EEG studies to see them here'

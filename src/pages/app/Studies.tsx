@@ -12,7 +12,6 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
-import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
