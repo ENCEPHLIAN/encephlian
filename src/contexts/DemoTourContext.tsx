@@ -1,5 +1,5 @@
 import { ReactNode, createContext, useContext, useState, useEffect } from "react";
-import { useSku } from "@/hooks/useSku";
+import { useDemoMode } from "@/contexts/DemoModeContext";
 import { useLocation } from "react-router-dom";
 
 interface TourStep {
@@ -67,7 +67,7 @@ interface DemoTourContextType {
 const DemoTourContext = createContext<DemoTourContextType | undefined>(undefined);
 
 export function DemoTourProvider({ children }: { children: ReactNode }) {
-  const { isDemo, capabilities } = useSku();
+  const { isDemoMode } = useDemoMode();
   const location = useLocation();
   const [isActive, setIsActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -75,15 +75,15 @@ export function DemoTourProvider({ children }: { children: ReactNode }) {
     return localStorage.getItem("enceph.demo.tour_seen") === "true";
   });
 
-  // Auto-start tour for demo SKU on first visit
+  // Auto-start tour on first Demo Mode activation
   useEffect(() => {
-    if (isDemo && capabilities.showGuidedTour && !hasSeenTour) {
+    if (isDemoMode && !hasSeenTour) {
       const timer = setTimeout(() => {
         setIsActive(true);
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [isDemo, capabilities.showGuidedTour, hasSeenTour]);
+  }, [isDemoMode, hasSeenTour]);
 
   const startTour = () => {
     setCurrentStep(0);

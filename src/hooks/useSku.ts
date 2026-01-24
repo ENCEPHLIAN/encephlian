@@ -53,7 +53,7 @@ export function useSku(): UseSkuResult {
       can: (capability: SkuCapability) => hasCapability(sku, capability),
       isInternal: sku === 'internal',
       isPilot: sku === 'pilot',
-      isDemo: sku === 'demo',
+      isDemo: false, // Demo is now a mode toggle, not a SKU
       visibleNav,
       isNavVisible: (id: NavItemId) => visibleNav.includes(id),
     };
