@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useDemoMode } from "@/contexts/DemoModeContext";
+import { useSku } from "@/hooks/useSku";
+import PilotDashboard from "@/components/dashboard/PilotDashboard";
 
 // Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);
@@ -30,6 +32,12 @@ const MemoizedUrgentQueue = memo(UrgentQueue);
 const MemoizedCalendarWidget = memo(CalendarWidget);
 
 export default function Dashboard() {
+  const { sku, isPilot } = useSku();
+
+  // Pilot SKU gets the focused, value-only dashboard
+  if (isPilot) {
+    return <PilotDashboard />;
+  }
   const navigate = useNavigate();
   const [selectedStudy, setSelectedStudy] = useState<Study | null>(null);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
