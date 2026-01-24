@@ -32,8 +32,6 @@ import {
 import { Loader2, FileText, Download, Eye, Search, Filter, CheckCircle2, Clock, XCircle } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
-import { useDemoMode } from "@/contexts/DemoModeContext";
 
 type Report = {
   id: string;
@@ -137,15 +135,14 @@ const ReportRow = memo(function ReportRow({
 
 export default function Reports() {
   const navigate = useNavigate();
-  const { isDemoMode } = useDemoMode();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
 
   const { data: reports, isLoading, refetch } = useQuery({
-    queryKey: ["reports-list", isDemoMode],
+    queryKey: ["reports-list"],
     queryFn: async () => {
-      // Join with studies to filter by sample flag
+      // Show only real user reports (exclude sample)
       const { data, error } = await supabase
         .from("reports")
         .select(`
@@ -153,21 +150,12 @@ export default function Reports() {
           studies!inner(id, sla, meta, sample, clinics(name)),
           profiles:interpreter(full_name)
         `)
+        .or(`studies.sample.is.null,studies.sample.eq.false`)
         .order("created_at", { ascending: false })
         .limit(500);
       
       if (error) throw error;
-      
-      // Filter by demo mode
-      const filtered = (data || []).filter((report: any) => {
-        if (isDemoMode) {
-          return report.studies?.sample === true;
-        } else {
-          return !report.studies?.sample;
-        }
-      });
-      
-      return filtered as Report[];
+      return data as Report[];
     },
     staleTime: 30000,
   });
@@ -260,14 +248,9 @@ export default function Reports() {
             View and manage generated reports
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <DemoModeToggle />
-          {!isDemoMode && (
-            <Button onClick={() => navigate("/app/report-v0")}>
-              Generate Report
-            </Button>
-          )}
-        </div>
+        <Button onClick={() => navigate("/app/report-v0")}>
+          Generate Report
+        </Button>
       </div>
 
       {/* Stats Cards */}

@@ -35,8 +35,6 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
-import { useDemoMode } from "@/contexts/DemoModeContext";
-import { DemoModeToggle } from "@/components/DemoModeToggle";
 import { useSku } from "@/hooks/useSku";
 import { SkuGate } from "@/components/SkuGate";
 import { fetchJson } from "@/shared/readApiClient";
@@ -65,7 +63,7 @@ export default function StudyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isDemoMode } = useDemoMode();
+  
   const { can, capabilities } = useSku();
   const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
@@ -266,25 +264,13 @@ export default function StudyDetail() {
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Back button and demo toggle */}
-      <div className="flex items-center justify-between">
+      {/* Back button */}
+      <div className="flex items-center">
         <Button variant="ghost" onClick={() => navigate("/app/studies")} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
           Back to Studies
         </Button>
-        <DemoModeToggle />
       </div>
-
-      {/* Demo mode banner */}
-      {isDemoMode && study.sample && (
-        <Alert className="bg-amber-500/10 border-amber-500/30">
-          <FlaskConical className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-700 dark:text-amber-400">Demo Study</AlertTitle>
-          <AlertDescription className="text-amber-600/80 dark:text-amber-400/80">
-            This is a sample study for demonstration purposes. Data shown is from Temple University Hospital EEG Corpus.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Header Card */}
       <Card>
