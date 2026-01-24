@@ -81,6 +81,7 @@ export default function AdminClinics() {
   const [onboardForm, setOnboardForm] = useState({
     clinic_name: "",
     city: "",
+    sku: "" as SkuTier | "", // Admin must explicitly choose SKU
     clinician_name: "",
     clinician_email: "",
     clinician_password: "",
@@ -121,6 +122,7 @@ export default function AdminClinics() {
         body: {
           clinic_name: form.clinic_name,
           city: form.city,
+          sku: form.sku, // Explicit SKU selection
           clinician_name: form.clinician_name,
           clinician_email: form.clinician_email,
           clinician_password: form.clinician_password,
@@ -139,6 +141,7 @@ export default function AdminClinics() {
       setOnboardForm({
         clinic_name: "",
         city: "",
+        sku: "",
         clinician_name: "",
         clinician_email: "",
         clinician_password: "",
@@ -408,8 +411,8 @@ export default function AdminClinics() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                {formData.sku === "internal" && "Enterprise: Full platform access with all features."}
-                {formData.sku === "pilot" && "Pilot: Focused value unit (Upload → Triage → Report)."}
+                {formData.sku === "internal" && "Internal: Full platform with all features (dev/ops)."}
+                {formData.sku === "pilot" && "Pilot: Production value unit (Upload → Triage → Report)."}
                 {formData.sku === "demo" && "Demo: Showcase mode with guided tutorials."}
               </p>
             </div>
@@ -462,6 +465,31 @@ export default function AdminClinics() {
                     placeholder="Mumbai"
                   />
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clinic-sku">SKU Tier *</Label>
+                <Select
+                  value={onboardForm.sku}
+                  onValueChange={(v) => setOnboardForm((f) => ({ ...f, sku: v as SkuTier }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select SKU..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SKU_TIERS.map((tier) => (
+                      <SelectItem key={tier} value={tier}>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={SKU_BADGE_STYLES[tier].variant} className={cn("text-xs", SKU_BADGE_STYLES[tier].className)}>
+                            {SKU_LABELS[tier]}
+                          </Badge>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Pilot = Production, Internal = Dev/Ops, Demo = Showcase
+                </p>
               </div>
             </div>
 
@@ -538,6 +566,7 @@ export default function AdminClinics() {
               disabled={
                 onboardMutation.isPending ||
                 !onboardForm.clinic_name ||
+                !onboardForm.sku ||
                 !onboardForm.clinician_name ||
                 !onboardForm.clinician_email ||
                 !onboardForm.clinician_password

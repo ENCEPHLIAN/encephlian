@@ -135,7 +135,7 @@ export function hasCapability(sku: SkuTier | string | null | undefined, capabili
  * SKU display labels for admin UI
  */
 export const SKU_LABELS: Record<SkuTier, string> = {
-  internal: 'Enterprise',
+  internal: 'Internal',
   pilot: 'Pilot',
   demo: 'Demo',
 };
@@ -144,8 +144,8 @@ export const SKU_LABELS: Record<SkuTier, string> = {
  * SKU descriptions for admin UI
  */
 export const SKU_DESCRIPTIONS: Record<SkuTier, string> = {
-  internal: 'Full platform access with all features enabled',
-  pilot: 'Focused value unit: Upload → Triage → Report (₹3000/10 tokens)',
+  internal: 'Full platform with all features (development/ops)',
+  pilot: 'Production value unit: Upload → Triage → Report',
   demo: 'Showcase mode with guided tutorials and sample data',
 };
 
