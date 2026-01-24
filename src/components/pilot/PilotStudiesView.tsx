@@ -6,8 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
-  Upload, Brain, FileText, CheckCircle2, Clock, 
-  Loader2, ArrowRight, Zap, Download, AlertCircle
+  Upload, FileText, CheckCircle2, Clock, 
+  Loader2, Zap, Download
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { useStudiesData } from "@/hooks/useStudiesData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { cn } from "@/lib/utils";
+import logoSrc from "@/assets/logo.png";
 
 /**
  * PilotStudiesView: Value-focused study management
@@ -157,7 +158,7 @@ export default function PilotStudiesView() {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-3">
-          <Brain className="h-12 w-12 text-primary mx-auto animate-pulse" />
+          <img src={logoSrc} alt="Loading" className="h-12 w-12 mx-auto animate-pulse" />
           <p className="text-muted-foreground text-sm">Loading...</p>
         </div>
       </div>
