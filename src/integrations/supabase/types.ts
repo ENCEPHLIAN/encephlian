@@ -166,6 +166,8 @@ export type Database = {
           name: string
           primary_color: string | null
           secondary_color: string | null
+          sku: string
+          sku_config: Json | null
           state: string | null
           tz: string | null
         }
@@ -181,6 +183,8 @@ export type Database = {
           name: string
           primary_color?: string | null
           secondary_color?: string | null
+          sku?: string
+          sku_config?: Json | null
           state?: string | null
           tz?: string | null
         }
@@ -196,6 +200,8 @@ export type Database = {
           name?: string
           primary_color?: string | null
           secondary_color?: string | null
+          sku?: string
+          sku_config?: Json | null
           state?: string | null
           tz?: string | null
         }
@@ -996,6 +1002,7 @@ export type Database = {
           primary_color: string | null
           role: Database["public"]["Enums"]["app_role"] | null
           secondary_color: string | null
+          sku: string | null
           user_id: string | null
         }
         Relationships: [
@@ -1032,6 +1039,7 @@ export type Database = {
           is_active: boolean
           member_count: number
           name: string
+          sku: string
           study_count: number
         }[]
       }

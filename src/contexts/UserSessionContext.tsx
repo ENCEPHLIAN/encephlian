@@ -27,6 +27,7 @@ interface UserSession {
     primary_color: string | null;
     secondary_color: string | null;
     role: string | null;
+    sku: string | null;
   } | null;
   roles: string[];
   isAdmin: boolean;

@@ -1,5 +1,5 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -27,7 +27,8 @@ import {
   Layers,
   Zap,
   FileIcon,
-  Eye
+  Eye,
+  Brain
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -36,6 +37,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useDemoMode } from "@/contexts/DemoModeContext";
 import { DemoModeToggle } from "@/components/DemoModeToggle";
+import { useSku } from "@/hooks/useSku";
+import { SkuGate } from "@/components/SkuGate";
+import { fetchJson } from "@/shared/readApiClient";
 
 dayjs.extend(relativeTime);
 
@@ -62,8 +66,11 @@ export default function StudyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { isDemoMode } = useDemoMode();
+  const { can, capabilities } = useSku();
+  const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [runningTriage, setRunningTriage] = useState(false);
 
   const { data: study, isLoading, refetch } = useQuery({
     queryKey: ["study-detail", id],
@@ -72,10 +79,11 @@ export default function StudyDetail() {
         .from("studies")
         .select(`
           *,
-          clinics(name, brand_name, logo_url),
+          clinics(name, brand_name, logo_url, sku),
           study_files(*),
           reports(*, profiles:interpreter(full_name, credentials)),
-          canonical_eeg_records(id, schema_version, tensor_path, native_sampling_hz, sfreq_model)
+          canonical_eeg_records(id, schema_version, tensor_path, native_sampling_hz, sfreq_model),
+          study_reports(id, run_id, content, report_html, created_at)
         `)
         .eq("id", id!)
         .single();
@@ -85,6 +93,65 @@ export default function StudyDetail() {
     },
     enabled: !!id
   });
+
+  // Run AI Triage - uses proxy for PILOT, calls inference endpoint
+  const handleRunAITriage = async () => {
+    if (!study?.study_key) {
+      toast({ 
+        title: "Study key missing", 
+        description: "This study is not linked to the inference pipeline.",
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setRunningTriage(true);
+    try {
+      toast({ title: "Starting AI Triage...", description: "Calling inference pipeline" });
+
+      // Use proxy for PILOT SKU
+      const proxyBase = capabilities.mustUseReadApiProxy 
+        ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/read_api_proxy`
+        : undefined;
+
+      const result = await fetchJson<{ run_id: string }>(
+        `/studies/${study.study_key}/inference/run`,
+        { 
+          base: proxyBase, 
+          requireKey: !capabilities.mustUseReadApiProxy,
+          method: 'POST'
+        }
+      );
+
+      if (!result.ok) {
+        throw new Error('error' in result ? result.error : "Inference failed");
+      }
+
+      const runId = result.data.run_id;
+
+      // Update study with latest_run_id
+      await supabase
+        .from("studies")
+        .update({ latest_run_id: runId, state: 'processing' })
+        .eq("id", study.id);
+
+      toast({ 
+        title: "AI Triage started", 
+        description: `Run ID: ${runId.slice(0, 8)}...` 
+      });
+
+      refetch();
+    } catch (error) {
+      console.error("Triage error:", error);
+      toast({
+        title: "Triage failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setRunningTriage(false);
+    }
+  };
 
   const handleGenerateAIReport = async () => {
     setGenerating(true);
@@ -256,8 +323,24 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
+              {/* Run AI Triage - for PILOT SKU users with study_key */}
+              {can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
+                <Button 
+                  onClick={handleRunAITriage} 
+                  disabled={runningTriage}
+                  className="bg-primary"
+                >
+                  {runningTriage ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Brain className="h-4 w-4 mr-2" />
+                  )}
+                  Run AI Triage
+                </Button>
+              )}
+              
               {canGenerateReport && (
-                <Button onClick={handleGenerateAIReport} disabled={generating}>
+                <Button onClick={handleGenerateAIReport} disabled={generating} variant="outline">
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
