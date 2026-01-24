@@ -30,14 +30,14 @@ serve(async (req) => {
     return new Response(null, {
       headers: {
         ...corsHeaders,
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
         "Access-Control-Expose-Headers": EXPOSE_HEADERS,
       },
     });
   }
 
   try {
-    if (req.method !== "GET") {
+    if (req.method !== "GET" && req.method !== "POST") {
       return new Response(JSON.stringify({ error: "Method not allowed" }), {
         status: 405,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -66,7 +66,20 @@ serve(async (req) => {
     const accept = req.headers.get("accept");
     if (accept) headers.set("accept", accept);
 
-    const upstream = await fetch(targetUrl, { method: "GET", headers });
+    const contentType = req.headers.get("content-type");
+    if (contentType) headers.set("content-type", contentType);
+
+    // Handle request body for POST
+    let body: BodyInit | null = null;
+    if (req.method === "POST") {
+      body = await req.text();
+    }
+
+    const upstream = await fetch(targetUrl, { 
+      method: req.method, 
+      headers,
+      body: req.method === "POST" ? body : undefined,
+    });
 
     const outHeaders = new Headers(upstream.headers);
     // Ensure CORS + header visibility for diagnostics UI

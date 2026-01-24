@@ -42,6 +42,7 @@ import {
 import { toast } from "sonner";
 import { Loader2, Building2, Edit, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { SKU_LABELS, SKU_TIERS, SkuTier } from "@/shared/skuPolicy";
 
 type ClinicRow = {
   id: string;
@@ -51,6 +52,7 @@ type ClinicRow = {
   created_at: string;
   study_count: number;
   member_count: number;
+  sku: string;
 };
 
 type UserOption = {
@@ -62,7 +64,7 @@ type UserOption = {
 export default function AdminClinics() {
   const queryClient = useQueryClient();
   const [editingClinic, setEditingClinic] = useState<ClinicRow | null>(null);
-  const [formData, setFormData] = useState({ name: "", city: "" });
+  const [formData, setFormData] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [deleteClinic, setDeleteClinic] = useState<ClinicRow | null>(null);
 
@@ -158,7 +160,7 @@ export default function AdminClinics() {
 
   const handleEdit = (clinic: ClinicRow) => {
     setEditingClinic(clinic);
-    setFormData({ name: clinic.name, city: clinic.city || "" });
+    setFormData({ name: clinic.name, city: clinic.city || "", sku: (clinic.sku as SkuTier) || "pilot" });
   };
 
   const handleSave = async () => {
@@ -199,6 +201,7 @@ export default function AdminClinics() {
               <TableRow>
                 <TableHead className="font-mono">Clinic Name</TableHead>
                 <TableHead className="font-mono">City</TableHead>
+                <TableHead className="font-mono">SKU</TableHead>
                 <TableHead className="font-mono">Studies</TableHead>
                 <TableHead className="font-mono">Members</TableHead>
                 <TableHead className="font-mono">Created</TableHead>
@@ -222,6 +225,14 @@ export default function AdminClinics() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {clinic.city || "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge 
+                      variant={clinic.sku === 'internal' ? 'default' : clinic.sku === 'prod' ? 'secondary' : 'outline'}
+                      className="font-mono text-xs"
+                    >
+                      {SKU_LABELS[clinic.sku as SkuTier] || clinic.sku}
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     <Badge variant="secondary" className="font-mono text-xs">
@@ -266,7 +277,7 @@ export default function AdminClinics() {
               ))}
               {(!clinics || clinics.length === 0) && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No clinics found
                   </TableCell>
                 </TableRow>
@@ -299,6 +310,24 @@ export default function AdminClinics() {
                 onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
                 className="font-mono"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>SKU Tier</Label>
+              <Select
+                value={formData.sku}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, sku: v as SkuTier }))}
+              >
+                <SelectTrigger className="font-mono">
+                  <SelectValue placeholder="Select SKU..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {SKU_TIERS.map((tier) => (
+                    <SelectItem key={tier} value={tier} className="font-mono">
+                      {SKU_LABELS[tier]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <Button variant="outline" onClick={() => setEditingClinic(null)}>

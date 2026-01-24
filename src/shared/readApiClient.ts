@@ -35,13 +35,14 @@ function getGatewayHeaders(): Record<string, string> {
 
 export async function fetchJson<T>(
   path: string,
-  opts?: { timeoutMs?: number; base?: string; requireKey?: boolean }
+  opts?: { timeoutMs?: number; base?: string; requireKey?: boolean; method?: 'GET' | 'POST'; body?: unknown }
 ): Promise<FetchResult<T>> {
   const t0 = nowMs();
 
   const key = getReadApiKey();
   const requireKey = opts?.requireKey ?? false;
   const proxyBase = getReadApiProxyBase();
+  const method = opts?.method || 'GET';
 
   const directBase = (opts?.base || resolveReadApiBase()).replace(/\/+$/, "");
   const baseToUse = (requireKey && !key && proxyBase) ? proxyBase : directBase;
@@ -58,13 +59,20 @@ export async function fetchJson<T>(
   try {
     const usingProxy = !!proxyBase && baseToUse === proxyBase;
 
+    const headers: Record<string, string> = {
+      ...(usingProxy ? getGatewayHeaders() : {}),
+      ...(!usingProxy && key ? { "X-API-KEY": key } : {}),
+    };
+
+    if (method === 'POST' && opts?.body) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const res = await fetch(url, {
-      method: "GET",
+      method,
       signal: controller.signal,
-      headers: {
-        ...(usingProxy ? getGatewayHeaders() : {}),
-        ...(!usingProxy && key ? { "X-API-KEY": key } : {}),
-      },
+      headers,
+      body: method === 'POST' && opts?.body ? JSON.stringify(opts.body) : undefined,
     });
 
     const ms = nowMs() - t0;
