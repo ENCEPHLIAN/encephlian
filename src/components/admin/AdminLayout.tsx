@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import { ClinicSelectorDropdown } from "./ClinicSelectorDropdown";
+// ClinicSelectorDropdown removed from sidebar per user request - can be added to individual pages if needed
 import {
   LayoutDashboard,
   Building2,
@@ -93,10 +93,6 @@ export default function AdminLayout() {
           <ThemeToggle />
         </div>
 
-        {/* Clinic Selector */}
-        <div className="px-3 py-3 border-b border-border/50">
-          <ClinicSelectorDropdown />
-        </div>
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3">
