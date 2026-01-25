@@ -13,6 +13,7 @@ import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -171,6 +172,7 @@ export default function Studies() {
 function InternalStudiesView() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { userId } = useUserSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -184,6 +186,14 @@ function InternalStudiesView() {
   }, [navigate]);
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    
+    if (!userId) {
+      toast({
+        title: "Not authenticated",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const file = files[0];
     const lowerName = file.name.toLowerCase();
@@ -199,19 +209,29 @@ function InternalStudiesView() {
     try {
       toast({ title: "Uploading file..." });
       
-      const filePath = `${Date.now()}-${file.name}`;
+      // CRITICAL: Path must start with userId for RLS policy compliance
+      const filePath = `${userId}/${Date.now()}-${file.name}`;
       const { error: uploadError } = await supabase.storage
         .from("eeg-raw")
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw uploadError;
+      }
 
       toast({ title: "Creating study..." });
       const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
         body: { filePath, fileName: file.name }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Create study error:", error);
+        throw error;
+      }
 
       if (data?.studyId) {
         toast({ title: "Generating AI draft..." });
@@ -226,11 +246,11 @@ function InternalStudiesView() {
         
         navigate(`/app/studies/${data.studyId}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
       toast({
         title: "Upload failed",
-        description: "Failed to create study from uploaded file",
+        description: error?.message || "Failed to create study from uploaded file",
         variant: "destructive",
       });
     }
