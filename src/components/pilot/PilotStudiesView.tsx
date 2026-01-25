@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { useStudiesData } from "@/hooks/useStudiesData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import { cn } from "@/lib/utils";
 import logoSrc from "@/assets/logo.png";
 
@@ -37,6 +38,7 @@ export default function PilotStudiesView() {
 
   const { studies, isLoading } = useStudiesData("all");
   const { tokenBalance } = useDashboardData();
+  const { userId } = useUserSession();
 
   // Categorize studies by stage
   const pendingStudies = studies.filter(s => 
@@ -70,37 +72,55 @@ export default function PilotStudiesView() {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
+    if (!userId) {
+      toast.error("Not authenticated");
+      return;
+    }
+    
     const file = files[0];
     const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.edf') && !lowerName.endsWith('.bdf')) {
-      toast.error("Only EDF/BDF files supported");
+    if (!lowerName.endsWith('.edf')) {
+      toast.error("Only EDF files supported", {
+        description: "BDF support coming soon"
+      });
       return;
     }
 
     setUploading(true);
     try {
-      const filePath = `${Date.now()}-${file.name}`;
+      // CRITICAL: Path must start with userId for RLS policy compliance
+      const filePath = `${userId}/${Date.now()}-${file.name}`;
+      
       const { error: uploadError } = await supabase.storage
         .from("eeg-raw")
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw uploadError;
+      }
 
+      // Create study and trigger AI triage
       const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
         body: { filePath, fileName: file.name }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Create study error:", error);
+        throw error;
+      }
 
       toast.success("EEG uploaded!", {
-        description: "Select priority to start analysis",
+        description: "Select priority to start AI triage",
       });
       
-      // Refresh happens via realtime subscription
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload error:", error);
       toast.error("Upload failed", {
-        description: "Please try again",
+        description: error?.message || "Please try again",
       });
     } finally {
       setUploading(false);
