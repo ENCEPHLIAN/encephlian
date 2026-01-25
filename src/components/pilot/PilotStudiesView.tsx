@@ -76,6 +76,14 @@ export default function PilotStudiesView() {
       toast.error("Not authenticated");
       return;
     }
+
+    // Hard gate: Storage RLS requires a real user JWT (not anon).
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast.error("Session expired", { description: "Please sign in again." });
+      navigate("/login", { replace: true });
+      return;
+    }
     
     const file = files[0];
     const lowerName = file.name.toLowerCase();
