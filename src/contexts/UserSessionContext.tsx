@@ -57,7 +57,8 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
   });
 
-  const loadUserData = useCallback(async (user: User) => {
+  const loadUserData = useCallback(async (session: Session) => {
+    const user = session.user;
     try {
       // Parallel fetch all user data
       const [profileResult, clinicResult, rolesResult] = await Promise.all([
@@ -73,7 +74,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
 
       setState({
         user,
-        session: null,
+        session,
         userId: user.id,
         profile,
         clinicContext,
@@ -84,7 +85,15 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Failed to load user data:', error);
-      setState(prev => ({ ...prev, isLoading: false }));
+      // If we fail to load user-scoped data, we still keep auth truthy based on the session.
+      setState(prev => ({
+        ...prev,
+        user,
+        session,
+        userId: user.id,
+        isLoading: false,
+        isAuthenticated: true,
+      }));
     }
   }, []);
 
@@ -110,9 +119,9 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       
       if (session?.user) {
-        loadUserData(session.user);
+        loadUserData(session);
       } else {
-        setState(prev => ({ ...prev, isLoading: false }));
+        clearSession();
       }
     });
 
@@ -125,13 +134,9 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (event === 'SIGNED_IN' && session?.user) {
-        loadUserData(session.user);
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+        loadUserData(session);
         return;
-      }
-
-      if (event === 'TOKEN_REFRESHED' && session) {
-        setState(prev => ({ ...prev, session }));
       }
     });
 
@@ -144,9 +149,11 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   const refreshSession = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      await loadUserData(session.user);
+      await loadUserData(session);
+    } else {
+      clearSession();
     }
-  }, [loadUserData]);
+  }, [loadUserData, clearSession]);
 
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();

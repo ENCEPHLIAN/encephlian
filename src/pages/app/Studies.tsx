@@ -194,6 +194,18 @@ function InternalStudiesView() {
       });
       return;
     }
+
+    // Hard gate: Storage RLS requires a real user JWT (not anon).
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      toast({
+        title: "Session expired",
+        description: "Please sign in again.",
+        variant: "destructive",
+      });
+      navigate("/login", { replace: true });
+      return;
+    }
     
     const file = files[0];
     const lowerName = file.name.toLowerCase();
