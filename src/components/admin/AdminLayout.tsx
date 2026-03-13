@@ -58,6 +58,7 @@ const NAV_SECTIONS = [
     items: [
       { name: "Settings", href: "/admin/settings", icon: Settings },
       { name: "Account", href: "/admin/account", icon: Shield },
+      { name: "Manual", href: "/admin/docs", icon: BookOpen },
     ],
   },
 ];
