@@ -282,32 +282,47 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
   // Submit the study
   const handleSubmit = useCallback(async () => {
-    if (!file || !userId || !clinicId) {
-      toast.error("Missing required data");
+    if (!file || !userId) {
+      systemFeedback.report({
+        severity: "error",
+        what: "Cannot upload",
+        why: "Missing authentication. Please log in again.",
+        action: "Refresh the page and sign in.",
+      });
+      return;
+    }
+
+    if (!clinicId) {
+      systemFeedback.noClinicAssigned();
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStage("Uploading file...");
 
     try {
-      // 1. Upload file to storage
+      // 1. Upload file to storage with timeout
       const filePath = `${userId}/${Date.now()}_${file.name}`;
       
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 80));
-      }, 200);
+      setUploadProgress(10);
 
-      const { error: uploadError } = await supabase.storage
+      const uploadPromise = supabase.storage
         .from("eeg-uploads")
         .upload(filePath, file);
 
-      clearInterval(progressInterval);
-      setUploadProgress(90);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("UPLOAD_TIMEOUT")), 60000)
+      );
+
+      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
 
       if (uploadError) {
         throw uploadError;
       }
+
+      setUploadProgress(50);
+      setUploadStage("Creating study record...");
 
       // 2. Build comprehensive meta from EDF header + user input
       const fileExt = file.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
@@ -321,7 +336,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         file_size_bytes: file.size,
       };
 
-      // Merge EDF header data into meta
       if (edfMeta) {
         studyMeta.edf_patient_id = edfMeta.patient_id || null;
         studyMeta.edf_recording_id = edfMeta.recording_id || null;
@@ -352,10 +366,12 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .single();
 
       if (studyError) {
-        throw studyError;
+        systemFeedback.studyCreationFailed(studyError.message);
+        return;
       }
 
-      setUploadProgress(95);
+      setUploadProgress(75);
+      setUploadStage("Triggering analysis...");
 
       // 4. Auto-trigger parse_eeg_study for EDF/BDF files
       const isEdfBdf = EDF_BDF_EXTENSIONS.includes(
@@ -372,17 +388,22 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             },
           });
         } catch (parseErr) {
-          // Non-blocking — study was created successfully
-          console.warn("Auto-parse triggered but failed:", parseErr);
+          systemFeedback.parseEdgeFunctionFailed(
+            parseErr instanceof Error ? parseErr.message : String(parseErr)
+          );
         }
       }
 
       setUploadProgress(100);
+      setUploadStage("Complete");
 
-      toast.success("Study uploaded successfully!", {
-        description: isProprietaryFormat
-          ? "File will be processed server-side."
-          : "Metadata extracted. Ready for triage.",
+      systemFeedback.report({
+        severity: "info",
+        what: "Study uploaded successfully",
+        why: isProprietaryFormat
+          ? "Proprietary format saved. Export as EDF for immediate analysis."
+          : "Metadata extracted. Study is ready for triage.",
+        action: "Redirecting to study detail...",
       });
 
       onOpenChange(false);
@@ -390,12 +411,14 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       navigate(`/app/studies/${study.id}`);
 
     } catch (error: any) {
-      console.error("Upload error:", error);
-      toast.error("Upload failed", {
-        description: error.message || "Please try again.",
-      });
+      if (error?.message === "UPLOAD_TIMEOUT") {
+        systemFeedback.uploadTimeout();
+      } else {
+        systemFeedback.uploadFailed(error?.message || String(error));
+      }
     } finally {
       setIsUploading(false);
+      setUploadStage("");
     }
   }, [file, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, navigate, onOpenChange, resetWizard]);
 
