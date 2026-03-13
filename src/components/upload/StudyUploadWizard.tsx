@@ -717,8 +717,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             {isUploading && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span>Uploading...</span>
-                  <span>{uploadProgress}%</span>
+                  <span className="text-muted-foreground">{uploadStage || "Preparing..."}</span>
+                  <span className="font-mono text-xs">{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} />
               </div>

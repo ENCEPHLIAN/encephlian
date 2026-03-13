@@ -235,16 +235,16 @@ export default function StudyDetail() {
     );
   }
 
-  if (!study) {
+  if (isError || !study) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-lg font-medium">Study not found</p>
-        <Button variant="outline" onClick={() => navigate("/app/studies")}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Studies
-        </Button>
-      </div>
+      <ErrorPage
+        title="Study not found"
+        description="This study may have been deleted, or you may not have access to it. If you believe this is an error, contact your clinic administrator."
+        actions={[
+          { label: "Back to Studies", onClick: () => navigate("/app/studies") },
+          { label: "Retry", onClick: () => refetch(), variant: "outline" },
+        ]}
+      />
     );
   }
 

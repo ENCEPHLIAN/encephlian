@@ -88,12 +88,39 @@ export default function Dashboard() {
 
   const hasProcessingStudies = processingStudies.length > 0;
 
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4 max-w-sm">
+          <WifiOff className="h-10 w-10 text-destructive mx-auto" />
+          <p className="font-medium">Could not load dashboard</p>
+          <p className="text-sm text-muted-foreground">
+            This could be a network issue or a temporary server problem. Check your connection and try again.
+          </p>
+          <Button onClick={() => refetchStudies()} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">Loading dashboard...</p>
+          {loadingTooLong && (
+            <div className="space-y-2">
+              <p className="text-sm text-amber-600">Taking longer than expected. This could be a network issue.</p>
+              <Button onClick={() => refetchStudies()} variant="outline" size="sm" className="gap-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
