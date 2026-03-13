@@ -391,4 +391,31 @@ src/pages/admin/AdminClinics.tsx      # SKU management UI
 
 ---
 
+## 11. Security Hardening (Latest)
+
+### RLS Recursion Fix
+All remaining `my_memberships` view references in RLS policies have been replaced with direct `clinic_memberships` table joins. This eliminates the infinite recursion risk that previously froze the platform.
+
+**Policies fixed:**
+- `studies.studies_insert` — INSERT policy
+- `study_files.files_scope` — SELECT policy
+- `eeg_markers.markers_insert` — INSERT policy
+- `report_attachments.report_attachments_own_clinic` — ALL policy (also added admin access)
+
+### Auth Configuration
+- **Anonymous signups**: Disabled
+- **Public signups**: Disabled (admin-only user creation)
+- **Email auto-confirm**: Disabled (email verification required)
+- **Password reset**: Proper `/reset-password` page with `PASSWORD_RECOVERY` event handling
+
+### Password Reset Flow
+```
+User → Forgot Password → Email sent with redirectTo=/reset-password
+→ User clicks link → /reset-password page detects type=recovery
+→ User enters new password → supabase.auth.updateUser({ password })
+→ Redirect to /login
+```
+
+---
+
 *Document prepared for ENCEPHLIAN team discussion. For questions, contact the platform engineering team.*
