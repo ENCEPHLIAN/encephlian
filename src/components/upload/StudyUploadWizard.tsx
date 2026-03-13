@@ -108,19 +108,19 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
     const numSignals = parseInt(readStr(252, 4), 10) || 0;
     const dataRecordDuration = parseFloat(readStr(244, 8)) || 1;
 
-    if (numSignals < 1 || numSignals > 512) return null;
+    if (numSignals < 1 || numSignals > 512) {
+      systemFeedback.edfHeaderExtractionFailed(`Invalid signal count: ${numSignals}`);
+      return null;
+    }
 
     const ns = Math.min(numSignals, 128);
     let offset = 256;
 
-    // Read channel labels (16 chars each)
     const labels: string[] = [];
     for (let i = 0; i < ns; i++) {
       labels.push(readStr(offset + i * 16, 16).replace(/\.+$/, "").trim());
     }
     offset += ns * 16;
-
-    // Skip to samples per record
     offset += ns * 80; // transducer
     offset += ns * 8;  // physical dimension
     offset += ns * 8;  // physical min
@@ -129,7 +129,6 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
     offset += ns * 8;  // digital max
     offset += ns * 80; // prefiltering
 
-    // Read samples per record
     let samplesPerRecord = 256;
     if (offset + 8 <= buffer.byteLength) {
       samplesPerRecord = parseInt(readStr(offset, 8), 10) || 256;
@@ -150,7 +149,7 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
       channel_labels: labels.length > 0 ? labels : undefined,
     };
   } catch (e) {
-    console.warn("EDF header extraction failed:", e);
+    systemFeedback.edfHeaderExtractionFailed(e instanceof Error ? e.message : String(e));
     return null;
   }
 }
