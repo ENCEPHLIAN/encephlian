@@ -27,6 +27,7 @@ import StudyReview from "./pages/app/StudyReview";
 import EEGViewer from "./pages/app/EEGViewer";
 import Notes from "./pages/app/Notes";
 import Files from "./pages/app/Files";
+import Documentation from "./pages/app/Documentation";
 import Wallet from "./pages/app/Wallet";
 import Lanes from "./pages/app/Lanes";
 import Reports from "./pages/app/Reports";
@@ -94,6 +95,7 @@ function App() {
                   <Route path="read-api" element={<AdminReadApi />} />
                   <Route path="report-v0" element={<AdminReportV0 />} />
                   <Route path="account" element={<AdminAccount />} />
+                  <Route path="docs" element={<Documentation />} />
                 </Route>
               </Route>
 
@@ -120,6 +122,7 @@ function App() {
                   <Route path="settings/tfa" element={<TFASetup />} />
                   <Route path="support" element={<Support />} />
                   <Route path="templates" element={<Templates />} />
+                  <Route path="docs" element={<Documentation />} />
                   <Route path="coming-soon" element={<ComingSoon />} />
                 </Route>
               </Route>
