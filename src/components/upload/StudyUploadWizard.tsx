@@ -524,9 +524,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     </p>
                   )}
                   {isProprietaryFormat && (
-                    <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                      <Server className="h-3 w-3" />
-                      Proprietary format — will be processed server-side
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-amber-600">
+                      <AlertCircle className="h-3 w-3" />
+                      Export as EDF from your machine for immediate processing
                     </div>
                   )}
                   <Button
