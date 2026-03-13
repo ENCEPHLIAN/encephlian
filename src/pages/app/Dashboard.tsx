@@ -1,6 +1,6 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle, RefreshCw, WifiOff } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
