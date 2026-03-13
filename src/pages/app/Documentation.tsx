@@ -1036,6 +1036,252 @@ supabase/
         </div>
       ),
     },
+
+    // ═══════════════════════════════════════════════════════════════
+    // REGULATORY COMPLIANCE
+    // ═══════════════════════════════════════════════════════════════
+    {
+      id: "regulatory-overview",
+      title: "Regulatory Classification & Strategy",
+      icon: Shield,
+      category: "regulatory",
+      tags: ["cdsco", "samd", "class-b", "cdss", "mdr-2017", "regulatory"],
+      relatedSections: ["audit-logging", "rls-security", "tfa-security"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            ENCEPHLIAN is classified as a <strong>Class B SaMD</strong> (Software as a Medical Device) under 
+            CDSCO&rsquo;s risk-based classification framework aligned with IMDRF.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
+              <h4 className="font-semibold text-sm">Classification Rationale</h4>
+              <ul className="text-xs space-y-1 text-muted-foreground mt-2">
+                <li>&bull; Provides AI-assisted triage to <strong>support</strong> clinical decisions</li>
+                <li>&bull; Does NOT autonomously diagnose or treat</li>
+                <li>&bull; EEG triage is non-life-threatening clinical management</li>
+                <li>&bull; Clinician always makes final diagnosis</li>
+              </ul>
+            </div>
+            <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+              <h4 className="font-semibold text-sm">CDSS Positioning</h4>
+              <ul className="text-xs space-y-1 text-muted-foreground mt-2">
+                <li>&bull; Clinical Decision Support System, not diagnostic AI</li>
+                <li>&bull; All reports require physician review + sign</li>
+                <li>&bull; Medical disclaimer enforced on all surfaces</li>
+                <li>&bull; AI draft &rarr; Review &rarr; Sign workflow preserves CDSS classification</li>
+              </ul>
+            </div>
+          </div>
+          <InfoBox variant="warning">
+            <strong>Critical:</strong> If AI output ever directly suggests specific diagnoses without requiring 
+            physician interpretation, the CDSS classification may be challenged and upgraded to Class C. 
+            The current architecture (AI draft &rarr; physician review &rarr; sign) correctly prevents this.
+          </InfoBox>
+          <div className="space-y-2">
+            <h4 className="font-semibold text-sm">Regulatory Authority</h4>
+            <p className="text-sm text-muted-foreground">
+              <strong>CDSCO</strong> (Central Drugs Standard Control Organization) under MoHFW. 
+              Class B SaMD manufacturing license issued by <strong>State Licensing Authority (SLA)</strong>. 
+              Registration via <strong>Sugam Portal</strong>. Estimated approval: 6&ndash;12 weeks.
+            </p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "iso-13485-qms",
+      title: "ISO 13485 QMS Readiness",
+      icon: CheckCircle,
+      category: "regulatory",
+      tags: ["iso-13485", "qms", "quality", "sop", "dhf", "capa"],
+      relatedSections: ["regulatory-overview", "audit-logging"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            ISO 13485:2016 certification is <strong>mandatory</strong> for CDSCO Class B SaMD registration. 
+            Current platform status against key clauses:
+          </p>
+          <div className="space-y-2">
+            {[
+              { clause: "4.2 Documentation", status: "partial", desc: "Architecture docs exist. Need formal Quality Manual, SOPs, Work Instructions." },
+              { clause: "5.5 Management Rep", status: "gap", desc: "Appoint QMS Management Representative." },
+              { clause: "7.1 Product Realization", status: "partial", desc: "Four-plane architecture documented. Need formal Design & Development Plan." },
+              { clause: "7.3 Design & Development", status: "partial", desc: "Code architecture exists. Need formal DHF with design inputs/outputs/V&V." },
+              { clause: "8.2 Monitoring", status: "partial", desc: "Audit logging exists. Need formal KPIs and process monitoring." },
+              { clause: "8.5 CAPA", status: "gap", desc: "Need formal Corrective and Preventive Action procedure." },
+            ].map((item) => (
+              <div key={item.clause} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
+                <div className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1.5 ${item.status === 'done' ? 'bg-emerald-500' : item.status === 'partial' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <div>
+                  <span className="text-sm font-medium">{item.clause}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <InfoBox variant="info">
+            The platform&rsquo;s existing audit trail, RLS isolation, and architecture documentation 
+            significantly reduce the QMS documentation burden compared to a greenfield startup.
+          </InfoBox>
+        </div>
+      ),
+    },
+    {
+      id: "iec-62304-lifecycle",
+      title: "IEC 62304 Software Lifecycle",
+      icon: Activity,
+      category: "regulatory",
+      tags: ["iec-62304", "software-lifecycle", "srs", "sad", "testing", "release"],
+      relatedSections: ["iso-13485-qms", "four-plane-architecture"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            IEC 62304 defines software lifecycle processes for medical device software. 
+            ENCEPHLIAN is classified as <strong>Class B software</strong> (could contribute to hazardous situations 
+            but not directly cause serious injury).
+          </p>
+          <div className="space-y-2">
+            {[
+              { clause: "5.1 Development Planning", status: "partial", desc: "Task tracking exists. Need formal Software Development Plan." },
+              { clause: "5.2 Requirements Analysis", status: "partial", desc: "Functional requirements in code/docs. Need formal SRS document." },
+              { clause: "5.3 Architectural Design", status: "done", desc: "Four-plane architecture well-documented with clear plane boundaries." },
+              { clause: "5.5 Integration & Testing", status: "partial", desc: "Some tests exist. Need formal test plan + traceability matrix." },
+              { clause: "5.7 Software Release", status: "gap", desc: "Need formal release procedure with checklist." },
+              { clause: "6.1 Maintenance Plan", status: "gap", desc: "Need post-market software maintenance SOP." },
+              { clause: "8.1 Config Management", status: "partial", desc: "Git-based. Need formal CM plan with baseline management." },
+            ].map((item) => (
+              <div key={item.clause} className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
+                <div className={`h-2.5 w-2.5 rounded-full shrink-0 mt-1.5 ${item.status === 'done' ? 'bg-emerald-500' : item.status === 'partial' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <div>
+                  <span className="text-sm font-medium">{item.clause}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "iso-14971-risk",
+      title: "ISO 14971 Risk Management",
+      icon: AlertTriangle,
+      category: "regulatory",
+      tags: ["iso-14971", "risk", "hazard", "residual-risk", "pms"],
+      relatedSections: ["regulatory-overview", "iec-62304-lifecycle"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            ISO 14971:2019 requires systematic risk management throughout the product lifecycle.
+          </p>
+          <div className="space-y-2">
+            <h4 className="font-semibold text-sm">Key Hazards to Address</h4>
+            <ul className="text-sm space-y-1 text-muted-foreground ml-4">
+              <li>&bull; <strong>Incorrect AI triage output</strong> &mdash; Mitigated by CDSS labeling + mandatory physician review</li>
+              <li>&bull; <strong>Data integrity loss</strong> &mdash; Mitigated by RLS isolation + audit logging + atomic transactions</li>
+              <li>&bull; <strong>Unauthorized access to PHI</strong> &mdash; Mitigated by multi-tenant RLS + TFA + role hierarchy</li>
+              <li>&bull; <strong>System unavailability during clinical need</strong> &mdash; Monitor via service health checks</li>
+              <li>&bull; <strong>EDF parsing errors producing wrong canonical data</strong> &mdash; Mitigate with validation checksums</li>
+            </ul>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold text-sm">Existing Risk Controls</h4>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "CDSS disclaimer", "Physician sign-off gate", "RLS isolation",
+                "Audit trail", "TFA for admins", "48h refund window",
+                "Deterministic error handling", "Storage lifecycle policies",
+              ].map((c) => (
+                <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
+              ))}
+            </div>
+          </div>
+          <InfoBox variant="warning">
+            <strong>Action Required:</strong> Create formal Risk Management Plan, hazard identification register, 
+            probability &times; severity matrix, and residual risk assessment document.
+          </InfoBox>
+        </div>
+      ),
+    },
+    {
+      id: "dpdpa-cybersecurity",
+      title: "DPDPA 2023 & Cybersecurity",
+      icon: Lock,
+      category: "regulatory",
+      tags: ["dpdpa", "privacy", "cybersecurity", "iec-81001", "data-protection"],
+      relatedSections: ["rls-security", "storage-security"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            India&rsquo;s Digital Personal Data Protection Act, 2023 (DPDPA) applies to all health data processing. 
+            IEC 81001-5-1 covers cybersecurity for health software.
+          </p>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg border border-border/50 bg-muted/20">
+              <h4 className="font-semibold text-sm mb-2">What Exists</h4>
+              <ul className="text-xs space-y-1 text-muted-foreground">
+                <li className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-500" /> RLS on all 23+ tables</li>
+                <li className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-500" /> TFA (TOTP) for admin access</li>
+                <li className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-500" /> Encryption in transit (TLS)</li>
+                <li className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-500" /> GDPR delete_account function</li>
+                <li className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-emerald-500" /> Path-based storage isolation</li>
+              </ul>
+            </div>
+            <div className="p-4 rounded-lg border border-red-500/30 bg-red-500/5">
+              <h4 className="font-semibold text-sm mb-2">Gaps</h4>
+              <ul className="text-xs space-y-1 text-muted-foreground">
+                <li className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Privacy policy document</li>
+                <li className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Consent management UI</li>
+                <li className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Data processing agreements</li>
+                <li className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Penetration test report</li>
+                <li className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-red-500" /> Data localization assessment</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: "regulatory-roadmap",
+      title: "Registration Roadmap",
+      icon: ArrowRight,
+      category: "regulatory",
+      tags: ["roadmap", "timeline", "registration", "sugam", "certification"],
+      relatedSections: ["iso-13485-qms", "regulatory-overview"],
+      content: (
+        <div className="space-y-4">
+          <p>Prioritized 5-phase plan for CDSCO Class B SaMD registration:</p>
+          <div className="space-y-3">
+            {[
+              { phase: "Phase 1: QMS Foundation", time: "Month 1\u20132", items: "Quality Manual, Intended Use statement, Document Control SOP, CAPA procedure, Management Representative" },
+              { phase: "Phase 2: Design History File", time: "Month 2\u20133", items: "Software Dev Plan (IEC 62304), SRS, Architecture Description, Traceability Matrix, V&V records" },
+              { phase: "Phase 3: Risk Management", time: "Month 2\u20133", items: "Risk Management Plan (ISO 14971), Hazard analysis, Risk estimation matrix, Residual risk assessment" },
+              { phase: "Phase 4: Clinical Eval & Security", time: "Month 3\u20134", items: "Clinical Evaluation Report, Cybersecurity risk assessment, Penetration testing, DPDPA documentation" },
+              { phase: "Phase 5: Certification & Registration", time: "Month 4\u20136", items: "ISO 13485 audit (Stage 1+2), Algorithm Change Protocol, CDSCO Sugam Portal filing, State Mfg License" },
+            ].map((p, idx) => (
+              <div key={p.phase} className="flex gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
+                <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
+                  {idx + 1}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">{p.phase}</span>
+                    <Badge variant="secondary" className="text-[10px]">{p.time}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{p.items}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <InfoBox variant="success">
+            <strong>Estimated total investment:</strong> &#x20B9;10\u201322 lakhs including ISO 13485 certification, 
+            documentation, clinical evaluation, penetration testing, and CDSCO registration fees. 
+            Timeline: 4\u20136 months with dedicated QMS effort.
+          </InfoBox>
+        </div>
+      ),
+    },
   ];
 }
 
