@@ -165,6 +165,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
   const [isProprietaryFormat, setIsProprietaryFormat] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
