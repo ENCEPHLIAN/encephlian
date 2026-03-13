@@ -1292,6 +1292,7 @@ const CATEGORY_LABELS: Record<string, { label: string; icon: React.ElementType }
   workflow: { label: "Workflows", icon: Activity },
   admin: { label: "Admin Console", icon: Monitor },
   security: { label: "Security", icon: Shield },
+  regulatory: { label: "Regulatory Compliance", icon: Shield },
   migration: { label: "Migration", icon: Globe },
   reference: { label: "Reference", icon: Database },
 };
