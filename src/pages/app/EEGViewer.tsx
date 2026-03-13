@@ -1,21 +1,25 @@
 // src/pages/app/EEGViewer.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, X, Focus, PanelRightOpen, FlaskConical } from "lucide-react";
+import { Loader2, X, Focus, PanelRightOpen } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
+import { MontageSelector } from "@/components/eeg/MontageSelector";
+import { ChannelGroupList } from "@/components/eeg/ChannelGroupList";
+import { applyMontage } from "@/lib/eeg/montage-transforms";
+import { getChannelGroup, ChannelGroup } from "@/lib/eeg/channel-groups";
+import { filterStandardChannels } from "@/lib/eeg/standard-channels";
+import { groupChannels } from "@/lib/eeg/channel-groups";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 /* =======================
    MVP LOCK - Demo study ID
-   Real study loading requires canonical_eeg_records to be populated by the pipeline
 ======================= */
 const DEMO_STUDY_ID = "TUH_CANON_001";
 
@@ -26,6 +30,8 @@ const PROXY_BASE = getReadApiProxyBase() || "";
 const IS_LOCAL_BASE = DIRECT_BASE.includes("127.0.0.1") || DIRECT_BASE.includes("localhost");
 const USING_PROXY = !DIRECT_KEY && !IS_LOCAL_BASE && !!PROXY_BASE;
 const API_AVAILABLE = !!(DIRECT_KEY || IS_LOCAL_BASE || PROXY_BASE);
+
+const MAX_CACHE_ENTRIES = 20;
 
 /* =======================
    TYPES
@@ -85,14 +91,7 @@ function keyFor(startSample: number, length: number) {
 }
 
 /**
- * Binary layout ambiguity guard:
- * Some pipelines serve chunk.bin as:
- *  A) channel-major: [ch0...ch0][ch1...][chN...]
- *  B) sample-major:  [s0ch0,s0ch1..][s1ch0..]...
- *
- * We:
- * - Implement both reshape variants
- * - Auto-pick via a deterministic heuristic (no randomness)
+ * Binary layout ambiguity guard
  */
 function reshapeChannelMajor(f32: Float32Array, nCh: number, nSamp: number): number[][] {
   const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamp));
@@ -115,7 +114,6 @@ function reshapeSampleMajor(f32: Float32Array, nCh: number, nSamp: number): numb
 }
 
 function scoreContinuity(channels: number[][], probeSamples = 2048) {
-  // Lower score = smoother temporal continuity (what EEG should look like).
   const nCh = channels.length;
   if (nCh === 0) return Number.POSITIVE_INFINITY;
   const nSamp = channels[0]?.length ?? 0;
@@ -124,8 +122,6 @@ function scoreContinuity(channels: number[][], probeSamples = 2048) {
 
   let acc = 0;
   let count = 0;
-
-  // sample a few channels deterministically: first, middle, last
   const idxs = [0, Math.floor(nCh / 2), nCh - 1].filter((x, i, a) => x >= 0 && x < nCh && a.indexOf(x) === i);
 
   for (const ch of idxs) {
@@ -148,13 +144,11 @@ function reshapeAuto(f32: Float32Array, nCh: number, nSamp: number) {
   const sa = scoreContinuity(a);
   const sb = scoreContinuity(b);
 
-  // Deterministic tie-breaker: prefer channel-major if equal
   return sa <= sb
     ? { signals: a, layout: "channel-major" as const, score: sa }
     : { signals: b, layout: "sample-major" as const, score: sb };
 }
 
-// header helper: prefer multiple possible names (legacy + new)
 function hdrNum(headers: Record<string, string>, names: string[]): number {
   for (const n of names) {
     const v = headers[n.toLowerCase()];
@@ -166,7 +160,6 @@ function hdrNum(headers: Record<string, string>, names: string[]): number {
   return Number.NaN;
 }
 
-// Helper to fetch chunk.bin using shared client
 async function fetchChunkBin(studyId: string, startSample: number, length: number): Promise<{
   ok: true;
   data: ArrayBuffer;
@@ -217,11 +210,12 @@ export default function EEGViewer() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
 
-  // Window scheduler (global time = windowStartSec + cursorSec)
+  // Window scheduler
   const [windowSec, setWindowSec] = useState(10);
-  const [windowStartSec, setWindowStartSec] = useState(0); // global start of rendered buffer
-  const [cursorSec, setCursorSec] = useState(0); // local time within window [0..windowSec]
+  const [windowStartSec, setWindowStartSec] = useState(0);
+  const [cursorSec, setCursorSec] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
   // Viewer controls
   const [amplitude, setAmplitude] = useState(1.0);
@@ -230,21 +224,27 @@ export default function EEGViewer() {
   const [showSegmentOverlays, setShowSegmentOverlays] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Montage
+  const [montage, setMontage] = useState("referential");
+
+  // Channel group visibility
+  const [visibleGroups, setVisibleGroups] = useState<Set<ChannelGroup>>(
+    new Set(["frontal", "central", "temporal", "occipital"])
+  );
+
   // Canonical overlays
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
 
-  // Data buffer for current window (this is what WebGLEEGViewer renders)
+  // Data buffer
   const [signals, setSignals] = useState<number[][] | null>(null);
 
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingWindow, setLoadingWindow] = useState(true);
   
-  // Track if we've done initial seek from query param
   const didInitialSeek = useRef(false);
   
-  // Current segment index for keyboard navigation
   const currentSegmentIndex = useMemo(() => {
     if (!focusedSegment || segments.length === 0) return -1;
     return segments.findIndex(
@@ -252,14 +252,29 @@ export default function EEGViewer() {
     );
   }, [focusedSegment, segments]);
 
-  // Perf + cache
+  // Cache with eviction
   const cacheRef = useRef<Map<string, number[][]>>(new Map());
+  const cacheOrderRef = useRef<string[]>([]);
   const lastReqId = useRef(0);
   const lastFetchMs = useRef<number | null>(null);
   const lastFetchMode = useRef<"cache" | "net" | null>(null);
-
-  // Debug: what layout did we detect?
   const lastLayoutRef = useRef<string | null>(null);
+
+  const addToCache = useCallback((key: string, data: number[][]) => {
+    const cache = cacheRef.current;
+    const order = cacheOrderRef.current;
+    
+    if (cache.has(key)) return;
+    
+    // Evict oldest entries if over limit
+    while (order.length >= MAX_CACHE_ENTRIES) {
+      const oldest = order.shift();
+      if (oldest) cache.delete(oldest);
+    }
+    
+    cache.set(key, data);
+    order.push(key);
+  }, []);
 
   // Hard sanity
   useEffect(() => {
@@ -336,37 +351,47 @@ export default function EEGViewer() {
       .catch(() => setSegments([]));
   }, []);
 
-
-  /* ---------- DERIVED (channel order is canonical, no sorting) ---------- */
+  /* ---------- DERIVED (channel order is canonical) ---------- */
   const channelLabels = useMemo(() => {
     if (!meta) return [];
-    // Prefer explicit ordered map
     if (Array.isArray(meta.channel_map) && meta.channel_map.length > 0) {
-      // Ensure stable order by channel_map.index
       return [...meta.channel_map].sort((a, b) => a.index - b.index).map((c) => c.canonical_id);
     }
-    // Fallbacks (if backend shape changes)
     if (Array.isArray(meta.channel_names)) return meta.channel_names;
     if (Array.isArray(meta.channels)) return meta.channels.map((c) => c.name);
     return [];
   }, [meta]);
 
+  // Channel group visibility → visible channel indices
   const visibleChannels = useMemo(() => {
-    // Stable Set instance (avoids rerender thrash in renderer)
     if (!meta) return new Set<number>();
     const s = new Set<number>();
-    for (let i = 0; i < meta.n_channels; i++) s.add(i);
+    
+    // When montage is not referential, show all derived channels
+    if (montage !== "referential") {
+      // After montage transform, all channels are visible
+      // The montage transform produces new channel list, so show all
+      for (let i = 0; i < meta.n_channels; i++) s.add(i);
+      return s;
+    }
+    
+    // For referential montage, filter by group visibility
+    for (let i = 0; i < channelLabels.length; i++) {
+      const group = getChannelGroup(channelLabels[i]);
+      if (visibleGroups.has(group) || group === "other") {
+        s.add(i);
+      }
+    }
     return s;
-  }, [meta]);
+  }, [meta, channelLabels, visibleGroups, montage]);
 
-  /* ---------- WINDOW FETCH (ONLY when windowStartSec/windowSec changes) ---------- */
+  /* ---------- WINDOW FETCH ---------- */
   useEffect(() => {
     if (!API_AVAILABLE || !meta) return;
 
     const fs = meta.sampling_rate_hz;
     const durationSec = meta.n_samples / fs;
 
-    // Clamp windowStart within file
     const maxStart = Math.max(0, durationSec - windowSec);
     const ws = clamp(windowStartSec, 0, maxStart);
     if (ws !== windowStartSec) {
@@ -374,7 +399,6 @@ export default function EEGViewer() {
       return;
     }
 
-    // Clamp cursor inside window
     const c = clamp(cursorSec, 0, windowSec);
     if (c !== cursorSec) {
       setCursorSec(c);
@@ -404,19 +428,11 @@ export default function EEGViewer() {
       .then((result) => {
         if (result.ok === false) throw new Error(result.error);
 
-        // Headers may be invisible in browser depending on proxy/CORS behavior.
-        // We treat them as *optional* and derive dimensions deterministically.
         const hdrNCh = hdrNum(result.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]);
         const hdrNSamp = hdrNum(result.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]);
 
         const nCh = Number.isFinite(hdrNCh) ? hdrNCh : meta.n_channels;
         const nSamp = Number.isFinite(hdrNSamp) ? hdrNSamp : length;
-
-        // Optional consistency check (doesn't block rendering)
-        if (Number.isFinite(hdrNCh) && hdrNCh !== meta.n_channels && import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.warn("[chunk.bin] header nCh != meta.n_channels:", hdrNCh, meta.n_channels);
-        }
 
         return { buf: result.data, nCh, nSamp };
       })
@@ -426,7 +442,6 @@ export default function EEGViewer() {
         const f32 = new Float32Array(buf);
         const expected = nCh * nSamp;
 
-        // Hard gate: payload must match computed dimensions
         if (f32.length !== expected) {
           throw new Error(
             `Bad payload length: got ${f32.length}, expected ${expected}. ` +
@@ -434,16 +449,10 @@ export default function EEGViewer() {
           );
         }
 
-        if (import.meta.env.DEV) {
-          const preview = Array.from(f32.slice(0, 24)).map((v) => Number(v.toFixed(3)));
-          // eslint-disable-next-line no-console
-          console.log("[chunk.bin] f32[0..24):", preview, "nCh=", nCh, "nSamp=", nSamp);
-        }
-
         const reshaped = reshapeAuto(f32, nCh, nSamp);
         lastLayoutRef.current = `${reshaped.layout} (score=${reshaped.score.toFixed(3)})`;
 
-        cacheRef.current.set(k, reshaped.signals);
+        addToCache(k, reshaped.signals);
         setSignals(reshaped.signals);
 
         lastFetchMs.current = Math.round(performance.now() - t0);
@@ -456,7 +465,7 @@ export default function EEGViewer() {
         if (reqId === lastReqId.current) setLoadingWindow(false);
       });
 
-    // Prefetch next window (stride = windowSec/2) during playback
+    // Prefetch next window during playback
     if (playing) {
       const stride = windowSec / 2;
       const nextWs = clamp(ws + stride, 0, maxStart);
@@ -482,13 +491,13 @@ export default function EEGViewer() {
             const expected = x.nCh * x.nSamp;
             if (f32.length !== expected) return;
             const reshaped = reshapeAuto(f32, x.nCh, x.nSamp);
-            cacheRef.current.set(nk, reshaped.signals);
+            addToCache(nk, reshaped.signals);
           })
           .catch(() => {});
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meta, windowStartSec, windowSec, playing]);
+  }, [meta, windowStartSec, windowSec, playing, addToCache]);
 
   /* ---------- PLAYBACK (smooth + deterministic) ---------- */
   useEffect(() => {
@@ -503,13 +512,12 @@ export default function EEGViewer() {
     let last = performance.now();
 
     const tick = (now: number) => {
-      const dt = (now - last) / 1000;
+      const dt = ((now - last) / 1000) * playbackSpeed;
       last = now;
 
       setCursorSec((c) => {
         let nc = c + dt;
 
-        // Keep cursor moving locally; shift window in coarse strides
         if (nc < windowSec * 0.75) return nc;
 
         setWindowStartSec((ws) => clamp(ws + stride, 0, maxStart));
@@ -521,7 +529,36 @@ export default function EEGViewer() {
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, meta, windowSec]);
+  }, [playing, meta, windowSec, playbackSpeed]);
+
+  /* ---------- KEYBOARD NAVIGATION (P/N for segment jumping) ---------- */
+  useEffect(() => {
+    if (segments.length === 0) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't capture when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      
+      const key = e.key.toLowerCase();
+      if (key !== "p" && key !== "n") return;
+      
+      e.preventDefault();
+      
+      let targetIdx: number;
+      if (key === "n") {
+        targetIdx = currentSegmentIndex + 1;
+        if (targetIdx >= segments.length) targetIdx = 0; // wrap
+      } else {
+        targetIdx = currentSegmentIndex - 1;
+        if (targetIdx < 0) targetIdx = segments.length - 1; // wrap
+      }
+      
+      navigateToSegment(segments[targetIdx]);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [segments, currentSegmentIndex]);
 
   /* ---------- DERIVED TIMES ---------- */
   const globalTime = windowStartSec + cursorSec;
@@ -531,7 +568,7 @@ export default function EEGViewer() {
     return meta.n_samples / meta.sampling_rate_hz;
   }, [meta]);
 
-  /* ---------- WINDOW-LOCAL OVERLAYS (C-plane only) ---------- */
+  /* ---------- WINDOW-LOCAL OVERLAYS ---------- */
   const windowArtifacts = useMemo(() => {
     if (!showArtifacts) return [];
     const ws = windowStartSec;
@@ -561,7 +598,6 @@ export default function EEGViewer() {
       }));
   }, [annotations, windowStartSec, windowSec]);
 
-  // Segment overlays for the current window (color-coded by label, channel-specific)
   const windowSegmentOverlays = useMemo(() => {
     if (!showSegmentOverlays || segments.length === 0) return [];
     
@@ -588,13 +624,11 @@ export default function EEGViewer() {
       });
   }, [segments, showSegmentOverlays, windowStartSec, windowSec, focusedSegment]);
 
-  // Legacy focused segment highlight (window-relative) - used when segment overlays are disabled
   const windowHighlight = useMemo(() => {
     if (!focusedSegment || showSegmentOverlays) return null;
     const ws = windowStartSec;
     const we = windowStartSec + windowSec;
     
-    // Check if segment overlaps with current window
     if (focusedSegment.t_end_s <= ws || focusedSegment.t_start_s >= we) return null;
     
     return {
@@ -605,7 +639,7 @@ export default function EEGViewer() {
   }, [focusedSegment, showSegmentOverlays, windowStartSec, windowSec]);
 
   // Navigate to a specific segment
-  const navigateToSegment = (seg: Segment) => {
+  const navigateToSegment = useCallback((seg: Segment) => {
     if (!meta) return;
     
     const fs = meta.sampling_rate_hz;
@@ -618,7 +652,6 @@ export default function EEGViewer() {
     setWindowStartSec(clamp(ws, 0, Math.max(0, dur - windowSec)));
     setCursorSec(clamp(tt - ws, 0, windowSec));
     
-    // Update URL with new segment
     const params = new URLSearchParams(searchParams);
     params.set("t", String(seg.t_start_s));
     params.set("t_end", String(seg.t_end_s));
@@ -635,12 +668,102 @@ export default function EEGViewer() {
       params.delete("score");
     }
     setSearchParams(params, { replace: true });
-  };
+  }, [meta, windowSec, searchParams, setSearchParams]);
 
+  /* ---------- MONTAGE TRANSFORM ---------- */
+  const { renderSignals, renderLabels } = useMemo(() => {
+    if (!signals || !channelLabels.length) {
+      return { renderSignals: signals, renderLabels: channelLabels };
+    }
+    
+    if (montage === "referential") {
+      return { renderSignals: signals, renderLabels: channelLabels };
+    }
+    
+    const result = applyMontage(signals, channelLabels, montage);
+    return { renderSignals: result.signals, renderLabels: result.labels };
+  }, [signals, channelLabels, montage]);
 
-  /* ---------- RAW IMMUTABLE DISPLAY MODE ---------- */
-  const renderSignals = signals;
+  // Visible channels after montage — need to recalculate for non-referential
+  const renderVisibleChannels = useMemo(() => {
+    if (montage !== "referential" && renderSignals) {
+      // For bipolar/avg montages, show all derived channels
+      const s = new Set<number>();
+      for (let i = 0; i < renderSignals.length; i++) s.add(i);
+      return s;
+    }
+    return visibleChannels;
+  }, [montage, renderSignals, visibleChannels]);
 
+  /* ---------- CLICK-TO-SEEK ---------- */
+  const handleTimeClick = useCallback((localTime: number) => {
+    setPlaying(false);
+    setCursorSec(clamp(localTime, 0, windowSec));
+  }, [windowSec]);
+
+  /* ---------- EXPORT ---------- */
+  const handleExport = useCallback(() => {
+    const exportData = {
+      study_id: DEMO_STUDY_ID,
+      exported_at: new Date().toISOString(),
+      montage,
+      window: {
+        start_sec: windowStartSec,
+        end_sec: windowStartSec + windowSec,
+        window_sec: windowSec,
+      },
+      annotations: annotations.map(a => ({
+        start_sec: a.start_sec,
+        end_sec: a.end_sec,
+        label: a.label,
+        channel: a.channel,
+      })),
+      segments: segments.map(s => ({
+        t_start_s: s.t_start_s,
+        t_end_s: s.t_end_s,
+        label: s.label,
+        channel_index: s.channel_index,
+        score: s.score,
+      })),
+      artifacts: artifacts.map(a => ({
+        start_sec: a.start_sec,
+        end_sec: a.end_sec,
+        label: a.label,
+        channel: a.channel,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `eeg-annotations-${DEMO_STUDY_ID}-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [annotations, segments, artifacts, montage, windowStartSec, windowSec]);
+
+  // Channel group toggle handlers
+  const handleToggleGroup = useCallback((group: ChannelGroup) => {
+    setVisibleGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(group)) {
+        next.delete(group);
+      } else {
+        next.add(group);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleSelectAllGroups = useCallback(() => {
+    setVisibleGroups(new Set(["frontal", "central", "temporal", "occipital"]));
+  }, []);
+
+  const handleDeselectAllGroups = useCallback(() => {
+    setVisibleGroups(new Set());
+  }, []);
 
   // Handler to dismiss focused segment banner
   const dismissFocusedSegment = () => {
@@ -716,7 +839,24 @@ export default function EEGViewer() {
         {loadingWindow && <Badge variant="secondary">Loading…</Badge>}
         {lastFetchMs.current != null && <Badge variant="secondary">{lastFetchMs.current}ms</Badge>}
         {lastFetchMode.current && <Badge variant="secondary">{lastFetchMode.current}</Badge>}
-        {lastLayoutRef.current && <Badge variant="secondary">{lastLayoutRef.current}</Badge>}
+
+        <div className="h-4 border-l mx-1" />
+
+        {/* Montage selector inline */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Montage:</span>
+          <select
+            value={montage}
+            onChange={(e) => setMontage(e.target.value)}
+            className="h-7 text-xs rounded border border-border bg-background px-2"
+          >
+            <option value="referential">Referential</option>
+            <option value="bipolar-longitudinal">Bipolar Long.</option>
+            <option value="bipolar-transverse">Bipolar Trans.</option>
+            <option value="average-reference">Avg Reference</option>
+            <option value="laplacian">Laplacian</option>
+          </select>
+        </div>
 
         <div className="h-4 border-l mx-1" />
 
@@ -769,8 +909,8 @@ export default function EEGViewer() {
         }}
         amplitudeScale={amplitude}
         onAmplitudeScaleChange={setAmplitude}
-        playbackSpeed={1}
-        onPlaybackSpeedChange={() => {}}
+        playbackSpeed={playbackSpeed}
+        onPlaybackSpeedChange={setPlaybackSpeed}
         onSkipBackward={() => {
           setPlaying(false);
           const tt = clamp(globalTime - windowSec, 0, durationSec);
@@ -787,20 +927,32 @@ export default function EEGViewer() {
           setWindowStartSec(clamp(ws, 0, Math.max(0, durationSec - windowSec)));
           setCursorSec(clamp(tt - ws, 0, windowSec));
         }}
-        onExport={() => {}}
+        onExport={handleExport}
       />
 
       <div className="flex-1 flex overflow-hidden">
+        {/* Channel Group Panel (referential montage only) */}
+        {montage === "referential" && (
+          <div className="w-48 border-r overflow-y-auto shrink-0">
+            <ChannelGroupList
+              channelLabels={channelLabels}
+              visibleGroups={visibleGroups}
+              onToggleGroup={handleToggleGroup}
+              onSelectAll={handleSelectAllGroups}
+              onDeselectAll={handleDeselectAllGroups}
+            />
+          </div>
+        )}
+
         <div className="flex-1 min-w-0">
           <WebGLEEGViewer
             signals={renderSignals}
-            channelLabels={channelLabels}
+            channelLabels={renderLabels}
             sampleRate={meta.sampling_rate_hz}
-            // IMPORTANT: currentTime is LOCAL cursor within window
             currentTime={cursorSec}
             timeWindow={windowSec}
             amplitudeScale={amplitude}
-            visibleChannels={visibleChannels}
+            visibleChannels={renderVisibleChannels}
             theme={theme ?? "dark"}
             markers={windowMarkers}
             artifactIntervals={windowArtifacts}
@@ -808,6 +960,7 @@ export default function EEGViewer() {
             segmentOverlays={windowSegmentOverlays}
             showArtifactsAsRed={true}
             suppressArtifacts={suppressArtifacts}
+            onTimeClick={handleTimeClick}
           />
         </div>
 
