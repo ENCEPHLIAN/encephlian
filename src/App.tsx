@@ -95,6 +95,7 @@ function App() {
                   <Route path="read-api" element={<AdminReadApi />} />
                   <Route path="report-v0" element={<AdminReportV0 />} />
                   <Route path="account" element={<AdminAccount />} />
+                  <Route path="docs" element={<Documentation />} />
                 </Route>
               </Route>
 
