@@ -71,7 +71,7 @@ export default function StudyDetail() {
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
 
-  const { data: study, isLoading, refetch } = useQuery({
+  const { data: study, isLoading, isError, refetch } = useQuery({
     queryKey: ["study-detail", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -90,7 +90,8 @@ export default function StudyDetail() {
       if (error) throw error;
       return data;
     },
-    enabled: !!id
+    enabled: !!id,
+    retry: 1,
   });
 
   // Run AI Triage - uses proxy for PILOT, calls inference endpoint
