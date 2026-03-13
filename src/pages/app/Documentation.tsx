@@ -45,7 +45,7 @@ type DocSection = {
   id: string;
   title: string;
   icon: React.ElementType;
-  category: "overview" | "architecture" | "workflow" | "admin" | "security" | "migration" | "reference";
+  category: "overview" | "architecture" | "workflow" | "admin" | "security" | "migration" | "reference" | "regulatory";
   content: React.ReactNode;
   relatedSections?: string[];
   tags?: string[];
