@@ -194,8 +194,8 @@ function buildSections(): DocSection[] {
                 color: "border-purple-500/30 bg-purple-500/5",
               },
               {
-                plane: "3. Inference Plane (I-Plane)",
-                desc: "Run AI triage: seizure detection, spike identification, asymmetry analysis, artifact rejection. Currently uses simulated triage; will connect to Azure ML endpoint.",
+                plane: "3. Inference Plane (I-Plane) — MIND®",
+                desc: "Hosts the MIND® (Machine Intelligence for Neural Data) algorithm family: MIND®Triage (priority routing), MIND®Clean (artifact rejection), MIND®Seizure (seizure detection), MIND®Score (severity scoring). Future R&D: MIND®Sleep. Currently uses simulated triage; production will connect to Azure ML endpoint.",
                 tech: "Target: Azure ML Endpoint with $5,000 credits (expires Aug 2026)",
                 color: "border-amber-500/30 bg-amber-500/5",
               },
