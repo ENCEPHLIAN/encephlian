@@ -30,6 +30,8 @@ import {
   CheckCircle,
   ArrowRight,
   Cpu,
+  Download,
+  FolderOpen,
   HardDrive,
   Network,
   Key,
@@ -1279,6 +1281,142 @@ supabase/
             documentation, clinical evaluation, penetration testing, and CDSCO registration fees. 
             Timeline: 4\u20136 months with dedicated QMS effort.
           </InfoBox>
+        </div>
+      ),
+    },
+    // ═══════════════════════════════════════════════════════════════
+    // REGULATORY DOCUMENT PACK
+    // ═══════════════════════════════════════════════════════════════
+    {
+      id: "regulatory-document-pack",
+      title: "Regulatory Document Pack",
+      icon: FolderOpen,
+      category: "regulatory",
+      tags: ["qms", "iso-13485", "iec-62304", "iso-14971", "cdsco", "isms", "acp", "downloads"],
+      relatedSections: ["iso-13485-qms", "iec-62304-lifecycle", "iso-14971-risk", "dpdpa-cybersecurity", "regulatory-roadmap"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            Formal regulatory documents generated from the platform&rsquo;s actual architecture, 
+            codebase, and technical controls. Each document maps real implemented features to 
+            specific regulatory clauses — not placeholder content.
+          </p>
+          <InfoBox variant="success">
+            These documents form the core of ENCEPHLIAN&rsquo;s Design History File (DHF) and 
+            Quality Management System. They are living documents that should be updated as the 
+            platform evolves toward MVP and post-market deployment.
+          </InfoBox>
+          <div className="space-y-3">
+            {[
+              {
+                docId: "QMS-001",
+                title: "Quality Manual (ISO 13485:2016)",
+                desc: "QMS scope, quality policy, process mapping across four-plane architecture. Maps existing audit trails, RLS, and TFA to ISO 13485 clauses 4.1–8.5.",
+                standard: "ISO 13485:2016",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_QMS-001_Quality_Manual.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_QMS-001_Quality_Manual.docx",
+                color: "border-blue-500/30 bg-blue-500/5",
+              },
+              {
+                docId: "SDP-001",
+                title: "Software Development Plan (IEC 62304)",
+                desc: "Safety Class B rationale, SOUP inventory from package.json (React, pdfjs, mammoth, etc.), software architecture description, and unit decomposition.",
+                standard: "IEC 62304:2006+A1:2015",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_SDP-001_Software_Development_Plan.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_SDP-001_Software_Development_Plan.docx",
+                color: "border-purple-500/30 bg-purple-500/5",
+              },
+              {
+                docId: "RMF-001",
+                title: "Risk Management File (ISO 14971)",
+                desc: "12 identified hazards, 17 mitigations mapped to platform controls (RLS, CDSS disclaimers, physician sign-off gates, atomic token transactions).",
+                standard: "ISO 14971:2019",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_RMF-001_Risk_Management_File.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_RMF-001_Risk_Management_File.docx",
+                color: "border-amber-500/30 bg-amber-500/5",
+              },
+              {
+                docId: "TF-001",
+                title: "CDSCO Technical File (Indian MDR 2017)",
+                desc: "Class B SaMD classification rationale, Intended Use statement, Essential Principles checklist, and SUGAM portal submission requirements.",
+                standard: "Indian MDR 2017 / CDSCO",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_TF-001_CDSCO_Technical_File.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_TF-001_CDSCO_Technical_File.docx",
+                color: "border-emerald-500/30 bg-emerald-500/5",
+              },
+              {
+                docId: "ISMS-001",
+                title: "Security & Privacy Framework",
+                desc: "ISO 27001 Annex A control mapping, DPDPA 2023 data inventory, IEC 81001-5-1 health software security requirements, and penetration test readiness.",
+                standard: "ISO 27001 / DPDPA 2023 / IEC 81001-5-1",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_ISMS-001_Security_Privacy_Framework.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_ISMS-001_Security_Privacy_Framework.docx",
+                color: "border-red-500/30 bg-red-500/5",
+              },
+              {
+                docId: "ACP-001",
+                title: "Algorithm Change Protocol",
+                desc: "Three-tier change classification (Cat A/B/C), performance thresholds for AI model updates, PCCP-style boundary conditions, and annual PSUR reporting format.",
+                standard: "CDSCO Oct 2025 Draft / IMDRF N67 / FDA PCCP",
+                pdfUrl: "/__l5e/documents/ENCEPHLIAN_ACP-001_Algorithm_Change_Protocol.pdf",
+                docxUrl: "/__l5e/documents/ENCEPHLIAN_ACP-001_Algorithm_Change_Protocol.docx",
+                color: "border-cyan-500/30 bg-cyan-500/5",
+              },
+            ].map((doc) => (
+              <div key={doc.docId} className={cn("p-4 rounded-lg border", doc.color)}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Badge variant="outline" className="text-[10px] font-mono shrink-0">{doc.docId}</Badge>
+                      <h4 className="font-semibold text-sm truncate">{doc.title}</h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{doc.desc}</p>
+                    <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">Standard: {doc.standard}</p>
+                  </div>
+                  <div className="flex flex-col gap-1.5 shrink-0">
+                    <a href={doc.pdfUrl} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm" className="h-7 text-xs w-full gap-1.5">
+                        <Download className="h-3 w-3" />
+                        PDF
+                      </Button>
+                    </a>
+                    <a href={doc.docxUrl} target="_blank" rel="noopener noreferrer">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs w-full gap-1.5">
+                        <Download className="h-3 w-3" />
+                        DOCX
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <InfoBox variant="warning">
+            <strong>Document Lifecycle:</strong> These documents should be version-controlled under 
+            formal Document Control (QMS-001 §4.2). Update revision history, obtain QMS Management 
+            Representative approval, and re-issue when the platform architecture or risk profile changes materially.
+          </InfoBox>
+          <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
+            <h4 className="font-semibold text-sm mb-2">Gap Analysis Report</h4>
+            <p className="text-xs text-muted-foreground mb-2">
+              Comprehensive gap analysis covering Indian MDR 2017, CDSCO requirements, ISO 13485, 
+              IEC 62304, ISO 14971, ISO 27001, and DPDPA 2023 compliance status.
+            </p>
+            <div className="flex gap-2">
+              <a href="/__l5e/documents/ENCEPHLIAN_Regulatory_Gap_Analysis.pdf" target="_blank" rel="noopener noreferrer">
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
+                  <Download className="h-3 w-3" />
+                  Gap Analysis (PDF)
+                </Button>
+              </a>
+              <a href="/__l5e/documents/ENCEPHLIAN_Regulatory_Gap_Analysis.docx" target="_blank" rel="noopener noreferrer">
+                <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5">
+                  <Download className="h-3 w-3" />
+                  Gap Analysis (DOCX)
+                </Button>
+              </a>
+            </div>
+          </div>
         </div>
       ),
     },
