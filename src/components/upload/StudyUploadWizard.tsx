@@ -205,9 +205,19 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."));
     
     if (!ALL_ACCEPTED_EXTENSIONS.includes(ext)) {
-      toast.error("Unsupported file type", {
-        description: `Supported: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
+      systemFeedback.report({
+        severity: "error",
+        what: "Unsupported file type",
+        why: `The file extension "${ext}" is not recognized.`,
+        action: `Supported formats: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
       });
+      return;
+    }
+
+    // Pre-upload file size check (20MB limit)
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      systemFeedback.fileTooLarge(selectedFile.size / (1024 * 1024));
       return;
     }
 
@@ -216,7 +226,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setFile(selectedFile);
 
     if (!isProprietary && EDF_BDF_EXTENSIONS.includes(ext)) {
-      // Extract EDF/BDF header metadata
       const meta = await extractEdfHeader(selectedFile);
       if (meta) {
         setEdfMeta(meta);
@@ -233,12 +242,16 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
         setAutoFilledFields(filled);
 
-        toast.success("File header parsed", {
-          description: `${meta.num_channels} channels · ${meta.sample_rate}Hz · ${meta.duration_sec ? Math.round(meta.duration_sec / 60) + " min" : "unknown duration"}`,
+        systemFeedback.report({
+          severity: "info",
+          what: "File header parsed",
+          why: `${meta.num_channels} channels · ${meta.sample_rate}Hz · ${meta.duration_sec ? Math.round(meta.duration_sec / 60) + " min" : "unknown duration"}`,
+          action: "Metadata has been auto-filled where available.",
         });
       }
-    } else {
-      // Proprietary format — just extract patient ID from filename
+      // If meta is null, systemFeedback already fired inside extractEdfHeader
+    } else if (isProprietary) {
+      systemFeedback.proprietaryFormatNotice(ext);
       const nameParts = selectedFile.name.replace(/\.[^.]+$/i, "").split(/[_\-\s]+/);
       if (nameParts.length >= 1) {
         setPatientData(prev => ({ ...prev, patient_id: nameParts[0] || "" }));
