@@ -213,7 +213,14 @@ function buildSections(): DocSection[] {
               { module: "MIND®Clean", status: "Active", desc: "Artifact detection and rejection. Identifies muscle, eye-blink, electrode-pop, and environmental noise.", color: "text-emerald-500" },
               { module: "MIND®Seizure", status: "Active", desc: "Seizure pattern detection. Identifies electrographic seizure morphologies, spike-wave, and ictal patterns.", color: "text-emerald-500" },
               { module: "MIND®Score", status: "Active", desc: "Severity scoring engine. Quantifies EEG abnormality burden and generates structured severity indices.", color: "text-emerald-500" },
-              { module: "MIND®Sleep", status: "R&D", desc: "Sleep staging and architecture analysis. Planned for future EEG sleep study support.", color: "text-amber-500" },
+              { module: "MIND®Sleep", status: "R&D", desc: "Sleep staging and architecture analysis. Automated sleep stage classification for EEG sleep studies.", color: "text-amber-500" },
+              { module: "MIND®Burst", status: "R&D", desc: "Burst-suppression detection and quantification. ICU and anaesthesia depth monitoring applications.", color: "text-amber-500" },
+              { module: "MIND®Artifact", status: "R&D", desc: "Next-gen artifact identification and removal. Advanced source-separation beyond MIND®Clean.", color: "text-amber-500" },
+              { module: "MIND®Wave", status: "R&D", desc: "Spectral decomposition and waveform morphology engine. Frequency-band power analysis and coherence mapping.", color: "text-amber-500" },
+              { module: "MIND®Signature", status: "R&D", desc: "EEG biometric model. Individual neural signature extraction for patient identity verification and longitudinal tracking.", color: "text-orange-500" },
+              { module: "MIND®Atlas", status: "R&D", desc: "Long-term population model. Normative EEG database for age/sex-matched comparison and epidemiological insights.", color: "text-orange-500" },
+              { module: "MIND®Pilot", status: "R&D", desc: "Brain-Computer Interface (BCI) research module. Motor imagery classification and neurofeedback signal processing.", color: "text-orange-500" },
+              { module: "MIND®Clinical", status: "R&D", desc: "Ambulatory EEG analysis. Optimized for long-term outpatient recordings with motion artifact resilience.", color: "text-orange-500" },
             ].map((m) => (
               <div key={m.module} className="p-3 rounded-lg bg-muted/30 border border-border/50">
                 <div className="flex items-center gap-2 mb-1">
@@ -268,7 +275,7 @@ function buildSections(): DocSection[] {
               },
               {
                 plane: "3. Inference Plane (I-Plane) — MIND®",
-                desc: "Hosts the MIND® (Machine Intelligence for Neural Data) algorithm family: MIND®Triage (priority routing), MIND®Clean (artifact rejection), MIND®Seizure (seizure detection), MIND®Score (severity scoring). Future R&D: MIND®Sleep. Currently uses simulated triage; production will connect to Azure ML endpoint.",
+                desc: "Hosts the MIND® (Machine Intelligence for Neural Data) algorithm family: MIND®Triage (priority routing), MIND®Clean (artifact rejection), MIND®Seizure (seizure detection), MIND®Score (severity scoring). R&D pipeline: MIND®Sleep, MIND®Burst, MIND®Artifact, MIND®Wave, MIND®Signature, MIND®Atlas, MIND®Pilot, MIND®Clinical. Currently uses simulated triage; production will connect to Azure ML endpoint.",
                 tech: "Target: Azure ML Endpoint with $5,000 credits (expires Aug 2026)",
                 color: "border-amber-500/30 bg-amber-500/5",
               },
