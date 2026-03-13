@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, HardDrive, FileOutput, CheckCircle2, AlertTriangle, ArrowRight, Info, Shield, Users, Activity, Ban } from "lucide-react";
+import { Monitor, HardDrive, FileOutput, CheckCircle2, AlertTriangle, ArrowRight, Info } from "lucide-react";
 
 const MACHINES = [
   {
@@ -71,72 +71,6 @@ export default function OnboardingGuide() {
           Step-by-step instructions to export EDF files from your EEG machine for upload to Encephlian.
         </p>
       </div>
-
-      {/* Intended Use Summary Card */}
-      <Card className="border-primary/20 bg-card overflow-hidden">
-        <CardHeader className="pb-3 bg-primary/5">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Shield className="h-4 w-4 text-primary" />
-                Intended Use — ENCEPHLIAN
-              </CardTitle>
-              <CardDescription className="mt-1">
-                Class B SaMD · Clinical Decision Support System · Ref: TF-001 §2
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="text-[10px] font-mono border-primary/30 text-primary">CDSS</Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-4 space-y-4">
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            ENCEPHLIAN is a cloud-based software platform intended to assist qualified neurologists and clinical
-            neurophysiologists in the triage and preliminary review of EEG recordings. It provides AI-generated
-            triage suggestions including event detection markers and urgency prioritization.
-          </p>
-          <p className="text-sm font-medium text-destructive/80">
-            ENCEPHLIAN does not provide autonomous diagnosis, treatment recommendations, or replace clinical judgment.
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <Users className="h-3.5 w-3.5" />
-                Intended Users
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>Board-certified neurologists</li>
-                <li>Clinical neurophysiologists</li>
-                <li>DM / DNB Neurology holders</li>
-              </ul>
-            </div>
-
-            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                <Activity className="h-3.5 w-3.5" />
-                Supported Formats
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>EDF / EDF+ (European Data Format)</li>
-                <li>BDF (BioSemi Data Format)</li>
-                <li>ENCEPHLIAN_EEG_v1 canonical</li>
-              </ul>
-            </div>
-
-            <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-destructive/70">
-                <Ban className="h-3.5 w-3.5" />
-                Contraindications
-              </div>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>Not for sole diagnostic basis</li>
-                <li>Not for real-time ICU monitoring</li>
-                <li>Not for intraoperative use</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Alert className="border-primary/30 bg-primary/5">
         <Info className="h-4 w-4 text-primary" />
