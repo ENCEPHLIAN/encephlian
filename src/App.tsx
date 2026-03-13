@@ -122,6 +122,7 @@ function App() {
                   <Route path="settings/tfa" element={<TFASetup />} />
                   <Route path="support" element={<Support />} />
                   <Route path="templates" element={<Templates />} />
+                  <Route path="docs" element={<Documentation />} />
                   <Route path="coming-soon" element={<ComingSoon />} />
                 </Route>
               </Route>
