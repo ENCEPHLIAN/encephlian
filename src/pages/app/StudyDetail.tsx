@@ -33,6 +33,7 @@ import {
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
+import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useSku } from "@/hooks/useSku";
@@ -70,7 +71,7 @@ export default function StudyDetail() {
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
 
-  const { data: study, isLoading, refetch } = useQuery({
+  const { data: study, isLoading, isError, refetch } = useQuery({
     queryKey: ["study-detail", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -89,7 +90,8 @@ export default function StudyDetail() {
       if (error) throw error;
       return data;
     },
-    enabled: !!id
+    enabled: !!id,
+    retry: 1,
   });
 
   // Run AI Triage - uses proxy for PILOT, calls inference endpoint
@@ -233,16 +235,16 @@ export default function StudyDetail() {
     );
   }
 
-  if (!study) {
+  if (isError || !study) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-lg font-medium">Study not found</p>
-        <Button variant="outline" onClick={() => navigate("/app/studies")}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Studies
-        </Button>
-      </div>
+      <ErrorPage
+        title="Study not found"
+        description="This study may have been deleted, or you may not have access to it. If you believe this is an error, contact your clinic administrator."
+        actions={[
+          { label: "Back to Studies", onClick: () => navigate("/app/studies") },
+          { label: "Retry", onClick: () => refetch(), variant: "outline" },
+        ]}
+      />
     );
   }
 

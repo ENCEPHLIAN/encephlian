@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { systemFeedback } from "@/lib/systemFeedback";
 
 interface StudyUploadWizardProps {
   open: boolean;
@@ -108,19 +108,19 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
     const numSignals = parseInt(readStr(252, 4), 10) || 0;
     const dataRecordDuration = parseFloat(readStr(244, 8)) || 1;
 
-    if (numSignals < 1 || numSignals > 512) return null;
+    if (numSignals < 1 || numSignals > 512) {
+      systemFeedback.edfHeaderExtractionFailed(`Invalid signal count: ${numSignals}`);
+      return null;
+    }
 
     const ns = Math.min(numSignals, 128);
     let offset = 256;
 
-    // Read channel labels (16 chars each)
     const labels: string[] = [];
     for (let i = 0; i < ns; i++) {
       labels.push(readStr(offset + i * 16, 16).replace(/\.+$/, "").trim());
     }
     offset += ns * 16;
-
-    // Skip to samples per record
     offset += ns * 80; // transducer
     offset += ns * 8;  // physical dimension
     offset += ns * 8;  // physical min
@@ -129,7 +129,6 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
     offset += ns * 8;  // digital max
     offset += ns * 80; // prefiltering
 
-    // Read samples per record
     let samplesPerRecord = 256;
     if (offset + 8 <= buffer.byteLength) {
       samplesPerRecord = parseInt(readStr(offset, 8), 10) || 256;
@@ -150,7 +149,7 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
       channel_labels: labels.length > 0 ? labels : undefined,
     };
   } catch (e) {
-    console.warn("EDF header extraction failed:", e);
+    systemFeedback.edfHeaderExtractionFailed(e instanceof Error ? e.message : String(e));
     return null;
   }
 }
@@ -164,6 +163,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStage, setUploadStage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
@@ -206,9 +206,19 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."));
     
     if (!ALL_ACCEPTED_EXTENSIONS.includes(ext)) {
-      toast.error("Unsupported file type", {
-        description: `Supported: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
+      systemFeedback.report({
+        severity: "error",
+        what: "Unsupported file type",
+        why: `The file extension "${ext}" is not recognized.`,
+        action: `Supported formats: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
       });
+      return;
+    }
+
+    // Pre-upload file size check (20MB limit)
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      systemFeedback.fileTooLarge(selectedFile.size / (1024 * 1024));
       return;
     }
 
@@ -217,7 +227,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setFile(selectedFile);
 
     if (!isProprietary && EDF_BDF_EXTENSIONS.includes(ext)) {
-      // Extract EDF/BDF header metadata
       const meta = await extractEdfHeader(selectedFile);
       if (meta) {
         setEdfMeta(meta);
@@ -234,12 +243,16 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
         setAutoFilledFields(filled);
 
-        toast.success("File header parsed", {
-          description: `${meta.num_channels} channels · ${meta.sample_rate}Hz · ${meta.duration_sec ? Math.round(meta.duration_sec / 60) + " min" : "unknown duration"}`,
+        systemFeedback.report({
+          severity: "info",
+          what: "File header parsed",
+          why: `${meta.num_channels} channels · ${meta.sample_rate}Hz · ${meta.duration_sec ? Math.round(meta.duration_sec / 60) + " min" : "unknown duration"}`,
+          action: "Metadata has been auto-filled where available.",
         });
       }
-    } else {
-      // Proprietary format — just extract patient ID from filename
+      // If meta is null, systemFeedback already fired inside extractEdfHeader
+    } else if (isProprietary) {
+      systemFeedback.proprietaryFormatNotice(ext);
       const nameParts = selectedFile.name.replace(/\.[^.]+$/i, "").split(/[_\-\s]+/);
       if (nameParts.length >= 1) {
         setPatientData(prev => ({ ...prev, patient_id: nameParts[0] || "" }));
@@ -270,32 +283,47 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
   // Submit the study
   const handleSubmit = useCallback(async () => {
-    if (!file || !userId || !clinicId) {
-      toast.error("Missing required data");
+    if (!file || !userId) {
+      systemFeedback.report({
+        severity: "error",
+        what: "Cannot upload",
+        why: "Missing authentication. Please log in again.",
+        action: "Refresh the page and sign in.",
+      });
+      return;
+    }
+
+    if (!clinicId) {
+      systemFeedback.noClinicAssigned();
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStage("Uploading file...");
 
     try {
-      // 1. Upload file to storage
+      // 1. Upload file to storage with timeout
       const filePath = `${userId}/${Date.now()}_${file.name}`;
       
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 80));
-      }, 200);
+      setUploadProgress(10);
 
-      const { error: uploadError } = await supabase.storage
+      const uploadPromise = supabase.storage
         .from("eeg-uploads")
         .upload(filePath, file);
 
-      clearInterval(progressInterval);
-      setUploadProgress(90);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("UPLOAD_TIMEOUT")), 60000)
+      );
+
+      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
 
       if (uploadError) {
         throw uploadError;
       }
+
+      setUploadProgress(50);
+      setUploadStage("Creating study record...");
 
       // 2. Build comprehensive meta from EDF header + user input
       const fileExt = file.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
@@ -309,7 +337,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         file_size_bytes: file.size,
       };
 
-      // Merge EDF header data into meta
       if (edfMeta) {
         studyMeta.edf_patient_id = edfMeta.patient_id || null;
         studyMeta.edf_recording_id = edfMeta.recording_id || null;
@@ -340,10 +367,12 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .single();
 
       if (studyError) {
-        throw studyError;
+        systemFeedback.studyCreationFailed(studyError.message);
+        return;
       }
 
-      setUploadProgress(95);
+      setUploadProgress(75);
+      setUploadStage("Triggering analysis...");
 
       // 4. Auto-trigger parse_eeg_study for EDF/BDF files
       const isEdfBdf = EDF_BDF_EXTENSIONS.includes(
@@ -360,17 +389,22 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             },
           });
         } catch (parseErr) {
-          // Non-blocking — study was created successfully
-          console.warn("Auto-parse triggered but failed:", parseErr);
+          systemFeedback.parseEdgeFunctionFailed(
+            parseErr instanceof Error ? parseErr.message : String(parseErr)
+          );
         }
       }
 
       setUploadProgress(100);
+      setUploadStage("Complete");
 
-      toast.success("Study uploaded successfully!", {
-        description: isProprietaryFormat
-          ? "File will be processed server-side."
-          : "Metadata extracted. Ready for triage.",
+      systemFeedback.report({
+        severity: "info",
+        what: "Study uploaded successfully",
+        why: isProprietaryFormat
+          ? "Proprietary format saved. Export as EDF for immediate analysis."
+          : "Metadata extracted. Study is ready for triage.",
+        action: "Redirecting to study detail...",
       });
 
       onOpenChange(false);
@@ -378,12 +412,14 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       navigate(`/app/studies/${study.id}`);
 
     } catch (error: any) {
-      console.error("Upload error:", error);
-      toast.error("Upload failed", {
-        description: error.message || "Please try again.",
-      });
+      if (error?.message === "UPLOAD_TIMEOUT") {
+        systemFeedback.uploadTimeout();
+      } else {
+        systemFeedback.uploadFailed(error?.message || String(error));
+      }
     } finally {
       setIsUploading(false);
+      setUploadStage("");
     }
   }, [file, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, navigate, onOpenChange, resetWizard]);
 
@@ -489,9 +525,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     </p>
                   )}
                   {isProprietaryFormat && (
-                    <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-                      <Server className="h-3 w-3" />
-                      Proprietary format — will be processed server-side
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-amber-600">
+                      <AlertCircle className="h-3 w-3" />
+                      Export as EDF from your machine for immediate processing
                     </div>
                   )}
                   <Button
@@ -682,8 +718,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             {isUploading && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span>Uploading...</span>
-                  <span>{uploadProgress}%</span>
+                  <span className="text-muted-foreground">{uploadStage || "Preparing..."}</span>
+                  <span className="font-mono text-xs">{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} />
               </div>

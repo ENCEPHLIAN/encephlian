@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2, Upload, Clock, Brain, Eye, CheckCircle2,
-  ArrowRight, AlertTriangle, Zap, Inbox
+  ArrowRight, AlertTriangle, Zap, Inbox, RefreshCw, WifiOff
 } from "lucide-react";
 import dayjs from "dayjs";
 import { useStudiesData, Study } from "@/hooks/useStudiesData";
@@ -215,7 +216,7 @@ function LanesSkeleton() {
 
 export default function Lanes() {
   const navigate = useNavigate();
-  const { studies, isLoading } = useStudiesData("all");
+  const { studies, isLoading, isError, error, refetch } = useStudiesData("all");
 
   const stageStudies = useMemo(() => {
     if (!studies) return {};
@@ -275,6 +276,23 @@ export default function Lanes() {
   }, [overdueCount, activeCount]);
 
   if (isLoading) return <LanesSkeleton />;
+
+  if (isError) {
+    return (
+      <div className="p-6 space-y-4 h-full flex flex-col">
+        <Alert variant="destructive" className="flex items-center gap-3">
+          <WifiOff className="h-4 w-4 shrink-0" />
+          <AlertDescription className="flex-1">
+            Could not load studies. Check your connection and try again.
+          </AlertDescription>
+          <Button size="sm" variant="outline" onClick={() => refetch()} className="shrink-0 gap-1.5">
+            <RefreshCw className="h-3.5 w-3.5" />
+            Retry
+          </Button>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-4 h-full flex flex-col">

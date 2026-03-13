@@ -27,7 +27,7 @@ export function useStudiesData(stateFilter: string) {
   const { userId, isAuthenticated } = useUserSession();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const { data: studies, isLoading, refetch } = useQuery({
+  const { data: studies, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["studies-list", stateFilter, userId],
     queryFn: async () => {
       // Show user's real studies (RLS handles ownership), exclude sample studies
@@ -91,7 +91,7 @@ export function useStudiesData(stateFilter: string) {
     };
   }, [isAuthenticated, userId, refetch]);
 
-  return { studies: studies || [], isLoading, refetch };
+  return { studies: studies || [], isLoading, isError, error, refetch };
 }
 
 export function useFilteredStudies(studies: StudyListItem[], search: string) {

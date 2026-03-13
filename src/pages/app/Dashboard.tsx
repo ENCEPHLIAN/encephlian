@@ -1,6 +1,6 @@
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, memo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle, RefreshCw, WifiOff } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
@@ -42,9 +42,24 @@ export default function Dashboard() {
     metrics,
     filteredStudies,
     isLoading,
+    isError,
+    error: dataError,
     tokenBalance,
     previousBalance,
+    refetchStudies,
   } = useDashboardData();
+
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  // Loading timeout — if data takes > 15s, show helpful message
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTooLong(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingTooLong(true), 15000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   const { pendingTriageStudies, processingStudies, completedReports, pendingStudies } = filteredStudies;
 
@@ -73,12 +88,39 @@ export default function Dashboard() {
 
   const hasProcessingStudies = processingStudies.length > 0;
 
+  if (isError) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center space-y-4 max-w-sm">
+          <WifiOff className="h-10 w-10 text-destructive mx-auto" />
+          <p className="font-medium">Could not load dashboard</p>
+          <p className="text-sm text-muted-foreground">
+            This could be a network issue or a temporary server problem. Check your connection and try again.
+          </p>
+          <Button onClick={() => refetchStudies()} variant="outline" className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center space-y-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <p className="text-muted-foreground">Loading dashboard...</p>
+          {loadingTooLong && (
+            <div className="space-y-2">
+              <p className="text-sm text-amber-600">Taking longer than expected. This could be a network issue.</p>
+              <Button onClick={() => refetchStudies()} variant="outline" size="sm" className="gap-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     );
