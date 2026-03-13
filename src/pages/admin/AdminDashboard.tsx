@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Building2, FileText, Coins, Users, TrendingUp, Zap, Clock } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 type DashboardStats = {
@@ -105,6 +106,8 @@ function PipelineCard({ studyStates }: { studyStates: Record<string, number> }) 
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["admin-dashboard-stats"],
     queryFn: async () => {
@@ -139,6 +142,13 @@ export default function AdminDashboard() {
   const tokenUtilization = stats?.total_tokens_sold 
     ? Math.round((stats.total_tokens_consumed / stats.total_tokens_sold) * 100) 
     : 0;
+
+  const quickActions = [
+    { label: "New Clinic", href: "/admin/clinics", icon: Building2 },
+    { label: "Push EEG", href: "/admin/eeg-push", icon: Zap },
+    { label: "View Studies", href: "/admin/studies", icon: FileText },
+    { label: "Check Health", href: "/admin/health", icon: TrendingUp },
+  ];
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -218,27 +228,22 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - using navigate instead of <a> tags */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "New Clinic", href: "/admin/clinics", icon: Building2 },
-              { label: "Push EEG", href: "/admin/eeg-push", icon: Zap },
-              { label: "View Studies", href: "/admin/studies", icon: FileText },
-              { label: "Check Health", href: "/admin/health", icon: TrendingUp },
-            ].map((action) => (
-              <a
+            {quickActions.map((action) => (
+              <button
                 key={action.label}
-                href={action.href}
-                className="flex items-center gap-2 p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors"
+                onClick={() => navigate(action.href)}
+                className="flex items-center gap-2 p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors text-left"
               >
                 <action.icon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{action.label}</span>
-              </a>
+              </button>
             ))}
           </div>
         </CardContent>

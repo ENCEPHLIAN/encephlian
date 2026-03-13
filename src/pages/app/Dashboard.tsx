@@ -30,19 +30,13 @@ const MemoizedUrgentQueue = memo(UrgentQueue);
 const MemoizedCalendarWidget = memo(CalendarWidget);
 
 export default function Dashboard() {
-  const { sku, isPilot } = useSku();
-
-  // Pilot SKU gets the focused, value-only dashboard
-  if (isPilot) {
-    return <PilotDashboard />;
-  }
+  const { isPilot } = useSku();
   const navigate = useNavigate();
   const [selectedStudy, setSelectedStudy] = useState<Study | null>(null);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [refundStudy, setRefundStudy] = useState<Study | null>(null);
 
-  // Use optimized hook with request deduplication
   const {
     studies,
     metrics,
@@ -71,6 +65,11 @@ export default function Dashboard() {
     setRefundStudy(study);
     setRefundDialogOpen(true);
   }, []);
+
+  // Pilot SKU gets the focused, value-only dashboard
+  if (isPilot) {
+    return <PilotDashboard />;
+  }
 
   const hasProcessingStudies = processingStudies.length > 0;
 
@@ -108,7 +107,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Pending Triage Section - Shows when there are uploads awaiting SLA */}
+      {/* Pending Triage Section */}
       {pendingTriageStudies.length > 0 && (
         <MemoizedPendingTriageSection
           studies={pendingTriageStudies}
@@ -116,7 +115,7 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Quick Actions - Core workflow focused */}
+      {/* Quick Actions */}
       <Card className="openai-card border-2">
         <CardHeader className="pb-4">
           <CardTitle className="text-xl">Quick Actions</CardTitle>
@@ -186,7 +185,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* KPI Cards - Using real metrics */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MemoizedKPICard
           label="Pending Studies"
@@ -196,7 +195,6 @@ export default function Dashboard() {
           color="kpi-amber"
           onClick={() => navigate("/app/studies?filter=uploaded")}
         />
-
         <MemoizedKPICard
           label="Completed Today"
           value={metrics?.completedToday || 0}
@@ -204,7 +202,6 @@ export default function Dashboard() {
           trend={metrics?.completedToday && metrics.completedToday >= 3 ? "up" : "neutral"}
           color="kpi-green"
         />
-
         <MemoizedKPICard 
           label="This Week" 
           value={metrics?.completedWeek || 0} 
@@ -212,7 +209,6 @@ export default function Dashboard() {
           trend={metrics?.completedWeek && metrics.completedWeek >= 10 ? "up" : "neutral"} 
           color="kpi-cyan" 
         />
-
         <MemoizedKPICard
           label="Token Balance"
           value={tokenBalance}
@@ -232,7 +228,6 @@ export default function Dashboard() {
           trend="up" 
           color="kpi-blue" 
         />
-
         <MemoizedKPICard
           label="This Month"
           value={metrics?.completedMonth || 0}
@@ -240,7 +235,6 @@ export default function Dashboard() {
           trend="up"
           color="kpi-neutral"
         />
-
         <MemoizedKPICard 
           label="Total Studies" 
           value={metrics?.totalStudies || 0} 
@@ -248,7 +242,6 @@ export default function Dashboard() {
           trend="neutral" 
           color="kpi-cyan" 
         />
-
         <MemoizedKPICard 
           label="Processing Now" 
           value={metrics?.processingCount || 0} 
@@ -258,7 +251,7 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Recent Reports Section */}
+      {/* Recent Reports */}
       {completedReports.length > 0 && (
         <MemoizedRecentReportsSection
           studies={completedReports}
@@ -322,7 +315,6 @@ export default function Dashboard() {
                     const isCompleted = study.triage_status === "completed" || study.state === "signed";
                     const isProcessing = study.triage_status === "processing";
                     
-                    // Build patient info string with age/gender
                     const patientAge = meta?.patient_age;
                     const patientGender = meta?.patient_gender;
                     const ageGenderStr = [
@@ -379,17 +371,14 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Calendar Widget - Full width to match Activity card height */}
       <MemoizedCalendarWidget />
 
-      {/* Urgent Queue */}
       {pendingStudies.length > 0 && (
         <div className="openai-section">
           <MemoizedUrgentQueue studies={pendingStudies} />
         </div>
       )}
 
-      {/* SLA Selection Modal */}
       <SlaSelectionModal
         open={slaModalOpen}
         onOpenChange={setSlaModalOpen}
@@ -398,7 +387,6 @@ export default function Dashboard() {
         onInsufficientTokens={handleInsufficientTokens}
       />
 
-      {/* Refund Dialog */}
       <RefundDialog
         open={refundDialogOpen}
         onOpenChange={setRefundDialogOpen}

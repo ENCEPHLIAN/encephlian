@@ -8,7 +8,7 @@ import { useSku } from "@/hooks/useSku";
 import { PilotWalletCard } from "@/components/sku/PilotWalletCard";
 
 export default function Wallet() {
-  const { isPilot, isDemo } = useSku();
+  const { isPilot } = useSku();
   
   const { data: walletData, isLoading: walletLoading } = useQuery({
     queryKey: ["wallet-balance"],

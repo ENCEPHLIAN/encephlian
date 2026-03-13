@@ -21,8 +21,6 @@ interface UseSkuResult {
   isInternal: boolean;
   /** Whether user is on pilot SKU (production value unit) */
   isPilot: boolean;
-  /** Whether user is on demo SKU (showcase) */
-  isDemo: boolean;
   /** Navigation items visible for this SKU */
   visibleNav: NavItemId[];
   /** Check if a nav item is visible */
@@ -53,7 +51,6 @@ export function useSku(): UseSkuResult {
       can: (capability: SkuCapability) => hasCapability(sku, capability),
       isInternal: sku === 'internal',
       isPilot: sku === 'pilot',
-      isDemo: false, // Demo is now a mode toggle, not a SKU
       visibleNav,
       isNavVisible: (id: NavItemId) => visibleNav.includes(id),
     };

@@ -13,7 +13,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, Sparkles, CreditCard, HelpCircle, Menu, Monitor, Cloud, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, FileStack, Braces } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, CreditCard, HelpCircle, Menu, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, Braces } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -23,16 +23,12 @@ import CommandPalette from "@/components/CommandPalette";
 import logo from "@/assets/logo.png";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
-import { MissionPanel } from "@/components/MissionPanel";
-import { FloatingCommandIsland } from "@/components/FloatingCommandIsland";
-import { FloatingDeviceStatus } from "@/components/FloatingDeviceStatus";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
 import { NavItemId } from "@/shared/skuPolicy";
 
 // --------------- NAV DATA ---------------
-// Navigation items with IDs for SKU filtering
 const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
   { id: "dashboard", name: "Dashboard", href: "/app/dashboard", icon: LayoutDashboard },
   { id: "studies", name: "Studies", href: "/app/studies", icon: Activity },
@@ -44,7 +40,6 @@ const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: a
 const resourceNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
   { id: "files", name: "Files", href: "/app/files", icon: FolderOpen },
   { id: "notes", name: "Notes", href: "/app/notes", icon: StickyNote },
-  { id: "templates", name: "Templates", href: "/app/templates", icon: FileStack },
 ];
 
 const accountNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
@@ -69,7 +64,6 @@ function NavSection({
 }) {
   const location = useLocation();
   
-  // Filter items based on SKU
   const filteredItems = items.filter(item => visibleNav.includes(item.id));
 
   if (filteredItems.length === 0) return null;
@@ -126,7 +120,6 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
       <NavSection title="Resources" items={resourceNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
       <NavSection title="Account" items={accountNavigation} collapsed={collapsed} onNavigate={onNavigate} visibleNav={visibleNav} />
       
-      {/* SKU Badge at bottom */}
       {!collapsed && (
         <div className="px-3 pt-4 border-t border-border/30 space-y-2">
           <SkuBadge />
@@ -138,7 +131,7 @@ function SidebarNav({ collapsed, onNavigate }: { collapsed?: boolean; onNavigate
 
 // --------------- DESKTOP SIDEBAR ---------------
 
-function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: boolean; onMissionOpen: () => void; onToggle: () => void }) {
+function AppSidebarDesktop({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const [isHoveringEdge, setIsHoveringEdge] = useState(false);
 
   return (
@@ -151,7 +144,6 @@ function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: 
         collapsed ? "w-16" : "w-56",
       )}
     >
-      {/* Invisible hover zone on right edge for cursor change */}
       <div 
         className={cn(
           "absolute right-0 top-0 bottom-0 w-3 z-40",
@@ -169,31 +161,13 @@ function AppSidebarDesktop({ collapsed, onMissionOpen, onToggle }: { collapsed: 
         )}
         <SidebarNav collapsed={collapsed} />
       </div>
-
-      {/* Mission CTA Button at bottom */}
-      <div className={cn("flex items-center justify-center", collapsed ? "p-3" : "p-4")}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-full hover:bg-secondary"
-              onClick={onMissionOpen}
-              aria-label="Open mission panel"
-            >
-              <Sparkles className="h-5 w-5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="right">Quick Actions</TooltipContent>
-        </Tooltip>
-      </div>
     </aside>
   );
 }
 
 // --------------- MOBILE SIDEBAR (FULLSCREEN FROSTED SHEET) ---------------
 
-function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean; onOpenChange: (open: boolean) => void; onMissionOpen: () => void }) {
+function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -205,7 +179,6 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
         )}
       >
         <div className="h-full flex flex-col">
-          {/* Top row: "Navigation" + X */}
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Navigation</span>
             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => onOpenChange(false)}>
@@ -214,25 +187,8 @@ function AppSidebarMobile({ open, onOpenChange, onMissionOpen }: { open: boolean
             </Button>
           </div>
 
-          {/* Nav list */}
           <div className="flex-1 overflow-y-auto px-4 py-4">
             <SidebarNav onNavigate={() => onOpenChange(false)} />
-          </div>
-
-          {/* Mission CTA Button at bottom */}
-          <div className="p-4 flex items-center justify-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-full hover:bg-secondary"
-              onClick={() => {
-                onOpenChange(false);
-                onMissionOpen();
-              }}
-              aria-label="Open mission panel"
-            >
-              <Sparkles className="h-5 w-5" />
-            </Button>
           </div>
         </div>
       </SheetContent>
@@ -247,26 +203,14 @@ export default function AppLayout() {
   const { toast } = useToast();
   const isMobile = useIsMobile();
   
-  // Use unified session context
   const { profile, clinicContext, signOut } = useUserSession();
 
   const [commandOpen, setCommandOpen] = useState(false);
-  const [missionOpen, setMissionOpen] = useState(false);
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
-  // desktop: collapsed vs expanded
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // mobile: full-screen nav open/close
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // Device status - Windows Uploader + Cloud Sync only
-  const deviceStatus = {
-    windowsUploader: { connected: false },
-    cloudSync: { connected: true },
-  };
-  const allConnected = deviceStatus.windowsUploader.connected && deviceStatus.cloudSync.connected;
-
-  // Use cached profile from context
   const userName = profile?.full_name?.trim() || "Account";
   const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
@@ -293,7 +237,6 @@ export default function AppLayout() {
                 {brandName}<sup className="text-[10px] align-super">™</sup>
               </h1>
             </div>
-            {/* Sidebar toggle button - after branding, desktop only */}
             {!isMobile && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -318,7 +261,6 @@ export default function AppLayout() {
 
           {/* RIGHT: search + actions */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Desktop command palette button */}
             {!isMobile && (
               <Button
                 variant="outline"
@@ -333,13 +275,9 @@ export default function AppLayout() {
               </Button>
             )}
 
-            {/* QuickTips only on desktop */}
             {!isMobile && <QuickTipsDialog />}
-
-            {/* Theme toggle only on desktop */}
             {!isMobile && <ThemeToggle />}
 
-            {/* Mobile: only sidebar icon and hamburger menu */}
             {isMobile && (
               <>
                 <IconButton
@@ -385,7 +323,7 @@ export default function AppLayout() {
               </>
             )}
 
-            {/* Account dropdown - only on desktop, opens on hover */}
+            {/* Account dropdown - desktop only */}
             {!isMobile && (
             <div 
               className="relative"
@@ -403,34 +341,6 @@ export default function AppLayout() {
                   <div className="px-2 py-3 border-b border-border/50 mb-2">
                     <p className="font-medium text-sm">{userName}</p>
                     <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Portal"}</p>
-                  </div>
-
-                  {/* Device Status in dropdown - Windows Uploader + Cloud Sync only */}
-                  <div className="px-2 py-2 mb-2 rounded-lg bg-muted/50">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-muted-foreground">Device Status</span>
-                      <div className={cn("h-2 w-2 rounded-full", allConnected ? "bg-emerald-500" : "bg-amber-500")} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-1.5">
-                          <Monitor className={cn("h-3 w-3", deviceStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                          Windows Uploader
-                        </span>
-                        <span className={cn("text-[10px]", deviceStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50")}>
-                          {deviceStatus.windowsUploader.connected ? "Online" : "Offline"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="flex items-center gap-1.5">
-                          <Cloud className={cn("h-3 w-3", deviceStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                          Cloud Sync
-                        </span>
-                        <span className={cn("text-[10px]", deviceStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50")}>
-                          {deviceStatus.cloudSync.connected ? "Online" : "Offline"}
-                        </span>
-                      </div>
-                    </div>
                   </div>
                   
                   <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
@@ -471,41 +381,32 @@ export default function AppLayout() {
         </div>
       </header>
 
-      {/* BODY: sidebar fixed; main content scrolls */}
-      <div className="flex flex-1 relative">
-        {/* Desktop sidebar (fixed, frosted, pinned left) */}
-        {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onMissionOpen={() => setMissionOpen(true)} onToggle={() => setSidebarCollapsed(v => !v)} />}
+        {/* BODY: sidebar fixed; main content scrolls */}
+        <div className="flex flex-1 relative">
+          {!isMobile && <AppSidebarDesktop collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed(v => !v)} />}
+          {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} />}
 
-        {/* Mobile full-screen nav */}
-        {isMobile && <AppSidebarMobile open={mobileNavOpen} onOpenChange={setMobileNavOpen} onMissionOpen={() => setMissionOpen(true)} />}
+          <main className={cn(
+            "flex-1 px-4 sm:px-6 py-6 min-h-[calc(100vh-4rem)]",
+            !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
+            "transition-[margin] duration-200 ease-out"
+          )}>
+            <Breadcrumbs />
+            <Outlet />
+          </main>
+        </div>
 
-        {/* Main content with margin for fixed sidebar */}
-        <main className={cn(
-          "flex-1 px-4 sm:px-6 py-6 min-h-[calc(100vh-4rem)]",
+        {/* Footer */}
+        <footer className={cn(
+          "py-3 px-4 sm:px-6",
           !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
           "transition-[margin] duration-200 ease-out"
         )}>
-          <Breadcrumbs />
-          <Outlet />
-        </main>
+          <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN™ ©{new Date().getFullYear()}</p>
+        </footer>
+
+        <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </div>
-
-      {/* Footer - positioned after main content, doesn't affect sidebar */}
-      <footer className={cn(
-        "py-3 px-4 sm:px-6",
-        !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
-        "transition-[margin] duration-200 ease-out"
-      )}>
-        <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN™ ©2025</p>
-      </footer>
-
-      {/* Floating elements */}
-      <FloatingCommandIsland onOpen={() => setCommandOpen(true)} />
-      <FloatingDeviceStatus />
-
-      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
-      <MissionPanel open={missionOpen} onOpenChange={setMissionOpen} />
-    </div>
     </TooltipProvider>
   );
 }
