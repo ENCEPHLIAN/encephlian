@@ -36,6 +36,7 @@ import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
 import TFASetup from "./pages/app/TFASetup";
 import Support from "./pages/app/Support";
+import OnboardingGuide from "./pages/app/OnboardingGuide";
 import NotFound from "./pages/NotFound";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
@@ -120,6 +121,7 @@ function App() {
                   <Route path="settings/tfa" element={<TFASetup />} />
                   <Route path="support" element={<Support />} />
                   <Route path="docs" element={<Documentation />} />
+                  <Route path="onboarding-guide" element={<OnboardingGuide />} />
                 </Route>
               </Route>
 
