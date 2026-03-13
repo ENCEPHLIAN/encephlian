@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { systemFeedback } from "@/lib/systemFeedback";
 
 interface StudyUploadWizardProps {
   open: boolean;
