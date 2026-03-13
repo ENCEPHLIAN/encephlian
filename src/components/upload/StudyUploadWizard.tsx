@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { 
   Upload, FileUp, User, Clock, CheckCircle2, 
-  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft 
+  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft, Server
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -32,6 +32,21 @@ interface PatientData {
   indication: string;
   notes: string;
 }
+
+interface ExtractedEdfMeta {
+  patient_id?: string;
+  recording_id?: string;
+  start_date?: string;
+  start_time?: string;
+  num_channels?: number;
+  sample_rate?: number;
+  duration_sec?: number;
+  channel_labels?: string[];
+}
+
+const EDF_BDF_EXTENSIONS = [".edf", ".bdf"];
+const PROPRIETARY_EXTENSIONS = [".e", ".nk", ".eeg", ".21e", ".cnt"];
+const ALL_ACCEPTED_EXTENSIONS = [...EDF_BDF_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
 
 const SLA_OPTIONS = [
   { 
@@ -71,6 +86,75 @@ const STEPS = [
   { id: 3, label: "Select SLA", icon: Clock },
 ];
 
+/**
+ * Lightweight EDF header reader — reads only the first 64KB to extract metadata.
+ * No signal data is parsed.
+ */
+async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
+  try {
+    const headerSlice = file.slice(0, 64 * 1024);
+    const buffer = await headerSlice.arrayBuffer();
+    const decoder = new TextDecoder("ascii");
+
+    const readStr = (offset: number, length: number): string => {
+      const bytes = new Uint8Array(buffer, offset, Math.min(length, buffer.byteLength - offset));
+      return decoder.decode(bytes).trim();
+    };
+
+    const patientId = readStr(8, 80);
+    const recordingId = readStr(88, 80);
+    const startDate = readStr(168, 8);
+    const startTime = readStr(176, 8);
+    const numSignals = parseInt(readStr(252, 4), 10) || 0;
+    const dataRecordDuration = parseFloat(readStr(244, 8)) || 1;
+
+    if (numSignals < 1 || numSignals > 512) return null;
+
+    const ns = Math.min(numSignals, 128);
+    let offset = 256;
+
+    // Read channel labels (16 chars each)
+    const labels: string[] = [];
+    for (let i = 0; i < ns; i++) {
+      labels.push(readStr(offset + i * 16, 16).replace(/\.+$/, "").trim());
+    }
+    offset += ns * 16;
+
+    // Skip to samples per record
+    offset += ns * 80; // transducer
+    offset += ns * 8;  // physical dimension
+    offset += ns * 8;  // physical min
+    offset += ns * 8;  // physical max
+    offset += ns * 8;  // digital min
+    offset += ns * 8;  // digital max
+    offset += ns * 80; // prefiltering
+
+    // Read samples per record
+    let samplesPerRecord = 256;
+    if (offset + 8 <= buffer.byteLength) {
+      samplesPerRecord = parseInt(readStr(offset, 8), 10) || 256;
+    }
+
+    const numDataRecords = parseInt(readStr(236, 8), 10) || 0;
+    const sampleRate = Math.round(samplesPerRecord / dataRecordDuration);
+    const durationSec = numDataRecords * dataRecordDuration;
+
+    return {
+      patient_id: patientId || undefined,
+      recording_id: recordingId || undefined,
+      start_date: startDate || undefined,
+      start_time: startTime || undefined,
+      num_channels: ns,
+      sample_rate: sampleRate,
+      duration_sec: durationSec > 0 ? durationSec : undefined,
+      channel_labels: labels.length > 0 ? labels : undefined,
+    };
+  } catch (e) {
+    console.warn("EDF header extraction failed:", e);
+    return null;
+  }
+}
+
 export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps) {
   const navigate = useNavigate();
   const { userId, clinicContext } = useUserSession();
@@ -82,6 +166,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
+  const [isProprietaryFormat, setIsProprietaryFormat] = useState(false);
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
   
   const [patientData, setPatientData] = useState<PatientData>({
     patient_name: "",
@@ -100,6 +187,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setFile(null);
     setUploadProgress(0);
     setIsUploading(false);
+    setEdfMeta(null);
+    setIsProprietaryFormat(false);
+    setAutoFilledFields(new Set());
     setPatientData({
       patient_name: "",
       patient_id: "",
@@ -112,26 +202,48 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   }, []);
 
   // Handle file selection
-  const handleFileSelect = useCallback((selectedFile: File) => {
-    const validExtensions = [".edf", ".bdf"];
+  const handleFileSelect = useCallback(async (selectedFile: File) => {
     const ext = selectedFile.name.toLowerCase().slice(selectedFile.name.lastIndexOf("."));
     
-    if (!validExtensions.includes(ext)) {
-      toast.error("Invalid file type", {
-        description: "Please upload an EDF or BDF file.",
+    if (!ALL_ACCEPTED_EXTENSIONS.includes(ext)) {
+      toast.error("Unsupported file type", {
+        description: `Supported: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
       });
       return;
     }
-    
+
+    const isProprietary = PROPRIETARY_EXTENSIONS.includes(ext);
+    setIsProprietaryFormat(isProprietary);
     setFile(selectedFile);
-    
-    // Try to extract patient info from filename
-    const nameParts = selectedFile.name.replace(/\.(edf|bdf)$/i, "").split(/[_\-\s]+/);
-    if (nameParts.length >= 1) {
-      setPatientData(prev => ({
-        ...prev,
-        patient_id: nameParts[0] || "",
-      }));
+
+    if (!isProprietary && EDF_BDF_EXTENSIONS.includes(ext)) {
+      // Extract EDF/BDF header metadata
+      const meta = await extractEdfHeader(selectedFile);
+      if (meta) {
+        setEdfMeta(meta);
+        const filled = new Set<string>();
+
+        setPatientData(prev => {
+          const updated = { ...prev };
+          if (meta.patient_id && !prev.patient_id) {
+            updated.patient_id = meta.patient_id;
+            filled.add("patient_id");
+          }
+          return updated;
+        });
+
+        setAutoFilledFields(filled);
+
+        toast.success("File header parsed", {
+          description: `${meta.num_channels} channels · ${meta.sample_rate}Hz · ${meta.duration_sec ? Math.round(meta.duration_sec / 60) + " min" : "unknown duration"}`,
+        });
+      }
+    } else {
+      // Proprietary format — just extract patient ID from filename
+      const nameParts = selectedFile.name.replace(/\.[^.]+$/i, "").split(/[_\-\s]+/);
+      if (nameParts.length >= 1) {
+        setPatientData(prev => ({ ...prev, patient_id: nameParts[0] || "" }));
+      }
     }
   }, []);
 
@@ -170,7 +282,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       // 1. Upload file to storage
       const filePath = `${userId}/${Date.now()}_${file.name}`;
       
-      // Simulate progress (actual upload doesn't give progress easily)
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => Math.min(prev + 10, 80));
       }, 200);
@@ -186,7 +297,31 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         throw uploadError;
       }
 
-      // 2. Create study record
+      // 2. Build comprehensive meta from EDF header + user input
+      const fileExt = file.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
+      const studyMeta: Record<string, any> = {
+        patient_name: patientData.patient_name || null,
+        patient_id: patientData.patient_id || null,
+        patient_age: patientData.patient_age ? parseInt(patientData.patient_age) : null,
+        patient_gender: patientData.patient_gender || null,
+        notes: patientData.notes || null,
+        original_filename: file.name,
+        file_size_bytes: file.size,
+      };
+
+      // Merge EDF header data into meta
+      if (edfMeta) {
+        studyMeta.edf_patient_id = edfMeta.patient_id || null;
+        studyMeta.edf_recording_id = edfMeta.recording_id || null;
+        studyMeta.edf_start_date = edfMeta.start_date || null;
+        studyMeta.edf_start_time = edfMeta.start_time || null;
+        studyMeta.edf_num_channels = edfMeta.num_channels || null;
+        studyMeta.edf_sample_rate = edfMeta.sample_rate || null;
+        studyMeta.edf_duration_sec = edfMeta.duration_sec || null;
+        studyMeta.edf_channel_labels = edfMeta.channel_labels || null;
+      }
+
+      // 3. Create study record
       const { data: study, error: studyError } = await supabase
         .from("studies")
         .insert({
@@ -195,17 +330,11 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
           state: "uploaded",
           sla: selectedSla,
           uploaded_file_path: filePath,
-          original_format: file.name.split(".").pop()?.toUpperCase(),
+          original_format: fileExt,
           indication: patientData.indication || null,
-          meta: {
-            patient_name: patientData.patient_name || null,
-            patient_id: patientData.patient_id || null,
-            patient_age: patientData.patient_age ? parseInt(patientData.patient_age) : null,
-            patient_gender: patientData.patient_gender || null,
-            notes: patientData.notes || null,
-            original_filename: file.name,
-            file_size_bytes: file.size,
-          },
+          srate_hz: edfMeta?.sample_rate || null,
+          duration_min: edfMeta?.duration_sec ? Math.round(edfMeta.duration_sec / 60) : null,
+          meta: studyMeta,
         })
         .select("id")
         .single();
@@ -214,13 +343,36 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         throw studyError;
       }
 
+      setUploadProgress(95);
+
+      // 4. Auto-trigger parse_eeg_study for EDF/BDF files
+      const isEdfBdf = EDF_BDF_EXTENSIONS.includes(
+        file.name.toLowerCase().slice(file.name.lastIndexOf("."))
+      );
+
+      if (isEdfBdf && study?.id) {
+        try {
+          await supabase.functions.invoke("parse_eeg_study", {
+            body: {
+              study_id: study.id,
+              file_path: filePath,
+              file_type: file.name.toLowerCase().endsWith(".bdf") ? "bdf" : "edf",
+            },
+          });
+        } catch (parseErr) {
+          // Non-blocking — study was created successfully
+          console.warn("Auto-parse triggered but failed:", parseErr);
+        }
+      }
+
       setUploadProgress(100);
 
       toast.success("Study uploaded successfully!", {
-        description: "You can now select an SLA to start AI triage.",
+        description: isProprietaryFormat
+          ? "File will be processed server-side."
+          : "Metadata extracted. Ready for triage.",
       });
 
-      // Close wizard and navigate to study
       onOpenChange(false);
       resetWizard();
       navigate(`/app/studies/${study.id}`);
@@ -233,12 +385,19 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     } finally {
       setIsUploading(false);
     }
-  }, [file, userId, clinicId, selectedSla, patientData, navigate, onOpenChange, resetWizard]);
+  }, [file, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, navigate, onOpenChange, resetWizard]);
 
   // Validation
   const canProceedStep1 = !!file;
-  const canProceedStep2 = true; // Patient info is optional
+  const canProceedStep2 = true;
   const canSubmit = !!file && !!selectedSla;
+
+  const ExtractedBadge = () => (
+    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal gap-0.5">
+      <CheckCircle2 className="h-2.5 w-2.5" />
+      From file
+    </Badge>
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o) => {
@@ -308,7 +467,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".edf,.bdf"
+                accept={ALL_ACCEPTED_EXTENSIONS.join(",")}
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -323,12 +482,27 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                   <p className="text-sm text-muted-foreground">
                     {(file.size / (1024 * 1024)).toFixed(2)} MB
                   </p>
+                  {edfMeta && (
+                    <p className="text-xs text-muted-foreground">
+                      {edfMeta.num_channels} ch · {edfMeta.sample_rate}Hz
+                      {edfMeta.duration_sec ? ` · ${Math.round(edfMeta.duration_sec / 60)} min` : ""}
+                    </p>
+                  )}
+                  {isProprietaryFormat && (
+                    <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                      <Server className="h-3 w-3" />
+                      Proprietary format — will be processed server-side
+                    </div>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
                       setFile(null);
+                      setEdfMeta(null);
+                      setIsProprietaryFormat(false);
+                      setAutoFilledFields(new Set());
                     }}
                   >
                     <X className="h-4 w-4 mr-1" />
@@ -340,7 +514,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                   <FileUp className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
                   <p className="font-medium">Drop your EEG file here</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    or click to browse • EDF, BDF supported
+                    or click to browse • EDF, BDF, Natus (.e), NK (.nk, .eeg, .21e), CNT
                   </p>
                 </>
               )}
@@ -357,6 +531,24 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         {/* Step 2: Patient Info */}
         {step === 2 && (
           <div className="space-y-4">
+            {/* EDF header summary */}
+            {edfMeta && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3 w-3 text-primary" />
+                  Extracted from file header
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                  {edfMeta.recording_id && <span>Recording: {edfMeta.recording_id}</span>}
+                  {edfMeta.start_date && <span>Date: {edfMeta.start_date}</span>}
+                  {edfMeta.start_time && <span>Time: {edfMeta.start_time}</span>}
+                  {edfMeta.num_channels && <span>Channels: {edfMeta.num_channels}</span>}
+                  {edfMeta.sample_rate && <span>Rate: {edfMeta.sample_rate}Hz</span>}
+                  {edfMeta.duration_sec && <span>Duration: {Math.round(edfMeta.duration_sec / 60)}min</span>}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="patient_name">Patient Name</Label>
@@ -368,7 +560,10 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="patient_id">Patient ID</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="patient_id">Patient ID</Label>
+                  {autoFilledFields.has("patient_id") && <ExtractedBadge />}
+                </div>
                 <Input
                   id="patient_id"
                   placeholder="MRN-12345"
