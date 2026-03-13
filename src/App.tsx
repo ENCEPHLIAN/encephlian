@@ -36,9 +36,7 @@ import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
 import TFASetup from "./pages/app/TFASetup";
 import Support from "./pages/app/Support";
-import Templates from "./pages/app/Templates";
 import NotFound from "./pages/NotFound";
-import ComingSoon from "./pages/app/ComingSoon";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 import AdminStudies from "./pages/admin/AdminStudies";
@@ -121,9 +119,7 @@ function App() {
                   <Route path="settings" element={<Settings />} />
                   <Route path="settings/tfa" element={<TFASetup />} />
                   <Route path="support" element={<Support />} />
-                  <Route path="templates" element={<Templates />} />
                   <Route path="docs" element={<Documentation />} />
-                  <Route path="coming-soon" element={<ComingSoon />} />
                 </Route>
               </Route>
 

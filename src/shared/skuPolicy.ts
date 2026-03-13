@@ -7,9 +7,6 @@
  * Two tiers:
  * - internal: Full dev/ops version with all features (your development build)
  * - pilot: Production value unit (what ships to real clinics)
- * 
- * Note: "Demo Mode" is a separate toggle for viewing sample data,
- * not a SKU tier. Any clinic (pilot or internal) can toggle demo mode.
  */
 
 export type SkuTier = 'internal' | 'pilot';
@@ -51,12 +48,11 @@ export type NavItemId =
   | 'viewer' 
   | 'files' 
   | 'notes' 
-  | 'templates' 
   | 'wallet' 
   | 'support';
 
 const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'wallet'];
-const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'templates', 'wallet', 'support'];
+const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'wallet', 'support'];
 
 export function getVisibleNavItems(sku: SkuTier): NavItemId[] {
   switch (sku) {
