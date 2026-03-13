@@ -30,6 +30,8 @@ import {
   CheckCircle,
   ArrowRight,
   Cpu,
+  Download,
+  FolderOpen,
   HardDrive,
   Network,
   Key,
