@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Monitor, HardDrive, FileOutput, CheckCircle2, AlertTriangle, ArrowRight, Info } from "lucide-react";
+import { Monitor, HardDrive, FileOutput, CheckCircle2, AlertTriangle, ArrowRight, Info, Shield, Users, Activity, Ban } from "lucide-react";
 
 const MACHINES = [
   {
