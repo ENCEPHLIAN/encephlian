@@ -19,6 +19,7 @@ import {
   Shield,
   Wrench,
   BarChart3,
+  BookOpen,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
