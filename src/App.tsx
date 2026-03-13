@@ -27,6 +27,7 @@ import StudyReview from "./pages/app/StudyReview";
 import EEGViewer from "./pages/app/EEGViewer";
 import Notes from "./pages/app/Notes";
 import Files from "./pages/app/Files";
+import Documentation from "./pages/app/Documentation";
 import Wallet from "./pages/app/Wallet";
 import Lanes from "./pages/app/Lanes";
 import Reports from "./pages/app/Reports";
