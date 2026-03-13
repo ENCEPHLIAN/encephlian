@@ -124,10 +124,12 @@ function buildSections(): DocSection[] {
       content: (
         <div className="space-y-4">
           <p>
-            <strong>ENCEPHLIAN</strong> is a clinical-grade EEG analysis Platform-as-a-Service (PaaS) 
+            <strong>ENCEPHLIAN®</strong> is the business brand of <strong>Aposematium Private Limited</strong> (Hyderabad, est. June 2025).
+            It is a clinical-grade EEG analysis Platform-as-a-Service (PaaS) 
             designed to solve the interoperability and accessibility problem for underserved neurology 
             clinics. It ingests vendor-locked EEG files, standardizes them into a canonical format, 
-            runs AI-assisted triage, and delivers signed reports through a token-based billing system.
+            runs AI-assisted triage via the <strong>MIND®</strong> (Machine Intelligence for Neural Data) algorithm family, 
+            and delivers signed reports through a token-based billing system.
           </p>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
