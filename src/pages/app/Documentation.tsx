@@ -124,10 +124,12 @@ function buildSections(): DocSection[] {
       content: (
         <div className="space-y-4">
           <p>
-            <strong>ENCEPHLIAN</strong> is a clinical-grade EEG analysis Platform-as-a-Service (PaaS) 
+            <strong>ENCEPHLIAN®</strong> is the business brand of <strong>Aposematium Private Limited</strong> (Hyderabad, est. June 2025).
+            It is a clinical-grade EEG analysis Platform-as-a-Service (PaaS) 
             designed to solve the interoperability and accessibility problem for underserved neurology 
             clinics. It ingests vendor-locked EEG files, standardizes them into a canonical format, 
-            runs AI-assisted triage, and delivers signed reports through a token-based billing system.
+            runs AI-assisted triage via the <strong>MIND®</strong> (Machine Intelligence for Neural Data) algorithm family, 
+            and delivers signed reports through a token-based billing system.
           </p>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 rounded-lg bg-muted/30 border border-border/50">
@@ -156,6 +158,79 @@ function buildSections(): DocSection[] {
             • <SectionLink id="sku-tiers" label="SKU Tiers" />{" "}
             • <SectionLink id="study-lifecycle" label="Study Lifecycle" />
           </p>
+        </div>
+      ),
+    },
+
+    {
+      id: "corporate-product-structure",
+      title: "Corporate & Product Structure",
+      icon: Building2,
+      category: "overview",
+      tags: ["aposematium", "encephlian", "mind", "algorithm", "corporate", "brand"],
+      relatedSections: ["platform-overview", "four-plane-architecture"],
+      content: (
+        <div className="space-y-4">
+          <p>
+            The platform operates across three clearly defined layers — corporate, business, and product — 
+            each with distinct branding and regulatory identity.
+          </p>
+          <div className="space-y-3">
+            {[
+              {
+                layer: "Corporate Layer",
+                name: "Aposematium Private Limited",
+                desc: "Registered entity (Hyderabad, India — June 2025). Legal manufacturer for CDSCO filings. Holds all IP, contracts, and regulatory obligations.",
+                color: "border-blue-500/30 bg-blue-500/5",
+              },
+              {
+                layer: "Business Layer (DBA)",
+                name: "ENCEPHLIAN®",
+                desc: "Customer-facing brand. The PaaS platform brand under which clinics, clinicians, and stakeholders interact. All product marketing, SLAs, and support run under this identity.",
+                color: "border-purple-500/30 bg-purple-500/5",
+              },
+              {
+                layer: "Product / Algorithm Layer",
+                name: "MIND® — Machine Intelligence for Neural Data",
+                desc: "The core AI algorithm family that powers the Inference Plane (I-Plane). Each algorithm is a discrete, versioned module with its own performance thresholds defined in ACP-001.",
+                color: "border-amber-500/30 bg-amber-500/5",
+              },
+            ].map((l) => (
+              <div key={l.layer} className={cn("p-4 rounded-lg border", l.color)}>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{l.layer}</span>
+                </div>
+                <h4 className="font-semibold text-sm">{l.name}</h4>
+                <p className="text-sm text-muted-foreground mt-1">{l.desc}</p>
+              </div>
+            ))}
+          </div>
+          <Separator />
+          <h4 className="font-semibold text-sm">MIND® Algorithm Family</h4>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { module: "MIND®Triage", status: "Active", desc: "Priority routing and SLA-based study queuing. Determines TAT vs STAT processing order.", color: "text-emerald-500" },
+              { module: "MIND®Clean", status: "Active", desc: "Artifact detection and rejection. Identifies muscle, eye-blink, electrode-pop, and environmental noise.", color: "text-emerald-500" },
+              { module: "MIND®Seizure", status: "Active", desc: "Seizure pattern detection. Identifies electrographic seizure morphologies, spike-wave, and ictal patterns.", color: "text-emerald-500" },
+              { module: "MIND®Score", status: "Active", desc: "Severity scoring engine. Quantifies EEG abnormality burden and generates structured severity indices.", color: "text-emerald-500" },
+              { module: "MIND®Sleep", status: "R&D", desc: "Sleep staging and architecture analysis. Planned for future EEG sleep study support.", color: "text-amber-500" },
+            ].map((m) => (
+              <div key={m.module} className="p-3 rounded-lg bg-muted/30 border border-border/50">
+                <div className="flex items-center gap-2 mb-1">
+                  <Brain className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold text-sm">{m.module}</span>
+                  <Badge variant="outline" className={cn("text-[10px] ml-auto", m.color)}>{m.status}</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">{m.desc}</p>
+              </div>
+            ))}
+          </div>
+          <InfoBox variant="info">
+            Each MIND® module follows the <strong>Algorithm Change Protocol (ACP-001)</strong> for versioning. 
+            Category A (maintenance) and B (enhancement) updates deploy without re-registration. 
+            Category C (significant change) requires a new CDSCO submission. 
+            See <SectionLink id="regulatory-document-pack" label="Regulatory Document Pack" /> for ACP-001 download.
+          </InfoBox>
         </div>
       ),
     },
@@ -192,8 +267,8 @@ function buildSections(): DocSection[] {
                 color: "border-purple-500/30 bg-purple-500/5",
               },
               {
-                plane: "3. Inference Plane (I-Plane)",
-                desc: "Run AI triage: seizure detection, spike identification, asymmetry analysis, artifact rejection. Currently uses simulated triage; will connect to Azure ML endpoint.",
+                plane: "3. Inference Plane (I-Plane) — MIND®",
+                desc: "Hosts the MIND® (Machine Intelligence for Neural Data) algorithm family: MIND®Triage (priority routing), MIND®Clean (artifact rejection), MIND®Seizure (seizure detection), MIND®Score (severity scoring). Future R&D: MIND®Sleep. Currently uses simulated triage; production will connect to Azure ML endpoint.",
                 tech: "Target: Azure ML Endpoint with $5,000 credits (expires Aug 2026)",
                 color: "border-amber-500/30 bg-amber-500/5",
               },
@@ -1513,9 +1588,9 @@ export default function Documentation() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">ENCEPHLIAN Manual</h1>
+            <h1 className="text-xl font-semibold tracking-tight">ENCEPHLIAN® Platform Manual</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Comprehensive platform documentation — v1.0
+              Aposematium Pvt. Ltd. — Comprehensive platform documentation — v1.0
             </p>
           </div>
           <Badge variant="outline" className="text-xs font-mono">
