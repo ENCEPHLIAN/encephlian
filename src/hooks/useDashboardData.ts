@@ -250,6 +250,8 @@ export function useDashboardData() {
     metrics,
     filteredStudies,
     isLoading: studiesLoading,
+    isError: studiesError,
+    error: studiesErrorObj,
     tokenBalance: typeof wallet?.tokens === 'number' ? wallet.tokens : 0,
     previousBalance: previousBalanceRef.current,
     refetchStudies,

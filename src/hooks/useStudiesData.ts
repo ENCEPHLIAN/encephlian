@@ -91,7 +91,7 @@ export function useStudiesData(stateFilter: string) {
     };
   }, [isAuthenticated, userId, refetch]);
 
-  return { studies: studies || [], isLoading, refetch };
+  return { studies: studies || [], isLoading, isError, error, refetch };
 }
 
 export function useFilteredStudies(studies: StudyListItem[], search: string) {
