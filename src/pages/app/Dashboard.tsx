@@ -42,9 +42,24 @@ export default function Dashboard() {
     metrics,
     filteredStudies,
     isLoading,
+    isError,
+    error: dataError,
     tokenBalance,
     previousBalance,
+    refetchStudies,
   } = useDashboardData();
+
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
+
+  // Loading timeout — if data takes > 15s, show helpful message
+  useEffect(() => {
+    if (!isLoading) {
+      setLoadingTooLong(false);
+      return;
+    }
+    const timer = setTimeout(() => setLoadingTooLong(true), 15000);
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   const { pendingTriageStudies, processingStudies, completedReports, pendingStudies } = filteredStudies;
 
