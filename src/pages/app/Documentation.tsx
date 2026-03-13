@@ -1588,9 +1588,9 @@ export default function Documentation() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">ENCEPHLIAN Manual</h1>
+            <h1 className="text-xl font-semibold tracking-tight">ENCEPHLIAN® Platform Manual</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Comprehensive platform documentation — v1.0
+              Aposematium Pvt. Ltd. — Comprehensive platform documentation — v1.0
             </p>
           </div>
           <Badge variant="outline" className="text-xs font-mono">
