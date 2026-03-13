@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2, Upload, Clock, Brain, Eye, CheckCircle2,
-  ArrowRight, AlertTriangle, Zap, Inbox
+  ArrowRight, AlertTriangle, Zap, Inbox, RefreshCw, WifiOff
 } from "lucide-react";
 import dayjs from "dayjs";
 import { useStudiesData, Study } from "@/hooks/useStudiesData";
