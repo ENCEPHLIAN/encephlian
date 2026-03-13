@@ -259,6 +259,21 @@ export default function Lanes() {
            (stageStudies.in_review?.length || 0);
   }, [stageStudies]);
 
+  const avgProcessingMinutes = useMemo(() => {
+    const processing = stageStudies.processing || [];
+    if (processing.length === 0) return null;
+    const totalMin = processing.reduce((sum, s) => {
+      const start = s.triage_started_at || s.created_at;
+      return sum + dayjs().diff(dayjs(start), "minute");
+    }, 0);
+    return Math.round(totalMin / processing.length);
+  }, [stageStudies]);
+
+  const overduePercent = useMemo(() => {
+    if (activeCount === 0) return 0;
+    return Math.round((overdueCount / activeCount) * 100);
+  }, [overdueCount, activeCount]);
+
   if (isLoading) return <LanesSkeleton />;
 
   return (
@@ -268,23 +283,41 @@ export default function Lanes() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Triage Lanes</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            <span className="font-medium text-foreground">{activeCount}</span> active
-            {" · "}
-            <span className="font-medium text-foreground">{stageStudies.signed?.length || 0}</span> completed
+            Real-time study pipeline
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {overdueCount > 0 && (
-            <Badge variant="destructive" className="gap-1 text-xs">
-              <AlertTriangle className="h-3 w-3" />
-              {overdueCount} overdue
-            </Badge>
-          )}
-          <Button size="sm" onClick={() => navigate("/app/studies")}>
-            <Upload className="h-3.5 w-3.5 mr-1.5" />
-            Upload Study
-          </Button>
+        <Button size="sm" onClick={() => navigate("/app/studies")}>
+          <Upload className="h-3.5 w-3.5 mr-1.5" />
+          Upload Study
+        </Button>
+      </div>
+
+      {/* Summary stats bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+          <span className="text-xs text-muted-foreground">Active</span>
+          <span className="text-sm font-semibold text-foreground font-mono">{activeCount}</span>
         </div>
+        <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+          <span className="text-xs text-muted-foreground">Signed</span>
+          <span className="text-sm font-semibold text-foreground font-mono">{stageStudies.signed?.length || 0}</span>
+        </div>
+        {overdueCount > 0 && (
+          <div className="flex items-center gap-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5">
+            <AlertTriangle className="h-3 w-3 text-destructive" />
+            <span className="text-xs text-destructive font-medium">{overduePercent}% overdue</span>
+            <span className="text-[10px] text-destructive/70">({overdueCount})</span>
+          </div>
+        )}
+        {avgProcessingMinutes !== null && (
+          <div className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5">
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">Avg processing</span>
+            <span className="text-sm font-semibold text-foreground font-mono">
+              {avgProcessingMinutes >= 60 ? `${Math.floor(avgProcessingMinutes / 60)}h ${avgProcessingMinutes % 60}m` : `${avgProcessingMinutes}m`}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Kanban board */}
