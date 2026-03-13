@@ -33,6 +33,7 @@ import {
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
+import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useSku } from "@/hooks/useSku";
