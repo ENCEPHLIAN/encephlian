@@ -18,6 +18,7 @@ export interface StudyListItem {
   tokens_deducted: number | null;
   triage_status: string | null;
   triage_progress: number | null;
+  triage_started_at: string | null;
   triage_completed_at: string | null;
   clinics: { name: string } | null;
 }
