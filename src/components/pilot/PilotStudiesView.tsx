@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileText, CheckCircle2, Clock,
-  Loader2, Zap, Download, ArrowRight, Brain,
+  Loader2, Zap, Download, Brain, Eye,
+  ChevronRight, AlertTriangle, Activity,
+  HelpCircle,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
@@ -33,7 +35,6 @@ export default function PilotStudiesView() {
     processing: processingStudies,
     completed: completedStudies,
   } = usePilotData();
-  const { userId } = useUserSession();
 
   const handleSelectSla = useCallback((study: PilotStudy) => {
     setSelectedStudy(study);
@@ -50,7 +51,7 @@ export default function PilotStudiesView() {
     });
   }, [navigate]);
 
-  // Drag-and-drop
+  /* ─── Drag and drop ─── */
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -69,18 +70,18 @@ export default function PilotStudiesView() {
     setIsDragOver(false);
     const files = e.dataTransfer.files;
     if (files.length > 0) {
-      const file = files[0];
-      const name = file.name.toLowerCase();
+      const name = files[0].name.toLowerCase();
       if (name.endsWith(".edf") || name.endsWith(".bdf")) {
         setUploadWizardOpen(true);
       } else {
-        toast.error("Only EDF/BDF files supported", {
-          description: "Export your EEG recording as .EDF format first",
+        toast.error("Only EDF/BDF files are supported", {
+          description: "Export your EEG recording as .EDF first.",
         });
       }
     }
   }, []);
 
+  /* ─── Download report ─── */
   const handleDownload = async (study: PilotStudy) => {
     try {
       const { data: report } = await supabase
@@ -118,12 +119,16 @@ export default function PilotStudiesView() {
     }
   };
 
-  // Skeleton
+  /* ─── Skeleton loading ─── */
   if (isLoading) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6 py-4">
-        <Skeleton className="h-7 w-36 mx-auto" />
-        <Skeleton className="h-40 w-full rounded-xl" />
+      <div className="max-w-2xl mx-auto space-y-5 py-4 px-1">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-7 w-28" />
+          <Skeleton className="h-9 w-24 rounded-full" />
+        </div>
+        <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-20 w-full rounded-xl" />
         <Skeleton className="h-20 w-full rounded-xl" />
         <Skeleton className="h-20 w-full rounded-xl" />
       </div>
@@ -131,16 +136,18 @@ export default function PilotStudiesView() {
   }
 
   const isEmpty = studies.length === 0;
-  const totalInFlight = pendingStudies.length + processingStudies.length;
+  const totalActive = pendingStudies.length + processingStudies.length;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 py-4 animate-fade-in">
+    <div className="max-w-2xl mx-auto space-y-5 py-4 px-1 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Studies</h1>
           <p className="text-xs text-muted-foreground">
-            {studies.length} total • {totalInFlight} in progress
+            {isEmpty
+              ? "Upload your first EEG to get started"
+              : `${studies.length} total · ${totalActive} active`}
           </p>
         </div>
         <Button
@@ -156,142 +163,190 @@ export default function PilotStudiesView() {
       {/* Upload Drop Zone */}
       <Card
         className={cn(
-          "border-2 border-dashed transition-all cursor-pointer",
+          "border-2 border-dashed transition-all cursor-pointer group",
           isDragOver
             ? "border-primary bg-primary/10 scale-[1.01] shadow-lg"
-            : "hover:border-primary/50 hover:bg-primary/5"
+            : "hover:border-primary/40 hover:bg-primary/5"
         )}
         onClick={() => setUploadWizardOpen(true)}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <CardContent className="p-6 text-center">
+        <CardContent className="p-6 sm:p-8 text-center">
           {isDragOver ? (
             <div className="space-y-2">
-              <Upload className="h-8 w-8 text-primary mx-auto animate-bounce" />
-              <p className="font-medium text-primary">Drop to upload</p>
+              <Upload className="h-10 w-10 text-primary mx-auto animate-bounce" />
+              <p className="font-semibold text-primary">Drop to upload</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <Upload className="h-6 w-6 text-primary" />
+            <div className="space-y-3">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto group-hover:bg-primary/15 transition-colors">
+                <Upload className="h-7 w-7 text-primary" />
               </div>
               <div>
-                <p className="font-medium text-sm">Upload EEG File</p>
-                <p className="text-xs text-muted-foreground">
-                  EDF format • Click or drag & drop
+                <p className="font-semibold text-sm">Upload EEG Recording</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  EDF/BDF format · Click or drag & drop · Max 20MB
                 </p>
+              </div>
+              <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Brain className="h-3 w-3" /> AI-analyzed
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-3 w-3" /> ~15 min
+                </span>
+                <span className="flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> PDF report
+                </span>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Pending SLA */}
+      {/* Pending SLA Selection */}
       {pendingStudies.length > 0 && (
-        <div className="space-y-2">
+        <section className="space-y-2">
           <div className="flex items-center gap-2 px-1">
-            <Clock className="h-4 w-4 text-amber-600" />
-            <span className="text-sm font-medium">Ready for Triage</span>
-            <Badge variant="secondary" className="text-xs ml-auto">{pendingStudies.length}</Badge>
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <span className="text-sm font-semibold">Ready for Triage</span>
+            <Badge variant="secondary" className="text-[10px] ml-auto tabular-nums">
+              {pendingStudies.length}
+            </Badge>
           </div>
           {pendingStudies.map((study) => {
             const meta = study.meta as any;
             return (
-              <Card key={study.id} className="bg-amber-500/5 border-amber-500/20">
-                <CardContent className="p-4">
+              <Card
+                key={study.id}
+                className="bg-amber-500/5 border-amber-500/20"
+              >
+                <CardContent className="p-3.5">
                   <div className="flex items-center justify-between">
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">
-                        {meta?.patient_name || "Patient"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {dayjs(study.created_at).format("MMM D, h:mm A")}
-                      </p>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                        <FileText className="h-4 w-4 text-amber-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {meta?.patient_name || "Patient"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {dayjs(study.created_at).format("MMM D, h:mm A")}
+                        </p>
+                      </div>
                     </div>
                     <Button
                       size="sm"
                       onClick={() => handleSelectSla(study)}
-                      className="gap-1 shrink-0 rounded-full"
+                      className="gap-1.5 shrink-0 rounded-full h-8 px-4"
                     >
                       <Zap className="h-3 w-3" />
-                      Start Triage
+                      Start
                     </Button>
                   </div>
                 </CardContent>
               </Card>
             );
           })}
-        </div>
+        </section>
       )}
 
       {/* Processing */}
       {processingStudies.length > 0 && (
-        <div className="space-y-2">
+        <section className="space-y-2">
           <div className="flex items-center gap-2 px-1">
-            <Brain className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">AI Analyzing</span>
-            <Badge variant="secondary" className="text-xs ml-auto">{processingStudies.length}</Badge>
+            <Activity className="h-4 w-4 text-primary animate-pulse" />
+            <span className="text-sm font-semibold">Analyzing</span>
+            <Badge variant="secondary" className="text-[10px] ml-auto tabular-nums">
+              {processingStudies.length}
+            </Badge>
           </div>
           {processingStudies.map((study) => {
             const meta = study.meta as any;
             const progress = study.triage_progress || 0;
+            const label =
+              progress < 30
+                ? "Preprocessing..."
+                : progress < 70
+                ? "AI analysis..."
+                : "Generating report...";
             return (
               <Card key={study.id} className="bg-primary/5 border-primary/20">
-                <CardContent className="p-4 space-y-2">
+                <CardContent className="p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm truncate">{meta?.patient_name || "Patient"}</p>
-                    <Badge variant="outline" className="text-xs">{study.sla}</Badge>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {meta?.patient_name || "Patient"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">{label}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-semibold text-primary tabular-nums">
+                      {progress}%
+                    </span>
                   </div>
                   <Progress value={progress} className="h-1.5" />
-                  <p className="text-xs text-muted-foreground">
-                    {progress < 30 ? "Preprocessing signals..." : progress < 70 ? "Running AI analysis..." : "Generating report..."}
-                  </p>
                 </CardContent>
               </Card>
             );
           })}
-        </div>
+        </section>
       )}
 
-      {/* Completed */}
+      {/* Completed Reports */}
       {completedStudies.length > 0 && (
-        <div className="space-y-2">
+        <section className="space-y-2">
           <div className="flex items-center gap-2 px-1">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-            <span className="text-sm font-medium">Reports Ready</span>
-            <Badge variant="secondary" className="text-xs ml-auto">{completedStudies.length}</Badge>
+            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <span className="text-sm font-semibold">Reports</span>
+            <Badge variant="secondary" className="text-[10px] ml-auto tabular-nums">
+              {completedStudies.length}
+            </Badge>
           </div>
-          {completedStudies.slice(0, 10).map((study) => {
+          {completedStudies.slice(0, 15).map((study) => {
             const meta = study.meta as any;
             return (
-              <Card key={study.id} className="hover:bg-muted/30 transition-colors">
-                <CardContent className="p-4">
+              <Card
+                key={study.id}
+                className="hover:bg-muted/30 transition-colors group"
+              >
+                <CardContent className="p-3.5">
                   <div className="flex items-center justify-between">
                     <div
                       className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
                       onClick={() => navigate(`/app/studies/${study.id}`)}
                     >
-                      <div className="h-9 w-9 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                      <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                       </div>
                       <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">{meta?.patient_name || "Patient"}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {dayjs(study.triage_completed_at || study.created_at).format("MMM D")}
-                          <span className="mx-1">•</span>{study.sla}
+                        <p className="font-medium text-sm truncate">
+                          {meta?.patient_name || "Patient"}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {dayjs(
+                            study.triage_completed_at || study.created_at
+                          ).format("MMM D, h:mm A")}
+                          <span className="mx-1">·</span>
+                          {study.sla}
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex gap-0.5 shrink-0">
                       <Button
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => navigate(`/app/studies/${study.id}`)}
                       >
-                        <FileText className="h-4 w-4" />
+                        <Eye className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -307,25 +362,32 @@ export default function PilotStudiesView() {
               </Card>
             );
           })}
-        </div>
+        </section>
       )}
 
       {/* Empty State */}
       {isEmpty && (
-        <div className="text-center py-12 text-muted-foreground">
-          <div className="h-14 w-14 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-            <FileText className="h-7 w-7 opacity-40" />
+        <div className="text-center py-10 space-y-4">
+          <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto">
+            <FileText className="h-8 w-8 text-muted-foreground/40" />
           </div>
-          <p className="font-medium text-foreground mb-1">No studies yet</p>
-          <p className="text-sm mb-4">Upload your first EEG recording to get started</p>
-          <Button onClick={() => setUploadWizardOpen(true)} className="gap-2 rounded-full">
+          <div>
+            <p className="font-semibold">No studies yet</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Upload your first EEG recording to get an AI triage report
+            </p>
+          </div>
+          <Button
+            onClick={() => setUploadWizardOpen(true)}
+            className="gap-2 rounded-full"
+          >
             <Upload className="h-4 w-4" />
             Upload EEG
           </Button>
         </div>
       )}
 
-      {/* SLA Modal (Pilot 1-tap) */}
+      {/* Modals */}
       <SlaSelectionModal
         open={slaModalOpen}
         onOpenChange={setSlaModalOpen}
@@ -335,7 +397,6 @@ export default function PilotStudiesView() {
         isPilot
       />
 
-      {/* Upload Wizard */}
       <StudyUploadWizard
         open={uploadWizardOpen}
         onOpenChange={setUploadWizardOpen}
