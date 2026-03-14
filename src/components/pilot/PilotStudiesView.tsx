@@ -14,7 +14,7 @@ import dayjs from "dayjs";
 import { toast } from "sonner";
 import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
-import StudyUploadWizard from "@/components/upload/StudyUploadWizard";
+import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { cn } from "@/lib/utils";
 
