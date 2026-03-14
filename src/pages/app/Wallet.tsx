@@ -34,12 +34,12 @@ export default function Wallet() {
     );
   }
 
-  // Pilot SKU: Simplified wallet with subscription focus
+  // Pilot SKU: Streamlined wallet with token packs + subscription
   if (isPilot) {
     return (
       <div className="space-y-6 max-w-lg mx-auto">
         <div>
-          <h1 className="text-2xl font-bold">Wallet</h1>
+          <h1 className="text-xl font-semibold">Wallet</h1>
           <p className="text-muted-foreground text-sm">
             Tokens power your AI triage reports
           </p>
