@@ -1,42 +1,38 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Loader2, Upload, FileText, Coins, ArrowRight, 
-  CheckCircle2, Clock, Zap 
+import {
+  Loader2, FileText, Coins, ArrowRight,
+  CheckCircle2, Clock, Zap, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import dayjs from "dayjs";
-import { useDashboardData, Study } from "@/hooks/useDashboardData";
+import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import { toast } from "sonner";
 import logoSrc from "@/assets/logo.png";
 
-/**
- * PilotDashboard: Value-focused, minimal cognitive load
- * Core loop: Upload → Triage → Report
- * No KPIs, no charts, no information overload
- */
 export default function PilotDashboard() {
   const navigate = useNavigate();
-  const [selectedStudy, setSelectedStudy] = useState<Study | null>(null);
+  const [selectedStudy, setSelectedStudy] = useState<PilotStudy | null>(null);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
-  const [refundStudy, setRefundStudy] = useState<Study | null>(null);
+  const [refundStudy, setRefundStudy] = useState<PilotStudy | null>(null);
 
   const {
     studies,
-    filteredStudies,
     isLoading,
     tokenBalance,
-  } = useDashboardData();
+    pending: pendingTriageStudies,
+    processing: processingStudies,
+    completed: completedReports,
+  } = usePilotData();
 
-  const { pendingTriageStudies, processingStudies, completedReports } = filteredStudies;
-
-  const handleSelectSla = useCallback((study: Study) => {
+  const handleSelectSla = useCallback((study: PilotStudy) => {
     setSelectedStudy(study);
     setSlaModalOpen(true);
   }, []);
@@ -49,30 +45,37 @@ export default function PilotDashboard() {
     navigate("/app/wallet");
   }, [navigate]);
 
-  const handleRequestRefund = useCallback((study: Study) => {
+  const handleRequestRefund = useCallback((study: PilotStudy) => {
     setRefundStudy(study);
     setRefundDialogOpen(true);
   }, []);
 
+  // Skeleton loading — matches final layout shape
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="text-center space-y-3">
-          <img src={logoSrc} alt="Loading" className="h-12 w-12 mx-auto animate-pulse" />
-          <p className="text-muted-foreground text-sm">Loading...</p>
+      <div className="max-w-2xl mx-auto space-y-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-3 w-32" />
+          </div>
+          <Skeleton className="h-8 w-24 rounded-full" />
         </div>
+        <Skeleton className="h-28 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
       </div>
     );
   }
 
-  const hasProcessingStudies = processingStudies.length > 0;
-  const hasPendingStudies = pendingTriageStudies.length > 0;
-  const hasCompletedReports = completedReports.length > 0;
-  const isEmpty = !hasProcessingStudies && !hasPendingStudies && !hasCompletedReports && studies.length === 0;
+  const hasProcessing = processingStudies.length > 0;
+  const hasPending = pendingTriageStudies.length > 0;
+  const hasCompleted = completedReports.length > 0;
+  const isEmpty = !hasProcessing && !hasPending && !hasCompleted && studies.length === 0;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 py-4 animate-fade-in">
-      {/* Token Balance - Subtle, top right */}
+      {/* Header with inline token balance (non-navigating) */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Accelerated Triage</h1>
@@ -80,17 +83,24 @@ export default function PilotDashboard() {
             Upload → Analyze → Report
           </p>
         </div>
-        <button 
-          onClick={() => navigate("/app/wallet")}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/50 hover:bg-accent transition-colors"
-        >
-          <Coins className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium">{tokenBalance}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/50">
+            <Coins className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium tabular-nums">{tokenBalance}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => navigate("/app/wallet")}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Processing Studies - Active progress */}
-      {hasProcessingStudies && (
+      {/* Processing Studies */}
+      {hasProcessing && (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -120,8 +130,8 @@ export default function PilotDashboard() {
         </Card>
       )}
 
-      {/* Pending Triage - Awaiting SLA selection */}
-      {hasPendingStudies && (
+      {/* Pending Triage */}
+      {hasPending && (
         <Card className="border-amber-500/20 bg-amber-500/5">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
@@ -132,8 +142,8 @@ export default function PilotDashboard() {
               {pendingTriageStudies.slice(0, 5).map((study) => {
                 const meta = study.meta as any;
                 return (
-                  <div 
-                    key={study.id} 
+                  <div
+                    key={study.id}
                     className="flex items-center justify-between p-2 rounded-lg bg-background/50 hover:bg-background transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
@@ -147,8 +157,8 @@ export default function PilotDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       onClick={() => handleSelectSla(study)}
                       className="shrink-0 gap-1"
                     >
@@ -163,8 +173,8 @@ export default function PilotDashboard() {
         </Card>
       )}
 
-      {/* Recent Completed Reports */}
-      {hasCompletedReports && (
+      {/* Completed Reports */}
+      {hasCompleted && (
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
@@ -172,9 +182,9 @@ export default function PilotDashboard() {
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <span className="text-sm font-medium">Completed Reports</span>
               </div>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => navigate("/app/studies")}
                 className="text-xs h-7"
               >
@@ -185,8 +195,8 @@ export default function PilotDashboard() {
               {completedReports.slice(0, 3).map((study) => {
                 const meta = study.meta as any;
                 return (
-                  <div 
-                    key={study.id} 
+                  <div
+                    key={study.id}
                     onClick={() => navigate(`/app/studies/${study.id}`)}
                     className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
                   >
@@ -212,7 +222,7 @@ export default function PilotDashboard() {
         </Card>
       )}
 
-      {/* Empty State - Primary CTA */}
+      {/* Empty State */}
       {isEmpty && (
         <Card className="border-dashed border-2">
           <CardContent className="p-8 text-center">
@@ -223,28 +233,12 @@ export default function PilotDashboard() {
             <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
               Upload an EEG file and get an AI-accelerated triage report in minutes
             </p>
-            <Button 
-              size="lg" 
-              onClick={() => navigate("/app/studies")}
-              className="gap-2"
-            >
-              <Upload className="h-4 w-4" />
+            <Button size="lg" onClick={() => navigate("/app/studies")} className="gap-2">
+              <Zap className="h-4 w-4" />
               Upload EEG
             </Button>
           </CardContent>
         </Card>
-      )}
-
-      {/* Primary Action - Always visible unless empty */}
-      {!isEmpty && (
-        <Button 
-          size="lg" 
-          onClick={() => navigate("/app/studies")}
-          className="w-full gap-2 h-12"
-        >
-          <Upload className="h-4 w-4" />
-          Upload New Study
-        </Button>
       )}
 
       {/* Modals */}
@@ -254,6 +248,7 @@ export default function PilotDashboard() {
         study={selectedStudy}
         tokenBalance={tokenBalance}
         onInsufficientTokens={handleInsufficientTokens}
+        isPilot
       />
 
       <RefundDialog
