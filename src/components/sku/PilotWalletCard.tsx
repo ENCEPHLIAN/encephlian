@@ -58,12 +58,12 @@ export function PilotWalletCard() {
       }
 
       const options = {
-        key: data.razorpay_key,
-        amount: data.amount,
+        key: data.keyId,
+        amount: data.amountPaise,
         currency: data.currency,
         name: "ENCEPHLIAN",
         description: `Pilot Plan - ${PILOT_PLAN.tokens} Tokens`,
-        order_id: data.order_id,
+        order_id: data.orderId,
         handler: async (response: any) => {
           const { error: verifyError } = await supabase.functions.invoke("verify_payment", {
             body: {
