@@ -19,6 +19,8 @@ interface SlaSelectionModalProps {
   study: Study | null;
   tokenBalance: number;
   onInsufficientTokens: () => void;
+  /** When true, TAT selection skips confirmation (1-tap). STAT still confirms. */
+  isPilot?: boolean;
 }
 
 type SlaType = "TAT" | "STAT";
@@ -37,11 +39,11 @@ async function simulateTriageProgress(studyId: string) {
 
   for (const stage of stages) {
     await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
-    
+
     const updateData: Record<string, any> = {
       triage_progress: stage.progress,
     };
-    
+
     if (stage.status === "completed") {
       updateData.triage_status = "completed";
       updateData.triage_completed_at = new Date().toISOString();
@@ -53,8 +55,7 @@ async function simulateTriageProgress(studyId: string) {
       .update(updateData)
       .eq("id", studyId);
   }
-  
-  // Send triage completion notification (edge function reads setting from database)
+
   try {
     await supabase.functions.invoke("send_triage_notification", {
       body: { study_id: studyId },
@@ -70,30 +71,20 @@ export default function SlaSelectionModal({
   study,
   tokenBalance,
   onInsufficientTokens,
+  isPilot = false,
 }: SlaSelectionModalProps) {
   const [selectedSla, setSelectedSla] = useState<SlaType | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
-  const handleSelectSla = (sla: SlaType) => {
-    const required = sla === "STAT" ? 2 : 1;
-    if (tokenBalance < required) {
-      onInsufficientTokens();
-      return;
-    }
-    setSelectedSla(sla);
-    setIsConfirming(true);
-  };
-
-  const handleConfirm = async () => {
-    if (!study || !selectedSla) return;
-
+  const submitTriage = async (sla: SlaType) => {
+    if (!study) return;
     setIsSubmitting(true);
     try {
       const { data, error } = await supabase.rpc("select_sla_and_start_triage", {
         p_study_id: study.id,
-        p_sla: selectedSla,
+        p_sla: sla,
       });
 
       if (error) throw error;
@@ -109,11 +100,11 @@ export default function SlaSelectionModal({
         throw new Error(result.error || "Failed to start triage");
       }
 
-      // Invalidate queries to refresh data
-      await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
-      await queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
-      await queryClient.invalidateQueries({ queryKey: ["pending-triage-studies"] });
-      await queryClient.invalidateQueries({ queryKey: ["processing-studies"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["wallet-balance"] }),
+        queryClient.invalidateQueries({ queryKey: ["pilot-studies"] }),
+        queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] }),
+      ]);
 
       toast.success(
         <div className="flex items-center gap-2">
@@ -122,19 +113,35 @@ export default function SlaSelectionModal({
         </div>
       );
 
-      onOpenChange(false);
-      setSelectedSla(null);
-      setIsConfirming(false);
-
-      // Start background triage simulation
+      handleClose();
       simulateTriageProgress(study.id).catch(console.error);
-
     } catch (err: any) {
       console.error("SLA selection error:", err);
       toast.error(err.message || "Failed to start triage");
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleSelectSla = (sla: SlaType) => {
+    const required = sla === "STAT" ? 2 : 1;
+    if (tokenBalance < required) {
+      onInsufficientTokens();
+      return;
+    }
+
+    // Pilot mode: TAT (1 token) goes straight through, no confirmation
+    if (isPilot && sla === "TAT") {
+      submitTriage(sla);
+      return;
+    }
+
+    setSelectedSla(sla);
+    setIsConfirming(true);
+  };
+
+  const handleConfirm = () => {
+    if (selectedSla) submitTriage(selectedSla);
   };
 
   const handleCancel = () => {
@@ -160,13 +167,13 @@ export default function SlaSelectionModal({
             {isConfirming ? "Confirm Analysis" : "Start AI Analysis"}
           </DialogTitle>
           <DialogDescription>
-            {isConfirming 
-              ? "Review your selection before starting" 
+            {isConfirming
+              ? "Review your selection before starting"
               : "Choose the turnaround time for this EEG analysis"}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Token Balance Display */}
+        {/* Token Balance */}
         <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
           <div className="flex items-center gap-2">
             <Coins className="h-4 w-4 text-primary" />
@@ -178,18 +185,21 @@ export default function SlaSelectionModal({
         </div>
 
         {!isConfirming ? (
-          /* SLA Options */
           <div className="grid grid-cols-2 gap-4 mt-2">
-            {/* TAT Option */}
+            {/* TAT */}
             <Card
               className={`p-4 cursor-pointer transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
                 tokenBalance < 1 ? "opacity-50 pointer-events-none" : ""
-              }`}
+              } ${isSubmitting ? "pointer-events-none opacity-70" : ""}`}
               onClick={() => handleSelectSla("TAT")}
             >
               <div className="flex flex-col items-center text-center space-y-3">
                 <div className="p-3 rounded-full bg-gradient-to-br from-blue-500/20 to-cyan-500/20">
-                  <Clock className="h-6 w-6 text-blue-500" />
+                  {isSubmitting && selectedSla === null ? (
+                    <Loader2 className="h-6 w-6 text-blue-500 animate-spin" />
+                  ) : (
+                    <Clock className="h-6 w-6 text-blue-500" />
+                  )}
                 </div>
                 <div>
                   <h3 className="font-semibold">Standard</h3>
@@ -201,11 +211,11 @@ export default function SlaSelectionModal({
               </div>
             </Card>
 
-            {/* STAT Option */}
+            {/* STAT */}
             <Card
               className={`p-4 cursor-pointer transition-all hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/5 ${
                 tokenBalance < 2 ? "opacity-50 pointer-events-none" : ""
-              }`}
+              } ${isSubmitting ? "pointer-events-none opacity-70" : ""}`}
               onClick={() => handleSelectSla("STAT")}
             >
               <div className="flex flex-col items-center text-center space-y-3">
@@ -223,7 +233,6 @@ export default function SlaSelectionModal({
             </Card>
           </div>
         ) : (
-          /* Confirmation View */
           <div className="space-y-4 mt-2">
             <div className="p-4 rounded-lg border bg-muted/30">
               <div className="space-y-3">
@@ -255,9 +264,9 @@ export default function SlaSelectionModal({
               <Button variant="outline" className="flex-1" onClick={handleCancel} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button 
-                className="flex-1 btn-gradient-analysis rounded-full" 
-                onClick={handleConfirm} 
+              <Button
+                className="flex-1 btn-gradient-analysis rounded-full"
+                onClick={handleConfirm}
                 disabled={isSubmitting}
               >
                 {isSubmitting ? (

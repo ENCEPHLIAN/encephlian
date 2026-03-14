@@ -5,56 +5,38 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Upload, FileText, CheckCircle2, Clock, 
-  Loader2, Zap, Download
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Upload, FileText, CheckCircle2, Clock,
+  Loader2, Zap, Download,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
-import { useStudiesData } from "@/hooks/useStudiesData";
+import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
-import { useDashboardData, Study } from "@/hooks/useDashboardData";
+import StudyUploadWizard from "@/components/upload/StudyUploadWizard";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { cn } from "@/lib/utils";
-import logoSrc from "@/assets/logo.png";
 
-/**
- * PilotStudiesView: Value-focused study management
- * 
- * Three clear sections:
- * 1. Upload - Primary action
- * 2. In Progress - Processing studies
- * 3. Ready - Completed reports to download
- * 
- * No tables, no filters, no complexity.
- * Just: Upload → Process → Get Report
- */
 export default function PilotStudiesView() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const [selectedStudy, setSelectedStudy] = useState<Study | null>(null);
+  const [selectedStudy, setSelectedStudy] = useState<PilotStudy | null>(null);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
+  const [uploadWizardOpen, setUploadWizardOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
-  const { studies, isLoading } = useStudiesData("all");
-  const { tokenBalance } = useDashboardData();
+  const {
+    studies,
+    isLoading,
+    tokenBalance,
+    pending: pendingStudies,
+    processing: processingStudies,
+    completed: completedStudies,
+  } = usePilotData();
   const { userId } = useUserSession();
 
-  // Categorize studies by stage
-  const pendingStudies = studies.filter(s => 
-    s.state === "awaiting_sla" || 
-    (s.state === "uploaded" && (!s.triage_status || s.triage_status === "pending" || s.triage_status === "awaiting_sla"))
-  );
-  
-  const processingStudies = studies.filter(s => 
-    s.triage_status === "processing" || s.state === "ai_draft" || s.state === "in_review"
-  );
-  
-  const completedStudies = studies.filter(s => 
-    s.state === "signed" || s.triage_status === "completed"
-  );
-
-  const handleSelectSla = useCallback((study: Study) => {
+  const handleSelectSla = useCallback((study: PilotStudy) => {
     setSelectedStudy(study);
     setSlaModalOpen(true);
   }, []);
@@ -69,93 +51,51 @@ export default function PilotStudiesView() {
     });
   }, [navigate]);
 
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    
-    if (!userId) {
-      toast.error("Not authenticated");
-      return;
-    }
+  // Drag-and-drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
 
-    // Hard gate: Storage RLS requires a real user JWT (not anon).
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      toast.error("Session expired", { description: "Please sign in again." });
-      navigate("/login", { replace: true });
-      return;
-    }
-    
-    const file = files[0];
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.edf')) {
-      toast.error("Only EDF files supported", {
-        description: "BDF support coming soon"
-      });
-      return;
-    }
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
 
-    setUploading(true);
-    try {
-      // CRITICAL: Path must start with userId for RLS policy compliance
-      const filePath = `${userId}/${Date.now()}-${file.name}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from("eeg-raw")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.name.toLowerCase().endsWith(".edf") || file.name.toLowerCase().endsWith(".bdf")) {
+        // Open wizard with the dropped file — wizard handles upload
+        setUploadWizardOpen(true);
+      } else {
+        toast.error("Only EDF files supported", {
+          description: "Please upload an EDF format EEG file",
         });
-
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        throw uploadError;
       }
-
-      // Create study and trigger AI triage
-      const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
-        body: { filePath, fileName: file.name }
-      });
-
-      if (error) {
-        console.error("Create study error:", error);
-        throw error;
-      }
-
-      toast.success("EEG uploaded!", {
-        description: "Select priority to start AI triage",
-      });
-      
-    } catch (error: any) {
-      console.error("Upload error:", error);
-      toast.error("Upload failed", {
-        description: error?.message || "Please try again",
-      });
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  };
+  }, []);
 
-  const handleDownload = async (study: any) => {
+  const handleDownload = async (study: PilotStudy) => {
     try {
       const { data: report } = await supabase
         .from("reports")
-        .select("pdf_path")
+        .select("pdf_path, id")
         .eq("study_id", study.id)
         .single();
 
       if (!report?.pdf_path) {
         toast.info("Generating report...");
-        
-        const { data: reportData } = await supabase
-          .from("reports")
-          .select("id")
-          .eq("study_id", study.id)
-          .single();
-
-        if (reportData) {
+        if (report?.id) {
           await supabase.functions.invoke("generate_report_pdf", {
-            body: { reportId: reportData.id }
+            body: { reportId: report.id },
           });
         }
         return;
@@ -168,27 +108,30 @@ export default function PilotStudiesView() {
       if (error) throw error;
 
       const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `triage-report-${study.id.slice(0, 8)}.pdf`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
       toast.success("Download started");
-    } catch (error) {
+    } catch {
       toast.error("Download failed");
     }
   };
 
+  // Skeleton loading matching final layout
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="text-center space-y-3">
-          <img src={logoSrc} alt="Loading" className="h-12 w-12 mx-auto animate-pulse" />
-          <p className="text-muted-foreground text-sm">Loading...</p>
+      <div className="max-w-2xl mx-auto space-y-6 py-4">
+        <div className="text-center space-y-1">
+          <Skeleton className="h-6 w-36 mx-auto" />
+          <Skeleton className="h-3 w-52 mx-auto" />
         </div>
+        <Skeleton className="h-36 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
       </div>
     );
   }
@@ -205,19 +148,24 @@ export default function PilotStudiesView() {
         </p>
       </div>
 
-      {/* Upload Section - Primary CTA */}
-      <Card 
+      {/* Upload Section with drag-and-drop */}
+      <Card
         className={cn(
-          "border-2 border-dashed transition-colors cursor-pointer hover:border-primary/50 hover:bg-primary/5",
-          uploading && "pointer-events-none opacity-70"
+          "border-2 border-dashed transition-all cursor-pointer",
+          isDragOver
+            ? "border-primary bg-primary/10 scale-[1.01]"
+            : "hover:border-primary/50 hover:bg-primary/5"
         )}
-        onClick={() => !uploading && fileInputRef.current?.click()}
+        onClick={() => setUploadWizardOpen(true)}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <CardContent className="p-8 text-center">
-          {uploading ? (
+          {isDragOver ? (
             <>
-              <Loader2 className="h-10 w-10 text-primary mx-auto mb-3 animate-spin" />
-              <p className="font-medium">Uploading...</p>
+              <Upload className="h-10 w-10 text-primary mx-auto mb-3 animate-bounce" />
+              <p className="font-medium">Drop to upload</p>
             </>
           ) : (
             <>
@@ -226,19 +174,12 @@ export default function PilotStudiesView() {
               </div>
               <p className="font-medium mb-1">Upload EEG File</p>
               <p className="text-xs text-muted-foreground">
-                EDF or BDF format • Click or drag
+                EDF format • Click or drag & drop
               </p>
             </>
           )}
         </CardContent>
       </Card>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".edf,.bdf"
-        className="hidden"
-        onChange={(e) => handleFileUpload(e.target.files)}
-      />
 
       {/* Pending SLA Selection */}
       {pendingStudies.length > 0 && (
@@ -265,9 +206,9 @@ export default function PilotStudiesView() {
                           Uploaded {dayjs(study.created_at).format("MMM D, h:mm A")}
                         </p>
                       </div>
-                      <Button 
-                        size="sm" 
-                        onClick={() => handleSelectSla(study as Study)}
+                      <Button
+                        size="sm"
+                        onClick={() => handleSelectSla(study)}
                         className="gap-1 shrink-0"
                       >
                         <Zap className="h-3 w-3" />
@@ -336,7 +277,7 @@ export default function PilotStudiesView() {
                 <Card key={study.id} className="hover:bg-muted/30 transition-colors">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
-                      <div 
+                      <div
                         className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
                         onClick={() => navigate(`/app/studies/${study.id}`)}
                       >
@@ -355,16 +296,16 @@ export default function PilotStudiesView() {
                         </div>
                       </div>
                       <div className="flex gap-1 shrink-0">
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => navigate(`/app/studies/${study.id}`)}
                         >
                           <FileText className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => handleDownload(study)}
@@ -390,13 +331,20 @@ export default function PilotStudiesView() {
         </div>
       )}
 
-      {/* SLA Selection Modal */}
+      {/* SLA Selection Modal (Pilot 1-tap mode) */}
       <SlaSelectionModal
         open={slaModalOpen}
         onOpenChange={setSlaModalOpen}
         study={selectedStudy}
         tokenBalance={tokenBalance}
         onInsufficientTokens={handleInsufficientTokens}
+        isPilot
+      />
+
+      {/* Upload Wizard */}
+      <StudyUploadWizard
+        open={uploadWizardOpen}
+        onOpenChange={setUploadWizardOpen}
       />
     </div>
   );
