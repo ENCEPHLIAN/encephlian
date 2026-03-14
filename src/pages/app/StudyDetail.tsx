@@ -385,7 +385,9 @@ export default function StudyDetail() {
           <TabsTrigger value="report" disabled={!hasReport}>
             Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
-          <TabsTrigger value="ai-analysis">AI Analysis</TabsTrigger>
+          <TabsTrigger value="ai-analysis">
+            MIND®Triage {study.ai_draft_json && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+          </TabsTrigger>
           <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
         </TabsList>
 
