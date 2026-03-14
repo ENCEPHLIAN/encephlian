@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
+import TriageReportView from "@/components/report/TriageReportView";
 import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
