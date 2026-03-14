@@ -636,9 +636,43 @@ export default function StudyDetail() {
           )}
         </TabsContent>
 
-        {/* AI Analysis Tab */}
+        {/* AI Analysis Tab — MIND®Triage */}
         <TabsContent value="ai-analysis">
-          <AnomalyDetectionPreview studyId={id} />
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                MIND®Triage
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Quantitative EEG markers — clinician interprets
+              </p>
+            </CardHeader>
+            <CardContent>
+              {study.ai_draft_json ? (
+                <TriageReportView
+                  data={study.ai_draft_json}
+                  studyId={study.id}
+                  patientAge={patientAge?.toString()}
+                  patientGender={patientGender}
+                  studyDate={study.created_at ? dayjs(study.created_at).format("YYYY-MM-DD") : undefined}
+                />
+              ) : (
+                <div className="text-center py-10 space-y-3">
+                  <Brain className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    No triage data yet. Generate an AI report to see MIND®Triage results.
+                  </p>
+                  {canGenerateReport && (
+                    <Button onClick={handleGenerateAIReport} disabled={generating} size="sm">
+                      {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+                      Generate MIND®Triage
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Files Tab */}
