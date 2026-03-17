@@ -37,8 +37,18 @@ export default function TriageReportView({
   const pipeline = data.pipeline || [];
   const durationSec = (rec.duration_min || 30) * 60;
 
-  const goToMarker = (timeSec: number) => {
-    navigate(`/app/eeg-viewer?studyId=${studyId}&t=${timeSec}`);
+  const goToMarker = (m: any) => {
+    const params = new URLSearchParams({
+      studyId,
+      t: String(m.time_sec),
+      focus: "segment",
+      label: m.metric || "marker",
+    });
+    if (m.channel) params.set("ch", m.channel);
+    if (m.zscore != null) params.set("score", String(m.zscore));
+    // Set t_end to t + 10s (one epoch)
+    params.set("t_end", String((m.time_sec || 0) + 10));
+    navigate(`/app/eeg-viewer?${params.toString()}`);
   };
 
   return (
