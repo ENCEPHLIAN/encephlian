@@ -183,27 +183,22 @@ export default function EEGViewer() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse query params for focused segment
-  const focusedSegment = useMemo<FocusedSegment | null>(() => {
-    const focus = searchParams.get("focus");
+  const rawFocusParams = useMemo(() => {
     const t = searchParams.get("t");
-    const tEnd = searchParams.get("t_end");
     const label = searchParams.get("label");
-    
-    if (focus !== "segment" || !t || !label) return null;
-    
+    const focus = searchParams.get("focus");
+    if (!t) return null;
+    if (focus !== "segment" && !label) return null;
     const tStart = parseFloat(t);
-    const tEndVal = tEnd ? parseFloat(tEnd) : tStart;
-    const ch = searchParams.get("ch");
-    const score = searchParams.get("score");
-    
     if (!Number.isFinite(tStart)) return null;
-    
+    const tEnd = searchParams.get("t_end");
+    const tEndVal = tEnd ? parseFloat(tEnd) : tStart + 10;
     return {
-      label,
+      label: label || "marker",
       t_start_s: tStart,
-      t_end_s: Number.isFinite(tEndVal) ? tEndVal : tStart,
-      channel_index: ch ? parseInt(ch, 10) : undefined,
-      score: score ? parseFloat(score) : undefined,
+      t_end_s: Number.isFinite(tEndVal) ? tEndVal : tStart + 10,
+      ch: searchParams.get("ch"),
+      score: searchParams.get("score"),
     };
   }, [searchParams]);
 
@@ -244,6 +239,28 @@ export default function EEGViewer() {
   const [loadingWindow, setLoadingWindow] = useState(true);
   
   const didInitialSeek = useRef(false);
+
+  // Resolve focusedSegment from raw params + meta (for channel name resolution)
+  const focusedSegment = useMemo<FocusedSegment | null>(() => {
+    if (!rawFocusParams) return null;
+    const { ch, score, ...rest } = rawFocusParams;
+    let channelIndex: number | undefined;
+    if (ch) {
+      const parsed = parseInt(ch, 10);
+      if (Number.isFinite(parsed)) {
+        channelIndex = parsed;
+      } else if (meta) {
+        const labels = meta.channel_map?.map(c => c.canonical_id) ?? meta.channel_names ?? [];
+        const idx = labels.findIndex(l => l.toLowerCase() === ch.toLowerCase());
+        if (idx >= 0) channelIndex = idx;
+      }
+    }
+    return {
+      ...rest,
+      channel_index: channelIndex,
+      score: score ? parseFloat(score) : undefined,
+    };
+  }, [rawFocusParams, meta]);
   
   const currentSegmentIndex = useMemo(() => {
     if (!focusedSegment || segments.length === 0) return -1;

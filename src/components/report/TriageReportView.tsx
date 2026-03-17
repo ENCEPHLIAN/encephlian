@@ -37,8 +37,18 @@ export default function TriageReportView({
   const pipeline = data.pipeline || [];
   const durationSec = (rec.duration_min || 30) * 60;
 
-  const goToMarker = (timeSec: number) => {
-    navigate(`/app/eeg-viewer?studyId=${studyId}&t=${timeSec}`);
+  const goToMarker = (m: any) => {
+    const params = new URLSearchParams({
+      studyId,
+      t: String(m.time_sec),
+      focus: "segment",
+      label: m.metric || "marker",
+    });
+    if (m.channel) params.set("ch", m.channel);
+    if (m.zscore != null) params.set("score", String(m.zscore));
+    // Set t_end to t + 10s (one epoch)
+    params.set("t_end", String((m.time_sec || 0) + 10));
+    navigate(`/app/eeg-viewer?${params.toString()}`);
   };
 
   return (
@@ -142,7 +152,7 @@ export default function TriageReportView({
             {markers.map((m: any, i: number) => (
               <button
                 key={i}
-                onClick={() => goToMarker(m.time_sec)}
+                onClick={() => goToMarker(m)}
                 className="grid grid-cols-[3rem_4rem_4.5rem_1fr_4rem_3rem] gap-1 p-1.5 text-[11px] border-t w-full text-left hover:bg-primary/5 transition-colors group"
               >
                 <span className="tabular-nums font-mono">#{m.epoch}</span>
@@ -173,7 +183,7 @@ export default function TriageReportView({
             {markers.map((m: any, i: number) => (
               <button
                 key={i}
-                onClick={() => goToMarker(m.time_sec)}
+                onClick={() => goToMarker(m)}
                 className="absolute top-0 h-full w-0.5 bg-primary hover:bg-primary/80 hover:w-1 transition-all cursor-pointer"
                 style={{ left: `${(m.time_sec / durationSec) * 100}%` }}
                 title={`${m.time} · ${m.channel} · z=${m.zscore}`}
