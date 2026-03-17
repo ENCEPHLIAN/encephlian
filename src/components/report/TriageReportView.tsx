@@ -183,7 +183,7 @@ export default function TriageReportView({
             {markers.map((m: any, i: number) => (
               <button
                 key={i}
-                onClick={() => goToMarker(m.time_sec)}
+                onClick={() => goToMarker(m)}
                 className="absolute top-0 h-full w-0.5 bg-primary hover:bg-primary/80 hover:w-1 transition-all cursor-pointer"
                 style={{ left: `${(m.time_sec / durationSec) * 100}%` }}
                 title={`${m.time} · ${m.channel} · z=${m.zscore}`}
