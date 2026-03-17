@@ -152,7 +152,7 @@ export default function TriageReportView({
             {markers.map((m: any, i: number) => (
               <button
                 key={i}
-                onClick={() => goToMarker(m.time_sec)}
+                onClick={() => goToMarker(m)}
                 className="grid grid-cols-[3rem_4rem_4.5rem_1fr_4rem_3rem] gap-1 p-1.5 text-[11px] border-t w-full text-left hover:bg-primary/5 transition-colors group"
               >
                 <span className="tabular-nums font-mono">#{m.epoch}</span>
