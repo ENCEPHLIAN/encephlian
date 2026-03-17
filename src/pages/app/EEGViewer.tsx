@@ -183,45 +183,24 @@ export default function EEGViewer() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse query params for focused segment
-  const focusedSegment = useMemo<FocusedSegment | null>(() => {
-    const focus = searchParams.get("focus");
+  const rawFocusParams = useMemo(() => {
     const t = searchParams.get("t");
     const label = searchParams.get("label");
-    
-    // Support both focus=segment and bare ?t= from marker clicks
+    const focus = searchParams.get("focus");
     if (!t) return null;
     if (focus !== "segment" && !label) return null;
-    
     const tStart = parseFloat(t);
     if (!Number.isFinite(tStart)) return null;
-
     const tEnd = searchParams.get("t_end");
-    const tEndVal = tEnd ? parseFloat(tEnd) : tStart + 10; // default 10s epoch
-    const ch = searchParams.get("ch");
-    const score = searchParams.get("score");
-    
-    // Resolve channel name to index if meta is available
-    let channelIndex: number | undefined;
-    if (ch) {
-      const parsed = parseInt(ch, 10);
-      if (Number.isFinite(parsed)) {
-        channelIndex = parsed;
-      } else if (meta) {
-        // ch might be a channel name like "Fp1" — resolve to index
-        const labels = meta.channel_map?.map(c => c.canonical_id) ?? meta.channel_names ?? [];
-        const idx = labels.findIndex(l => l.toLowerCase() === ch.toLowerCase());
-        if (idx >= 0) channelIndex = idx;
-      }
-    }
-    
+    const tEndVal = tEnd ? parseFloat(tEnd) : tStart + 10;
     return {
       label: label || "marker",
       t_start_s: tStart,
       t_end_s: Number.isFinite(tEndVal) ? tEndVal : tStart + 10,
-      channel_index: channelIndex,
-      score: score ? parseFloat(score) : undefined,
+      ch: searchParams.get("ch"),
+      score: searchParams.get("score"),
     };
-  }, [searchParams, meta]);
+  }, [searchParams]);
 
   const [meta, setMeta] = useState<Meta | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
