@@ -239,6 +239,28 @@ export default function EEGViewer() {
   const [loadingWindow, setLoadingWindow] = useState(true);
   
   const didInitialSeek = useRef(false);
+
+  // Resolve focusedSegment from raw params + meta (for channel name resolution)
+  const focusedSegment = useMemo<FocusedSegment | null>(() => {
+    if (!rawFocusParams) return null;
+    const { ch, score, ...rest } = rawFocusParams;
+    let channelIndex: number | undefined;
+    if (ch) {
+      const parsed = parseInt(ch, 10);
+      if (Number.isFinite(parsed)) {
+        channelIndex = parsed;
+      } else if (meta) {
+        const labels = meta.channel_map?.map(c => c.canonical_id) ?? meta.channel_names ?? [];
+        const idx = labels.findIndex(l => l.toLowerCase() === ch.toLowerCase());
+        if (idx >= 0) channelIndex = idx;
+      }
+    }
+    return {
+      ...rest,
+      channel_index: channelIndex,
+      score: score ? parseFloat(score) : undefined,
+    };
+  }, [rawFocusParams, meta]);
   
   const currentSegmentIndex = useMemo(() => {
     if (!focusedSegment || segments.length === 0) return -1;
