@@ -1,7 +1,7 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle 
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Upload, FileUp, User, Clock, CheckCircle2, 
-  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft, Server
+import {
+  Upload, FileUp, User, Clock, CheckCircle2,
+  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -44,39 +44,67 @@ interface ExtractedEdfMeta {
   channel_labels?: string[];
 }
 
+interface SlaOption {
+  value: string;
+  label: string;
+  description: string;
+  tokens: number;
+  color: string;
+  icon?: typeof Zap;
+}
+
 const EDF_BDF_EXTENSIONS = [".edf", ".bdf"];
 const PROPRIETARY_EXTENSIONS = [".e", ".nk", ".eeg", ".21e", ".cnt"];
 const ALL_ACCEPTED_EXTENSIONS = [...EDF_BDF_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
 
-const SLA_OPTIONS = [
-  { 
-    value: "STAT", 
-    label: "STAT", 
+const INTERNAL_SLA_OPTIONS: SlaOption[] = [
+  {
+    value: "STAT",
+    label: "STAT",
     description: "Immediate priority, 1 hour target",
     tokens: 5,
     color: "text-destructive",
-    icon: Zap
+    icon: Zap,
   },
-  { 
-    value: "24H", 
-    label: "24 Hour", 
+  {
+    value: "24H",
+    label: "24 Hour",
     description: "Urgent, same-day turnaround",
     tokens: 3,
-    color: "text-amber-600"
+    color: "text-primary",
   },
-  { 
-    value: "48H", 
-    label: "48 Hour", 
+  {
+    value: "48H",
+    label: "48 Hour",
     description: "Standard priority",
     tokens: 2,
-    color: "text-blue-600"
+    color: "text-foreground",
   },
-  { 
-    value: "ROUTINE", 
-    label: "Routine", 
+  {
+    value: "ROUTINE",
+    label: "Routine",
     description: "72 hour turnaround",
     tokens: 1,
-    color: "text-muted-foreground"
+    color: "text-muted-foreground",
+  },
+];
+
+const PILOT_SLA_OPTIONS: SlaOption[] = [
+  {
+    value: "STAT",
+    label: "STAT",
+    description: "Immediate priority, 30–90 minute target",
+    tokens: 2,
+    color: "text-destructive",
+    icon: Zap,
+  },
+  {
+    value: "TAT",
+    label: "TAT",
+    description: "Standard turnaround, 12–24 hour target",
+    tokens: 1,
+    color: "text-primary",
+    icon: Clock,
   },
 ];
 
@@ -122,11 +150,11 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
     }
     offset += ns * 16;
     offset += ns * 80; // transducer
-    offset += ns * 8;  // physical dimension
-    offset += ns * 8;  // physical min
-    offset += ns * 8;  // physical max
-    offset += ns * 8;  // digital min
-    offset += ns * 8;  // digital max
+    offset += ns * 8; // physical dimension
+    offset += ns * 8; // physical min
+    offset += ns * 8; // physical max
+    offset += ns * 8; // digital min
+    offset += ns * 8; // digital max
     offset += ns * 80; // prefiltering
 
     let samplesPerRecord = 256;
@@ -158,6 +186,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const navigate = useNavigate();
   const { userId, clinicContext } = useUserSession();
   const clinicId = clinicContext?.clinic_id;
+  const isPilotSku = clinicContext?.sku === "pilot";
+  const SLA_OPTIONS = isPilotSku ? PILOT_SLA_OPTIONS : INTERNAL_SLA_OPTIONS;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
@@ -169,7 +199,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
   const [isProprietaryFormat, setIsProprietaryFormat] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
-  
+
   const [patientData, setPatientData] = useState<PatientData>({
     patient_name: "",
     patient_id: "",
@@ -178,8 +208,14 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     indication: "",
     notes: "",
   });
-  
-  const [selectedSla, setSelectedSla] = useState<string>("48H");
+
+  const [selectedSla, setSelectedSla] = useState<string>(SLA_OPTIONS[0].value);
+
+  useEffect(() => {
+    if (!SLA_OPTIONS.some((option) => option.value === selectedSla)) {
+      setSelectedSla(SLA_OPTIONS[0].value);
+    }
+  }, [selectedSla, SLA_OPTIONS]);
 
   // Reset wizard state
   const resetWizard = useCallback(() => {
@@ -198,8 +234,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       indication: "",
       notes: "",
     });
-    setSelectedSla("48H");
-  }, []);
+    setSelectedSla(SLA_OPTIONS[0].value);
+  }, [SLA_OPTIONS]);
 
   // Handle file selection
   const handleFileSelect = useCallback(async (selectedFile: File) => {
