@@ -65,7 +65,7 @@ export default function StudyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  const { can, capabilities } = useSku();
+  const { can, capabilities, isPilot } = useSku();
   const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -311,8 +311,8 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run AI Triage - for PILOT SKU users with study_key */}
-              {can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
+              {/* Run AI Triage - internal SKU only (pilot uses SLA modal from dashboard) */}
+              {!isPilot && can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
                 <Button 
                   onClick={handleRunAITriage} 
                   disabled={runningTriage}
@@ -327,7 +327,7 @@ export default function StudyDetail() {
                 </Button>
               )}
               
-              {canGenerateReport && (
+              {!isPilot && canGenerateReport && (
                 <Button onClick={handleGenerateAIReport} disabled={generating} variant="outline">
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -379,16 +379,20 @@ export default function StudyDetail() {
       </Card>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue={isPilot && study.ai_draft_json ? "ai-analysis" : "overview"} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="report" disabled={!hasReport}>
-            Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
-          </TabsTrigger>
+          {!isPilot && (
+            <TabsTrigger value="report" disabled={!hasReport}>
+              Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="ai-analysis">
             MIND®Triage {study.ai_draft_json && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
-          <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          {!isPilot && (
+            <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -663,9 +667,11 @@ export default function StudyDetail() {
                 <div className="text-center py-10 space-y-3">
                   <Brain className="h-10 w-10 mx-auto text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground">
-                    No triage data yet. Generate an AI report to see MIND®Triage results.
+                    {isPilot 
+                      ? "Triage data will appear here once analysis is complete." 
+                      : "No triage data yet. Generate an AI report to see MIND®Triage results."}
                   </p>
-                  {canGenerateReport && (
+                  {!isPilot && canGenerateReport && (
                     <Button onClick={handleGenerateAIReport} disabled={generating} size="sm">
                       {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
                       Generate MIND®Triage
