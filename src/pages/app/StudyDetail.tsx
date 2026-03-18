@@ -667,9 +667,11 @@ export default function StudyDetail() {
                 <div className="text-center py-10 space-y-3">
                   <Brain className="h-10 w-10 mx-auto text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground">
-                    No triage data yet. Generate an AI report to see MIND®Triage results.
+                    {isPilot 
+                      ? "Triage data will appear here once analysis is complete." 
+                      : "No triage data yet. Generate an AI report to see MIND®Triage results."}
                   </p>
-                  {canGenerateReport && (
+                  {!isPilot && canGenerateReport && (
                     <Button onClick={handleGenerateAIReport} disabled={generating} size="sm">
                       {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
                       Generate MIND®Triage
