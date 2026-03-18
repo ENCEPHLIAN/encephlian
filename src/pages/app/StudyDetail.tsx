@@ -311,8 +311,8 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run AI Triage - for PILOT SKU users with study_key */}
-              {can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
+              {/* Run AI Triage - internal SKU only (pilot uses SLA modal from dashboard) */}
+              {!isPilot && can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
                 <Button 
                   onClick={handleRunAITriage} 
                   disabled={runningTriage}
@@ -327,7 +327,7 @@ export default function StudyDetail() {
                 </Button>
               )}
               
-              {canGenerateReport && (
+              {!isPilot && canGenerateReport && (
                 <Button onClick={handleGenerateAIReport} disabled={generating} variant="outline">
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
