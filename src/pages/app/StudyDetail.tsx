@@ -379,16 +379,20 @@ export default function StudyDetail() {
       </Card>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue={isPilot && study.ai_draft_json ? "ai-analysis" : "overview"} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="report" disabled={!hasReport}>
-            Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
-          </TabsTrigger>
+          {!isPilot && (
+            <TabsTrigger value="report" disabled={!hasReport}>
+              Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="ai-analysis">
             MIND®Triage {study.ai_draft_json && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
-          <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          {!isPilot && (
+            <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
