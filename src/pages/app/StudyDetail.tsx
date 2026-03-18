@@ -65,7 +65,7 @@ export default function StudyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  const { can, capabilities } = useSku();
+  const { can, capabilities, isPilot } = useSku();
   const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
