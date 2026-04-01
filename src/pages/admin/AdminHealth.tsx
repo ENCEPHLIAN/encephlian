@@ -18,6 +18,7 @@ import {
   Circle,
 } from "lucide-react";
 import { format } from "date-fns";
+import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 
 type ServiceHealth = {
   id: string;
@@ -88,6 +89,25 @@ export default function AdminHealth() {
         });
       } catch (error: any) {
         results.push({ service: "storage", status: "down", error: error.message });
+      }
+
+      // Check Azure Read API
+      try {
+        const apiBase = resolveReadApiBase();
+        const apiKey = getReadApiKey();
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`${apiBase}/health`, {
+          signal: controller.signal,
+          headers: apiKey ? { "X-API-KEY": apiKey } : {},
+        });
+        clearTimeout(timeout);
+        results.push({
+          service: "azure_read_api",
+          status: res.ok ? "healthy" : "degraded",
+        });
+      } catch (error: any) {
+        results.push({ service: "azure_read_api", status: "down", error: error.message });
       }
 
       // Log results using direct insert (management users have insert policy)
@@ -161,6 +181,7 @@ export default function AdminHealth() {
 
   const dbStatus = getServiceStatus("database");
   const storageStatus = getServiceStatus("storage");
+  const azureApiStatus = getServiceStatus("azure_read_api");
 
   // Determine overall system status
   const allHealthy = dbStatus?.status === "healthy" && storageStatus?.status === "healthy";
@@ -252,16 +273,22 @@ export default function AdminHealth() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Cpu className="h-5 w-5 text-muted-foreground" />
-                <CardTitle className="text-base font-mono">Azure Microservice</CardTitle>
+                <CardTitle className="text-base font-mono">Azure Read API</CardTitle>
               </div>
-              <AlertCircle className="h-5 w-5 text-muted-foreground" />
+              {getStatusIcon(azureApiStatus?.status)}
             </div>
           </CardHeader>
           <CardContent>
-            <Badge variant="secondary" className="font-mono">UNKNOWN</Badge>
-            <p className="text-xs text-muted-foreground mt-2">
-              Azure integration pending
-            </p>
+            {getStatusBadge(azureApiStatus?.status)}
+            {azureApiStatus?.checked_at ? (
+              <p className="text-xs text-muted-foreground mt-2">
+                Last check: {format(new Date(azureApiStatus.checked_at), "MMM d, HH:mm")}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-2">
+                {resolveReadApiBase().replace("https://", "")}
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
