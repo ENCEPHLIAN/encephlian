@@ -216,6 +216,15 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
       setUploadProgress(100);
 
+      // Kick off metadata extraction (fire-and-forget — don't block navigation)
+      supabase.functions.invoke("parse_eeg_study", {
+        body: {
+          study_id: study.id,
+          file_path: filePath,
+          file_type: (file.name.split(".").pop()?.toLowerCase() || "edf") as "edf" | "bdf",
+        },
+      }).catch((err) => console.warn("parse_eeg_study failed:", err));
+
       toast.success("Study uploaded successfully!", {
         description: "You can now select an SLA to start AI triage.",
       });

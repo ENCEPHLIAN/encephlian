@@ -117,13 +117,21 @@ serve(async (req) => {
     console.log(`Parsing ${file_type} metadata for study: ${study_id}, file: ${file_path}`);
 
     // Download only the first 64KB for header parsing (EDF headers are at most ~8KB)
-    const { data: fileData, error: downloadError } = await supabase
-      .storage
-      .from('eeg-raw')
-      .download(file_path);
+    // Try eeg-uploads bucket first (where wizard-uploaded files live), fall back to eeg-raw
+    let fileData: Blob | null = null;
+    let downloadError: Error | null = null;
+    const bucketsToTry = ['eeg-uploads', 'eeg-raw'];
+    for (const bucket of bucketsToTry) {
+      const { data, error } = await supabase.storage.from(bucket).download(file_path);
+      if (!error && data) {
+        fileData = data;
+        break;
+      }
+      downloadError = error as Error;
+    }
+    if (!fileData) {
 
-    if (downloadError) {
-      throw new Error(`Failed to download file: ${downloadError.message}`);
+      throw new Error(`Failed to download file: ${downloadError?.message}`);
     }
 
     // Only read first 64KB for metadata extraction
