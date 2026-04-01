@@ -124,7 +124,7 @@ export function EEGControls({
   }, []);
 
   return (
-    <div className="space-y-4 bg-card border border-border rounded-lg p-4 transition-all duration-200">
+    <div className="space-y-1.5 border-b px-3 py-2 bg-background flex-shrink-0">
       {/* Playback Controls */}
       <div className="flex items-center gap-2">
         <Tooltip>
@@ -192,7 +192,7 @@ export function EEGControls({
       </div>
 
       {/* Control Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {/* Time Window */}
         <div className="space-y-2">
           <Label className="text-xs">Time Window</Label>
