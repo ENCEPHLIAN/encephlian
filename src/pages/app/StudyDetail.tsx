@@ -258,7 +258,8 @@ export default function StudyDetail() {
   const hasReport = !!report;
   const isSigned = study.state === "signed" || report?.status === "signed";
   const isProcessing = study.triage_status === "processing";
-  const canGenerateReport = !hasReport && (study.state === "uploaded" || study.state === "parsed") && !isProcessing;
+  const canGenerateReport = !hasReport && !isProcessing &&
+    (study.state === "uploaded" || study.state === "parsed" || study.state === "completed");
   const canReview = study.state === "ai_draft" || study.state === "in_review";
   const StateIcon = stateConfig.icon;
 

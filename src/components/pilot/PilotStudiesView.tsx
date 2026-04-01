@@ -41,13 +41,13 @@ export default function PilotStudiesView() {
   const { userId } = useUserSession();
 
   // Categorize studies by stage
-  const pendingStudies = studies.filter(s => 
-    s.state === "awaiting_sla" || 
-    (s.state === "uploaded" && (!s.triage_status || s.triage_status === "pending" || s.triage_status === "awaiting_sla"))
+  const pendingStudies = studies.filter(s =>
+    s.state === "awaiting_sla" ||
+    ((s.state === "uploaded" || s.state === "parsed") && (!s.triage_status || s.triage_status === "pending" || s.triage_status === "awaiting_sla"))
   );
   
-  const processingStudies = studies.filter(s => 
-    s.triage_status === "processing" || s.state === "ai_draft" || s.state === "in_review"
+  const processingStudies = studies.filter(s =>
+    s.triage_status === "processing" || s.state === "processing" || s.state === "ai_draft" || s.state === "in_review"
   );
   
   const completedStudies = studies.filter(s => 
@@ -121,10 +121,21 @@ export default function PilotStudiesView() {
         throw error;
       }
 
+      // Kick off metadata extraction (fire-and-forget)
+      if (data?.study_id) {
+        supabase.functions.invoke("parse_eeg_study", {
+          body: {
+            study_id: data.study_id,
+            file_path: filePath,
+            file_type: "edf",
+          },
+        }).catch((err) => console.warn("parse_eeg_study failed:", err));
+      }
+
       toast.success("EEG uploaded!", {
         description: "Select priority to start AI triage",
       });
-      
+
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error("Upload failed", {
