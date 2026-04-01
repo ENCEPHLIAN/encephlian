@@ -1,6 +1,6 @@
 // src/pages/app/EEGViewer.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useParams } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, X, Focus, PanelRightOpen, FlaskConical } from "lucide-react";
@@ -13,11 +13,7 @@ import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-/* =======================
-   MVP LOCK - Demo study ID
-   Real study loading requires canonical_eeg_records to be populated by the pipeline
-======================= */
-const DEMO_STUDY_ID = "TUH_CANON_001";
+const FALLBACK_STUDY_ID = "TUH_CANON_001";
 
 const DIRECT_BASE = resolveReadApiBase();
 const DIRECT_KEY = getReadApiKey();
@@ -186,8 +182,12 @@ async function fetchChunkBin(studyId: string, startSample: number, length: numbe
 
 export default function EEGViewer() {
   const { theme } = useTheme();
-  
+
   const [searchParams, setSearchParams] = useSearchParams();
+  const { id: routeStudyId } = useParams<{ id?: string }>();
+
+  // Resolve study ID: route param → query param → demo fallback
+  const studyId = routeStudyId || searchParams.get("studyId") || FALLBACK_STUDY_ID;
 
   // Parse query params for focused segment
   const focusedSegment = useMemo<FocusedSegment | null>(() => {
@@ -275,10 +275,19 @@ export default function EEGViewer() {
     if (!API_AVAILABLE) return;
     let alive = true;
 
+    // Reset on study change
+    setMeta(null);
+    setSignals(null);
+    setArtifacts([]);
+    setAnnotations([]);
+    setSegments([]);
+    setWindowStartSec(0);
+    setCursorSec(0);
+    cacheRef.current.clear();
     setLoadingMeta(true);
     setFatalError(null);
 
-    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => {
         if (!alive) return;
         if (result.ok === false) throw new Error(result.error);
@@ -296,7 +305,7 @@ export default function EEGViewer() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [studyId]);
 
   /* ---------- AUTO-SEEK FROM QUERY PARAM ---------- */
   useEffect(() => {
@@ -323,18 +332,18 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!API_AVAILABLE) return;
 
-    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/artifacts?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${studyId}/artifacts?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setArtifacts(result.ok ? (result.data?.artifacts ?? []) : []))
       .catch(() => setArtifacts([]));
 
-    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${studyId}/annotations?root=.`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setAnnotations(result.ok ? (result.data?.annotations ?? []) : []))
       .catch(() => setAnnotations([]));
 
-    fetchJson<any>(`/studies/${DEMO_STUDY_ID}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: true })
       .then((result) => setSegments(result.ok ? (result.data?.segments ?? []) : []))
       .catch(() => setSegments([]));
-  }, []);
+  }, [studyId]);
 
 
   /* ---------- DERIVED (channel order is canonical, no sorting) ---------- */
@@ -400,7 +409,7 @@ export default function EEGViewer() {
     const reqId = ++lastReqId.current;
     const t0 = performance.now();
 
-    fetchChunkBin(DEMO_STUDY_ID, startSample, length)
+    fetchChunkBin(studyId, startSample, length)
       .then((result) => {
         if (result.ok === false) throw new Error(result.error);
 
@@ -464,7 +473,7 @@ export default function EEGViewer() {
       const nk = keyFor(nextStartSample, length);
 
       if (!cacheRef.current.has(nk)) {
-        fetchChunkBin(DEMO_STUDY_ID, nextStartSample, length)
+        fetchChunkBin(studyId, nextStartSample, length)
           .then((result) => {
             if (result.ok === false) return null;
 
