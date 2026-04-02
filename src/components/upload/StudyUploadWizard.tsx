@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { useSku } from "@/hooks/useSku";
 import { cn } from "@/lib/utils";
 import { systemFeedback } from "@/lib/systemFeedback";
 
@@ -185,9 +186,9 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
 export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps) {
   const navigate = useNavigate();
   const { userId, clinicContext } = useUserSession();
+  const { isPilot } = useSku();
   const clinicId = clinicContext?.clinic_id;
-  const isPilotSku = clinicContext?.sku === "pilot";
-  const SLA_OPTIONS = isPilotSku ? PILOT_SLA_OPTIONS : INTERNAL_SLA_OPTIONS;
+  const SLA_OPTIONS = isPilot ? PILOT_SLA_OPTIONS : INTERNAL_SLA_OPTIONS;
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(1);
