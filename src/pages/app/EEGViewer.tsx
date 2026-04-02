@@ -9,18 +9,16 @@ import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
+import { resolveReadApiBase } from "@/shared/readApiConfig";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const FALLBACK_STUDY_ID = "TUH_CANON_001";
 
-// True when the user's browser is on localhost (dev mode)
-const IS_LOCAL_DEV =
-  typeof location !== "undefined" &&
-  (location.hostname === "localhost" || location.hostname === "127.0.0.1");
-
-// On local dev, go direct to 127.0.0.1:8787 without requiring an API key.
-// On prod, require a key (or fall through to the Supabase proxy).
-const FETCH_REQUIRE_KEY = !IS_LOCAL_DEV;
+// If the resolved API base is a local address, skip the key requirement.
+// If it's a remote URL (Azure prod), require key or Supabase proxy.
+const _apiBase = resolveReadApiBase();
+const FETCH_REQUIRE_KEY =
+  !_apiBase.includes("127.0.0.1") && !_apiBase.includes("localhost");
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Meta = {
