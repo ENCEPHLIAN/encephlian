@@ -8,17 +8,19 @@ import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
-import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
-import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
+import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const FALLBACK_STUDY_ID = "TUH_CANON_001";
 
-const DIRECT_BASE = resolveReadApiBase();
-const DIRECT_KEY = getReadApiKey();
-const PROXY_BASE = getReadApiProxyBase() || "";
-const IS_LOCAL_BASE = DIRECT_BASE.includes("127.0.0.1") || DIRECT_BASE.includes("localhost");
-const API_AVAILABLE = !!(DIRECT_KEY || IS_LOCAL_BASE || PROXY_BASE);
+// True when the user's browser is on localhost (dev mode)
+const IS_LOCAL_DEV =
+  typeof location !== "undefined" &&
+  (location.hostname === "localhost" || location.hostname === "127.0.0.1");
+
+// On local dev, go direct to 127.0.0.1:8787 without requiring an API key.
+// On prod, require a key (or fall through to the Supabase proxy).
+const FETCH_REQUIRE_KEY = !IS_LOCAL_DEV;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Meta = {
@@ -75,10 +77,10 @@ function hdrNum(h: Record<string, string>, keys: string[]) {
   for (const k of keys) { const v = Number(h[k.toLowerCase()]); if (isFinite(v)) return v; }
   return NaN;
 }
-async function fetchChunk(studyId: string, start: number, len: number) {
+function fetchChunk(studyId: string, start: number, len: number) {
   return fetchBinary(
     `/studies/${encodeURIComponent(studyId)}/chunk.bin?root=.&start=${start}&length=${len}`,
-    { timeoutMs: 30000, requireKey: true },
+    { timeoutMs: 30000, requireKey: FETCH_REQUIRE_KEY },
   );
 }
 
@@ -184,25 +186,15 @@ export default function EEGViewer() {
     setSearchParams(p, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  // ── Effects: guard ────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!API_AVAILABLE) {
-      setFatalError("Read API unavailable — no API key configured.");
-      setLoadingMeta(false);
-      setLoadingWin(false);
-    }
-  }, []);
-
   // ── Effects: meta (reset on study change) ─────────────────────────────────────
   useEffect(() => {
-    if (!API_AVAILABLE) return;
     let alive = true;
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null);
     cache.current.clear(); didSeek.current = false;
     setLoadingMeta(true);
 
-    fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: true })
+    fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY })
       .then(r => { if (!alive) return; if (!r.ok) throw new Error(r.error); setMeta((r.data?.meta ?? r.data) as Meta); })
       .catch(e => { if (alive) setFatalError(String(e?.message || e)); })
       .finally(() => { if (alive) setLoadingMeta(false); });
@@ -212,10 +204,9 @@ export default function EEGViewer() {
 
   // ── Effects: overlays ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!API_AVAILABLE) return;
-    fetchJson<any>(`/studies/${studyId}/artifacts?root=.`,         { timeoutMs: 20000, requireKey: true }).then(r => setArtifacts(r.ok ? (r.data?.artifacts ?? []) : [])).catch(() => setArtifacts([]));
-    fetchJson<any>(`/studies/${studyId}/annotations?root=.`,       { timeoutMs: 20000, requireKey: true }).then(r => setAnnotations(r.ok ? (r.data?.annotations ?? []) : [])).catch(() => setAnnotations([]));
-    fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`,  { timeoutMs: 20000, requireKey: true }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
+    fetchJson<any>(`/studies/${studyId}/artifacts?root=.`,        { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setArtifacts(r.ok ? (r.data?.artifacts ?? []) : [])).catch(() => setArtifacts([]));
+    fetchJson<any>(`/studies/${studyId}/annotations?root=.`,      { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setAnnotations(r.ok ? (r.data?.annotations ?? []) : [])).catch(() => setAnnotations([]));
+    fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
   }, [studyId]);
 
   // ── Effects: auto-seek from ?t= ───────────────────────────────────────────────
@@ -229,7 +220,7 @@ export default function EEGViewer() {
 
   // ── Effects: window fetch ─────────────────────────────────────────────────────
   useEffect(() => {
-    if (!API_AVAILABLE || !meta) return;
+    if (!meta) return;
     const fs  = meta.sampling_rate_hz;
     const dur = meta.n_samples / fs;
     const max = Math.max(0, dur - windowSec);
