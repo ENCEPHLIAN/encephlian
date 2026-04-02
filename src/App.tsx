@@ -15,6 +15,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { UserSessionProvider } from "@/contexts/UserSessionContext";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminRoute from "./components/admin/AdminRoute";
 import AppLayout from "./components/AppLayout";
@@ -26,6 +27,7 @@ import StudyReview from "./pages/app/StudyReview";
 import EEGViewer from "./pages/app/EEGViewer";
 import Notes from "./pages/app/Notes";
 import Files from "./pages/app/Files";
+import Documentation from "./pages/app/Documentation";
 import Wallet from "./pages/app/Wallet";
 import Lanes from "./pages/app/Lanes";
 import Reports from "./pages/app/Reports";
@@ -34,9 +36,8 @@ import Profile from "./pages/app/Profile";
 import Settings from "./pages/app/Settings";
 import TFASetup from "./pages/app/TFASetup";
 import Support from "./pages/app/Support";
-import Templates from "./pages/app/Templates";
+import OnboardingGuide from "./pages/app/OnboardingGuide";
 import NotFound from "./pages/NotFound";
-import ComingSoon from "./pages/app/ComingSoon";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 
 import AdminStudies from "./pages/admin/AdminStudies";
@@ -67,6 +68,7 @@ function App() {
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
 
               {/* Redirect base to /app */}
               <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
@@ -92,6 +94,7 @@ function App() {
                   <Route path="read-api" element={<AdminReadApi />} />
                   <Route path="report-v0" element={<AdminReportV0 />} />
                   <Route path="account" element={<AdminAccount />} />
+                  <Route path="docs" element={<Documentation />} />
                 </Route>
               </Route>
 
@@ -117,8 +120,8 @@ function App() {
                   <Route path="settings" element={<Settings />} />
                   <Route path="settings/tfa" element={<TFASetup />} />
                   <Route path="support" element={<Support />} />
-                  <Route path="templates" element={<Templates />} />
-                  <Route path="coming-soon" element={<ComingSoon />} />
+                  <Route path="docs" element={<Documentation />} />
+                  <Route path="onboarding-guide" element={<OnboardingGuide />} />
                 </Route>
               </Route>
 

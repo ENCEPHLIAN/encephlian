@@ -28,7 +28,7 @@ export function useDashboardData() {
   const realtimeChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Studies query - always show user's real studies (RLS handles ownership)
-  const { data: studies, isLoading: studiesLoading, refetch: refetchStudies } = useQuery({
+  const { data: studies, isLoading: studiesLoading, isError: studiesError, error: studiesErrorObj, refetch: refetchStudies } = useQuery({
     queryKey: ["dashboard-studies", userId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -250,6 +250,8 @@ export function useDashboardData() {
     metrics,
     filteredStudies,
     isLoading: studiesLoading,
+    isError: studiesError,
+    error: studiesErrorObj,
     tokenBalance: typeof wallet?.tokens === 'number' ? wallet.tokens : 0,
     previousBalance: previousBalanceRef.current,
     refetchStudies,

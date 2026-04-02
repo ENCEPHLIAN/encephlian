@@ -32,7 +32,8 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { AnomalyDetectionPreview } from "@/components/ai/AnomalyDetectionPreview";
+import TriageReportView from "@/components/report/TriageReportView";
+import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useSku } from "@/hooks/useSku";
@@ -64,13 +65,13 @@ export default function StudyDetail() {
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  const { can, capabilities } = useSku();
+  const { can, capabilities, isPilot } = useSku();
   const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
 
-  const { data: study, isLoading, refetch } = useQuery({
+  const { data: study, isLoading, isError, refetch } = useQuery({
     queryKey: ["study-detail", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -89,7 +90,8 @@ export default function StudyDetail() {
       if (error) throw error;
       return data;
     },
-    enabled: !!id
+    enabled: !!id,
+    retry: 1,
   });
 
   // Run AI Triage - uses proxy for PILOT, calls inference endpoint
@@ -233,16 +235,16 @@ export default function StudyDetail() {
     );
   }
 
-  if (!study) {
+  if (isError || !study) {
     return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-lg font-medium">Study not found</p>
-        <Button variant="outline" onClick={() => navigate("/app/studies")}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Studies
-        </Button>
-      </div>
+      <ErrorPage
+        title="Study not found"
+        description="This study may have been deleted, or you may not have access to it. If you believe this is an error, contact your clinic administrator."
+        actions={[
+          { label: "Back to Studies", onClick: () => navigate("/app/studies") },
+          { label: "Retry", onClick: () => refetch(), variant: "outline" },
+        ]}
+      />
     );
   }
 
@@ -310,8 +312,8 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run AI Triage - for PILOT SKU users with study_key */}
-              {can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
+              {/* Run AI Triage - internal SKU only (pilot uses SLA modal from dashboard) */}
+              {!isPilot && can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
                 <Button 
                   onClick={handleRunAITriage} 
                   disabled={runningTriage}
@@ -326,7 +328,7 @@ export default function StudyDetail() {
                 </Button>
               )}
               
-              {canGenerateReport && (
+              {!isPilot && canGenerateReport && (
                 <Button onClick={handleGenerateAIReport} disabled={generating} variant="outline">
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -378,14 +380,20 @@ export default function StudyDetail() {
       </Card>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs defaultValue={isPilot && study.ai_draft_json ? "ai-analysis" : "overview"} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="report" disabled={!hasReport}>
-            Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+          {!isPilot && (
+            <TabsTrigger value="report" disabled={!hasReport}>
+              Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            </TabsTrigger>
+          )}
+          <TabsTrigger value="ai-analysis">
+            MIND®Triage {study.ai_draft_json && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
-          <TabsTrigger value="ai-analysis">AI Analysis</TabsTrigger>
-          <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          {!isPilot && (
+            <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -635,9 +643,45 @@ export default function StudyDetail() {
           )}
         </TabsContent>
 
-        {/* AI Analysis Tab */}
+        {/* AI Analysis Tab — MIND®Triage */}
         <TabsContent value="ai-analysis">
-          <AnomalyDetectionPreview studyId={id} />
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary" />
+                MIND®Triage
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Quantitative EEG markers — clinician interprets
+              </p>
+            </CardHeader>
+            <CardContent>
+              {study.ai_draft_json ? (
+                <TriageReportView
+                  data={study.ai_draft_json}
+                  studyId={study.id}
+                  patientAge={patientAge?.toString()}
+                  patientGender={patientGender}
+                  studyDate={study.created_at ? dayjs(study.created_at).format("YYYY-MM-DD") : undefined}
+                />
+              ) : (
+                <div className="text-center py-10 space-y-3">
+                  <Brain className="h-10 w-10 mx-auto text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">
+                    {isPilot 
+                      ? "Triage data will appear here once analysis is complete." 
+                      : "No triage data yet. Generate an AI report to see MIND®Triage results."}
+                  </p>
+                  {!isPilot && canGenerateReport && (
+                    <Button onClick={handleGenerateAIReport} disabled={generating} size="sm">
+                      {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
+                      Generate MIND®Triage
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Files Tab */}

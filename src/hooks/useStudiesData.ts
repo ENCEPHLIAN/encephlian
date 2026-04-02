@@ -18,6 +18,7 @@ export interface StudyListItem {
   tokens_deducted: number | null;
   triage_status: string | null;
   triage_progress: number | null;
+  triage_started_at: string | null;
   triage_completed_at: string | null;
   clinics: { name: string } | null;
 }
@@ -26,13 +27,13 @@ export function useStudiesData(stateFilter: string) {
   const { userId, isAuthenticated } = useUserSession();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const { data: studies, isLoading, refetch } = useQuery({
+  const { data: studies, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["studies-list", stateFilter, userId],
     queryFn: async () => {
       // Show user's real studies (RLS handles ownership), exclude sample studies
       let query = supabase
         .from("studies")
-        .select("id, created_at, state, sla, sla_selected_at, meta, indication, sample, tokens_deducted, triage_status, triage_progress, triage_completed_at, clinics(name)")
+        .select("id, created_at, state, sla, sla_selected_at, meta, indication, sample, tokens_deducted, triage_status, triage_progress, triage_started_at, triage_completed_at, clinics(name)")
         .or(`sample.is.null,sample.eq.false`)
         .order("created_at", { ascending: false })
         .limit(100);
@@ -90,7 +91,7 @@ export function useStudiesData(stateFilter: string) {
     };
   }, [isAuthenticated, userId, refetch]);
 
-  return { studies: studies || [], isLoading, refetch };
+  return { studies: studies || [], isLoading, isError, error, refetch };
 }
 
 export function useFilteredStudies(studies: StudyListItem[], search: string) {
