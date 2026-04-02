@@ -28,7 +28,24 @@ import {
   getReadApiKey,
 } from "@/shared/readApiConfig";
 import { fetchJson, fetchBinary, getReadApiProxyBase } from "@/shared/readApiClient";
-import { Activity } from "lucide-react";
+import { Activity, Brain, Cpu, CheckCircle2, XCircle, AlertCircle, Loader2 } from "lucide-react";
+
+const IPLANE_LS_KEY = "enceph_iplane_base";
+const IPLANE_ENV_DEFAULT = String((import.meta as any).env?.VITE_IPLANE_BASE || "").replace(/\/+$/, "");
+
+type IPlaneHealth = {
+  status: string;
+  triage_model: "loaded" | "mock" | string;
+  clean_model: "loaded" | "mock" | string;
+  supabase: "configured" | "not configured" | string;
+  _ms?: number;
+};
+
+function ModelStatusBadge({ status }: { status: string }) {
+  if (status === "loaded") return <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs">loaded</Badge>;
+  if (status === "mock") return <Badge variant="secondary" className="text-xs">mock</Badge>;
+  return <Badge variant="outline" className="text-xs">{status}</Badge>;
+}
 
 type CheckRow = {
   name: string;
@@ -91,6 +108,15 @@ export default function AdminDiagnostics() {
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkResult[]>([]);
   const [benchmarkRunning, setBenchmarkRunning] = useState(false);
+
+  // I-Plane state
+  const [iplaneUrl, setIplaneUrl] = useState<string>(() => {
+    try { return (localStorage.getItem(IPLANE_LS_KEY) || IPLANE_ENV_DEFAULT).trim(); } catch { return IPLANE_ENV_DEFAULT; }
+  });
+  const [iplaneHealth, setIplaneHealth] = useState<IPlaneHealth | null>(null);
+  const [iplaneError, setIplaneError] = useState<string | null>(null);
+  const [iplaneChecking, setIplaneChecking] = useState(false);
+  const [iplaneLastRun, setIplaneLastRun] = useState<string | null>(null);
 
   const [backend, setBackend] = useState<{
     base: string;
@@ -224,6 +250,28 @@ export default function AdminDiagnostics() {
     });
     setLastRun(new Date().toISOString());
     setRunning(false);
+  }
+
+  async function checkIPlane() {
+    if (!iplaneUrl.trim()) return;
+    setIplaneChecking(true);
+    setIplaneHealth(null);
+    setIplaneError(null);
+    try {
+      localStorage.setItem(IPLANE_LS_KEY, iplaneUrl.trim());
+      const base = iplaneUrl.trim().replace(/\/+$/, "");
+      const t0 = performance.now();
+      const res = await fetch(`${base}/health`, { signal: AbortSignal.timeout(10000) });
+      const ms = Math.round(performance.now() - t0);
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      const data = await res.json();
+      setIplaneHealth({ ...data, _ms: ms });
+    } catch (e: any) {
+      setIplaneError(e?.message || String(e));
+    } finally {
+      setIplaneChecking(false);
+      setIplaneLastRun(new Date().toISOString());
+    }
   }
 
   async function runBenchmark() {
@@ -545,9 +593,102 @@ export default function AdminDiagnostics() {
         </CardContent>
       </Card>
 
+      {/* I-Plane (MIND® Inference) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            I-Plane — MIND® Inference API
+          </CardTitle>
+          <CardDescription>
+            Check the inference service status. MIND®Triage and MIND®Clean model load state, Supabase connectivity.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2 items-center">
+            <Input
+              className="font-mono text-xs"
+              placeholder="https://encephlian-iplane.xxx.centralindia.azurecontainerapps.io"
+              value={iplaneUrl}
+              onChange={(e) => setIplaneUrl(e.target.value)}
+            />
+            <Button onClick={checkIPlane} disabled={iplaneChecking || !iplaneUrl.trim()} className="shrink-0">
+              {iplaneChecking ? <Loader2 className="h-4 w-4 animate-spin" /> : "Check"}
+            </Button>
+          </div>
+
+          {!iplaneUrl.trim() && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              Set <code className="bg-muted px-1 rounded">VITE_IPLANE_BASE</code> in your env, or enter the URL above (saved to localStorage).
+            </div>
+          )}
+
+          {iplaneError && (
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/20 p-3">
+              <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium text-destructive">Unreachable</p>
+                <p className="text-xs text-muted-foreground">{iplaneError}</p>
+              </div>
+            </div>
+          )}
+
+          {iplaneHealth && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <span className="text-sm font-medium text-emerald-600">Online</span>
+                <span className="text-xs text-muted-foreground ml-auto tabular-nums">{iplaneHealth._ms}ms</span>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-muted-foreground text-xs">Notes</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium text-sm">MIND®Triage</TableCell>
+                    <TableCell><ModelStatusBadge status={iplaneHealth.triage_model} /></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {iplaneHealth.triage_model === "loaded" ? "ONNX model active" : "Spectral heuristic fallback"}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-sm">MIND®Clean</TableCell>
+                    <TableCell><ModelStatusBadge status={iplaneHealth.clean_model} /></TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {iplaneHealth.clean_model === "loaded" ? "ONNX model active" : "Amplitude threshold fallback"}
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium text-sm">Supabase</TableCell>
+                    <TableCell>
+                      {iplaneHealth.supabase === "configured"
+                        ? <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs">configured</Badge>
+                        : <Badge variant="secondary" className="text-xs">{iplaneHealth.supabase}</Badge>}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {iplaneHealth.supabase === "configured" ? "EDF download from eeg-raw bucket active" : "Using mock EEG data"}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {iplaneLastRun && (
+            <p className="text-xs text-muted-foreground">Last checked: {iplaneLastRun}</p>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Segments Panel */}
-      <AdminSegmentsPanel 
-        studyId="TUH_CANON_001" 
+      <AdminSegmentsPanel
+        studyId="TUH_CANON_001"
         root="/app/data"
       />
     </div>

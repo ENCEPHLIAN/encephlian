@@ -8,9 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileText, CheckCircle2, Clock,
-  Loader2, Zap, Download, Brain, Eye,
-  ChevronRight, AlertTriangle, Activity,
-  HelpCircle,
+  Loader2, Zap, Download, Brain,
+  AlertTriangle, Activity,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
@@ -312,24 +311,33 @@ export default function PilotStudiesView() {
           </div>
           {completedStudies.slice(0, 15).map((study) => {
             const meta = study.meta as any;
+            const isSigned = study.state === "signed";
             return (
               <Card
                 key={study.id}
-                className="hover:bg-muted/30 transition-colors group"
+                className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                onClick={() => navigate(`/app/studies/${study.id}`)}
               >
                 <CardContent className="p-3.5">
                   <div className="flex items-center justify-between">
-                    <div
-                      className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
-                      onClick={() => navigate(`/app/studies/${study.id}`)}
-                    >
-                      <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={cn(
+                        "h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
+                        isSigned ? "bg-emerald-500/10" : "bg-primary/10"
+                      )}>
+                        {isSigned
+                          ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          : <FileText className="h-4 w-4 text-primary" />}
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium text-sm truncate">
-                          {meta?.patient_name || "Patient"}
-                        </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {meta?.patient_name || "Patient"}
+                          </p>
+                          {isSigned && (
+                            <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 shrink-0">Signed</Badge>
+                          )}
+                        </div>
                         <p className="text-[11px] text-muted-foreground">
                           {dayjs(
                             study.triage_completed_at || study.created_at
@@ -339,24 +347,14 @@ export default function PilotStudiesView() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-0.5 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => navigate(`/app/studies/${study.id}`)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => handleDownload(study)}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      onClick={(e) => { e.stopPropagation(); handleDownload(study); }}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

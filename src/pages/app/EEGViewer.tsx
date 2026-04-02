@@ -1,9 +1,9 @@
 // src/pages/app/EEGViewer.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams, useParams } from "react-router-dom";
+import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
@@ -85,6 +85,7 @@ function fetchChunk(studyId: string, start: number, len: number) {
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function EEGViewer() {
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { id: routeId } = useParams<{ id?: string }>();
 
@@ -365,10 +366,30 @@ export default function EEGViewer() {
 
   // ── Render: error ─────────────────────────────────────────────────────────────
   if (fatalError) {
+    const isNotFound = fatalError.includes("404") || fatalError.includes("not found");
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 p-8">
-        <div className="text-sm font-medium text-destructive">Viewer unavailable</div>
-        <pre className="text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 max-w-lg whitespace-pre-wrap break-words">{fatalError}</pre>
+      <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
+          <WifiOff className="h-7 w-7 text-muted-foreground/60" />
+        </div>
+        <div className="space-y-1.5 max-w-sm">
+          <p className="text-sm font-semibold">
+            {isNotFound ? "EEG data not yet available" : "Viewer unavailable"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {isNotFound
+              ? "The waveform data for this study hasn't been processed yet. It will appear here once analysis is complete."
+              : "Could not connect to the EEG data service. Check your connection and try again."}
+          </p>
+        </div>
+        <details className="text-left">
+          <summary className="text-xs text-muted-foreground/60 cursor-pointer">Technical details</summary>
+          <pre className="mt-1 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 max-w-lg whitespace-pre-wrap break-words">{fatalError}</pre>
+        </details>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Go back
+        </Button>
       </div>
     );
   }

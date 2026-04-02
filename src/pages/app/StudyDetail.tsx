@@ -306,7 +306,7 @@ export default function StudyDetail() {
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild>
-                <Link to={`/app/eeg-viewer?studyId=${study.id}`}>
+                <Link to={`/app/eeg-viewer?studyId=${study.study_key || study.id}`}>
                   <Activity className="h-4 w-4 mr-2" />
                   Open Viewer
                 </Link>

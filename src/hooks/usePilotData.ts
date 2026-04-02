@@ -7,6 +7,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 
 export interface PilotStudy {
   id: string;
+  study_key: string | null;
   sla: string;
   state: string;
   created_at: string;
@@ -18,7 +19,7 @@ export interface PilotStudy {
   tokens_deducted: number | null;
 }
 
-const STUDY_COLUMNS = "id, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
+const STUDY_COLUMNS = "id, study_key, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
 
 /**
  * Single lightweight hook for ALL Pilot SKU data needs.
