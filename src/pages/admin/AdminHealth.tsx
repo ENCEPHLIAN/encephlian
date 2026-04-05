@@ -38,6 +38,9 @@ const EDGE_FUNCTIONS = [
   { name: "verify_payment", label: "Payment Verifier" },
 ];
 
+const CPLANE_BASE = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
+const IPLANE_BASE = (import.meta as any).env?.VITE_IPLANE_BASE as string | undefined;
+
 export default function AdminHealth() {
   const queryClient = useQueryClient();
   const [isRunningCheck, setIsRunningCheck] = useState(false);
@@ -108,6 +111,32 @@ export default function AdminHealth() {
         });
       } catch (error: any) {
         results.push({ service: "azure_read_api", status: "down", error: error.message });
+      }
+
+      // Check C-Plane
+      if (CPLANE_BASE) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const res = await fetch(`${CPLANE_BASE}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
+          results.push({ service: "cplane", status: res.ok ? "healthy" : "degraded" });
+        } catch (error: any) {
+          results.push({ service: "cplane", status: "down", error: error.message });
+        }
+      }
+
+      // Check I-Plane
+      if (IPLANE_BASE) {
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const res = await fetch(`${IPLANE_BASE}/health`, { signal: controller.signal });
+          clearTimeout(timeout);
+          results.push({ service: "iplane", status: res.ok ? "healthy" : "degraded" });
+        } catch (error: any) {
+          results.push({ service: "iplane", status: "down", error: error.message });
+        }
       }
 
       // Log results using direct insert (management users have insert policy)
@@ -182,10 +211,16 @@ export default function AdminHealth() {
   const dbStatus = getServiceStatus("database");
   const storageStatus = getServiceStatus("storage");
   const azureApiStatus = getServiceStatus("azure_read_api");
+  const cplaneStatus = getServiceStatus("cplane");
+  const iplaneStatus = getServiceStatus("iplane");
 
   // Determine overall system status
-  const allHealthy = dbStatus?.status === "healthy" && storageStatus?.status === "healthy";
-  const anyDown = dbStatus?.status === "down" || storageStatus?.status === "down";
+  const allHealthy = dbStatus?.status === "healthy" && storageStatus?.status === "healthy"
+    && azureApiStatus?.status === "healthy"
+    && (!CPLANE_BASE || cplaneStatus?.status === "healthy")
+    && (!IPLANE_BASE || iplaneStatus?.status === "healthy");
+  const anyDown = dbStatus?.status === "down" || storageStatus?.status === "down"
+    || azureApiStatus?.status === "down" || cplaneStatus?.status === "down" || iplaneStatus?.status === "down";
 
   return (
     <div className="space-y-6">
@@ -227,7 +262,7 @@ export default function AdminHealth() {
       </div>
 
       {/* Core Services */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -287,6 +322,52 @@ export default function AdminHealth() {
             ) : (
               <p className="text-xs text-muted-foreground mt-2">
                 {resolveReadApiBase().replace("https://", "")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* C-Plane */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base font-mono">C-Plane</CardTitle>
+              </div>
+              {getStatusIcon(CPLANE_BASE ? cplaneStatus?.status : undefined)}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {CPLANE_BASE ? getStatusBadge(cplaneStatus?.status) : (
+              <Badge variant="secondary" className="font-mono text-xs">NOT SET</Badge>
+            )}
+            {cplaneStatus?.checked_at && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Last check: {format(new Date(cplaneStatus.checked_at), "MMM d, HH:mm")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* I-Plane */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-5 w-5 text-muted-foreground" />
+                <CardTitle className="text-base font-mono">I-Plane</CardTitle>
+              </div>
+              {getStatusIcon(IPLANE_BASE ? iplaneStatus?.status : undefined)}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {IPLANE_BASE ? getStatusBadge(iplaneStatus?.status) : (
+              <Badge variant="secondary" className="font-mono text-xs">NOT SET</Badge>
+            )}
+            {iplaneStatus?.checked_at && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Last check: {format(new Date(iplaneStatus.checked_at), "MMM d, HH:mm")}
               </p>
             )}
           </CardContent>

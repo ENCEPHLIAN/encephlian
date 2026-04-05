@@ -41,6 +41,8 @@ interface PushedStudy {
   meta: any;
 }
 
+const CPLANE_BASE = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
+
 export default function AdminEegPush() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -51,6 +53,7 @@ export default function AdminEegPush() {
   const [notes, setNotes] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState("");
   const [deleteStudy, setDeleteStudy] = useState<PushedStudy | null>(null);
 
   // Fetch clinician users
@@ -154,35 +157,93 @@ export default function AdminEegPush() {
       toast.error("Please select a user, clinic, and file");
       return;
     }
+    if (!CPLANE_BASE) {
+      toast.error("C-Plane not configured (VITE_CPLANE_BASE missing)");
+      return;
+    }
 
     setIsUploading(true);
+    setUploadStage("Creating study record...");
     try {
-      // Upload file to storage under the target user's folder
-      const fileName = `${selectedUserId}/${Date.now()}_${uploadFile.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("eeg-uploads")
-        .upload(fileName, uploadFile);
-
-      if (uploadError) throw uploadError;
-
-      const uploadedPath = uploadData.path;
-
-      // Push to user - the admin_push_eeg_to_user function sets owner to p_user_id
-      await pushMutation.mutateAsync({
-        userId: selectedUserId,
-        clinicId: selectedClinicId,
-        filePath: uploadedPath,
-        meta: {
-          patient_id: patientId || `PAT-${Date.now().toString(36).toUpperCase()}`,
+      // 1. Create study record for the target user via admin RPC
+      const pid = patientId || `PAT-${Date.now().toString(36).toUpperCase()}`;
+      const { data: studyData, error: studyErr } = await supabase.rpc("admin_push_eeg_to_user", {
+        p_user_id: selectedUserId,
+        p_clinic_id: selectedClinicId,
+        p_file_path: `blob:eeg-raw/pending`,
+        p_meta: {
+          patient_id: pid,
           admin_notes: notes,
           admin_pushed: true,
           pushed_at: new Date().toISOString(),
+          original_filename: uploadFile.name,
+          file_size_bytes: uploadFile.size,
         },
       });
+      if (studyErr) throw studyErr;
+
+      const studyId = typeof studyData === "string" ? studyData : (studyData as any)?.id;
+      if (!studyId) throw new Error("No study ID returned from push RPC");
+
+      // 2. Get SAS upload token from C-Plane
+      setUploadStage("Getting upload token...");
+      const tokenRes = await fetch(`${CPLANE_BASE}/upload-token/${studyId}`, { method: "POST" });
+      if (!tokenRes.ok) throw new Error(`Token failed: HTTP ${tokenRes.status}`);
+      const { sas_url: sasUrl } = await tokenRes.json();
+
+      // 3. Upload to Azure Blob
+      setUploadStage(`Uploading ${uploadFile.name}...`);
+      const CHUNK_SIZE = 4 * 1024 * 1024;
+      if (uploadFile.size <= 25 * 1024 * 1024) {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)));
+          xhr.onerror = () => reject(new Error("Network error"));
+          xhr.timeout = 300000;
+          xhr.ontimeout = () => reject(new Error("Upload timeout"));
+          xhr.open("PUT", sasUrl);
+          xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+          xhr.send(uploadFile);
+        });
+      } else {
+        const totalBlocks = Math.ceil(uploadFile.size / CHUNK_SIZE);
+        const blockIds: string[] = [];
+        for (let i = 0; i < totalBlocks; i++) {
+          const blockId = btoa(`block-${String(i).padStart(6, "0")}`);
+          blockIds.push(blockId);
+          const chunk = uploadFile.slice(i * CHUNK_SIZE, Math.min((i + 1) * CHUNK_SIZE, uploadFile.size));
+          const res = await fetch(`${sasUrl}&comp=block&blockid=${encodeURIComponent(blockId)}`, {
+            method: "PUT",
+            headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "application/octet-stream" },
+            body: chunk,
+          });
+          if (!res.ok) throw new Error(`Block ${i} failed: HTTP ${res.status}`);
+          setUploadStage(`Uploading block ${i + 1}/${totalBlocks}...`);
+        }
+        const xml = `<?xml version="1.0" encoding="utf-8"?><BlockList>${blockIds.map(id => `<Latest>${id}</Latest>`).join("")}</BlockList>`;
+        const commit = await fetch(`${sasUrl}&comp=blocklist`, { method: "PUT", headers: { "Content-Type": "application/xml" }, body: xml });
+        if (!commit.ok) throw new Error(`Block list commit failed: HTTP ${commit.status}`);
+      }
+
+      // 4. Update study state and trigger pipeline
+      setUploadStage("Triggering pipeline...");
+      await supabase.from("studies").update({ state: "uploaded", uploaded_file_path: `blob:eeg-raw/${studyId}.edf` }).eq("id", studyId);
+      fetch(`${CPLANE_BASE}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ study_id: studyId }),
+      }).catch((err) => console.warn("C-Plane trigger:", err));
+
+      queryClient.invalidateQueries({ queryKey: ["admin-recent-pushes"] });
+      setDialogOpen(false);
+      resetForm();
+      toast.success(`EEG pushed and pipeline started for ${pid}`);
     } catch (err: any) {
       toast.error(err.message || "Failed to upload and push EEG");
     } finally {
       setIsUploading(false);
+      setUploadStage("");
     }
   };
 
@@ -418,7 +479,7 @@ export default function AdminEegPush() {
                         {isUploading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Uploading...
+                            {uploadStage || "Uploading..."}
                           </>
                         ) : (
                           <>

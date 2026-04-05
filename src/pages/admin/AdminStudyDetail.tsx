@@ -24,9 +24,11 @@ import {
   Play,
   Download,
   Database,
+  Activity,
 } from "lucide-react";
 import { format } from "date-fns";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
+import { Link } from "react-router-dom";
 
 export default function AdminStudyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -37,12 +39,12 @@ export default function AdminStudyDetail() {
     queryKey: ["admin-study", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .rpc("admin_get_all_studies")
-        .eq("id", id)
-        .single();
+      // admin_get_all_studies returns all studies; filter client-side by id
+      const { data, error } = await supabase.rpc("admin_get_all_studies");
       if (error) throw error;
-      return data;
+      const found = (data as any[])?.find((s) => s.id === id);
+      if (!found) throw new Error("Study not found");
+      return found;
     },
   });
 
@@ -133,13 +135,27 @@ export default function AdminStudyDetail() {
   };
 
   const handleRerunCanonicalization = async () => {
-    // Stub - placeholder for Azure endpoint
-    toast.info("Canonicalization triggered (stub)");
-    await logEventMutation.mutateAsync({
-      event: "admin_rerun_canonicalization",
-      payload: { status: "stub_triggered" },
-    });
-    toast.success("Canonicalization event logged (Azure endpoint TODO)");
+    const cplaneBase = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
+    if (!cplaneBase) {
+      toast.error("C-Plane not configured (VITE_CPLANE_BASE missing)");
+      return;
+    }
+    toast.info("Triggering canonicalization...");
+    try {
+      const res = await fetch(`${cplaneBase}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ study_id: id }),
+      });
+      if (!res.ok) throw new Error(`C-Plane returned ${res.status}`);
+      await logEventMutation.mutateAsync({
+        event: "admin_rerun_canonicalization",
+        payload: { cplane: cplaneBase },
+      });
+      toast.success("C-Plane processing triggered");
+    } catch (err: any) {
+      toast.error(`Canonicalization failed: ${err.message}`);
+    }
   };
 
   // Trigger inference via Read API
@@ -526,9 +542,6 @@ export default function AdminStudyDetail() {
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Re-run Canonicalization
-                  <Badge variant="secondary" className="ml-auto text-[10px]">
-                    STUB
-                  </Badge>
                 </Button>
 
                 <Button
@@ -538,6 +551,17 @@ export default function AdminStudyDetail() {
                 >
                   <Play className="h-4 w-4 mr-2" />
                   Run Inference
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="w-full justify-start font-mono"
+                  asChild
+                >
+                  <Link to={`/app/eeg-viewer?studyId=${id}`} target="_blank">
+                    <Activity className="h-4 w-4 mr-2" />
+                    Open EEG Viewer
+                  </Link>
                 </Button>
 
                 <Button
