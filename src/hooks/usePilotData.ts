@@ -26,10 +26,21 @@ const STUDY_COLUMNS = "id, study_key, sla, state, created_at, meta, triage_statu
  * One studies query + one wallet query + one filtered realtime channel.
  * Shared across PilotDashboard and PilotStudiesView via queryKey caching.
  */
+// C-Plane stage → triage_progress %
+const STAGE_PROGRESS: Record<string, number> = {
+  not_found: 10,
+  raw_uploaded: 20,
+  canonical_ready: 50,
+  derived_ready: 80,
+  complete: 100,
+};
+
 export function usePilotData() {
   const { userId, isAuthenticated } = useUserSession();
   const navigate = useNavigate();
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  // Stable ref so polling always sees latest processing list
+  const processingRef = useRef<PilotStudy[]>([]);
 
   // Single studies query — RLS + filter excludes samples
   const {
@@ -134,6 +145,75 @@ export function usePilotData() {
     };
   }, [isAuthenticated, userId, navigate, refetchStudies, refetchWallet]);
 
+  // Keep processingRef in sync with latest studies so polling can access it without re-registering
+  const processingStudies = useMemo(
+    () =>
+      (studies || []).filter(
+        (s) =>
+          s.triage_status === "processing" ||
+          s.state === "ai_draft" ||
+          s.state === "in_review"
+      ),
+    [studies]
+  );
+  processingRef.current = processingStudies;
+
+  // Poll C-Plane status for in-progress studies and sync results to Supabase
+  useEffect(() => {
+    const CPLANE_BASE = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
+    const IPLANE_BASE = (import.meta as any).env?.VITE_IPLANE_BASE as string | undefined;
+    if (!CPLANE_BASE || !isAuthenticated) return;
+
+    const checkStatus = async () => {
+      const toCheck = processingRef.current;
+      if (!toCheck.length) return;
+
+      for (const study of toCheck) {
+        try {
+          const res = await fetch(`${CPLANE_BASE}/status/${study.id}`);
+          if (!res.ok) continue;
+          const status = await res.json() as { stage: string };
+          const newProgress = STAGE_PROGRESS[status.stage] ?? 5;
+
+          if (status.stage === "complete") {
+            // Fetch the real I-Plane report
+            let aiDraft: any = null;
+            if (IPLANE_BASE) {
+              try {
+                const r = await fetch(`${IPLANE_BASE}/mind/report/${study.id}`);
+                if (r.ok) aiDraft = await r.json();
+              } catch {}
+            }
+            await supabase
+              .from("studies")
+              .update({
+                triage_status: "completed",
+                triage_progress: 100,
+                triage_completed_at: new Date().toISOString(),
+                state: "completed",
+                ...(aiDraft ? { ai_draft_json: aiDraft } : {}),
+              })
+              .eq("id", study.id);
+          } else if (newProgress !== (study.triage_progress ?? 5)) {
+            // Update progress percentage
+            await supabase
+              .from("studies")
+              .update({ triage_progress: newProgress })
+              .eq("id", study.id);
+          }
+        } catch {
+          // Silently ignore individual study failures
+        }
+      }
+    };
+
+    checkStatus(); // immediate on mount / when processing list changes
+    const interval = setInterval(checkStatus, 15_000);
+    return () => clearInterval(interval);
+    // Only re-register when isAuthenticated changes — processingRef handles dynamic updates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
   // Memoized categorization — no heavy metrics, just buckets
   const categorized = useMemo(() => {
     const all = studies || [];
@@ -146,17 +226,13 @@ export function usePilotData() {
               s.triage_status === "awaiting_sla" ||
               s.triage_status === "pending"))
       ),
-      processing: all.filter(
-        (s) =>
-          s.triage_status === "processing" ||
-          s.state === "ai_draft" ||
-          s.state === "in_review"
-      ),
+      processing: processingStudies,
       completed: all.filter(
         (s) => s.state === "signed" || s.triage_status === "completed"
       ),
     };
-  }, [studies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studies, processingStudies]);
 
   // Optimistic helper: instantly move a study to "processing" in cache
   const optimisticStartTriage = useCallback(

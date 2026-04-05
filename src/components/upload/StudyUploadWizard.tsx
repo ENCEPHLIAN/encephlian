@@ -353,7 +353,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       .insert({
         owner: userId,
         clinic_id: clinicId,
-        state: "uploading",
+        state: "awaiting_sla",
         sla: selectedSla,
         uploaded_file_path: `blob:eeg-raw/pending`,
         original_format: fileExt,

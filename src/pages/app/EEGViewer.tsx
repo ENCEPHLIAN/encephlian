@@ -417,7 +417,7 @@ export default function EEGViewer() {
 
   // ── Render: error ─────────────────────────────────────────────────────────────
   if (fatalError) {
-    const isNotFound = fatalError.includes("404") || fatalError.includes("not found");
+    const isNotFound = fatalError.includes("404") || fatalError.includes("No blobs") || fatalError.includes("not yet available");
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
@@ -425,11 +425,11 @@ export default function EEGViewer() {
         </div>
         <div className="space-y-1.5 max-w-sm">
           <p className="text-sm font-semibold">
-            {isNotFound ? "EEG data not yet available" : "Viewer unavailable"}
+            {isNotFound ? "Waveform not yet available" : "Viewer unavailable"}
           </p>
           <p className="text-xs text-muted-foreground">
             {isNotFound
-              ? "The waveform data for this study hasn't been processed yet. It will appear here once analysis is complete."
+              ? "The EEG waveform is still being processed. Return to the study and wait for analysis to complete — the viewer will work once processing finishes."
               : "Could not connect to the EEG data service. Check your connection and try again."}
           </p>
         </div>
@@ -437,10 +437,17 @@ export default function EEGViewer() {
           <summary className="text-xs text-muted-foreground/60 cursor-pointer">Technical details</summary>
           <pre className="mt-1 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 max-w-lg whitespace-pre-wrap break-words">{fatalError}</pre>
         </details>
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Go back
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Go back
+          </Button>
+          {isNotFound && (
+            <Button size="sm" className="gap-2" onClick={() => navigate(0)}>
+              Retry
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

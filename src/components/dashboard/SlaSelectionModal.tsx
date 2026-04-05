@@ -25,44 +25,15 @@ interface SlaSelectionModalProps {
 
 type SlaType = "TAT" | "STAT";
 
-// Simulates triage progress updates in the database
-async function simulateTriageProgress(studyId: string) {
-  const stages = [
-    { progress: 10, status: "queueing" },
-    { progress: 25, status: "artifact_cleanup" },
-    { progress: 50, status: "artifact_cleanup" },
-    { progress: 70, status: "triage_model" },
-    { progress: 85, status: "generating_report" },
-    { progress: 95, status: "generating_report" },
-    { progress: 100, status: "completed" },
-  ];
-
-  for (const stage of stages) {
-    await new Promise((resolve) => setTimeout(resolve, 1500 + Math.random() * 1000));
-
-    const updateData: Record<string, any> = {
-      triage_progress: stage.progress,
-    };
-
-    if (stage.status === "completed") {
-      updateData.triage_status = "completed";
-      updateData.triage_completed_at = new Date().toISOString();
-      updateData.state = "completed";
-    }
-
-    await supabase
-      .from("studies")
-      .update(updateData)
-      .eq("id", studyId);
-  }
-
-  try {
-    await supabase.functions.invoke("send_triage_notification", {
-      body: { study_id: studyId },
-    });
-  } catch (err) {
-    console.error("Failed to send triage notification:", err);
-  }
+// Trigger C-Plane processing (idempotent — safe to call even if already running)
+function triggerCPlane(studyId: string) {
+  const cplaneBase = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
+  if (!cplaneBase) return;
+  fetch(`${cplaneBase}/process`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ study_id: studyId }),
+  }).catch((e) => console.warn("[SLA] C-Plane trigger failed:", e));
 }
 
 export default function SlaSelectionModal({
@@ -113,8 +84,9 @@ export default function SlaSelectionModal({
         </div>
       );
 
+      // Ensure C-Plane is running (idempotent)
+      triggerCPlane(study.id);
       handleClose();
-      simulateTriageProgress(study.id).catch(console.error);
     } catch (err: any) {
       console.error("SLA selection error:", err);
       toast.error(err.message || "Failed to start triage");
