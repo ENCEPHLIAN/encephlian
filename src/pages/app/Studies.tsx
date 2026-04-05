@@ -112,7 +112,7 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
                   variant="ghost" 
                   size="icon"
                   className="h-8 w-8 text-primary"
-                  onClick={() => onNavigate(`/app/eeg-viewer?studyId=${study.id}`)}
+                  onClick={() => onNavigate(`/app/eeg-viewer?studyId=${study.study_key || study.id}`)}
                 >
                   <Unlock className="h-4 w-4" />
                 </Button>
