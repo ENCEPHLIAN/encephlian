@@ -98,15 +98,17 @@ export default function StudyDetail() {
   });
 
   // Fetch MIND® report from I-Plane blob (mind.report.v1 format)
+  // Use study_key (blob UUID) when available, fallback to Supabase id
   const { data: mindReport, isLoading: mindLoading, refetch: refetchMind } = useQuery({
     queryKey: ["mind-report", id],
     queryFn: async () => {
       if (!IPLANE_BASE || !id) return null;
-      const res = await fetch(`${IPLANE_BASE}/mind/report/${id}`);
+      const blobId = (study as any)?.study_key || id;
+      const res = await fetch(`${IPLANE_BASE}/mind/report/${blobId}`);
       if (!res.ok) return null;
       return res.json();
     },
-    enabled: !!id && !!IPLANE_BASE,
+    enabled: !!id && !!IPLANE_BASE && !isLoading,
     staleTime: 30_000,
     retry: false,
   });
@@ -127,7 +129,8 @@ export default function StudyDetail() {
     try {
       toast({ title: "Starting MIND® analysis...", description: "Calling I-Plane inference" });
 
-      const res = await fetch(`${IPLANE_BASE}/mind/run/${id}`, { method: "POST" });
+      const blobId = (study as any)?.study_key || id;
+      const res = await fetch(`${IPLANE_BASE}/mind/run/${blobId}`, { method: "POST" });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(`I-Plane returned ${res.status}: ${body}`);
