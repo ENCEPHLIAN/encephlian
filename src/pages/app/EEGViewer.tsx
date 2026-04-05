@@ -12,8 +12,6 @@ import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const FALLBACK_STUDY_ID = "TUH_CANON_001";
-
 // If the resolved API base is a local address, skip the key requirement.
 // If it's a remote URL (Azure prod), require key or Supabase proxy.
 const _apiBase = resolveReadApiBase();
@@ -29,11 +27,22 @@ type Meta = {
   channel_names?: string[];
   channels?: { name: string }[];
 };
-type Artifact   = { start_sec: number; end_sec: number; label?: string; channel?: number };
+type Artifact   = { start_sec: number; end_sec: number; label?: string; artifact_type?: string; channel?: number };
 type Annotation = { start_sec: number; end_sec?: number; label?: string; channel?: number };
 type Marker     = { id: string; timestamp_sec: number; marker_type: string; label?: string };
 type Segment    = { t_start_s: number; t_end_s: number; label: string; channel_index?: number | null; score?: number | null };
 type FocusedSeg = { label: string; t_start_s: number; t_end_s: number; channel_index?: number; score?: number };
+
+// ── Artifact type color map ────────────────────────────────────────────────────
+const ARTIFACT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
+  eye_movement:    { bg: "rgba(139,92,246,0.18)",  border: "rgba(139,92,246,0.60)", label: "Eye"      },
+  muscle:          { bg: "rgba(249,115,22,0.18)",  border: "rgba(249,115,22,0.60)", label: "Muscle"   },
+  electrode_noise: { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.60)",  label: "Noise"    },
+  artifact:        { bg: "rgba(239,68,68,0.18)",   border: "rgba(239,68,68,0.55)",  label: "Artifact" },
+};
+function artifactColor(t?: string) {
+  return ARTIFACT_COLORS[t ?? "artifact"] ?? ARTIFACT_COLORS.artifact;
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
@@ -89,8 +98,8 @@ export default function EEGViewer() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { id: routeId } = useParams<{ id?: string }>();
 
-  // Study ID: route param → ?studyId= → fallback TUH demo
-  const studyId = routeId || searchParams.get("studyId") || FALLBACK_STUDY_ID;
+  // Study ID: route param → ?studyId= query param
+  const studyId = routeId || searchParams.get("studyId") || "";
 
   // Focused segment from URL
   const focusedSeg = useMemo<FocusedSeg | null>(() => {
@@ -191,6 +200,9 @@ export default function EEGViewer() {
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null);
     cache.current.clear(); didSeek.current = false;
+
+    if (!studyId) { setLoadingMeta(false); return; }
+
     setLoadingMeta(true);
 
     fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY })
@@ -203,6 +215,7 @@ export default function EEGViewer() {
 
   // ── Effects: overlays ─────────────────────────────────────────────────────────
   useEffect(() => {
+    if (!studyId) return;
     fetchJson<any>(`/studies/${studyId}/artifacts?root=.`,        { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setArtifacts(r.ok ? (r.data?.artifacts ?? []) : [])).catch(() => setArtifacts([]));
     fetchJson<any>(`/studies/${studyId}/annotations?root=.`,      { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setAnnotations(r.ok ? (r.data?.annotations ?? []) : [])).catch(() => setAnnotations([]));
     fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
@@ -324,7 +337,18 @@ export default function EEGViewer() {
     if (!showArtifacts) return [];
     return artifacts
       .filter(a => a.end_sec > windowStart && a.start_sec < windowStart + windowSec)
-      .map(a => ({ start_sec: a.start_sec - windowStart, end_sec: a.end_sec - windowStart, label: a.label, channel: a.channel }));
+      .map(a => {
+        const ac = artifactColor(a.artifact_type);
+        return {
+          start_sec: a.start_sec - windowStart,
+          end_sec: a.end_sec - windowStart,
+          label: artifactColor(a.artifact_type).label,
+          artifact_type: a.artifact_type,
+          channel: a.channel,
+          color: ac.bg,
+          borderColor: ac.border,
+        };
+      });
   }, [artifacts, showArtifacts, windowStart, windowSec]);
 
   const winMarkers = useMemo<Marker[]>(() => {
@@ -363,6 +387,33 @@ export default function EEGViewer() {
   // ── Overlay legend counts ─────────────────────────────────────────────────────
   const artifactCount  = artifacts.length;
   const annotationCount = annotations.length;
+  const artifactTypeCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of artifacts) {
+      const t = a.artifact_type ?? "artifact";
+      m[t] = (m[t] ?? 0) + 1;
+    }
+    return m;
+  }, [artifacts]);
+
+  // ── Render: no study selected ────────────────────────────────────────────────
+  if (!studyId) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
+          <WifiOff className="h-7 w-7 text-muted-foreground/60" />
+        </div>
+        <div className="space-y-1.5 max-w-sm">
+          <p className="text-sm font-semibold">No study selected</p>
+          <p className="text-xs text-muted-foreground">Open the viewer from a study page.</p>
+        </div>
+        <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Go back
+        </Button>
+      </div>
+    );
+  }
 
   // ── Render: error ─────────────────────────────────────────────────────────────
   if (fatalError) {
@@ -461,12 +512,20 @@ export default function EEGViewer() {
               onClick={() => setShowArtifacts(v => !v)}
               className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
                 showArtifacts
-                  ? "bg-red-500/15 text-red-500 border border-red-500/30"
+                  ? "bg-muted/60 border border-muted-foreground/20 text-foreground"
                   : "bg-muted text-muted-foreground border border-transparent"
               }`}
+              title="Toggle artifact overlays"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />
-              {artifactCount} artifact{artifactCount !== 1 ? "s" : ""}
+              {Object.entries(artifactTypeCounts).map(([type, count]) => {
+                const ac = artifactColor(type);
+                return (
+                  <span key={type} className="flex items-center gap-0.5">
+                    <span className="h-1.5 w-1.5 rounded-full inline-block" style={{ background: ac.border }} />
+                    <span style={{ color: ac.border }}>{ac.label} {count}</span>
+                  </span>
+                );
+              })}
             </button>
           )}
 

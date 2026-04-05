@@ -193,9 +193,11 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
   const [step, setStep] = useState(1);
   const [file, setFile] = useState<File | null>(null);
+  const [fileQueue, setFileQueue] = useState<File[]>([]);  // multi-file queue
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ name: string; status: "pending"|"uploading"|"done"|"error" }[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
   const [isProprietaryFormat, setIsProprietaryFormat] = useState(false);
@@ -222,6 +224,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const resetWizard = useCallback(() => {
     setStep(1);
     setFile(null);
+    setFileQueue([]);
+    setBatchProgress([]);
     setUploadProgress(0);
     setIsUploading(false);
     setEdfMeta(null);
@@ -249,13 +253,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         why: `The file extension "${ext}" is not recognized.`,
         action: `Supported formats: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
       });
-      return;
-    }
-
-    // Pre-upload file size check (20MB limit)
-    const MAX_FILE_SIZE = 20 * 1024 * 1024;
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      systemFeedback.fileTooLarge(selectedFile.size / (1024 * 1024));
       return;
     }
 
@@ -311,163 +308,211 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      handleFileSelect(droppedFile);
+    const dropped = Array.from(e.dataTransfer.files);
+    if (dropped.length === 1) {
+      handleFileSelect(dropped[0]);
+    } else if (dropped.length > 1) {
+      const valid = dropped.filter(f => {
+        const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+        return ALL_ACCEPTED_EXTENSIONS.includes(ext);
+      });
+      if (valid.length > 0) {
+        setFile(valid[0]);
+        setFileQueue(valid);
+        setBatchProgress(valid.map(f => ({ name: f.name, status: "pending" as const })));
+      }
     }
   }, [handleFileSelect]);
 
-  // Submit the study
-  const handleSubmit = useCallback(async () => {
-    if (!file || !userId) {
-      systemFeedback.report({
-        severity: "error",
-        what: "Cannot upload",
-        why: "Missing authentication. Please log in again.",
-        action: "Refresh the page and sign in.",
-      });
-      return;
+  // Upload a single file — returns studyId on success, throws on error
+  const uploadOneFile = useCallback(async (
+    targetFile: File,
+    cplaneBase: string,
+    onProgress: (pct: number, stage: string) => void,
+  ): Promise<string> => {
+    const fileExt = targetFile.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
+    const studyMeta: Record<string, any> = {
+      patient_name: patientData.patient_name || null,
+      patient_id: patientData.patient_id || null,
+      patient_age: patientData.patient_age ? parseInt(patientData.patient_age) : null,
+      patient_gender: patientData.patient_gender || null,
+      notes: patientData.notes || null,
+      original_filename: targetFile.name,
+      file_size_bytes: targetFile.size,
+    };
+    if (edfMeta && targetFile === file) {
+      studyMeta.edf_num_channels = edfMeta.num_channels || null;
+      studyMeta.edf_sample_rate = edfMeta.sample_rate || null;
+      studyMeta.edf_duration_sec = edfMeta.duration_sec || null;
+      studyMeta.edf_channel_labels = edfMeta.channel_labels || null;
     }
 
-    if (!clinicId) {
-      systemFeedback.noClinicAssigned();
+    onProgress(5, `Creating study for ${targetFile.name}...`);
+    const { data: study, error: studyError } = await supabase
+      .from("studies")
+      .insert({
+        owner: userId,
+        clinic_id: clinicId,
+        state: "uploading",
+        sla: selectedSla,
+        uploaded_file_path: `blob:eeg-raw/pending`,
+        original_format: fileExt,
+        indication: patientData.indication || null,
+        srate_hz: edfMeta?.sample_rate || null,
+        duration_min: edfMeta?.duration_sec ? Math.round(edfMeta.duration_sec / 60) : null,
+        meta: studyMeta,
+      })
+      .select("id")
+      .single();
+
+    if (studyError || !study?.id) {
+      throw new Error(studyError?.message ?? "no id returned");
+    }
+    const studyId = study.id;
+
+    onProgress(10, `Getting upload token...`);
+    const tokenRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
+    if (!tokenRes.ok) throw new Error(`Token failed: ${tokenRes.status}`);
+    const { sas_url: sasUrl } = await tokenRes.json();
+
+    onProgress(15, `Uploading ${targetFile.name}...`);
+    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB blocks
+    if (targetFile.size <= 25 * 1024 * 1024) {
+      // Single PUT for files ≤ 25MB
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(15 + Math.round((e.loaded / e.total) * 70), `Uploading ${targetFile.name}...`);
+        };
+        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: HTTP ${xhr.status}`));
+        xhr.onerror = () => reject(new Error("Network error during upload"));
+        xhr.timeout = 300000; // 5 min
+        xhr.ontimeout = () => reject(new Error("UPLOAD_TIMEOUT"));
+        xhr.open("PUT", sasUrl);
+        xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.send(targetFile);
+      });
+    } else {
+      // Chunked block upload for large files
+      const totalBlocks = Math.ceil(targetFile.size / CHUNK_SIZE);
+      const blockIds: string[] = [];
+      for (let i = 0; i < totalBlocks; i++) {
+        const blockId = btoa(`block-${String(i).padStart(6, "0")}`);
+        blockIds.push(blockId);
+        const start = i * CHUNK_SIZE;
+        const chunk = targetFile.slice(start, Math.min(start + CHUNK_SIZE, targetFile.size));
+        const blockUrl = `${sasUrl}&comp=block&blockid=${encodeURIComponent(blockId)}`;
+        const res = await fetch(blockUrl, {
+          method: "PUT",
+          headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "application/octet-stream" },
+          body: chunk,
+        });
+        if (!res.ok) throw new Error(`Block ${i} upload failed: HTTP ${res.status}`);
+        onProgress(15 + Math.round(((i + 1) / totalBlocks) * 68), `Uploading ${targetFile.name} — block ${i + 1}/${totalBlocks}`);
+      }
+      // Commit block list
+      const blockListXml = `<?xml version="1.0" encoding="utf-8"?><BlockList>${blockIds.map(id => `<Latest>${id}</Latest>`).join("")}</BlockList>`;
+      const commitUrl = `${sasUrl}&comp=blocklist`;
+      const commitRes = await fetch(commitUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "application/xml" },
+        body: blockListXml,
+      });
+      if (!commitRes.ok) throw new Error(`Block list commit failed: HTTP ${commitRes.status}`);
+    }
+
+    onProgress(88, `Registering...`);
+    await supabase.from("studies").update({ state: "uploaded", uploaded_file_path: `blob:eeg-raw/${studyId}.edf` }).eq("id", studyId);
+
+    onProgress(93, `Triggering pipeline...`);
+    fetch(`${cplaneBase}/process`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ study_id: studyId }),
+    }).catch((err) => console.warn("C-Plane trigger failed:", err));
+
+    onProgress(100, "Done");
+    return studyId;
+  }, [userId, clinicId, selectedSla, patientData, edfMeta, file]);
+
+  // Submit the study (single or batch)
+  const handleSubmit = useCallback(async () => {
+    if (!file || !userId) {
+      systemFeedback.report({ severity: "error", what: "Cannot upload", why: "Missing authentication.", action: "Refresh and sign in." });
+      return;
+    }
+    if (!clinicId) { systemFeedback.noClinicAssigned(); return; }
+
+    const CPLANE_BASE = import.meta.env.VITE_CPLANE_BASE as string | undefined;
+    if (!CPLANE_BASE) {
+      systemFeedback.report({ severity: "error", what: "C-Plane not configured", why: "VITE_CPLANE_BASE is not set.", action: "Contact your administrator." });
       return;
     }
 
     setIsUploading(true);
     setUploadProgress(0);
-    setUploadStage("Uploading file...");
+
+    const filesToUpload = fileQueue.length > 1 ? fileQueue : [file];
+    const lastStudyIds: string[] = [];
 
     try {
-      // 1. Upload file to storage with timeout
-      const filePath = `${userId}/${Date.now()}_${file.name}`;
-      
-      setUploadProgress(10);
-
-      const uploadPromise = supabase.storage
-        .from("eeg-uploads")
-        .upload(filePath, file);
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("UPLOAD_TIMEOUT")), 60000)
-      );
-
-      const { error: uploadError } = await Promise.race([uploadPromise, timeoutPromise]);
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      setUploadProgress(50);
-      setUploadStage("Creating study record...");
-
-      // 2. Build comprehensive meta from EDF header + user input
-      const fileExt = file.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
-      const studyMeta: Record<string, any> = {
-        patient_name: patientData.patient_name || null,
-        patient_id: patientData.patient_id || null,
-        patient_age: patientData.patient_age ? parseInt(patientData.patient_age) : null,
-        patient_gender: patientData.patient_gender || null,
-        notes: patientData.notes || null,
-        original_filename: file.name,
-        file_size_bytes: file.size,
-      };
-
-      if (edfMeta) {
-        studyMeta.edf_patient_id = edfMeta.patient_id || null;
-        studyMeta.edf_recording_id = edfMeta.recording_id || null;
-        studyMeta.edf_start_date = edfMeta.start_date || null;
-        studyMeta.edf_start_time = edfMeta.start_time || null;
-        studyMeta.edf_num_channels = edfMeta.num_channels || null;
-        studyMeta.edf_sample_rate = edfMeta.sample_rate || null;
-        studyMeta.edf_duration_sec = edfMeta.duration_sec || null;
-        studyMeta.edf_channel_labels = edfMeta.channel_labels || null;
-      }
-
-      // 3. Create study record
-      const { data: study, error: studyError } = await supabase
-        .from("studies")
-        .insert({
-          owner: userId,
-          clinic_id: clinicId,
-          state: "uploaded",
-          sla: selectedSla,
-          uploaded_file_path: filePath,
-          original_format: fileExt,
-          indication: patientData.indication || null,
-          srate_hz: edfMeta?.sample_rate || null,
-          duration_min: edfMeta?.duration_sec ? Math.round(edfMeta.duration_sec / 60) : null,
-          meta: studyMeta,
-        })
-        .select("id")
-        .single();
-
-      if (studyError) {
-        systemFeedback.studyCreationFailed(studyError.message);
-        return;
-      }
-
-      setUploadProgress(75);
-      setUploadStage("Triggering analysis...");
-
-      // 4. Auto-trigger parse_eeg_study for EDF/BDF files
-      const isEdfBdf = EDF_BDF_EXTENSIONS.includes(
-        file.name.toLowerCase().slice(file.name.lastIndexOf("."))
-      );
-
-      if (isEdfBdf && study?.id) {
-        try {
-          await supabase.functions.invoke("parse_eeg_study", {
-            body: {
-              study_id: study.id,
-              file_path: filePath,
-              file_type: file.name.toLowerCase().endsWith(".bdf") ? "bdf" : "edf",
-            },
-          });
-        } catch (parseErr) {
-          systemFeedback.parseEdgeFunctionFailed(
-            parseErr instanceof Error ? parseErr.message : String(parseErr)
-          );
-        }
-      }
-
-      setUploadProgress(100);
-      setUploadStage("Complete");
-
-      // Kick off metadata extraction (fire-and-forget — don't block navigation)
-      supabase.functions.invoke("parse_eeg_study", {
-        body: {
-          study_id: study.id,
-          file_path: filePath,
-          file_type: (file.name.split(".").pop()?.toLowerCase() || "edf") as "edf" | "bdf",
-        },
-      }).catch((err) => console.warn("parse_eeg_study failed:", err));
-
-      systemFeedback.report({
-        severity: "info",
-        what: "Study uploaded successfully",
-        why: isProprietaryFormat
-          ? "Proprietary format saved. Export as EDF for immediate analysis."
-          : "Metadata extracted. Study is ready for triage.",
-        action: "Redirecting to study detail...",
-      });
-
-      onOpenChange(false);
-      resetWizard();
-      navigate(`/app/studies/${study.id}`);
-
-    } catch (error: any) {
-      if (error?.message === "UPLOAD_TIMEOUT") {
-        systemFeedback.uploadTimeout();
+      if (filesToUpload.length === 1) {
+        // Single-file path — navigate to study on completion
+        setUploadStage("Starting upload...");
+        const studyId = await uploadOneFile(filesToUpload[0], CPLANE_BASE, (pct, stage) => {
+          setUploadProgress(pct);
+          setUploadStage(stage);
+        });
+        lastStudyIds.push(studyId);
+        systemFeedback.report({
+          severity: "info",
+          what: "Study uploaded",
+          why: isProprietaryFormat ? "Proprietary format — export as EDF for analysis." : "Analysis pipeline started.",
+          action: "Opening study...",
+        });
+        onOpenChange(false);
+        resetWizard();
+        navigate(`/app/studies/${studyId}`);
       } else {
-        systemFeedback.uploadFailed(error?.message || String(error));
+        // Batch path — upload all files, show queue progress
+        const progress = filesToUpload.map(f => ({ name: f.name, status: "pending" as const }));
+        setBatchProgress(progress);
+        let completed = 0;
+
+        for (let i = 0; i < filesToUpload.length; i++) {
+          setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "uploading" } : p));
+          try {
+            const studyId = await uploadOneFile(filesToUpload[i], CPLANE_BASE, (pct, stage) => {
+              setUploadProgress(Math.round(((i + pct / 100) / filesToUpload.length) * 100));
+              setUploadStage(`[${i + 1}/${filesToUpload.length}] ${stage}`);
+            });
+            lastStudyIds.push(studyId);
+            completed++;
+            setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "done" } : p));
+          } catch (e: any) {
+            setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "error" } : p));
+          }
+        }
+
+        systemFeedback.report({
+          severity: "info",
+          what: `${completed}/${filesToUpload.length} studies uploaded`,
+          why: "Analysis pipelines started for all uploaded files.",
+          action: "Opening studies list...",
+        });
+        onOpenChange(false);
+        resetWizard();
+        navigate("/app/studies");
       }
+    } catch (error: any) {
+      if (error?.message === "UPLOAD_TIMEOUT") systemFeedback.uploadTimeout();
+      else systemFeedback.uploadFailed(error?.message || String(error));
     } finally {
       setIsUploading(false);
       setUploadStage("");
     }
-  }, [file, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, navigate, onOpenChange, resetWizard]);
+  }, [file, fileQueue, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, uploadOneFile, navigate, onOpenChange, resetWizard]);
 
   // Validation
   const canProceedStep1 = !!file;
@@ -549,15 +594,44 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 accept={ALL_ACCEPTED_EXTENSIONS.join(",")}
                 className="hidden"
                 onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) handleFileSelect(f);
+                  const files = Array.from(e.target.files ?? []);
+                  if (files.length === 1) {
+                    handleFileSelect(files[0]);
+                  } else if (files.length > 1) {
+                    const valid = files.filter(f => ALL_ACCEPTED_EXTENSIONS.includes(f.name.toLowerCase().slice(f.name.lastIndexOf("."))));
+                    if (valid.length > 0) {
+                      setFile(valid[0]);
+                      setFileQueue(valid);
+                      setBatchProgress(valid.map(f => ({ name: f.name, status: "pending" as const })));
+                    }
+                  }
                 }}
               />
-              
-              {file ? (
+
+              {fileQueue.length > 1 ? (
+                /* Batch file list */
+                <div className="space-y-2 w-full text-left" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-medium">{fileQueue.length} files selected</p>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={(e) => { e.stopPropagation(); setFile(null); setFileQueue([]); setBatchProgress([]); }}>
+                      <X className="h-3 w-3 mr-1" /> Clear
+                    </Button>
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {fileQueue.map((f, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs bg-muted/50 rounded px-2 py-1">
+                        <span className="truncate max-w-[200px] font-mono">{f.name}</span>
+                        <span className="text-muted-foreground ml-2 shrink-0">{(f.size / (1024 * 1024)).toFixed(1)} MB</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">All files will be uploaded with the same patient info and SLA.</p>
+                </div>
+              ) : file ? (
                 <div className="space-y-2">
                   <CheckCircle2 className="h-10 w-10 mx-auto text-primary" />
                   <p className="font-medium">{file.name}</p>
@@ -582,6 +656,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     onClick={(e) => {
                       e.stopPropagation();
                       setFile(null);
+                      setFileQueue([]);
                       setEdfMeta(null);
                       setIsProprietaryFormat(false);
                       setAutoFilledFields(new Set());
@@ -594,10 +669,11 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               ) : (
                 <>
                   <FileUp className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-                  <p className="font-medium">Drop your EEG file here</p>
+                  <p className="font-medium">Drop EEG file(s) here</p>
                   <p className="text-sm text-muted-foreground mt-1">
                     or click to browse • EDF, BDF, Natus (.e), NK (.nk, .eeg, .21e), CNT
                   </p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Multiple files supported for batch upload</p>
                 </>
               )}
             </div>
@@ -768,6 +844,21 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                   <span className="font-mono text-xs">{uploadProgress}%</span>
                 </div>
                 <Progress value={uploadProgress} />
+                {batchProgress.length > 1 && (
+                  <div className="space-y-1 mt-1">
+                    {batchProgress.map((bp, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        {bp.status === "done" && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
+                        {bp.status === "uploading" && <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                        {bp.status === "pending" && <span className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+                        {bp.status === "error" && <AlertCircle className="h-3 w-3 text-destructive shrink-0" />}
+                        <span className={`truncate ${bp.status === "done" ? "text-muted-foreground line-through" : bp.status === "error" ? "text-destructive" : ""}`}>
+                          {bp.name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -788,7 +879,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-2" />
-                    Upload Study
+                    {fileQueue.length > 1 ? `Upload ${fileQueue.length} Studies` : "Upload Study"}
                   </>
                 )}
               </Button>

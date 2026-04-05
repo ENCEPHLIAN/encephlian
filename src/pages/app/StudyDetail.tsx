@@ -33,6 +33,7 @@ import {
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import TriageReportView from "@/components/report/TriageReportView";
+import MindReportView from "@/components/report/MindReportView";
 import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -71,6 +72,8 @@ export default function StudyDetail() {
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
 
+  const IPLANE_BASE = import.meta.env.VITE_IPLANE_BASE as string | undefined;
+
   const { data: study, isLoading, isError, refetch } = useQuery({
     queryKey: ["study-detail", id],
     queryFn: async () => {
@@ -94,57 +97,57 @@ export default function StudyDetail() {
     retry: 1,
   });
 
-  // Run AI Triage - uses proxy for PILOT, calls inference endpoint
+  // Fetch MIND® report from I-Plane blob (mind.report.v1 format)
+  const { data: mindReport, isLoading: mindLoading, refetch: refetchMind } = useQuery({
+    queryKey: ["mind-report", id],
+    queryFn: async () => {
+      if (!IPLANE_BASE || !id) return null;
+      const res = await fetch(`${IPLANE_BASE}/mind/report/${id}`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!id && !!IPLANE_BASE,
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  // Run the full MIND® pipeline directly on I-Plane
   const handleRunAITriage = async () => {
-    if (!study?.study_key) {
-      toast({ 
-        title: "Study key missing", 
-        description: "This study is not linked to the inference pipeline.",
-        variant: "destructive" 
+    if (!id) return;
+    if (!IPLANE_BASE) {
+      toast({
+        title: "I-Plane not configured",
+        description: "VITE_IPLANE_BASE is not set.",
+        variant: "destructive",
       });
       return;
     }
 
     setRunningTriage(true);
     try {
-      toast({ title: "Starting AI Triage...", description: "Calling inference pipeline" });
+      toast({ title: "Starting MIND® analysis...", description: "Calling I-Plane inference" });
 
-      // Use proxy for PILOT SKU
-      const proxyBase = capabilities.mustUseReadApiProxy 
-        ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/read_api_proxy`
-        : undefined;
-
-      const result = await fetchJson<{ run_id: string }>(
-        `/studies/${study.study_key}/inference/run`,
-        { 
-          base: proxyBase, 
-          requireKey: !capabilities.mustUseReadApiProxy,
-          method: 'POST'
-        }
-      );
-
-      if (!result.ok) {
-        throw new Error('error' in result ? result.error : "Inference failed");
+      const res = await fetch(`${IPLANE_BASE}/mind/run/${id}`, { method: "POST" });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`I-Plane returned ${res.status}: ${body}`);
       }
 
-      const runId = result.data.run_id;
+      const report = await res.json();
 
-      // Update study with latest_run_id
+      // Cache the report in study.ai_draft_json so it persists in Supabase
       await supabase
         .from("studies")
-        .update({ latest_run_id: runId, state: 'processing' })
-        .eq("id", study.id);
+        .update({ ai_draft_json: report, state: "ai_draft" })
+        .eq("id", id);
 
-      toast({ 
-        title: "AI Triage started", 
-        description: `Run ID: ${runId.slice(0, 8)}...` 
-      });
-
+      toast({ title: "MIND® analysis complete", description: report.score?.summary?.slice(0, 80) });
       refetch();
+      refetchMind();
     } catch (error) {
       console.error("Triage error:", error);
       toast({
-        title: "Triage failed",
+        title: "Analysis failed",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
@@ -289,6 +292,22 @@ export default function StudyDetail() {
                 <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"}>
                   {study.sla}
                 </Badge>
+                {(() => {
+                  const activeReport = mindReport?.schema_version === "mind.report.v1" ? mindReport
+                    : (study.ai_draft_json as any)?.schema_version === "mind.report.v1" ? study.ai_draft_json
+                    : null;
+                  if (!activeReport) return null;
+                  const cls = activeReport.triage?.classification;
+                  const conf = activeReport.triage?.confidence;
+                  if (!cls || cls === "unknown") return null;
+                  return (
+                    <Badge className={cls === "abnormal" ? "bg-destructive text-destructive-foreground" : "bg-emerald-500 text-white"}>
+                      <Brain className="h-3 w-3 mr-1" />
+                      {cls.toUpperCase()}
+                      {conf != null && ` ${(conf * 100).toFixed(0)}%`}
+                    </Badge>
+                  );
+                })()}
                 {study.sample && (
                   <Badge variant="outline" className="border-amber-500/50 text-amber-600">
                     <FlaskConical className="h-3 w-3 mr-1" />
@@ -306,16 +325,16 @@ export default function StudyDetail() {
 
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild>
-                <Link to={`/app/eeg-viewer?studyId=${study.study_key || study.id}`}>
+                <Link to={`/app/eeg-viewer?studyId=${study.id}`}>
                   <Activity className="h-4 w-4 mr-2" />
                   Open Viewer
                 </Link>
               </Button>
               
-              {/* Run AI Triage - internal SKU only (pilot uses SLA modal from dashboard) */}
-              {!isPilot && can('canRunInference') && study.study_key && study.state !== 'signed' && study.state !== 'processing' && (
-                <Button 
-                  onClick={handleRunAITriage} 
+              {/* Run MIND® Analysis — available for all SKUs when I-Plane is configured */}
+              {IPLANE_BASE && study.state !== 'signed' && (
+                <Button
+                  onClick={handleRunAITriage}
                   disabled={runningTriage}
                   className="bg-primary"
                 >
@@ -324,7 +343,7 @@ export default function StudyDetail() {
                   ) : (
                     <Brain className="h-4 w-4 mr-2" />
                   )}
-                  Run AI Triage
+                  Run MIND® Analysis
                 </Button>
               )}
               
@@ -380,7 +399,7 @@ export default function StudyDetail() {
       </Card>
 
       {/* Tabs for different sections */}
-      <Tabs defaultValue={isPilot && study.ai_draft_json ? "ai-analysis" : "overview"} className="space-y-4">
+      <Tabs defaultValue={(study.ai_draft_json || mindReport) ? "ai-analysis" : "overview"} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {!isPilot && (
@@ -389,7 +408,7 @@ export default function StudyDetail() {
             </TabsTrigger>
           )}
           <TabsTrigger value="ai-analysis">
-            MIND®Triage {study.ai_draft_json && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            MIND® {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
           {!isPilot && (
             <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
@@ -494,37 +513,6 @@ export default function StudyDetail() {
             </Card>
           </div>
 
-          {/* Technical Details */}
-          {canonicalRecord && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-primary" />
-                  Technical Details (Canonical Record)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Schema Version</p>
-                    <p className="font-medium font-mono text-sm">{canonicalRecord.schema_version}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Native Sample Rate</p>
-                    <p className="font-medium">{canonicalRecord.native_sampling_hz || "—"} Hz</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Model Sample Rate</p>
-                    <p className="font-medium">{canonicalRecord.sfreq_model || "—"} Hz</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Tensor Path</p>
-                    <p className="font-medium font-mono text-xs truncate">{canonicalRecord.tensor_path}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* Report Tab */}
@@ -643,20 +631,31 @@ export default function StudyDetail() {
           )}
         </TabsContent>
 
-        {/* AI Analysis Tab — MIND®Triage */}
+        {/* AI Analysis Tab — MIND® Pipeline results */}
         <TabsContent value="ai-analysis">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                MIND®Triage
+                MIND® Analysis
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Quantitative EEG markers — clinician interprets
+                Triage · Clean · Seizure · SCORE — clinician interprets
               </p>
             </CardHeader>
             <CardContent>
-              {study.ai_draft_json ? (
+              {/* Priority: live blob report > cached ai_draft_json > empty state */}
+              {mindLoading ? (
+                <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="text-sm">Loading analysis...</span>
+                </div>
+              ) : mindReport?.schema_version === "mind.report.v1" ? (
+                <MindReportView report={mindReport} studyId={study.id} />
+              ) : study.ai_draft_json && (study.ai_draft_json as any).schema_version === "mind.report.v1" ? (
+                <MindReportView report={study.ai_draft_json} studyId={study.id} />
+              ) : study.ai_draft_json ? (
+                // Legacy format (old TriageReportView schema)
                 <TriageReportView
                   data={study.ai_draft_json}
                   studyId={study.id}
@@ -668,14 +667,15 @@ export default function StudyDetail() {
                 <div className="text-center py-10 space-y-3">
                   <Brain className="h-10 w-10 mx-auto text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground">
-                    {isPilot 
-                      ? "Triage data will appear here once analysis is complete." 
-                      : "No triage data yet. Generate an AI report to see MIND®Triage results."}
+                    No analysis yet.
+                    {IPLANE_BASE
+                      ? " Click \"Run MIND® Analysis\" to start."
+                      : " Upload an EDF file and wait for the pipeline to complete."}
                   </p>
-                  {!isPilot && canGenerateReport && (
-                    <Button onClick={handleGenerateAIReport} disabled={generating} size="sm">
-                      {generating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Zap className="h-4 w-4 mr-2" />}
-                      Generate MIND®Triage
+                  {IPLANE_BASE && (
+                    <Button onClick={handleRunAITriage} disabled={runningTriage} size="sm">
+                      {runningTriage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
+                      Run MIND® Analysis
                     </Button>
                   )}
                 </div>

@@ -373,8 +373,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
       const x1 = (s0 / timeWindow) * w;
       const x2 = (s1 / timeWindow) * w;
-      const bg = showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBgRed;
-      const br = showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorderRed;
+      const bg = (a as any).color ?? (showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBgRed);
+      const br = (a as any).borderColor ?? (showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorderRed);
 
       const affected = a.channel != null ? [a.channel] : channels;
       for (const chIdx of affected) {
@@ -395,6 +395,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           "pointer-events:none",
           "box-sizing:border-box",
         ].join(";");
+        if ((a as any).label) el.title = (a as any).label;
         artifactRef.current?.appendChild(el);
       }
     }
