@@ -370,67 +370,72 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
     const studyId = study.id;
 
-    onProgress(10, `Getting upload token...`);
-    const tokenRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
-    if (!tokenRes.ok) throw new Error(`Token failed: ${tokenRes.status}`);
-    const { sas_url: sasUrl } = await tokenRes.json();
+    // ── Upload to Supabase edge storage (no SAS roundtrip) ─────────
+    onProgress(10, `Uploading ${targetFile.name}...`);
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token ?? "";
+    const storagePath = `${studyId}.edf`;
+    const storageUploadUrl = `${supabaseUrl}/storage/v1/object/eeg-raw/${storagePath}`;
 
-    onProgress(15, `Uploading ${targetFile.name}...`);
-    const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB blocks
-    if (targetFile.size <= 25 * 1024 * 1024) {
-      // Single PUT for files ≤ 25MB
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) onProgress(15 + Math.round((e.loaded / e.total) * 70), `Uploading ${targetFile.name}...`);
-        };
-        xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: HTTP ${xhr.status}`));
-        xhr.onerror = () => reject(new Error("Network error during upload"));
-        xhr.timeout = 300000; // 5 min
-        xhr.ontimeout = () => reject(new Error("UPLOAD_TIMEOUT"));
-        xhr.open("PUT", sasUrl);
-        xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
-        xhr.setRequestHeader("Content-Type", "application/octet-stream");
-        xhr.send(targetFile);
-      });
-    } else {
-      // Chunked block upload for large files
-      const totalBlocks = Math.ceil(targetFile.size / CHUNK_SIZE);
-      const blockIds: string[] = [];
-      for (let i = 0; i < totalBlocks; i++) {
-        const blockId = btoa(`block-${String(i).padStart(6, "0")}`);
-        blockIds.push(blockId);
-        const start = i * CHUNK_SIZE;
-        const chunk = targetFile.slice(start, Math.min(start + CHUNK_SIZE, targetFile.size));
-        const blockUrl = `${sasUrl}&comp=block&blockid=${encodeURIComponent(blockId)}`;
-        const res = await fetch(blockUrl, {
-          method: "PUT",
-          headers: { "x-ms-blob-type": "BlockBlob", "Content-Type": "application/octet-stream" },
-          body: chunk,
-        });
-        if (!res.ok) throw new Error(`Block ${i} upload failed: HTTP ${res.status}`);
-        onProgress(15 + Math.round(((i + 1) / totalBlocks) * 68), `Uploading ${targetFile.name} — block ${i + 1}/${totalBlocks}`);
-      }
-      // Commit block list
-      const blockListXml = `<?xml version="1.0" encoding="utf-8"?><BlockList>${blockIds.map(id => `<Latest>${id}</Latest>`).join("")}</BlockList>`;
-      const commitUrl = `${sasUrl}&comp=blocklist`;
-      const commitRes = await fetch(commitUrl, {
-        method: "PUT",
-        headers: { "Content-Type": "application/xml" },
-        body: blockListXml,
-      });
-      if (!commitRes.ok) throw new Error(`Block list commit failed: HTTP ${commitRes.status}`);
-    }
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable)
+          onProgress(10 + Math.round((e.loaded / e.total) * 72), `Uploading ${targetFile.name}...`);
+      };
+      xhr.onload = () =>
+        xhr.status >= 200 && xhr.status < 300
+          ? resolve()
+          : reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.timeout = 600000; // 10 min for large files
+      xhr.ontimeout = () => reject(new Error("UPLOAD_TIMEOUT"));
+      xhr.open("POST", storageUploadUrl);
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.setRequestHeader("x-upsert", "true");
+      xhr.send(targetFile);
+    });
 
-    onProgress(88, `Registering...`);
-    await supabase.from("studies").update({ state: "uploaded", uploaded_file_path: `blob:eeg-raw/${studyId}.edf` }).eq("id", studyId);
+    onProgress(84, `Registering...`);
+    await supabase
+      .from("studies")
+      .update({ state: "uploaded", uploaded_file_path: `supabase:eeg-raw/${storagePath}` })
+      .eq("id", studyId);
 
-    onProgress(93, `Triggering pipeline...`);
+    // ── Get signed URL for C-Plane to download the file ─────────
+    const { data: signedData } = await supabase.storage
+      .from("eeg-raw")
+      .createSignedUrl(storagePath, 3600);
+    const sourceUrl = signedData?.signedUrl ?? "";
+
+    onProgress(90, `Triggering pipeline...`);
+    // C-Plane: canonicalize in background (for EEG viewer)
     fetch(`${cplaneBase}/process`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ study_id: studyId }),
+      body: JSON.stringify({ study_id: studyId, source_url: sourceUrl }),
     }).catch((err) => console.warn("C-Plane trigger failed:", err));
+
+    // I-Plane: fast triage directly from raw EDF bytes (fire-and-forget)
+    const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
+    if (iplaneBase) {
+      const form = new FormData();
+      form.append("file", targetFile, targetFile.name);
+      form.append("study_id", studyId);
+      fetch(`${iplaneBase}/mind/run-edf`, { method: "POST", body: form })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((report) => {
+          if (!report) return;
+          supabase.from("studies").update({
+            triage_status: "completed",
+            triage_progress: 100,
+            ai_draft_json: report,
+          }).eq("id", studyId).then(() => {});
+        })
+        .catch((e) => console.warn("[upload] I-Plane fast triage failed:", e));
+    }
 
     onProgress(100, "Done");
     return studyId;

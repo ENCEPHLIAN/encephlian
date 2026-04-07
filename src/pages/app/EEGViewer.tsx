@@ -3,13 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
+import { supabase } from "@/integrations/supabase/client";
+import { EdfChunkReader } from "@/lib/eeg/edf-reader";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // If the resolved API base is a local address, skip the key requirement.
@@ -140,6 +142,11 @@ export default function EEGViewer() {
   const cache       = useRef<Map<string, number[][]>>(new Map());
   const reqId       = useRef(0);
   const didSeek     = useRef(false);
+  // Raw EDF fallback — set when canonical zarr not yet available
+  const edfReader   = useRef<EdfChunkReader | null>(null);
+  const [rawEdfMode, setRawEdfMode] = useState(false);
+  // Upgrade polling: once in raw mode, check if canonical becomes available
+  const upgradeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const globalTime = windowStart + cursor;
@@ -198,19 +205,78 @@ export default function EEGViewer() {
   useEffect(() => {
     let alive = true;
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
-    setWindowStart(0); setCursor(0); setFatalError(null);
-    cache.current.clear(); didSeek.current = false;
+    setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
+    cache.current.clear(); didSeek.current = false; edfReader.current = null;
+    if (upgradeTimerRef.current) { clearInterval(upgradeTimerRef.current); upgradeTimerRef.current = null; }
 
     if (!studyId) { setLoadingMeta(false); return; }
 
     setLoadingMeta(true);
 
-    fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY })
-      .then(r => { if (!alive) return; if (!r.ok) throw new Error(r.error); setMeta((r.data?.meta ?? r.data) as Meta); })
-      .catch(e => { if (alive) setFatalError(String(e?.message || e)); })
+    const tryCanonical = () =>
+      fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY });
+
+    const tryRawEdf = async () => {
+      // Download EDF from Supabase storage and use EdfChunkReader for immediate display
+      const { data: blob, error } = await supabase.storage
+        .from("eeg-raw")
+        .download(`${studyId}.edf`);
+      if (error || !blob) {
+        // Try .bdf
+        const { data: blobB, error: errB } = await supabase.storage
+          .from("eeg-raw")
+          .download(`${studyId}.bdf`);
+        if (errB || !blobB) throw new Error("EDF not found in edge storage");
+        return blobB;
+      }
+      return blob;
+    };
+
+    tryCanonical()
+      .then(r => {
+        if (!alive) return;
+        if (!r.ok) throw new Error(r.error ?? "read-api-fail");
+        setMeta((r.data?.meta ?? r.data) as Meta);
+      })
+      .catch(async () => {
+        if (!alive) return;
+        // Canonical zarr not ready — fall back to raw EDF from Supabase storage
+        try {
+          const blob = await tryRawEdf();
+          if (!alive) return;
+          const buf = await blob.arrayBuffer();
+          const reader = new EdfChunkReader(buf);
+          edfReader.current = reader;
+          setMeta({
+            n_channels: reader.nChannels,
+            sampling_rate_hz: reader.sampleRate,
+            n_samples: reader.totalSamples,
+            channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+          });
+          setRawEdfMode(true);
+          setFatalError(null);
+
+          // Poll for canonical upgrade every 30s
+          upgradeTimerRef.current = setInterval(async () => {
+            const r2 = await tryCanonical().catch(() => ({ ok: false }));
+            if (r2.ok) {
+              if (upgradeTimerRef.current) clearInterval(upgradeTimerRef.current);
+              edfReader.current = null;
+              cache.current.clear();
+              setRawEdfMode(false);
+              setMeta((r2 as any).data?.meta ?? (r2 as any).data);
+            }
+          }, 30000);
+        } catch (e2) {
+          if (alive) setFatalError(String((e2 as Error)?.message || e2));
+        }
+      })
       .finally(() => { if (alive) setLoadingMeta(false); });
 
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+      if (upgradeTimerRef.current) { clearInterval(upgradeTimerRef.current); upgradeTimerRef.current = null; }
+    };
   }, [studyId]);
 
   // ── Effects: overlays ─────────────────────────────────────────────────────────
@@ -250,6 +316,21 @@ export default function EEGViewer() {
 
     setLoadingWin(true);
     const id = ++reqId.current;
+
+    // ── Raw EDF mode: serve chunks from in-memory reader ──────────
+    if (edfReader.current) {
+      try {
+        const sig = edfReader.current.getChunk(startSamp, len);
+        if (id === reqId.current) {
+          cache.current.set(k, sig);
+          setSignals(sig);
+          setLoadingWin(false);
+        }
+      } catch (e) {
+        if (id === reqId.current) setFatalError(String(e));
+      }
+      return;
+    }
 
     fetchChunk(studyId, startSamp, len)
       .then(r => {
@@ -465,6 +546,17 @@ export default function EEGViewer() {
   // ── Render: main ──────────────────────────────────────────────────────────────
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background" tabIndex={-1}>
+
+      {/* ── Raw EDF mode banner ── */}
+      {rawEdfMode && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
+          <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+          <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+            Showing raw signal — enhanced canonical view processing in background
+          </span>
+          <Loader2 className="h-3 w-3 text-amber-500 animate-spin shrink-0" />
+        </div>
+      )}
 
       {/* ── Focused segment banner ── */}
       {focusedSeg && (
