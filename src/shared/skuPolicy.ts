@@ -115,8 +115,8 @@ export function hasCapability(sku: SkuTier | string | null | undefined, capabili
  * SKU display labels for admin UI
  */
 export const SKU_LABELS: Record<SkuTier, string> = {
-  internal: 'Internal',
-  pilot: 'Pilot',
+  internal: 'ENCEPHLIAN',
+  pilot: 'ENCEPHLIAN',
 };
 
 /**
