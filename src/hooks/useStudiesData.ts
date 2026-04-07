@@ -55,7 +55,7 @@ export function useStudiesData(stateFilter: string) {
   useEffect(() => {
     if (channelRef.current || !isAuthenticated || !userId) return;
 
-    const debounceTimerRef = { current: null as NodeJS.Timeout | null };
+    const debounceTimerRef = { current: null as ReturnType<typeof setTimeout> | null };
 
     channelRef.current = supabase
       .channel(`studies-realtime-${userId}`)

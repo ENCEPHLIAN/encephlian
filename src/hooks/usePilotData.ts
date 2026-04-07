@@ -95,7 +95,7 @@ export function usePilotData() {
   useEffect(() => {
     if (channelRef.current || !isAuthenticated || !userId) return;
 
-    let debounce: NodeJS.Timeout | null = null;
+    let debounce: ReturnType<typeof setTimeout> | null = null;
 
     channelRef.current = supabase
       .channel(`pilot-rt-${userId}`)

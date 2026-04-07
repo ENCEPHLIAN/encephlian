@@ -334,7 +334,7 @@ export default function EEGViewer() {
 
     fetchChunk(studyId, startSamp, len)
       .then(r => {
-        if (!r.ok) throw new Error(r.error);
+        if (!r.ok) throw new Error((r as any).error);
         const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
         const nSamp = isFinite(hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"])) ? hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]) : len;
         const f32   = new Float32Array(r.data);
