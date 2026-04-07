@@ -235,7 +235,7 @@ export default function EEGViewer() {
     tryCanonical()
       .then(r => {
         if (!alive) return;
-        if (!r.ok) throw new Error(r.error ?? "read-api-fail");
+        if (!r.ok) throw new Error((r as any).error ?? "read-api-fail");
         setMeta((r.data?.meta ?? r.data) as Meta);
       })
       .catch(async () => {
