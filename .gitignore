@@ -26,3 +26,8 @@ dist-ssr
 # Local env backups
 .env.local.bak
 .env.local
+
+# Environment variables (set in CI/Vercel/Azure)
+.env
+.env.local
+.env.*.local
