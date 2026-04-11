@@ -13,7 +13,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 
 const emailSchema = z.string().email("Invalid email address");
 
-type Mode = "signin" | "forgot" | "signup";
+type Mode = "signin" | "forgot";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -77,23 +77,6 @@ export default function Login() {
         description: error.message || "An error occurred. Please try again.",
         variant: "destructive",
       });
-      setIsLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const isEmailValid = validateEmail(email);
-    if (!isEmailValid) return;
-    setIsLoading(true);
-    try {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) throw error;
-      toast({ title: "Account created", description: "You can now sign in." });
-      setMode("signin");
-    } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } finally {
       setIsLoading(false);
     }
   };
@@ -276,73 +259,15 @@ export default function Login() {
                   </Button>
                 </form>
 
-                <div className="mt-4 text-center space-y-2">
+                <div className="mt-4 text-center">
                   <button
                     type="button"
                     onClick={() => { setMode("forgot"); setResetSent(false); }}
-                    className="text-sm text-muted-foreground hover:text-foreground underline block w-full"
+                    className="text-sm text-muted-foreground hover:text-foreground underline"
                   >
                     Forgot your password?
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode("signup")}
-                    className="text-sm text-muted-foreground hover:text-foreground underline block w-full"
-                  >
-                    Create account
-                  </button>
                 </div>
-              </div>
-            )}
-
-            {/* SIGN UP CARD */}
-            {mode === "signup" && (
-              <div className="w-full max-w-md bg-card/50 backdrop-blur-sm border-0 rounded-lg p-8 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => setMode("signin")}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
-                >
-                  <ArrowLeft size={16} />
-                  Back to sign in
-                </button>
-                <form onSubmit={handleSignUp} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email-signup">Email</Label>
-                    <Input
-                      id="email-signup"
-                      type="email"
-                      placeholder="Enter your email"
-                      value={email}
-                      onChange={(e) => { setEmail(e.target.value); validateEmail(e.target.value); }}
-                      required
-                    />
-                    {emailError && <p className="text-sm text-destructive">{emailError}</p>}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password-signup">Password</Label>
-                    <div className="relative">
-                      <Input
-                        id="password-signup"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Choose a password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                      >
-                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                      </button>
-                    </div>
-                  </div>
-                  <Button type="submit" className="w-full mt-6" disabled={isLoading}>
-                    {isLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create Account"}
-                  </Button>
-                </form>
               </div>
             )}
 
