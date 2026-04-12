@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { UserSessionProvider } from "@/contexts/UserSessionContext";
+import { Analytics } from "@vercel/analytics/react";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -131,6 +132,7 @@ function App() {
           </TooltipProvider>
         </UserSessionProvider>
       </ThemeProvider>
+      <Analytics />
     </QueryClientProvider>
   );
 }
