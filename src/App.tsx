@@ -1,3 +1,4 @@
+import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "@/components/ui/toaster";
 import AdminCleanup from "@/pages/admin/AdminCleanup";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
@@ -131,6 +132,7 @@ function App() {
           </TooltipProvider>
         </UserSessionProvider>
       </ThemeProvider>
+      <Analytics />
     </QueryClientProvider>
   );
 }
