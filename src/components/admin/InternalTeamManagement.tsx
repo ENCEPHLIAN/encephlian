@@ -105,21 +105,9 @@ export default function InternalTeamManagement() {
     );
   }
 
-  // Only super_admin can see this component - management cannot create management users
+  // Only super_admin can see this component
   if (!isSuperAdmin) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            Internal Team (ENCEPHLIAN)
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground text-sm">Only super_admin can manage internal team members.</p>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (

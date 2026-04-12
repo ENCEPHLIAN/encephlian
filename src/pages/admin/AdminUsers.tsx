@@ -381,7 +381,9 @@ export default function AdminUsers() {
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    <span className="font-mono text-sm">{user.tokens}</span>
+                    <span className="font-mono text-sm">
+                      {isSystemRole(user) ? "—" : user.tokens}
+                    </span>
                   </TableCell>
                   <TableCell>
                     {user.is_disabled ? (

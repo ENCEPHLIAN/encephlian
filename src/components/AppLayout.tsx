@@ -340,7 +340,7 @@ export default function AppLayout() {
                 <DropdownMenuContent align="end" className="w-64 p-2">
                   <div className="px-2 py-3 border-b border-border/50 mb-2">
                     <p className="font-medium text-sm">{userName}</p>
-                    <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "Clinical Portal"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "ENCEPHLIAN"}</p>
                   </div>
                   
                   <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">
