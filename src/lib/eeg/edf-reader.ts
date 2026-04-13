@@ -17,8 +17,14 @@ export class EdfChunkReader {
   private hdr: EDFHeader;
   private sigHdrs: EDFSignalHeader[];
   private scales: { gain: number; offset: number }[];
-  /** Byte size of one full EDF record (all channels interleaved) */
+  /** Byte size of one full EDF record (all channels interleaved, including non-EEG) */
   private bytesPerRecord: number;
+  /** Byte offset of each channel within a single record */
+  private chByteOffsetInRecord: number[];
+  /** Indices into sigHdrs that are actual EEG channels (same spr as primary, not annotations) */
+  private eegIdx: number[];
+  /** Samples-per-record for the primary EEG channels */
+  private primarySpr: number;
 
   constructor(buffer: ArrayBuffer) {
     this.view = new DataView(buffer);
@@ -93,19 +99,51 @@ export class EdfChunkReader {
     });
 
     this.bytesPerRecord = this.sigHdrs.reduce((acc, s) => acc + s.numSamplesPerRecord * 2, 0);
+
+    // ── Pre-compute per-channel byte offset within a record ───────
+    this.chByteOffsetInRecord = new Array(ns);
+    let byteOff = 0;
+    for (let i = 0; i < ns; i++) {
+      this.chByteOffsetInRecord[i] = byteOff;
+      byteOff += this.sigHdrs[i].numSamplesPerRecord * 2;
+    }
+
+    // ── Identify EEG channels ─────────────────────────────────────
+    // Exclude EDF Annotations channels (EDF+ standard) and channels
+    // with wildly different sample rates (stimuli, EMG etc at different Fs).
+    // Primary spr = most common spr among non-annotation channels.
+    const nonAnnot = this.sigHdrs
+      .map((s, i) => ({ i, s }))
+      .filter(({ s }) => !s.label.toLowerCase().includes("edf annotations"));
+
+    if (nonAnnot.length === 0) {
+      // Degenerate file — use all channels
+      this.primarySpr = this.sigHdrs[0]?.numSamplesPerRecord ?? 256;
+      this.eegIdx = this.sigHdrs.map((_, i) => i);
+    } else {
+      // Pick the spr that appears most often (handles files with a lone different-rate channel)
+      const sprCount = new Map<number, number>();
+      for (const { s } of nonAnnot) sprCount.set(s.numSamplesPerRecord, (sprCount.get(s.numSamplesPerRecord) ?? 0) + 1);
+      let bestSpr = nonAnnot[0].s.numSamplesPerRecord;
+      let bestCount = 0;
+      for (const [sp, cnt] of sprCount) { if (cnt > bestCount) { bestSpr = sp; bestCount = cnt; } }
+      this.primarySpr = bestSpr;
+      this.eegIdx = nonAnnot.filter(({ s }) => s.numSamplesPerRecord === bestSpr).map(({ i }) => i);
+    }
   }
 
-  get nChannels() { return this.hdr.numSignals; }
+  /** Number of EEG channels (excludes annotation/mixed-rate channels) */
+  get nChannels() { return this.eegIdx.length; }
 
-  /** Samples per second (from first signal) */
+  /** Samples per second */
   get sampleRate() {
     const dur = this.hdr.dataRecordDuration;
-    return dur > 0 ? this.sigHdrs[0].numSamplesPerRecord / dur : 256;
+    return dur > 0 ? this.primarySpr / dur : 256;
   }
 
-  /** Total samples per channel */
+  /** Total samples per EEG channel */
   get totalSamples() {
-    return this.hdr.numDataRecords * this.sigHdrs[0].numSamplesPerRecord;
+    return this.hdr.numDataRecords * this.primarySpr;
   }
 
   get duration() {
@@ -113,22 +151,21 @@ export class EdfChunkReader {
   }
 
   get labels(): string[] {
-    return this.sigHdrs.map((s) => s.label);
+    return this.eegIdx.map((i) => this.sigHdrs[i].label.replace(/\.+$/, "").trim());
   }
 
   get patientId() { return this.hdr.patientId; }
 
   /**
-   * Read `nSamples` samples for all channels starting at `startSample`.
-   * Returns number[][] shaped [nChannels][nSamples].
-   * Only reads the necessary byte ranges from the ArrayBuffer.
+   * Read `nSamples` samples for all EEG channels starting at `startSample`.
+   * Returns number[][] shaped [nEegChannels][nSamples].
+   * Zeroes are returned for out-of-range positions (pre/post padding).
    */
   getChunk(startSample: number, nSamples: number): number[][] {
-    const nCh = this.nChannels;
+    const nCh = this.eegIdx.length;
     const out: number[][] = Array.from({ length: nCh }, () => new Array(nSamples).fill(0));
 
-    // All signals assumed to have the same sample rate (standard EDF assumption)
-    const sprMain = this.sigHdrs[0].numSamplesPerRecord;
+    const sprMain = this.primarySpr;
     const startRec = Math.floor(startSample / sprMain);
     const endRec = Math.min(
       Math.ceil((startSample + nSamples) / sprMain),
@@ -137,25 +174,23 @@ export class EdfChunkReader {
 
     for (let rec = startRec; rec < endRec; rec++) {
       const recStartSample = rec * sprMain;
-      // Byte offset of this record's start in the file
-      let chByteBase = this.hdr.headerBytes + rec * this.bytesPerRecord;
+      const recordByteBase = this.hdr.headerBytes + rec * this.bytesPerRecord;
 
-      for (let ch = 0; ch < nCh; ch++) {
-        const chSpr = this.sigHdrs[ch].numSamplesPerRecord;
-        const { gain, offset } = this.scales[ch];
+      // Sample range within this record that overlaps [startSample, startSample+nSamples)
+      const inRecStart = Math.max(startSample, recStartSample) - recStartSample;
+      const inRecEnd   = Math.min(startSample + nSamples, recStartSample + sprMain) - recStartSample;
 
-        // Sample index range within this record that overlaps with our request
-        const sampStart = Math.max(startSample, recStartSample) - recStartSample;
-        const sampEnd = Math.min(startSample + nSamples, recStartSample + chSpr) - recStartSample;
+      for (let ci = 0; ci < nCh; ci++) {
+        const chIdx = this.eegIdx[ci];
+        const { gain, offset } = this.scales[chIdx];
+        const chBase = recordByteBase + this.chByteOffsetInRecord[chIdx];
 
-        for (let s = sampStart; s < sampEnd; s++) {
+        for (let s = inRecStart; s < inRecEnd; s++) {
           const outIdx = recStartSample + s - startSample;
           if (outIdx < 0 || outIdx >= nSamples) continue;
-          const digital = this.view.getInt16(chByteBase + s * 2, true /* little-endian */);
-          out[ch][outIdx] = digital * gain + offset;
+          const digital = this.view.getInt16(chBase + s * 2, true /* little-endian */);
+          out[ci][outIdx] = digital * gain + offset;
         }
-
-        chByteBase += chSpr * 2;
       }
     }
 
