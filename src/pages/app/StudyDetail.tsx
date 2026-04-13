@@ -83,7 +83,7 @@ export default function StudyDetail() {
         .from("studies")
         .select(`
           *,
-          clinics(name, brand_name, logo_url, sku),
+          clinics(name, logo_url, sku),
           study_files(*),
           reports(*, profiles:interpreter(full_name, credentials)),
           canonical_eeg_records(id, schema_version, tensor_path, native_sampling_hz, sfreq_model),

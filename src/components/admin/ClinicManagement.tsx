@@ -15,7 +15,6 @@ export default function ClinicManagement() {
   const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    brand_name: "",
     city: "",
     state: "",
     country: "IN",
@@ -57,7 +56,6 @@ export default function ClinicManagement() {
       setOpen(false);
       setFormData({
         name: "",
-        brand_name: "",
         city: "",
         state: "",
         country: "IN",
@@ -103,14 +101,6 @@ export default function ClinicManagement() {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Magna Neurology Clinic"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Brand Name</Label>
-                  <Input
-                    value={formData.brand_name}
-                    onChange={(e) => setFormData({ ...formData, brand_name: e.target.value })}
-                    placeholder="Magna Neurology"
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -164,7 +154,6 @@ export default function ClinicManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>Clinic Name</TableHead>
-                <TableHead>Brand</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Members</TableHead>
                 <TableHead>Studies</TableHead>
@@ -175,7 +164,6 @@ export default function ClinicManagement() {
               {clinics?.map((clinic) => (
                 <TableRow key={clinic.id}>
                   <TableCell className="font-medium">{clinic.name}</TableCell>
-                  <TableCell>{clinic.brand_name || "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {[clinic.city, clinic.state].filter(Boolean).join(", ") || "—"}
                   </TableCell>
