@@ -121,15 +121,26 @@ export default function AdminClinics() {
         body: {
           clinic_name: form.clinic_name,
           city: form.city,
-          sku: form.sku, // Explicit SKU selection
+          sku: form.sku,
           clinician_name: form.clinician_name,
           clinician_email: form.clinician_email,
           clinician_password: form.clinician_password,
           initial_tokens: form.initial_tokens,
         },
       });
-      if (error) throw error;
+      // data?.error comes from the edge function's own error responses (4xx with JSON body)
       if (data?.error) throw new Error(data.error);
+      // error is a network/HTTP error from the Supabase client
+      if (error) {
+        // Try to extract the actual message from the response context
+        const ctx = (error as any).context;
+        const bodyText = typeof ctx === "string" ? ctx : undefined;
+        try {
+          const parsed = bodyText ? JSON.parse(bodyText) : null;
+          if (parsed?.error) throw new Error(parsed.error);
+        } catch (_) { /* ignore JSON parse failure */ }
+        throw error;
+      }
       return data;
     },
     onSuccess: () => {

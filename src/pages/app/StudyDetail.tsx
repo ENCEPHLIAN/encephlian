@@ -45,10 +45,12 @@ dayjs.extend(relativeTime);
 
 // State display configuration
 const STATE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+  pending: { label: "Pending", color: "bg-gray-400", icon: Clock },
   uploaded: { label: "Uploaded", color: "bg-blue-500", icon: FileIcon },
-  awaiting_sla: { label: "Awaiting SLA", color: "bg-amber-500", icon: Clock },
   processing: { label: "Processing", color: "bg-purple-500", icon: Zap },
+  awaiting_sla: { label: "Awaiting SLA", color: "bg-amber-500", icon: Clock },
   ai_draft: { label: "AI Draft Ready", color: "bg-cyan-500", icon: FileText },
+  complete: { label: "Analysis Ready", color: "bg-cyan-500", icon: Brain },
   in_review: { label: "In Review", color: "bg-orange-500", icon: Eye },
   signed: { label: "Signed", color: "bg-emerald-500", icon: CheckCircle2 },
 };
@@ -95,6 +97,11 @@ export default function StudyDetail() {
     },
     enabled: !!id,
     retry: 1,
+    // Auto-poll while pipeline is running — stops once complete/signed
+    refetchInterval: (query) => {
+      const state = (query.state.data as any)?.state;
+      return (state === "processing" || state === "uploaded" || state === "pending") ? 8000 : false;
+    },
   });
 
   // Fetch MIND® report from I-Plane blob (mind.report.v1 format)
@@ -111,40 +118,25 @@ export default function StudyDetail() {
     enabled: !!id && !!IPLANE_BASE && !isLoading,
     staleTime: 30_000,
     retry: false,
+    // Poll every 15s while no report yet and study is still processing
+    refetchInterval: (query) => {
+      if (query.state.data) return false; // already have report
+      const state = (study as any)?.state;
+      return (state === "uploaded" || state === "processing" || state === "ai_draft") ? 15_000 : false;
+    },
   });
 
-  // Run the full MIND® pipeline directly on I-Plane
+  // Re-trigger the full C-Plane → I-Plane pipeline via edge function
   const handleRunAITriage = async () => {
     if (!id) return;
-    if (!IPLANE_BASE) {
-      toast({
-        title: "I-Plane not configured",
-        description: "VITE_IPLANE_BASE is not set.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setRunningTriage(true);
     try {
-      toast({ title: "Starting MIND® analysis...", description: "Calling I-Plane inference" });
-
-      const blobId = (study as any)?.study_key || id;
-      const res = await fetch(`${IPLANE_BASE}/mind/run/${blobId}`, { method: "POST" });
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        throw new Error(`I-Plane returned ${res.status}: ${body}`);
-      }
-
-      const report = await res.json();
-
-      // Cache the report in study.ai_draft_json so it persists in Supabase
-      await supabase
-        .from("studies")
-        .update({ ai_draft_json: report, state: "ai_draft" })
-        .eq("id", id);
-
-      toast({ title: "MIND® analysis complete", description: report.score?.summary?.slice(0, 80) });
+      toast({ title: "Starting MIND® analysis...", description: "Triggering pipeline" });
+      const { error } = await supabase.functions.invoke("generate_ai_report", {
+        body: { study_id: id },
+      });
+      if (error) throw error;
+      toast({ title: "Pipeline started", description: "MIND® is processing. Results appear in 1–3 minutes." });
       refetch();
       refetchMind();
     } catch (error) {
@@ -267,8 +259,8 @@ export default function StudyDetail() {
   const isSigned = study.state === "signed" || report?.status === "signed";
   const isProcessing = study.triage_status === "processing";
   const canGenerateReport = !hasReport && !isProcessing &&
-    (study.state === "uploaded" || study.state === "parsed" || study.state === "completed");
-  const canReview = study.state === "ai_draft" || study.state === "in_review";
+    (study.state === "uploaded" || study.state === "parsed");
+  const canReview = study.state === "ai_draft" || study.state === "in_review" || study.state === "complete";
   const StateIcon = stateConfig.icon;
 
   return (

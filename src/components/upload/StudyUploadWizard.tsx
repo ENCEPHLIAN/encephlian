@@ -185,7 +185,7 @@ async function extractEdfHeader(file: File): Promise<ExtractedEdfMeta | null> {
 
 export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps) {
   const navigate = useNavigate();
-  const { userId, clinicContext } = useUserSession();
+  const { userId, clinicContext, refreshSession } = useUserSession();
   const { isPilot } = useSku();
   const clinicId = clinicContext?.clinic_id;
   const SLA_OPTIONS = isPilot ? PILOT_SLA_OPTIONS : INTERNAL_SLA_OPTIONS;
@@ -198,6 +198,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [uploadStage, setUploadStage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ name: string; status: "pending"|"uploading"|"done"|"error" }[]>([]);
+  const activeXhrRef = useRef<XMLHttpRequest | null>(null);
+  const activeIPlaneControllerRef = useRef<AbortController | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [edfMeta, setEdfMeta] = useState<ExtractedEdfMeta | null>(null);
   const [isProprietaryFormat, setIsProprietaryFormat] = useState(false);
@@ -220,8 +222,23 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
   }, [selectedSla, SLA_OPTIONS]);
 
+  // Cancel an in-progress upload
+  const handleCancelUpload = useCallback(() => {
+    activeXhrRef.current?.abort();
+    activeXhrRef.current = null;
+    activeIPlaneControllerRef.current?.abort();
+    activeIPlaneControllerRef.current = null;
+    setIsUploading(false);
+    setUploadProgress(0);
+    setUploadStage("");
+  }, []);
+
   // Reset wizard state
   const resetWizard = useCallback(() => {
+    activeXhrRef.current?.abort();
+    activeXhrRef.current = null;
+    activeIPlaneControllerRef.current?.abort();
+    activeIPlaneControllerRef.current = null;
     setStep(1);
     setFile(null);
     setFileQueue([]);
@@ -370,76 +387,89 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
     const studyId = study.id;
 
-    // ── Upload to Supabase edge storage (no SAS roundtrip) ─────────
-    onProgress(10, `Uploading ${targetFile.name}...`);
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session?.access_token ?? "";
-    const storagePath = `${studyId}.edf`;
-    const storageUploadUrl = `${supabaseUrl}/storage/v1/object/eeg-raw/${storagePath}`;
+    // ── Get SAS token from C-Plane → upload directly to Azure Blob ──
+    onProgress(8, `Preparing upload...`);
+    const sasRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
+    if (!sasRes.ok) throw new Error(`Failed to get upload token: ${sasRes.status}`);
+    const { sas_url: sasUrl, blob_name: blobName } = await sasRes.json();
 
+    onProgress(10, `Uploading ${targetFile.name} to Azure...`);
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      activeXhrRef.current = xhr;
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable)
           onProgress(10 + Math.round((e.loaded / e.total) * 72), `Uploading ${targetFile.name}...`);
       };
-      xhr.onload = () =>
+      xhr.onload = () => {
+        activeXhrRef.current = null;
         xhr.status >= 200 && xhr.status < 300
           ? resolve()
           : reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
-      xhr.onerror = () => reject(new Error("Network error during upload"));
-      xhr.timeout = 600000; // 10 min for large files
-      xhr.ontimeout = () => reject(new Error("UPLOAD_TIMEOUT"));
-      xhr.open("POST", storageUploadUrl);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      };
+      xhr.onerror = () => { activeXhrRef.current = null; reject(new Error("Network error during upload")); };
+      xhr.onabort = () => { activeXhrRef.current = null; reject(new Error("Upload cancelled")); };
+      xhr.timeout = 600000;
+      xhr.ontimeout = () => { activeXhrRef.current = null; reject(new Error("UPLOAD_TIMEOUT")); };
+      xhr.open("PUT", sasUrl);
+      xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
-      xhr.setRequestHeader("x-upsert", "true");
       xhr.send(targetFile);
     });
 
     onProgress(84, `Registering...`);
     await supabase
       .from("studies")
-      .update({ state: "uploaded", uploaded_file_path: `supabase:eeg-raw/${storagePath}` })
+      .update({ state: "uploaded", uploaded_file_path: blobName })
       .eq("id", studyId);
 
-    // ── Get signed URL for C-Plane to download the file ─────────
-    const { data: signedData } = await supabase.storage
-      .from("eeg-raw")
-      .createSignedUrl(storagePath, 3600);
-    const sourceUrl = signedData?.signedUrl ?? "";
-
-    onProgress(90, `Triggering pipeline...`);
-    // C-Plane: canonicalize in background (for EEG viewer)
+    // C-Plane: canonicalize in background (reads from Azure Blob directly)
     fetch(`${cplaneBase}/process`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ study_id: studyId, source_url: sourceUrl }),
+      body: JSON.stringify({ study_id: studyId }),
     }).catch((err) => console.warn("C-Plane trigger failed:", err));
 
-    // I-Plane: fast triage directly from raw EDF bytes (fire-and-forget)
+    // I-Plane: MIND® analysis — await so the result is ready before navigating
     const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
-    if (iplaneBase) {
-      const form = new FormData();
-      form.append("file", targetFile, targetFile.name);
-      form.append("study_id", studyId);
-      fetch(`${iplaneBase}/mind/run-edf`, { method: "POST", body: form })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((report) => {
-          if (!report) return;
-          supabase.from("studies").update({
+    if (iplaneBase && !isProprietaryFormat) {
+      onProgress(88, `Running MIND® analysis...`);
+      try {
+        const controller = new AbortController();
+        activeIPlaneControllerRef.current = controller;
+        const timer = setTimeout(() => controller.abort(), 300_000); // 5 min max
+        const form = new FormData();
+        form.append("file", targetFile, targetFile.name);
+        form.append("study_id", studyId);
+        const iRes = await fetch(`${iplaneBase}/mind/run-edf`, {
+          method: "POST",
+          body: form,
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+        activeIPlaneControllerRef.current = null;
+        if (iRes.ok) {
+          const report = await iRes.json();
+          onProgress(97, `Saving analysis...`);
+          await supabase.from("studies").update({
+            state: "ai_draft",
             triage_status: "completed",
             triage_progress: 100,
             ai_draft_json: report,
-          }).eq("id", studyId).then(() => {});
-        })
-        .catch((e) => console.warn("[upload] I-Plane fast triage failed:", e));
+          }).eq("id", studyId);
+        }
+      } catch (e: any) {
+        activeIPlaneControllerRef.current = null;
+        if (e?.name !== "AbortError") {
+          console.warn("[upload] I-Plane analysis failed:", e);
+        }
+        // Analysis failed/cancelled — study stays in "uploaded" state, user can retry from study page
+      }
     }
 
     onProgress(100, "Done");
     return studyId;
-  }, [userId, clinicId, selectedSla, patientData, edfMeta, file]);
+  }, [userId, clinicId, selectedSla, patientData, edfMeta, file, isProprietaryFormat]);
 
   // Submit the study (single or batch)
   const handleSubmit = useCallback(async () => {
@@ -447,11 +477,19 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       systemFeedback.report({ severity: "error", what: "Cannot upload", why: "Missing authentication.", action: "Refresh and sign in." });
       return;
     }
-    if (!clinicId) { systemFeedback.noClinicAssigned(); return; }
+    if (!clinicId) {
+      systemFeedback.noClinicAssigned();
+      return;
+    }
 
     const CPLANE_BASE = import.meta.env.VITE_CPLANE_BASE as string | undefined;
     if (!CPLANE_BASE) {
-      systemFeedback.report({ severity: "error", what: "C-Plane not configured", why: "VITE_CPLANE_BASE is not set.", action: "Contact your administrator." });
+      systemFeedback.report({
+        severity: "error",
+        what: "C-Plane not configured",
+        why: "VITE_CPLANE_BASE environment variable is not set.",
+        action: "Add VITE_CPLANE_BASE to your Vercel environment variables and redeploy.",
+      });
       return;
     }
 
@@ -841,12 +879,38 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               })}
             </RadioGroup>
 
+            {/* No clinic assigned warning */}
+            {!clinicId && (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>No clinic assigned to your account.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => refreshSession()}
+                  className="shrink-0 underline text-xs hover:opacity-70"
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+
             {/* Upload Progress */}
             {isUploading && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">{uploadStage || "Preparing..."}</span>
-                  <span className="font-mono text-xs">{uploadProgress}%</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs">{uploadProgress}%</span>
+                    <button
+                      type="button"
+                      onClick={handleCancelUpload}
+                      className="text-xs text-muted-foreground underline hover:text-destructive"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
                 <Progress value={uploadProgress} />
                 {batchProgress.length > 1 && (
@@ -871,9 +935,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               <Button variant="ghost" onClick={() => setStep(2)} disabled={isUploading}>
                 <ArrowLeft className="h-4 w-4 mr-2" /> Back
               </Button>
-              <Button 
-                onClick={handleSubmit} 
-                disabled={!canSubmit || isUploading}
+              <Button
+                onClick={handleSubmit}
+                disabled={!canSubmit || isUploading || !clinicId}
                 className="btn-gradient-analysis"
               >
                 {isUploading ? (

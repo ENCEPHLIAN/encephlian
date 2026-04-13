@@ -63,7 +63,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       // Parallel fetch all user data
       const [profileResult, clinicResult, rolesResult] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).maybeSingle(),
-        supabase.from('user_clinic_context').select('*').maybeSingle(),
+        supabase.from('user_clinic_context').select('*').eq('user_id', user.id).maybeSingle(),
         supabase.from('user_roles').select('role').eq('user_id', user.id),
       ]);
 

@@ -13,17 +13,19 @@ import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
-import { useUserSession } from "@/contexts/UserSessionContext";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
 const stateColors: Record<string, string> = {
-  awaiting_sla: "bg-amber-500",
+  pending: "bg-gray-400",
   uploaded: "bg-blue-500",
+  processing: "bg-yellow-500",
+  awaiting_sla: "bg-amber-500",
   preprocessing: "bg-yellow-500",
   canonicalized: "bg-cyan-500",
   ai_draft: "bg-purple-500",
   in_review: "bg-orange-500",
+  complete: "bg-green-500",
   signed: "bg-green-500",
   completed: "bg-green-500",
   failed: "bg-red-500",
@@ -172,7 +174,6 @@ export default function Studies() {
 function InternalStudiesView() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { userId } = useUserSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -186,85 +187,69 @@ function InternalStudiesView() {
   }, [navigate]);
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    
-    if (!userId) {
-      toast({
-        title: "Not authenticated",
-        variant: "destructive",
-      });
-      return;
-    }
 
-    // Hard gate: Storage RLS requires a real user JWT (not anon).
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      toast({
-        title: "Session expired",
-        description: "Please sign in again.",
-        variant: "destructive",
-      });
+      toast({ title: "Session expired", description: "Please sign in again.", variant: "destructive" });
       navigate("/login", { replace: true });
       return;
     }
-    
+
     const file = files[0];
     const lowerName = file.name.toLowerCase();
     if (!lowerName.endsWith('.edf') && !lowerName.endsWith('.bdf')) {
-      toast({
-        title: "Invalid file type",
-        description: "Only .edf and .bdf files are supported",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid file type", description: "Only .edf and .bdf files are supported", variant: "destructive" });
       return;
     }
 
     try {
-      toast({ title: "Uploading file..." });
-      
-      // CRITICAL: Path must start with userId for RLS policy compliance
-      const filePath = `${userId}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from("eeg-raw")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false
-        });
-
-      if (uploadError) {
-        console.error("Storage upload error:", uploadError);
-        throw uploadError;
-      }
-
+      // Step 1: Create study + get Azure Blob SAS token from edge function
       toast({ title: "Creating study..." });
-      const { data, error } = await supabase.functions.invoke("create_study_from_upload", {
-        body: { filePath, fileName: file.name }
+      const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
+        body: { fileName: file.name },
       });
+      if (createError) throw createError;
+      if (!data?.studyId) throw new Error("No study ID returned");
 
-      if (error) {
-        console.error("Create study error:", error);
-        throw error;
+      const { studyId, sasUrl } = data;
+
+      if (sasUrl) {
+        // Step 2: Upload directly to Azure Blob via SAS URL (bypasses Supabase Storage)
+        toast({ title: `Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB to Azure...` });
+        const uploadRes = await fetch(sasUrl, {
+          method: "PUT",
+          body: file,
+          headers: {
+            "x-ms-blob-type": "BlockBlob",
+            "Content-Type": "application/octet-stream",
+          },
+        });
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text();
+          throw new Error(`Azure upload failed: ${uploadRes.status} — ${errText}`);
+        }
+      } else {
+        // Fallback: SAS not available, C-Plane will read from Supabase storage if configured
+        console.warn(`[${studyId}] No SAS URL — pipeline may fail without source_url`);
       }
 
-      if (data?.studyId) {
-        toast({ title: "Generating AI draft..." });
-        await supabase.functions.invoke("generate_ai_report", {
-          body: { study_id: data.studyId }
-        });
-        
-        toast({
-          title: "Success!",
-          description: "Study created and AI draft generated",
-        });
-        
-        navigate(`/app/studies/${data.studyId}`);
+      // Step 3: Trigger real C-Plane pipeline (async, does not wait for completion)
+      toast({ title: "Pipeline started — MIND® processing..." });
+      const { error: pipelineError } = await supabase.functions.invoke("generate_ai_report", {
+        body: { study_id: studyId },
+      });
+      if (pipelineError) {
+        console.error("Pipeline trigger error:", pipelineError);
+        // Don't throw — study exists, user can retry from detail page
+        toast({ title: "Study created", description: "Pipeline trigger failed — check status in study detail", variant: "destructive" });
+      } else {
+        toast({ title: "Upload complete", description: "MIND® is processing your EEG. Results appear in 1–3 minutes." });
       }
+
+      navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
       console.error("Upload error:", error);
-      toast({
-        title: "Upload failed",
-        description: error?.message || "Failed to create study from uploaded file",
-        variant: "destructive",
-      });
+      toast({ title: "Upload failed", description: error?.message || "Failed to upload EEG", variant: "destructive" });
     }
   };
 
@@ -373,7 +358,10 @@ function InternalStudiesView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All States</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="uploaded">Uploaded</SelectItem>
+                  <SelectItem value="processing">Processing</SelectItem>
+                  <SelectItem value="complete">Complete</SelectItem>
                   <SelectItem value="preprocessing">Preprocessing</SelectItem>
                   <SelectItem value="canonicalized">Canonicalized</SelectItem>
                   <SelectItem value="ai_draft">AI Draft</SelectItem>

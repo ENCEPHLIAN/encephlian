@@ -217,31 +217,17 @@ export default function EEGViewer() {
       fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY });
 
     const tryRawEdf = async () => {
-      // Look up the actual storage path from the study record
-      const { data: studyRow } = await supabase
-        .from("studies")
-        .select("uploaded_file_path, storage_backend")
-        .eq("id", studyId)
-        .single();
+      // Get a read SAS URL from C-Plane for the raw EDF in Azure Blob
+      const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
 
-      const filePath = studyRow?.uploaded_file_path;
-      
-      // Try paths in order: study record path, then studyId.edf fallback
-      const pathsToTry: string[] = [];
-      if (filePath && !filePath.startsWith("blob:")) {
-        // Strip bucket prefix if present (e.g. "supabase:eeg-raw/path" → "path")
-        const cleaned = filePath.replace(/^supabase:eeg-raw\//, "");
-        pathsToTry.push(cleaned);
+      const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
+      if (!tokenRes.ok) {
+        throw new Error("EDF not found in Azure storage");
       }
-      pathsToTry.push(`${studyId}.edf`, `${studyId}.bdf`);
-
-      for (const p of pathsToTry) {
-        const { data: blob, error } = await supabase.storage
-          .from("eeg-raw")
-          .download(p);
-        if (!error && blob) return blob;
-      }
-      throw new Error("EDF not found in edge storage");
+      const { sas_url: sasUrl } = await tokenRes.json();
+      const res = await fetch(sasUrl);
+      if (!res.ok) throw new Error(`EDF download failed: ${res.status}`);
+      return new Blob([await res.arrayBuffer()]);
     };
 
     tryCanonical()

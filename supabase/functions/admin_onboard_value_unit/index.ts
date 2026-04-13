@@ -18,36 +18,36 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify caller is admin
-    const supabaseClient = createClient(
+    // Use service-role client for all operations — JWT is already verified
+    // by the admin portal (TFA + role-based route guard).
+    // We use supabaseAdmin.auth.getUser(token) which calls the Supabase Auth
+    // server directly and works with any JWT algorithm (HS256 or ES256).
+    const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    const { data: { user: caller } } = await supabaseClient.auth.getUser();
-    if (!caller) {
+    const authHeader = req.headers.get('Authorization') ?? '';
+    const token = authHeader.replace('Bearer ', '').trim();
+
+    let callerId: string | null = null;
+    if (token) {
+      const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+      callerId = user?.id ?? null;
+    }
+
+    if (!callerId) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Create admin client for privileged operations
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
     // Verify caller has admin role
     const { data: roleCheck } = await supabaseAdmin
       .from('user_roles')
       .select('role')
-      .eq('user_id', caller.id)
+      .eq('user_id', callerId)
       .in('role', ['super_admin', 'management']);
 
     if (!roleCheck || roleCheck.length === 0) {
@@ -200,7 +200,7 @@ Deno.serve(async (req) => {
 
     // STEP 8: Log the audit event
     await supabaseAdmin.from('audit_logs').insert({
-      user_id: caller.id,
+      user_id: callerId,
       event_type: 'value_unit_onboarded',
       event_data: {
         clinic_id: clinic.id,

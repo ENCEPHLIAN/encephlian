@@ -45,15 +45,53 @@ export default function StudyReview() {
   const { data: draft, isLoading: draftLoading } = useQuery({
     queryKey: ['ai-draft', id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // Primary: ai_drafts table (old Lovable pipeline)
+      const { data } = await supabase
         .from('ai_drafts')
         .select('*')
         .eq('study_id', id)
         .order('created_at', { ascending: false })
         .limit(1)
+        .maybeSingle();
+
+      if (data) return data;
+
+      // Fallback: extract editable text fields from study.ai_draft_json (mind.report.v1)
+      const { data: studyData } = await supabase
+        .from('studies')
+        .select('ai_draft_json')
+        .eq('id', id)
         .single();
-      if (error) throw error;
-      return data;
+
+      const raw = studyData?.ai_draft_json as any;
+      if (!raw) return null;
+
+      // Map mind.report.v1 SCORE fields → editable text areas
+      const score = raw.score || {};
+      const bg = score.background_activity || {};
+      const bgText = [
+        bg.dominant_rhythm ? `Dominant rhythm: ${bg.dominant_rhythm}` : null,
+        bg.amplitude ? `Amplitude: ${bg.amplitude}` : null,
+        typeof bg.generalized_slowing === 'object'
+          ? (bg.generalized_slowing?.present ? `Generalized slowing: ${bg.generalized_slowing?.grade || 'present'}` : null)
+          : (bg.generalized_slowing ? `Generalized slowing: ${bg.generalized_slowing}` : null),
+        bg.reactivity !== undefined ? `Reactivity: ${bg.reactivity}` : null,
+        bg.symmetry ? `Symmetry: ${bg.symmetry}` : null,
+      ].filter(Boolean).join('\n') || score.recording_conditions || '';
+
+      const ieds = score.interictal_findings?.ieds_note || '';
+      const ictal = score.ictal_findings?.note || '';
+      const abnormalities = [ieds, ictal].filter(Boolean).join('\n');
+
+      return {
+        draft: {
+          background_activity: bgText,
+          sleep_architecture: '',
+          abnormalities: abnormalities || '',
+          impression: score.impression || '',
+          clinical_correlates: score.recommended_action || '',
+        }
+      };
     },
     enabled: !!study
   });
@@ -125,7 +163,15 @@ export default function StudyReview() {
     );
   }
 
-  if (!study || !draft) {
+  if (!study) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!draft) {
     return (
       <div className="space-y-4">
         <Button variant="ghost" onClick={() => navigate(-1)}>
@@ -133,8 +179,11 @@ export default function StudyReview() {
           Back
         </Button>
         <Card>
-          <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground">AI draft not available for this study.</p>
+          <CardContent className="p-8 text-center space-y-2">
+            <p className="text-muted-foreground">No analysis available yet.</p>
+            <p className="text-sm text-muted-foreground">
+              The pipeline may still be processing. Check back in 1–2 minutes.
+            </p>
           </CardContent>
         </Card>
       </div>
