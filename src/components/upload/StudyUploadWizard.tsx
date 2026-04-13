@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
   Upload, FileUp, User, Clock, CheckCircle2,
-  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft
+  AlertCircle, Zap, Loader2, X, ArrowRight, ArrowLeft, WifiOff, RotateCcw
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -198,6 +198,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
   const [uploadStage, setUploadStage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ name: string; status: "pending"|"uploading"|"done"|"error" }[]>([]);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const activeXhrRef = useRef<XMLHttpRequest | null>(null);
   const activeIPlaneControllerRef = useRef<AbortController | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -222,6 +224,18 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
   }, [selectedSla, SLA_OPTIONS]);
 
+  // Network connectivity detection
+  useEffect(() => {
+    const onOnline  = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener("online",  onOnline);
+    window.addEventListener("offline", onOffline);
+    return () => {
+      window.removeEventListener("online",  onOnline);
+      window.removeEventListener("offline", onOffline);
+    };
+  }, []);
+
   // Cancel an in-progress upload
   const handleCancelUpload = useCallback(() => {
     activeXhrRef.current?.abort();
@@ -231,6 +245,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setIsUploading(false);
     setUploadProgress(0);
     setUploadStage("");
+    setUploadError(null);
   }, []);
 
   // Reset wizard state
@@ -247,6 +262,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setIsUploading(false);
     setEdfMeta(null);
     setIsProprietaryFormat(false);
+    setUploadError(null);
     setAutoFilledFields(new Set());
     setPatientData({
       patient_name: "",
@@ -387,35 +403,51 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
     const studyId = study.id;
 
-    // ── Get SAS token from C-Plane → upload directly to Azure Blob ──
-    onProgress(8, `Preparing upload...`);
-    const sasRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
-    if (!sasRes.ok) throw new Error(`Failed to get upload token: ${sasRes.status}`);
-    const { sas_url: sasUrl, blob_name: blobName } = await sasRes.json();
+    // ── Get SAS token from C-Plane → upload directly to Azure Blob (with retry) ──
+    let blobName = "";
+    const MAX_UPLOAD_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        onProgress(8, `Network error — retrying (${attempt - 1}/${MAX_UPLOAD_ATTEMPTS - 1})...`);
+        await new Promise(r => setTimeout(r, 2000 * (attempt - 1)));
+      }
+      try {
+        onProgress(8, attempt > 1 ? `Retrying upload...` : `Preparing upload...`);
+        const sasRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
+        if (!sasRes.ok) throw new Error(`Failed to get upload token: ${sasRes.status}`);
+        const { sas_url: sasUrl, blob_name: bn } = await sasRes.json();
+        blobName = bn;
 
-    onProgress(10, `Uploading ${targetFile.name} to Azure...`);
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      activeXhrRef.current = xhr;
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable)
-          onProgress(10 + Math.round((e.loaded / e.total) * 72), `Uploading ${targetFile.name}...`);
-      };
-      xhr.onload = () => {
-        activeXhrRef.current = null;
-        xhr.status >= 200 && xhr.status < 300
-          ? resolve()
-          : reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
-      };
-      xhr.onerror = () => { activeXhrRef.current = null; reject(new Error("Network error during upload")); };
-      xhr.onabort = () => { activeXhrRef.current = null; reject(new Error("Upload cancelled")); };
-      xhr.timeout = 600000;
-      xhr.ontimeout = () => { activeXhrRef.current = null; reject(new Error("UPLOAD_TIMEOUT")); };
-      xhr.open("PUT", sasUrl);
-      xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
-      xhr.setRequestHeader("Content-Type", "application/octet-stream");
-      xhr.send(targetFile);
-    });
+        onProgress(10, `Uploading ${targetFile.name} to Azure...`);
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          activeXhrRef.current = xhr;
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable)
+              onProgress(10 + Math.round((e.loaded / e.total) * 72), `Uploading ${targetFile.name}...`);
+          };
+          xhr.onload = () => {
+            activeXhrRef.current = null;
+            xhr.status >= 200 && xhr.status < 300
+              ? resolve()
+              : reject(new Error(`Upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
+          };
+          xhr.onerror = () => { activeXhrRef.current = null; reject(new Error("Network error during upload")); };
+          xhr.onabort = () => { activeXhrRef.current = null; reject(new Error("Upload cancelled")); };
+          xhr.timeout = 600000;
+          xhr.ontimeout = () => { activeXhrRef.current = null; reject(new Error("UPLOAD_TIMEOUT")); };
+          xhr.open("PUT", sasUrl);
+          xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+          xhr.setRequestHeader("Content-Type", "application/octet-stream");
+          xhr.send(targetFile);
+        });
+        break; // Upload succeeded — exit retry loop
+      } catch (e: any) {
+        if (e?.message === "Upload cancelled" || e?.message === "UPLOAD_TIMEOUT") throw e;
+        if (attempt === MAX_UPLOAD_ATTEMPTS || !e?.message?.startsWith("Network error")) throw e;
+        // Network error with retries remaining — loop continues
+      }
+    }
 
     onProgress(84, `Registering...`);
     await supabase
@@ -549,8 +581,18 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         navigate("/app/studies");
       }
     } catch (error: any) {
-      if (error?.message === "UPLOAD_TIMEOUT") systemFeedback.uploadTimeout();
-      else systemFeedback.uploadFailed(error?.message || String(error));
+      const msg = error?.message || String(error);
+      if (msg === "Upload cancelled") {
+        // User cancelled — no error shown
+      } else if (msg === "UPLOAD_TIMEOUT") {
+        systemFeedback.uploadTimeout();
+        setUploadError("Upload timed out after 10 minutes. Check your network connection and retry.");
+      } else if (msg.startsWith("Network error")) {
+        setUploadError("Network connection lost during upload. Check your connection and tap Retry.");
+      } else {
+        systemFeedback.uploadFailed(msg);
+        setUploadError(msg);
+      }
     } finally {
       setIsUploading(false);
       setUploadStage("");
@@ -879,6 +921,14 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               })}
             </RadioGroup>
 
+            {/* Network offline warning */}
+            {isOffline && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-600">
+                <WifiOff className="h-4 w-4 shrink-0" />
+                <span>No network connection — upload will resume when connectivity is restored.</span>
+              </div>
+            )}
+
             {/* No clinic assigned warning */}
             {!clinicId && (
               <div className="flex items-center justify-between gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -928,6 +978,25 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Upload error with retry */}
+            {uploadError && !isUploading && (
+              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 space-y-2">
+                <div className="flex items-start gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{uploadError}</span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => { setUploadError(null); handleSubmit(); }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5 mr-2" />
+                  Retry Upload
+                </Button>
               </div>
             )}
 

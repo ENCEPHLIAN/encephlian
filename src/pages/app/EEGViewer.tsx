@@ -143,10 +143,17 @@ export default function EEGViewer() {
   const reqId       = useRef(0);
   const didSeek     = useRef(false);
   // Raw EDF fallback — set when canonical zarr not yet available
-  const edfReader   = useRef<EdfChunkReader | null>(null);
+  const edfReader        = useRef<EdfChunkReader | null>(null);
   const [rawEdfMode, setRawEdfMode] = useState(false);
   // Upgrade polling: once in raw mode, check if canonical becomes available
-  const upgradeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const upgradeTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Signal layer toggle: "esf" = canonical zarr (default), "raw" = raw EDF bytes
+  const [signalLayer, setSignalLayer] = useState<"esf" | "raw">("esf");
+  const signalLayerRef   = useRef<"esf" | "raw">("esf");
+  const rawEdfRef        = useRef<EdfChunkReader | null>(null);
+  const rawMetaRef       = useRef<Meta | null>(null);
+  const canonicalMetaRef = useRef<Meta | null>(null);
+  const [loadingRaw, setLoadingRaw] = useState(false);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const globalTime = windowStart + cursor;
@@ -206,7 +213,9 @@ export default function EEGViewer() {
     let alive = true;
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
+    setSignalLayer("esf"); signalLayerRef.current = "esf";
     cache.current.clear(); didSeek.current = false; edfReader.current = null;
+    rawEdfRef.current = null; rawMetaRef.current = null; canonicalMetaRef.current = null;
     if (upgradeTimerRef.current) { clearInterval(upgradeTimerRef.current); upgradeTimerRef.current = null; }
 
     if (!studyId) { setLoadingMeta(false); return; }
@@ -234,7 +243,9 @@ export default function EEGViewer() {
       .then(r => {
         if (!alive) return;
         if (!r.ok) throw new Error((r as any).error ?? "read-api-fail");
-        setMeta((r.data?.meta ?? r.data) as Meta);
+        const m = (r.data?.meta ?? r.data) as Meta;
+        setMeta(m);
+        canonicalMetaRef.current = m;
       })
       .catch(async () => {
         if (!alive) return;
@@ -244,13 +255,16 @@ export default function EEGViewer() {
           if (!alive) return;
           const buf = await blob.arrayBuffer();
           const reader = new EdfChunkReader(buf);
-          edfReader.current = reader;
-          setMeta({
+          const rawM: Meta = {
             n_channels: reader.nChannels,
             sampling_rate_hz: reader.sampleRate,
             n_samples: reader.totalSamples,
             channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
-          });
+          };
+          edfReader.current = reader;
+          rawEdfRef.current = reader;
+          rawMetaRef.current = rawM;
+          setMeta(rawM);
           setRawEdfMode(true);
           setFatalError(null);
 
@@ -259,10 +273,15 @@ export default function EEGViewer() {
             const r2 = await tryCanonical().catch(() => ({ ok: false }));
             if (r2.ok) {
               if (upgradeTimerRef.current) clearInterval(upgradeTimerRef.current);
-              edfReader.current = null;
-              cache.current.clear();
-              setRawEdfMode(false);
-              setMeta((r2 as any).data?.meta ?? (r2 as any).data);
+              const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
+              canonicalMetaRef.current = newMeta;
+              // Auto-upgrade only if user hasn't explicitly chosen raw layer
+              if (signalLayerRef.current === "esf") {
+                edfReader.current = null;
+                cache.current.clear();
+                setRawEdfMode(false);
+                setMeta(newMeta);
+              }
             }
           }, 30000);
         } catch (e2) {
@@ -662,6 +681,93 @@ export default function EEGViewer() {
         </div>
 
         <div className="flex-1" />
+
+        {/* Signal layer toggle: Raw EEG ↔ ESF */}
+        <div className="flex items-center rounded-md border border-border/60 overflow-hidden text-xs">
+          <button
+            onClick={() => {
+              if (signalLayer === "raw") return;
+              // No-op if already ESF — this is the default
+            }}
+            className={`px-2 py-0.5 transition-colors ${
+              signalLayer === "esf"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="ESF canonical — 19ch 250Hz normalized"
+          >
+            ESF
+          </button>
+          <button
+            onClick={async () => {
+              if (signalLayer === "raw") return;
+              if (!studyId) return;
+              // If already loaded, just switch
+              if (rawEdfRef.current && rawMetaRef.current) {
+                edfReader.current = rawEdfRef.current;
+                cache.current.clear();
+                setMeta(rawMetaRef.current);
+                signalLayerRef.current = "raw";
+                setSignalLayer("raw");
+                return;
+              }
+              // Load raw EDF from C-Plane read-token
+              setLoadingRaw(true);
+              try {
+                const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
+                const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
+                if (!tokenRes.ok) throw new Error("read-token failed");
+                const { sas_url: sasUrl } = await tokenRes.json();
+                const res = await fetch(sasUrl);
+                if (!res.ok) throw new Error(`EDF fetch ${res.status}`);
+                const buf = await res.arrayBuffer();
+                const reader = new EdfChunkReader(buf);
+                const rawM: Meta = {
+                  n_channels: reader.nChannels,
+                  sampling_rate_hz: reader.sampleRate,
+                  n_samples: reader.totalSamples,
+                  channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+                };
+                rawEdfRef.current = reader;
+                rawMetaRef.current = rawM;
+                edfReader.current = reader;
+                cache.current.clear();
+                setMeta(rawM);
+                signalLayerRef.current = "raw";
+                setSignalLayer("raw");
+              } catch (e) {
+                console.warn("[viewer] raw EDF load failed:", e);
+              } finally {
+                setLoadingRaw(false);
+              }
+            }}
+            disabled={loadingRaw}
+            className={`px-2 py-0.5 transition-colors ${
+              signalLayer === "raw"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Raw immutable EDF — original sample rate, unfiltered"
+          >
+            {loadingRaw ? "…" : "Raw"}
+          </button>
+          {signalLayer === "raw" && (
+            <button
+              onClick={() => {
+                if (!canonicalMetaRef.current) return;
+                edfReader.current = null;
+                cache.current.clear();
+                setMeta(canonicalMetaRef.current);
+                signalLayerRef.current = "esf";
+                setSignalLayer("esf");
+              }}
+              className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors border-l border-border/60"
+              title="Switch back to ESF canonical"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
         {/* Keyboard hint */}
         <span className="text-[10px] text-muted-foreground/50 hidden sm:block">

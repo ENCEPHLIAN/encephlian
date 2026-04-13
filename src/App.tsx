@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/toaster";
+import { GeoRestrictionModal } from "@/components/GeoRestrictionModal";
 import AdminCleanup from "@/pages/admin/AdminCleanup";
 import AdminAuditLogs from "@/pages/admin/AdminAuditLogs";
 import AdminReadApi from "@/admin/index";
@@ -65,6 +66,7 @@ function App() {
           <TooltipProvider>
           <Toaster />
           <Sonner />
+          <GeoRestrictionModal />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               <Route path="/login" element={<Login />} />

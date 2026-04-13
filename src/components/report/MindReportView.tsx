@@ -174,7 +174,7 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
             </p>
           </div>
           {confidence != null && (
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <p className="text-2xl font-bold tabular-nums font-mono">
                 {(confidence * 100).toFixed(0)}
                 <span className="text-sm font-normal">%</span>
@@ -183,7 +183,66 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
             </div>
           )}
         </div>
+        {confidence != null && (
+          <div className="mt-3 space-y-1">
+            <div className="h-1.5 rounded-full bg-muted/60 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${isAbnormal ? "bg-destructive" : "bg-emerald-500"}`}
+                style={{ width: `${confidence * 100}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Key Indicators */}
+      {(() => {
+        type Sev = "critical" | "warn" | "good" | "info";
+        const items: Array<{ icon: (props: { className?: string }) => JSX.Element | null; label: string; sev: Sev }> = [];
+        if (seizureEvents.length > 0)
+          items.push({ icon: Zap, label: `${seizureEvents.length} seizure event${seizureEvents.length !== 1 ? "s" : ""} detected`, sev: "critical" });
+        if (cleanPct != null && cleanPct < 70)
+          items.push({ icon: Activity, label: `${(100 - cleanPct).toFixed(0)}% artifact contamination (${cleanPct.toFixed(0)}% clean)`, sev: "warn" });
+        if (genSlowingStr && genSlowingStr !== "none")
+          items.push({ icon: Waves, label: `Generalized slowing: ${genSlowingStr}`, sev: "warn" });
+        if (bg.symmetry === "asymmetric")
+          items.push({ icon: AlertCircle, label: "Interhemispheric asymmetry detected", sev: "warn" });
+        if (bg.pdr_normal === false)
+          items.push({ icon: AlertCircle, label: `PDR below normal range${bg.pdr_frequency_hz ? ` (${bg.pdr_frequency_hz} Hz)` : ""}`, sev: "warn" });
+        if (cleanPct != null && cleanPct >= 70)
+          items.push({ icon: CheckCircle2, label: `${cleanPct.toFixed(0)}% clean recording`, sev: "good" });
+        if (bg.pdr_normal === true)
+          items.push({ icon: CheckCircle2, label: `PDR within normal range (${bg.pdr_frequency_hz} Hz)`, sev: "good" });
+        if (seizureEvents.length === 0 && cleanPct != null)
+          items.push({ icon: CheckCircle2, label: "No seizure activity detected", sev: "good" });
+        if (items.length === 0) return null;
+        const CFG: Record<Sev, string> = {
+          critical: "bg-destructive/10 text-destructive",
+          warn:     "bg-amber-500/10 text-amber-700 dark:text-amber-400",
+          good:     "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+          info:     "bg-muted/40 text-muted-foreground",
+        };
+        return (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Info className="h-3.5 w-3.5 text-muted-foreground" />
+              <h3 className="text-xs font-medium">Key Indicators</h3>
+              <span className="text-[9px] text-muted-foreground ml-auto">contributing factors</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {items.map((item, i) => {
+                const Icon = item.icon;
+                return (
+                  <div key={i} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs ${CFG[item.sev]}`}>
+                    <Icon className="h-3 w-3 shrink-0" />
+                    <span>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* SCORE EEG — Background Activity */}
       {(bg.pdr_frequency_hz || bg.continuity || bg.symmetry || bg.generalized_slowing) && (
