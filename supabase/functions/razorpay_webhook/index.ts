@@ -92,7 +92,7 @@ serve(async (req) => {
       // Credit the user's wallet
       const { error: creditError } = await supabase.rpc('credit_wallet', {
         p_user_id: paymentRecord.user_id,
-        p_credits: paymentRecord.credits_purchased,
+        p_tokens: paymentRecord.credits_purchased,
       });
 
       if (creditError) {

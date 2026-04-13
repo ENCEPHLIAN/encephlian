@@ -30,12 +30,14 @@ type Study = {
 };
 
 const STATE_STYLE: Record<string, string> = {
-  pending:    "bg-muted/50 text-muted-foreground",
-  uploaded:   "bg-blue-500/10 text-blue-500",
-  processing: "bg-amber-500/10 text-amber-500",
-  complete:   "bg-emerald-500/10 text-emerald-500",
-  signed:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  failed:     "bg-red-500/10 text-red-500",
+  awaiting_sla: "bg-muted/50 text-muted-foreground",
+  pending:      "bg-muted/50 text-muted-foreground",
+  uploaded:     "bg-blue-500/10 text-blue-500",
+  processing:   "bg-amber-500/10 text-amber-500",
+  ai_draft:     "bg-violet-500/10 text-violet-500",
+  complete:     "bg-emerald-500/10 text-emerald-500",
+  signed:       "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  failed:       "bg-red-500/10 text-red-500",
 };
 
 export default function AdminStudies() {

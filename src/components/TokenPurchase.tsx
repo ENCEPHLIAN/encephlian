@@ -48,7 +48,7 @@ export function TokenPurchase() {
       const options: any = {
         key: orderData.keyId,
         // amount from edge function should already be in INR – Razorpay wants paise
-        amount: orderData.amount * 100,
+        amount: orderData.amountPaise,
         currency: orderData.currency,
         name: "ENCEPHLIAN",
         description: `${packageTokens} tokens`,

@@ -2,20 +2,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Loader2, Zap, CreditCard, CheckCircle, Coins, ArrowRight, Clock } from "lucide-react";
+import { Loader2, Zap, CheckCircle, Coins, ArrowRight, Clock } from "lucide-react";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import dayjs from "dayjs";
-
-const PILOT_PLAN = {
-  name: "Pilot Plan",
-  tokens: 10,
-  price: 3000,
-  period: "month",
-};
 
 const TOP_UP_PACKS = [
   { tokens: 5, price: 750, label: "5 Tokens", per: "₹150/token" },
@@ -204,59 +196,18 @@ export function PilotWalletCard() {
         </div>
       </div>
 
-      {/* Subscription Plan */}
-      <Card className="border-2 border-primary/20">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{PILOT_PLAN.name}</CardTitle>
-            <Badge variant="outline" className="border-primary/50 text-primary">
-              Best Value
-            </Badge>
+      {/* Plan info */}
+      <Card className="border border-border/60 bg-muted/30">
+        <CardContent className="p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+            Pilot Plan — pay-as-you-go
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold">₹{PILOT_PLAN.price.toLocaleString()}</span>
-            <span className="text-muted-foreground">/{PILOT_PLAN.period}</span>
-          </div>
-
-          <ul className="space-y-2 text-sm">
-            <li className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-              {PILOT_PLAN.tokens} triage tokens included
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-              AI-accelerated EEG triage
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-              HIPAA-compliant data handling
-            </li>
-            <li className="flex items-center gap-2">
-              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
-              48-hour refund guarantee
-            </li>
+          <ul className="space-y-1 text-xs text-muted-foreground pl-6">
+            <li>1 token = standard triage report</li>
+            <li>2 tokens = priority (STAT) triage report</li>
+            <li>Tokens never expire</li>
           </ul>
-
-          <Button
-            className="w-full rounded-full"
-            size="lg"
-            onClick={() => handlePurchase(PILOT_PLAN.tokens)}
-            disabled={purchasing !== null}
-          >
-            {purchasing === PILOT_PLAN.tokens ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                <CreditCard className="mr-2 h-4 w-4" />
-                Subscribe — ₹{PILOT_PLAN.price.toLocaleString()}/mo
-              </>
-            )}
-          </Button>
         </CardContent>
       </Card>
 

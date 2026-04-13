@@ -38,16 +38,17 @@ serve(async (req) => {
 
     // ✅ FIXED: explicit tiered pricing, must match frontend
     const PRICING: Record<number, number> = {
-      10: 1500, // ₹150 / token
-      25: 3499, // ~₹140 / token
-      50: 6499, // ~₹130 / token
+      5:   750,   // ₹150 / token (pilot top-up)
+      10:  1500,  // ₹150 / token
+      25:  3499,  // ~₹140 / token
+      50:  6499,  // ~₹130 / token
       100: 11999, // ~₹120 / token
     };
 
     const amountInr = PRICING[tokens];
 
     if (!amountInr) {
-      throw new Error("Invalid token package. Allowed: 10, 25, 50, 100.");
+      throw new Error("Invalid token package. Allowed: 5, 10, 25, 50, 100.");
     }
 
     const amountPaise = amountInr * 100;

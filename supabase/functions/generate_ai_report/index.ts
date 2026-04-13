@@ -72,8 +72,8 @@ serve(async (req) => {
       );
     }
 
-    // Idempotency: if already processing or complete, return current state
-    if (study.state === "processing" || study.state === "complete") {
+    // Idempotency: if already processing, complete, or signed — do not re-run
+    if (study.state === "processing" || study.state === "complete" || study.state === "signed") {
       return new Response(
         JSON.stringify({ success: true, status: study.state, message: "Pipeline already running or complete" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
