@@ -212,7 +212,7 @@ export default function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const userName = profile?.full_name?.trim() || "Account";
-  const brandName = clinicContext?.brand_name || "ENCEPHLIAN";
+  const brandName = "ENCEPHLIAN";
   const logoUrl = clinicContext?.logo_url as string | undefined;
 
   const handleSignOut = async () => {
@@ -340,7 +340,7 @@ export default function AppLayout() {
                 <DropdownMenuContent align="end" className="w-64 p-2">
                   <div className="px-2 py-3 border-b border-border/50 mb-2">
                     <p className="font-medium text-sm">{userName}</p>
-                    <p className="text-xs text-muted-foreground truncate">{clinicContext?.clinic_name || "ENCEPHLIAN"}</p>
+                    <p className="text-xs text-muted-foreground truncate">ENCEPHLIAN</p>
                   </div>
                   
                   <DropdownMenuItem onClick={() => navigate("/app/profile")} className="py-2.5">

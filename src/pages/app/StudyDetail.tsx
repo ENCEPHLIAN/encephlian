@@ -487,10 +487,7 @@ export default function StudyDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-medium">{study.clinics?.name || "Unknown Clinic"}</p>
-                {study.clinics?.brand_name && study.clinics.brand_name !== study.clinics.name && (
-                  <p className="text-sm text-muted-foreground">{study.clinics.brand_name}</p>
-                )}
+                <p className="font-medium">ENCEPHLIAN</p>
               </CardContent>
             </Card>
 
