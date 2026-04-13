@@ -7,6 +7,7 @@ import AdminWallets from "@/pages/admin/AdminWallets";
 import AdminTickets from "@/pages/admin/AdminTickets";
 import AdminSettings from "@/pages/admin/AdminSettings";
 import AdminRestore from "@/pages/admin/AdminRestore";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -65,6 +66,7 @@ function App() {
           <TooltipProvider>
           <Toaster />
           <Sonner />
+          <SpeedInsights />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <Routes>
               <Route path="/login" element={<Login />} />
