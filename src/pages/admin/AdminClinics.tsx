@@ -1,47 +1,24 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Building2, Pencil, Plus, Trash2, Users, FileText, Coins, User, Mail, Phone } from "lucide-react";
-import { format } from "date-fns";
+import { Loader2, Building2, Pencil, Plus, Trash2, User, Coins } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SKU_LABELS, SKU_TIERS, SkuTier } from "@/shared/skuPolicy";
 
@@ -56,38 +33,26 @@ type ClinicRow = {
   sku: string;
 };
 
-const SKU_BADGE_STYLES: Record<SkuTier, { variant: "default" | "secondary" | "outline"; className?: string }> = {
-  internal: { variant: "outline", className: "border-emerald-500/50 text-emerald-600 dark:text-emerald-400" },
-  pilot: { variant: "secondary", className: "border-amber-500/50 text-amber-600 dark:text-amber-400" },
+const SKU_STYLE: Record<string, string> = {
+  internal: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  pilot:    "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  demo:     "bg-blue-500/10 text-blue-500",
 };
 
-/**
- * AdminClinics - Value Unit Management
- * 
- * In the value unit model:
- * - 1 Clinic = 1 Neurologist (the value unit)
- * - Onboarding creates both clinic + clinician in one flow
- * - Simple, focused on getting clinics to triage EEGs
- */
+const EMPTY_ONBOARD = {
+  clinic_name: "", city: "", sku: "" as SkuTier | "",
+  clinician_name: "", clinician_email: "", clinician_password: "",
+  initial_tokens: 10,
+};
+
 export default function AdminClinics() {
   const queryClient = useQueryClient();
-  const [editingClinic, setEditingClinic] = useState<ClinicRow | null>(null);
-  const [formData, setFormData] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
-  const [showOnboardDialog, setShowOnboardDialog] = useState(false);
-  const [deleteClinic, setDeleteClinic] = useState<ClinicRow | null>(null);
+  const [editTarget, setEditTarget] = useState<ClinicRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
+  const [onboardOpen, setOnboardOpen] = useState(false);
+  const [onboardForm, setOnboardForm] = useState({ ...EMPTY_ONBOARD });
+  const [deleteTarget, setDeleteTarget] = useState<ClinicRow | null>(null);
 
-  // Unified onboarding form - creates clinic + neurologist together
-  const [onboardForm, setOnboardForm] = useState({
-    clinic_name: "",
-    city: "",
-    sku: "" as SkuTier | "", // Admin must explicitly choose SKU
-    clinician_name: "",
-    clinician_email: "",
-    clinician_password: "",
-    initial_tokens: 10,
-  });
-
-  // Fetch clinics
   const { data: clinics, isLoading } = useQuery<ClinicRow[]>({
     queryKey: ["admin-all-clinics"],
     queryFn: async () => {
@@ -97,48 +62,26 @@ export default function AdminClinics() {
     },
   });
 
-  // Update clinic mutation
-  const updateClinicMutation = useMutation({
+  const updateMutation = useMutation({
     mutationFn: async ({ clinicId, updates }: { clinicId: string; updates: Record<string, any> }) => {
-      const { error } = await supabase.rpc("admin_update_clinic", {
-        p_clinic_id: clinicId,
-        p_updates: updates,
-      });
+      const { error } = await supabase.rpc("admin_update_clinic", { p_clinic_id: clinicId, p_updates: updates });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
-      toast.success("Clinic updated");
-      setEditingClinic(null);
+      toast.success("Saved");
+      setEditTarget(null);
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Onboard value unit - creates clinic + neurologist in one go
   const onboardMutation = useMutation({
     mutationFn: async (form: typeof onboardForm) => {
-      const { data, error } = await supabase.functions.invoke("admin_onboard_value_unit", {
-        body: {
-          clinic_name: form.clinic_name,
-          city: form.city,
-          sku: form.sku,
-          clinician_name: form.clinician_name,
-          clinician_email: form.clinician_email,
-          clinician_password: form.clinician_password,
-          initial_tokens: form.initial_tokens,
-        },
-      });
-      // data?.error comes from the edge function's own error responses (4xx with JSON body)
+      const { data, error } = await supabase.functions.invoke("admin_onboard_value_unit", { body: form });
       if (data?.error) throw new Error(data.error);
-      // error is a network/HTTP error from the Supabase client
       if (error) {
-        // Try to extract the actual message from the response context
         const ctx = (error as any).context;
-        const bodyText = typeof ctx === "string" ? ctx : undefined;
-        try {
-          const parsed = bodyText ? JSON.parse(bodyText) : null;
-          if (parsed?.error) throw new Error(parsed.error);
-        } catch (_) { /* ignore JSON parse failure */ }
+        try { const p = JSON.parse(typeof ctx === "string" ? ctx : "{}"); if (p?.error) throw new Error(p.error); } catch (_) {}
         throw error;
       }
       return data;
@@ -146,466 +89,299 @@ export default function AdminClinics() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Value unit onboarded successfully!");
-      setShowOnboardDialog(false);
-      setOnboardForm({
-        clinic_name: "",
-        city: "",
-        sku: "",
-        clinician_name: "",
-        clinician_email: "",
-        clinician_password: "",
-        initial_tokens: 10,
-      });
+      toast.success("Clinic onboarded");
+      setOnboardOpen(false);
+      setOnboardForm({ ...EMPTY_ONBOARD });
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Delete clinic mutation
-  const deleteClinicMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (clinicId: string) => {
-      const { data, error } = await supabase.rpc("admin_delete_clinic", {
-        p_clinic_id: clinicId,
-      });
+      const { error } = await supabase.rpc("admin_delete_clinic", { p_clinic_id: clinicId });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
       toast.success("Clinic deleted");
-      setDeleteClinic(null);
+      setDeleteTarget(null);
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  const handleToggleActive = async (clinic: ClinicRow) => {
-    await updateClinicMutation.mutateAsync({
-      clinicId: clinic.id,
-      updates: { is_active: !clinic.is_active },
-    });
-  };
-
-  const handleEdit = (clinic: ClinicRow) => {
-    setEditingClinic(clinic);
-    setFormData({ name: clinic.name, city: clinic.city || "", sku: (clinic.sku as SkuTier) || "pilot" });
-  };
-
-  const handleSave = async () => {
-    if (!editingClinic) return;
-    await updateClinicMutation.mutateAsync({
-      clinicId: editingClinic.id,
-      updates: formData,
-    });
-  };
-
-  // Summary stats
-  const totalClinics = clinics?.length || 0;
-  const totalUsers = clinics?.reduce((sum, c) => sum + (c.member_count || 0), 0) || 0;
-  const totalStudies = clinics?.reduce((sum, c) => sum + (c.study_count || 0), 0) || 0;
-  const skuBreakdown = clinics?.reduce((acc, c) => {
-    const sku = c.sku || "pilot";
-    acc[sku] = (acc[sku] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>) || {};
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-4 max-w-5xl">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">Value Units</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Each clinic = 1 neurologist. Onboard them together as a value unit.
+          <h1 className="text-lg font-semibold tracking-tight">Clinics</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {clinics?.length ?? 0} value units ·{" "}
+            {clinics?.reduce((s, c) => s + (c.study_count || 0), 0) ?? 0} studies total
           </p>
         </div>
-        <Button onClick={() => setShowOnboardDialog(true)}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          Onboard Clinic
+        <Button size="sm" onClick={() => setOnboardOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1.5" />
+          Onboard clinic
         </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-card border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-                <Building2 className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">{totalClinics}</p>
-                <p className="text-xs text-muted-foreground">Value Units</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">{totalUsers}</p>
-                <p className="text-xs text-muted-foreground">Clinicians</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-semibold">{totalStudies}</p>
-                <p className="text-xs text-muted-foreground">Studies</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap gap-2">
-              {SKU_TIERS.map((tier) => (
-                <div key={tier} className="flex items-center gap-1.5">
-                  <Badge variant={SKU_BADGE_STYLES[tier].variant} className={cn("text-xs", SKU_BADGE_STYLES[tier].className)}>
-                    {SKU_LABELS[tier]}
-                  </Badge>
-                  <span className="text-sm font-medium">{skuBreakdown[tier] || 0}</span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">All Clinics</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[200px]">Clinic</TableHead>
-                <TableHead>City</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead className="text-center">Clinicians</TableHead>
-                <TableHead className="text-center">Studies</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Active</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clinics?.map((clinic) => {
-                const skuStyle = SKU_BADGE_STYLES[(clinic.sku as SkuTier) || "pilot"];
-                return (
-                  <TableRow key={clinic.id} className={cn(!clinic.is_active && "opacity-50")}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{clinic.name}</span>
-                        {!clinic.is_active && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            Disabled
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{clinic.city || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant={skuStyle.variant} className={cn("text-xs", skuStyle.className)}>
-                        {SKU_LABELS[(clinic.sku as SkuTier) || "pilot"]}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-48">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/30">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Clinic</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">SKU</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Members</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Studies</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Active</th>
+                <th className="px-4 py-2.5 w-20" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {clinics && clinics.length > 0 ? (
+                clinics.map((c) => (
+                  <tr key={c.id} className={cn("hover:bg-accent/20 transition-colors", !c.is_active && "opacity-50")}>
+                    <td className="px-4 py-3">
+                      <span className="text-sm font-medium">{c.name}</span>
+                      {c.city && <span className="ml-2 text-xs text-muted-foreground">{c.city}</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant="secondary" className={cn("text-[10px] h-4 px-1.5", SKU_STYLE[c.sku] || SKU_STYLE.pilot)}>
+                        {SKU_LABELS[(c.sku as SkuTier)] || c.sku}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">{clinic.member_count}</TableCell>
-                    <TableCell className="text-center">{clinic.study_count}</TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {format(new Date(clinic.created_at), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell>
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground">{c.member_count}</td>
+                    <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground">{c.study_count}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
+                    </td>
+                    <td className="px-4 py-3">
                       <Switch
-                        checked={clinic.is_active}
-                        onCheckedChange={() => handleToggleActive(clinic)}
+                        checked={c.is_active}
+                        onCheckedChange={() => updateMutation.mutate({ clinicId: c.id, updates: { is_active: !c.is_active } })}
                       />
-                    </TableCell>
-                    <TableCell>
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleEdit(clinic)}
+                          variant="ghost" size="icon" className="h-7 w-7"
+                          onClick={() => { setEditTarget(c); setEditForm({ name: c.name, city: c.city || "", sku: (c.sku as SkuTier) || "pilot" }); }}
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => setDeleteClinic(clinic)}
+                          variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(c)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              {(!clinics || clinics.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    No value units yet. Onboard your first clinic to get started.
-                  </TableCell>
-                </TableRow>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                    No clinics yet. Onboard your first clinic to get started.
+                  </td>
+                </tr>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Edit Dialog */}
-      <Dialog open={!!editingClinic} onOpenChange={(open) => !open && setEditingClinic(null)}>
-        <DialogContent>
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Edit Clinic</DialogTitle>
-            <DialogDescription>Update clinic details and SKU tier.</DialogDescription>
+            <DialogTitle>Edit clinic</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Clinic Name</Label>
-              <Input
-                id="edit-name"
-                value={formData.name}
-                onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-              />
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs">Name</Label>
+              <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="mt-1 h-8" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-city">City</Label>
-              <Input
-                id="edit-city"
-                value={formData.city}
-                onChange={(e) => setFormData((prev) => ({ ...prev, city: e.target.value }))}
-              />
+            <div>
+              <Label className="text-xs">City</Label>
+              <Input value={editForm.city} onChange={(e) => setEditForm((f) => ({ ...f, city: e.target.value }))} className="mt-1 h-8" placeholder="Mumbai" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-sku">SKU Tier</Label>
-              <Select
-                value={formData.sku}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, sku: v as SkuTier }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select SKU..." />
+            <div>
+              <Label className="text-xs">SKU</Label>
+              <Select value={editForm.sku} onValueChange={(v) => setEditForm((f) => ({ ...f, sku: v as SkuTier }))}>
+                <SelectTrigger className="mt-1 h-8 text-sm">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SKU_TIERS.map((tier) => (
-                    <SelectItem key={tier} value={tier}>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={SKU_BADGE_STYLES[tier].variant} className={cn("text-xs", SKU_BADGE_STYLES[tier].className)}>
-                          {SKU_LABELS[tier]}
-                        </Badge>
-                      </div>
+                  {SKU_TIERS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      <Badge variant="secondary" className={cn("text-[10px]", SKU_STYLE[t])}>{SKU_LABELS[t]}</Badge>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                {formData.sku === "internal" && "Internal: Full platform with all features (dev/ops)."}
-                {formData.sku === "pilot" && "Pilot: Production value unit (Upload → Triage → Report)."}
-              </p>
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditingClinic(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={updateClinicMutation.isPending}>
-              {updateClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Save Changes
+            <Button variant="outline" size="sm" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button
+              size="sm"
+              disabled={updateMutation.isPending}
+              onClick={() => editTarget && updateMutation.mutate({ clinicId: editTarget.id, updates: editForm })}
+            >
+              {updateMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Save
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Onboard Value Unit Dialog */}
-      <Dialog open={showOnboardDialog} onOpenChange={setShowOnboardDialog}>
-        <DialogContent className="max-w-lg">
+      {/* Onboard Dialog */}
+      <Dialog open={onboardOpen} onOpenChange={setOnboardOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Onboard Value Unit</DialogTitle>
-            <DialogDescription>
-              Create a clinic and its primary neurologist in one step. 
-              They'll be ready to upload EEGs and run triage immediately.
-            </DialogDescription>
+            <DialogTitle>Onboard clinic</DialogTitle>
+            <DialogDescription>Creates clinic + primary neurologist in one step.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            {/* Clinic Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Building2 className="h-4 w-4" />
-                Clinic Details
+          <div className="space-y-5 py-2">
+            {/* Clinic */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Building2 className="h-3.5 w-3.5" /> Clinic
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="clinic-name">Clinic Name *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Name *</Label>
                   <Input
-                    id="clinic-name"
                     value={onboardForm.clinic_name}
                     onChange={(e) => setOnboardForm((f) => ({ ...f, clinic_name: e.target.value }))}
                     placeholder="Magna Neurology"
+                    className="mt-1 h-8 text-sm"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="clinic-city">City</Label>
+                <div>
+                  <Label className="text-xs">City</Label>
                   <Input
-                    id="clinic-city"
                     value={onboardForm.city}
                     onChange={(e) => setOnboardForm((f) => ({ ...f, city: e.target.value }))}
                     placeholder="Mumbai"
+                    className="mt-1 h-8 text-sm"
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="clinic-sku">SKU Tier *</Label>
-                <Select
-                  value={onboardForm.sku}
-                  onValueChange={(v) => setOnboardForm((f) => ({ ...f, sku: v as SkuTier }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select SKU..." />
+              <div>
+                <Label className="text-xs">SKU *</Label>
+                <Select value={onboardForm.sku} onValueChange={(v) => setOnboardForm((f) => ({ ...f, sku: v as SkuTier }))}>
+                  <SelectTrigger className="mt-1 h-8 text-sm">
+                    <SelectValue placeholder="Select tier…" />
                   </SelectTrigger>
                   <SelectContent>
-                    {SKU_TIERS.map((tier) => (
-                      <SelectItem key={tier} value={tier}>
-                        <div className="flex items-center gap-2">
-                          <Badge variant={SKU_BADGE_STYLES[tier].variant} className={cn("text-xs", SKU_BADGE_STYLES[tier].className)}>
-                            {SKU_LABELS[tier]}
-                          </Badge>
-                        </div>
+                    {SKU_TIERS.map((t) => (
+                      <SelectItem key={t} value={t}>
+                        <Badge variant="secondary" className={cn("text-[10px]", SKU_STYLE[t])}>{SKU_LABELS[t]}</Badge>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  Pilot = Production, Internal = Dev/Ops, Demo = Showcase
-                </p>
               </div>
             </div>
 
-            {/* Clinician Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <User className="h-4 w-4" />
-                Primary Neurologist
+            {/* Neurologist */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <User className="h-3.5 w-3.5" /> Primary Neurologist
               </div>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="clinician-name">Full Name *</Label>
+              <div>
+                <Label className="text-xs">Full name *</Label>
+                <Input
+                  value={onboardForm.clinician_name}
+                  onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_name: e.target.value }))}
+                  placeholder="Dr. Priya Sharma"
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Email *</Label>
                   <Input
-                    id="clinician-name"
-                    value={onboardForm.clinician_name}
-                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_name: e.target.value }))}
-                    placeholder="Dr. Priya Sharma"
+                    type="email"
+                    value={onboardForm.clinician_email}
+                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_email: e.target.value }))}
+                    placeholder="dr@clinic.com"
+                    className="mt-1 h-8 text-sm"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="clinician-email">Email *</Label>
-                    <Input
-                      id="clinician-email"
-                      type="email"
-                      value={onboardForm.clinician_email}
-                      onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_email: e.target.value }))}
-                      placeholder="dr.sharma@clinic.com"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="clinician-password">Temp Password *</Label>
-                    <Input
-                      id="clinician-password"
-                      type="password"
-                      value={onboardForm.clinician_password}
-                      onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_password: e.target.value }))}
-                      placeholder="••••••••"
-                    />
-                  </div>
+                <div>
+                  <Label className="text-xs">Temp password *</Label>
+                  <Input
+                    type="password"
+                    value={onboardForm.clinician_password}
+                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_password: e.target.value }))}
+                    placeholder="••••••••"
+                    className="mt-1 h-8 text-sm"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Tokens Section */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Coins className="h-4 w-4" />
-                Initial Setup
+            {/* Tokens */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Coins className="h-3.5 w-3.5" /> Starting tokens
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="initial-tokens">Starting Tokens</Label>
-                <Input
-                  id="initial-tokens"
-                  type="number"
-                  value={onboardForm.initial_tokens}
-                  onChange={(e) => setOnboardForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
-                  min={0}
-                  className="w-32"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Tokens for initial EEG triage runs
-                </p>
-              </div>
+              <Input
+                type="number"
+                value={onboardForm.initial_tokens}
+                onChange={(e) => setOnboardForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
+                min={0}
+                className="w-24 h-8 text-sm font-mono"
+              />
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setShowOnboardDialog(false)}>
-              Cancel
-            </Button>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setOnboardOpen(false)}>Cancel</Button>
             <Button
-              onClick={() => onboardMutation.mutate(onboardForm)}
+              size="sm"
               disabled={
                 onboardMutation.isPending ||
-                !onboardForm.clinic_name ||
-                !onboardForm.sku ||
-                !onboardForm.clinician_name ||
-                !onboardForm.clinician_email ||
-                !onboardForm.clinician_password
+                !onboardForm.clinic_name || !onboardForm.sku ||
+                !onboardForm.clinician_name || !onboardForm.clinician_email || !onboardForm.clinician_password
               }
+              onClick={() => onboardMutation.mutate(onboardForm)}
             >
-              {onboardMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Onboard Clinic
+              {onboardMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Onboard
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
-      <AlertDialog open={!!deleteClinic} onOpenChange={(open) => !open && setDeleteClinic(null)}>
+      {/* Delete */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Clinic?</AlertDialogTitle>
+            <AlertDialogTitle>Delete clinic?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {deleteClinic?.name} and all associated data. 
-              This action cannot be undone.
+              <strong>{deleteTarget?.name}</strong> and all associated data will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteClinic && deleteClinicMutation.mutate(deleteClinic.id)}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
             >
-              {deleteClinicMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

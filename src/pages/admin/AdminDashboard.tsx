@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Building2, FileText, Coins, Users, TrendingUp, Zap, Clock } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Loader2, Building2, FileText, Users, AlertTriangle, CheckCircle2, Clock, RotateCcw, ArrowRight, Activity } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 type DashboardStats = {
@@ -16,238 +16,269 @@ type DashboardStats = {
   active_users: number;
 };
 
-function StatCard({ 
-  title, 
-  value, 
-  subtitle, 
-  icon: Icon, 
-  trend,
-  accent = "neutral" 
-}: { 
-  title: string; 
-  value: number | string; 
-  subtitle?: string; 
-  icon: React.ElementType;
-  trend?: string;
-  accent?: "primary" | "success" | "warning" | "info" | "neutral";
-}) {
-  return (
-    <Card className={cn("relative overflow-hidden", `dashboard-card--${accent}`)}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
-            <p className="text-2xl font-semibold tracking-tight">{value}</p>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground">{subtitle}</p>
-            )}
-          </div>
-          <div className="h-9 w-9 rounded-lg bg-accent/50 flex items-center justify-center">
-            <Icon className="h-4 w-4 text-muted-foreground" />
-          </div>
-        </div>
-        {trend && (
-          <div className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
-            <TrendingUp className="h-3 w-3" />
-            <span>{trend}</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function PipelineCard({ studyStates }: { studyStates: Record<string, number> }) {
-  const stages = [
-    { key: "uploaded", label: "Uploaded", color: "bg-muted-foreground/20" },
-    { key: "processing", label: "Processing", color: "bg-amber-500/20 text-amber-600 dark:text-amber-400" },
-    { key: "ai_draft", label: "AI Draft", color: "bg-blue-500/20 text-blue-600 dark:text-blue-400" },
-    { key: "in_review", label: "In Review", color: "bg-purple-500/20 text-purple-600 dark:text-purple-400" },
-    { key: "signed", label: "Signed", color: "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" },
-  ];
-
-  const total = Object.values(studyStates).reduce((a, b) => a + b, 0);
-  const failed = studyStates["failed"] || 0;
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-medium">Pipeline Health</CardTitle>
-          {failed > 0 && (
-            <Badge variant="destructive" className="text-xs">
-              {failed} failed
-            </Badge>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-5 gap-2">
-          {stages.map((stage) => {
-            const count = studyStates[stage.key] || 0;
-            const pct = total > 0 ? ((count / total) * 100).toFixed(0) : "0";
-            return (
-              <div key={stage.key} className="text-center">
-                <div className={cn(
-                  "rounded-md py-2 px-1 mb-1",
-                  stage.color
-                )}>
-                  <span className="text-lg font-semibold">{count}</span>
-                </div>
-                <p className="text-[10px] font-medium text-muted-foreground truncate">{stage.label}</p>
-                <p className="text-[10px] text-muted-foreground/60">{pct}%</p>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+const STATE_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+  pending:    { label: "Pending",    color: "text-muted-foreground", dot: "bg-muted-foreground/40" },
+  uploaded:   { label: "Uploaded",   color: "text-blue-500",         dot: "bg-blue-500" },
+  processing: { label: "Processing", color: "text-amber-500",        dot: "bg-amber-500" },
+  complete:   { label: "Complete",   color: "text-emerald-500",      dot: "bg-emerald-500" },
+  signed:     { label: "Signed",     color: "text-emerald-600",      dot: "bg-emerald-600" },
+  failed:     { label: "Failed",     color: "text-red-500",          dot: "bg-red-500" },
+};
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
+  const { data: stats, isLoading } = useQuery<DashboardStats>({
     queryKey: ["admin-dashboard-stats"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_get_dashboard_stats");
       if (error) throw error;
       return data as DashboardStats;
     },
+    refetchInterval: 30000,
   });
 
-  const { data: recentEvents } = useQuery({
+  const { data: recentAudit } = useQuery({
     queryKey: ["admin-recent-audit"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("audit_logs")
-        .select("*")
+        .select("id, event_type, created_at, event_data")
         .order("created_at", { ascending: false })
-        .limit(8);
+        .limit(10);
       if (error) throw error;
       return data;
     },
+    refetchInterval: 30000,
   });
 
-  if (statsLoading) {
+  const { data: failedStudies } = useQuery({
+    queryKey: ["admin-failed-studies"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_get_all_studies");
+      if (error) throw error;
+      return (data || []).filter((s: any) => s.state === "failed").slice(0, 5);
+    },
+    refetchInterval: 30000,
+  });
+
+  const { data: recentComplete } = useQuery({
+    queryKey: ["admin-recent-complete"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_get_all_studies");
+      if (error) throw error;
+      return (data || [])
+        .filter((s: any) => s.state === "complete" || s.state === "signed")
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 5);
+    },
+    refetchInterval: 30000,
+  });
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  const studyStates = stats?.studies_by_state || {};
-  const tokenUtilization = stats?.total_tokens_sold 
-    ? Math.round((stats.total_tokens_consumed / stats.total_tokens_sold) * 100) 
-    : 0;
-
-  const quickActions = [
-    { label: "New Clinic", href: "/admin/clinics", icon: Building2 },
-    { label: "Push EEG", href: "/admin/eeg-push", icon: Zap },
-    { label: "View Studies", href: "/admin/studies", icon: FileText },
-    { label: "Check Health", href: "/admin/health", icon: TrendingUp },
-  ];
+  const states = stats?.studies_by_state || {};
+  const failed = states["failed"] || 0;
+  const processing = states["processing"] || 0;
+  const complete = (states["complete"] || 0) + (states["signed"] || 0);
+  const total = stats?.total_studies || 0;
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-5xl">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Platform metrics and value unit health
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Operations</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {format(new Date(), "EEEE, d MMMM yyyy · HH:mm")}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => navigate("/admin/health")}>
+          <Activity className="h-3.5 w-3.5 mr-1.5" />
+          Service Health
+        </Button>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Value Units"
-          value={stats?.total_clinics || 0}
-          subtitle="Active clinics"
-          icon={Building2}
-          accent="primary"
-        />
-        <StatCard
-          title="Studies"
-          value={stats?.total_studies || 0}
-          subtitle="Total processed"
-          icon={FileText}
-          accent="info"
-        />
-        <StatCard
-          title="Token Utilization"
-          value={`${tokenUtilization}%`}
-          subtitle={`${stats?.total_tokens_consumed || 0} / ${stats?.total_tokens_sold || 0}`}
-          icon={Coins}
-          accent="warning"
-        />
-        <StatCard
-          title="Active Users"
-          value={stats?.active_users || 0}
-          subtitle="Last 30 days"
-          icon={Users}
-          accent="success"
-        />
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: "Clinics", value: stats?.total_clinics || 0, icon: Building2, href: "/admin/clinics" },
+          { label: "Studies", value: total, icon: FileText, href: "/admin/studies" },
+          { label: "Active Users", value: stats?.active_users || 0, icon: Users, href: "/admin/users" },
+          {
+            label: "Complete",
+            value: total > 0 ? `${Math.round((complete / total) * 100)}%` : "—",
+            icon: CheckCircle2,
+            href: "/admin/studies",
+            accent: complete > 0 ? "text-emerald-500" : undefined,
+          },
+        ].map((kpi) => (
+          <button
+            key={kpi.label}
+            onClick={() => navigate(kpi.href)}
+            className="text-left p-4 rounded-lg border border-border/60 hover:border-border hover:bg-accent/30 transition-all group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-muted-foreground">{kpi.label}</span>
+              <kpi.icon className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
+            </div>
+            <span className={cn("text-2xl font-semibold tabular-nums", kpi.accent)}>{kpi.value}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Pipeline + Activity */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <PipelineCard studyStates={studyStates} />
+      {/* Pipeline State Breakdown */}
+      <div className="rounded-lg border border-border/60 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm font-medium">Pipeline</span>
+          <span className="text-xs text-muted-foreground">{total} total studies</span>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(STATE_CONFIG).map(([key, cfg]) => {
+            const count = states[key] || 0;
+            if (count === 0 && key !== "processing" && key !== "failed") return null;
+            return (
+              <button
+                key={key}
+                onClick={() => navigate(`/admin/studies?state=${key}`)}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
+                  "border border-transparent hover:border-border/60 hover:bg-accent/40",
+                  count === 0 ? "opacity-40" : ""
+                )}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dot)} />
+                <span className={cfg.color}>{count}</span>
+                <span className="text-muted-foreground">{cfg.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {processing > 0 && (
+          <div className="mt-3 pt-3 border-t border-border/40 flex items-center gap-2 text-xs text-amber-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {processing} {processing === 1 ? "study" : "studies"} currently in pipeline
+          </div>
+        )}
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Failed Studies */}
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className={cn("h-3.5 w-3.5", failed > 0 ? "text-red-500" : "text-muted-foreground/40")} />
+              <span className="text-sm font-medium">Failed</span>
+              {failed > 0 && (
+                <Badge variant="destructive" className="h-4 text-[10px] px-1.5">{failed}</Badge>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => navigate("/admin/studies?state=failed")}>
+              View all <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+          <div className="divide-y divide-border/40">
+            {failedStudies && failedStudies.length > 0 ? (
+              failedStudies.map((s: any) => (
+                <div key={s.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors">
+                  <div className="min-w-0">
+                    <span className="font-mono text-xs text-muted-foreground">{s.id.slice(0, 8)}</span>
+                    {s.meta?.patient_id && (
+                      <span className="ml-2 text-xs text-muted-foreground/60">{s.meta.patient_id}</span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs shrink-0"
+                    onClick={() => navigate(`/admin/studies/${s.id}`)}
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    Retry
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="flex items-center justify-center h-20 text-xs text-muted-foreground/50">
+                No failed studies
+              </div>
+            )}
+          </div>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Recent Activity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {recentEvents && recentEvents.length > 0 ? (
-              recentEvents.slice(0, 5).map((event) => (
-                <div
-                  key={event.id}
-                  className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
-                    <span className="text-xs font-medium truncate">{event.event_type}</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
+        {/* Recent Activity */}
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground/60" />
+              <span className="text-sm font-medium">Activity</span>
+            </div>
+            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => navigate("/admin/audit")}>
+              Full log <ArrowRight className="h-3 w-3 ml-1" />
+            </Button>
+          </div>
+          <div className="divide-y divide-border/40">
+            {recentAudit && recentAudit.length > 0 ? (
+              recentAudit.slice(0, 6).map((event) => (
+                <div key={event.id} className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-xs font-mono text-muted-foreground truncate max-w-[180px]">
+                    {event.event_type}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/50 shrink-0 ml-2">
                     {formatDistanceToNow(new Date(event.created_at), { addSuffix: true })}
                   </span>
                 </div>
               ))
             ) : (
-              <div className="flex items-center justify-center py-6 text-muted-foreground">
-                <Clock className="h-4 w-4 mr-2" />
-                <span className="text-xs">No recent activity</span>
+              <div className="flex items-center justify-center h-20 text-xs text-muted-foreground/50">
+                No recent activity
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Quick Actions - using navigate instead of <a> tags */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium">Quick Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {quickActions.map((action) => (
+      {/* Recently Completed */}
+      {recentComplete && recentComplete.length > 0 && (
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+              <span className="text-sm font-medium">Recently Completed</span>
+            </div>
+          </div>
+          <div className="divide-y divide-border/40">
+            {recentComplete.map((s: any) => (
               <button
-                key={action.label}
-                onClick={() => navigate(action.href)}
-                className="flex items-center gap-2 p-3 rounded-lg border border-border/50 hover:bg-accent/50 transition-colors text-left"
+                key={s.id}
+                onClick={() => navigate(`/admin/studies/${s.id}`)}
+                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors text-left"
               >
-                <action.icon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">{action.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="font-mono text-xs text-muted-foreground">{s.id.slice(0, 8)}</span>
+                  {s.meta?.patient_id && (
+                    <span className="text-xs text-muted-foreground/60 truncate">{s.meta.patient_id}</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                    {s.state}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground/50">
+                    {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
+                  </span>
+                </div>
               </button>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }

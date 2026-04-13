@@ -1,42 +1,23 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Search, ExternalLink, Trash2 } from "lucide-react";
-import { format } from "date-fns";
+import { Loader2, Search, Trash2, RotateCcw, ExternalLink } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-import { useClinicSelector } from "@/hooks/useClinicSelector";
+import { cn } from "@/lib/utils";
 
-type StudyWithClinic = {
+type Study = {
   id: string;
   clinic_id: string;
   owner: string;
@@ -44,258 +25,241 @@ type StudyWithClinic = {
   state: string | null;
   meta: any;
   created_at: string;
-  report_locked: boolean | null;
-  clinic_name?: string;
-  last_event_at?: string;
   study_key?: string | null;
-  storage_backend?: string | null;
-  latest_run_id?: string | null;
+  clinic_name?: string;
+};
+
+const STATE_STYLE: Record<string, string> = {
+  pending:    "bg-muted/50 text-muted-foreground",
+  uploaded:   "bg-blue-500/10 text-blue-500",
+  processing: "bg-amber-500/10 text-amber-500",
+  complete:   "bg-emerald-500/10 text-emerald-500",
+  signed:     "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  failed:     "bg-red-500/10 text-red-500",
 };
 
 export default function AdminStudies() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
-  const { selectedClinicId } = useClinicSelector();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [stateFilter, setStateFilter] = useState<string>("all");
-  const [deleteStudy, setDeleteStudy] = useState<StudyWithClinic | null>(null);
+  const [search, setSearch] = useState("");
+  const [stateFilter, setStateFilter] = useState<string>(searchParams.get("state") || "all");
+  const [deleteTarget, setDeleteTarget] = useState<Study | null>(null);
 
-  const { data: studies, isLoading } = useQuery<StudyWithClinic[]>({
-    queryKey: ["admin-all-studies", selectedClinicId],
+  const { data: studies, isLoading } = useQuery<Study[]>({
+    queryKey: ["admin-all-studies"],
     queryFn: async () => {
-      // Get all studies via admin function
-      const { data: studiesData, error: studiesError } = await supabase.rpc("admin_get_all_studies");
-      if (studiesError) throw studiesError;
-
-      // Get clinic names
-      const { data: clinics } = await supabase.from("clinics").select("id, name");
-      const clinicMap = new Map(clinics?.map(c => [c.id, c.name]) || []);
-
-      // Get last event for each study
-      const { data: events } = await supabase
-        .from("review_events")
-        .select("study_id, created_at")
-        .order("created_at", { ascending: false });
-
-      const lastEventMap = new Map<string, string>();
-      events?.forEach(e => {
-        if (e.study_id && !lastEventMap.has(e.study_id)) {
-          lastEventMap.set(e.study_id, e.created_at);
-        }
-      });
-
-      let result = (studiesData || []).map((s: any) => ({
+      const [studiesRes, clinicsRes] = await Promise.all([
+        supabase.rpc("admin_get_all_studies"),
+        supabase.from("clinics").select("id, name"),
+      ]);
+      if (studiesRes.error) throw studiesRes.error;
+      const clinicMap = new Map((clinicsRes.data || []).map((c) => [c.id, c.name]));
+      return (studiesRes.data || []).map((s: any) => ({
         ...s,
-        clinic_name: clinicMap.get(s.clinic_id) || "Unknown",
-        last_event_at: lastEventMap.get(s.id),
+        clinic_name: clinicMap.get(s.clinic_id) || "—",
       }));
-
-      // Apply clinic filter if selected
-      if (selectedClinicId) {
-        result = result.filter((s: any) => s.clinic_id === selectedClinicId);
-      }
-
-      return result;
     },
+    refetchInterval: 15000,
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: async (studyId: string) => {
+      const res = await supabase.functions.invoke("generate_ai_report", {
+        body: { study_id: studyId },
+      });
+      if (res.error) throw res.error;
+    },
+    onSuccess: () => {
+      toast.success("Pipeline restarted");
+      queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
+    },
+    onError: (err: any) => toast.error(err.message || "Retry failed"),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (studyId: string) => {
-      const { data, error } = await supabase.rpc("admin_delete_study", {
-        p_study_id: studyId,
-      });
+      const { error } = await supabase.rpc("admin_delete_study", { p_study_id: studyId });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
-      toast.success("Study deleted successfully");
+      toast.success("Study deleted");
       queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
-      setDeleteStudy(null);
+      setDeleteTarget(null);
     },
-    onError: (err: any) => {
-      toast.error(err.message || "Failed to delete study");
-    },
+    onError: (err: any) => toast.error(err.message || "Delete failed"),
   });
 
-  const filteredStudies = studies?.filter((study) => {
-    const matchesSearch =
-      !searchQuery ||
-      study.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      study.meta?.patient_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      study.clinic_name?.toLowerCase().includes(searchQuery.toLowerCase());
+  const filtered = studies?.filter((s) => {
+    const matchSearch = !search
+      || s.id.toLowerCase().includes(search.toLowerCase())
+      || s.meta?.patient_id?.toLowerCase().includes(search.toLowerCase())
+      || s.clinic_name?.toLowerCase().includes(search.toLowerCase());
+    const matchState = stateFilter === "all" || s.state === stateFilter;
+    return matchSearch && matchState;
+  }) ?? [];
 
-    const matchesState = stateFilter === "all" || study.state === stateFilter;
-
-    return matchesSearch && matchesState;
-  });
-
-  const stateColors: Record<string, string> = {
-    uploaded: "bg-blue-500/10 text-blue-500",
-    parsed: "bg-yellow-500/10 text-yellow-500",
-    canonicalized: "bg-purple-500/10 text-purple-500",
-    processing: "bg-cyan-500/10 text-cyan-500",
-    ai_draft: "bg-cyan-500/10 text-cyan-500",
-    in_review: "bg-orange-500/10 text-orange-500",
-    completed: "bg-green-500/10 text-green-500",
-    signed: "bg-green-500/10 text-green-500",
-    failed: "bg-red-500/10 text-red-500",
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  const counts = studies?.reduce<Record<string, number>>((acc, s) => {
+    const k = s.state || "pending";
+    acc[k] = (acc[k] || 0) + 1;
+    return acc;
+  }, {}) ?? {};
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Studies Queue</h1>
-        <p className="text-sm text-muted-foreground">
-          All studies across all clinics
-        </p>
+    <div className="space-y-4 max-w-6xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Studies</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {studies?.length ?? 0} total
+            {counts["failed"] ? ` · ${counts["failed"]} failed` : ""}
+            {counts["processing"] ? ` · ${counts["processing"]} processing` : ""}
+          </p>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search by ID, patient, clinic..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            placeholder="ID, patient, clinic…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
           />
         </div>
         <Select value={stateFilter} onValueChange={setStateFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Filter by state" />
+          <SelectTrigger className="w-36 h-8 text-sm">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All States</SelectItem>
-            <SelectItem value="uploaded">Uploaded</SelectItem>
-            <SelectItem value="processing">Processing</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="signed">Signed</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="all">All states</SelectItem>
+            {Object.keys(STATE_STYLE).map((s) => (
+              <SelectItem key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+                {counts[s] ? ` (${counts[s]})` : ""}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Studies Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID / Key</TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>Patient ID</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Backend</TableHead>
-                <TableHead>Run ID</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-24">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredStudies?.map((study) => (
-                <TableRow key={study.id} className="group">
-                  <TableCell className="font-mono text-xs">
-                    <div>{study.study_key || study.id.slice(0, 8)}</div>
-                    {study.study_key && (
-                      <div className="text-muted-foreground text-[10px]">{study.id.slice(0, 8)}...</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {study.clinic_name}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
-                    {study.meta?.patient_id || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={`text-xs ${stateColors[study.state || "uploaded"]}`}
-                    >
-                      {(study.state || "uploaded").toUpperCase()}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {study.storage_backend || "supabase"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {study.latest_run_id ? study.latest_run_id.slice(0, 8) : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {format(new Date(study.created_at), "MMM d, HH:mm")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-8 w-8"
-                        onClick={() => navigate(`/admin/studies/${study.id}`)}
+      {/* Table */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-48">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/30">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Study</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Clinic</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Patient</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">State</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
+                <th className="px-4 py-2.5 w-24" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {filtered.length > 0 ? (
+                filtered.map((s) => (
+                  <tr
+                    key={s.id}
+                    onClick={() => navigate(`/admin/studies/${s.id}`)}
+                    className="hover:bg-accent/20 transition-colors cursor-pointer group"
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {s.study_key || s.id.slice(0, 8)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{s.clinic_name}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {s.meta?.patient_id || "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge
+                        variant="secondary"
+                        className={cn("text-[10px] h-4 px-1.5", STATE_STYLE[s.state || "pending"])}
                       >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteStudy(study);
-                        }}
+                        {s.state || "pending"}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div
+                        className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(!filteredStudies || filteredStudies.length === 0) && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No studies found
-                  </TableCell>
-                </TableRow>
+                        {s.state === "failed" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title="Retry pipeline"
+                            onClick={() => retryMutation.mutate(s.id)}
+                            disabled={retryMutation.isPending}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Open"
+                          onClick={() => navigate(`/admin/studies/${s.id}`)}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Delete"
+                          onClick={() => setDeleteTarget(s)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                    No studies match the current filters
+                  </td>
+                </tr>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteStudy} onOpenChange={() => setDeleteStudy(null)}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Study</AlertDialogTitle>
+            <AlertDialogTitle>Delete study?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete this study and all associated data including files, reports, and markers.
-              This action cannot be undone.
+              Study <code className="font-mono text-xs">{deleteTarget?.id.slice(0, 8)}</code> and all
+              associated data — files, reports, markers — will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={() => deleteStudy && deleteMutation.mutate(deleteStudy.id)}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
               disabled={deleteMutation.isPending}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Study"
-              )}
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

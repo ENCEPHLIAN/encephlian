@@ -1,74 +1,37 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import InternalTeamManagement from "@/components/admin/InternalTeamManagement";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import {
-  Loader2,
-  Search,
-  User,
-  MoreHorizontal,
-  Ban,
-  CheckCircle,
-  KeyRound,
-  Users,
-  Building2,
-  Trash2,
-  ShieldOff,
-  Coins,
+  Loader2, Search, MoreHorizontal, Ban, CheckCircle,
+  KeyRound, ShieldOff, Trash2, Coins,
 } from "lucide-react";
-import { format } from "date-fns";
+import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 type UserRow = {
   id: string;
   email: string;
   full_name: string | null;
-  profile_role: string;
   is_disabled: boolean;
   created_at: string;
   app_roles: { role: string; clinic_id: string | null }[];
@@ -76,29 +39,21 @@ type UserRow = {
   tokens: number;
 };
 
-type ClinicOption = {
-  id: string;
-  name: string;
+const ROLE_STYLE: Record<string, string> = {
+  super_admin: "bg-red-500/10 text-red-500",
+  management:  "bg-violet-500/10 text-violet-500",
+  neurologist: "bg-blue-500/10 text-blue-500",
+  clinician:   "bg-muted text-muted-foreground",
 };
 
-/**
- * AdminUsers - Simplified User Management
- * 
- * In the value unit model:
- * - Clinicians are created via the "Onboard Clinic" flow (AdminClinics)
- * - This page is for viewing/managing existing users
- * - Management users are rare (internal only)
- */
 export default function AdminUsers() {
   const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [clinicFilter, setClinicFilter] = useState<string>("all");
-  const [showTokenDialog, setShowTokenDialog] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
-  const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
+  const [search, setSearch] = useState("");
+  const [clinicFilter, setClinicFilter] = useState("all");
+  const [tokenDialog, setTokenDialog] = useState<UserRow | null>(null);
   const [tokenAmount, setTokenAmount] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
 
-  // Fetch users
   const { data: users, isLoading } = useQuery<UserRow[]>({
     queryKey: ["admin-all-users"],
     queryFn: async () => {
@@ -108,27 +63,15 @@ export default function AdminUsers() {
     },
   });
 
-  // Fetch clinics for filter
-  const { data: clinics } = useQuery<ClinicOption[]>({
+  const { data: clinics } = useQuery({
     queryKey: ["admin-clinics-list"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_get_clinics_for_dropdown");
       if (error) throw error;
-      return data as ClinicOption[];
+      return data as { id: string; name: string }[];
     },
   });
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    if (!users) return { total: 0, clinicians: 0, management: 0 };
-    return {
-      total: users.length,
-      clinicians: users.filter(u => u.app_roles?.some(r => r.role === 'clinician')).length,
-      management: users.filter(u => u.app_roles?.some(r => r.role === 'management' || r.role === 'super_admin')).length,
-    };
-  }, [users]);
-
-  // Send password reset mutation
   const sendResetMutation = useMutation({
     mutationFn: async (email: string) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -137,63 +80,47 @@ export default function AdminUsers() {
       if (error) throw error;
     },
     onSuccess: () => toast.success("Password reset link sent"),
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Suspend user mutation
   const suspendMutation = useMutation({
     mutationFn: async ({ userId, suspend }: { userId: string; suspend: boolean }) => {
-      const { data, error } = await supabase.rpc("admin_suspend_user", {
-        p_user_id: userId,
-        p_suspend: suspend,
-      });
+      const { error } = await supabase.rpc("admin_suspend_user", { p_user_id: userId, p_suspend: suspend });
       if (error) throw error;
-      return data;
     },
     onSuccess: (_, { suspend }) => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
       toast.success(suspend ? "User suspended" : "User reactivated");
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Delete user mutation
-  const deleteUserMutation = useMutation({
+  const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.rpc("admin_delete_user", {
-        p_user_id: userId,
-      });
+      const { error } = await supabase.rpc("admin_delete_user", { p_user_id: userId });
       if (error) throw error;
-      return data;
     },
-    onSuccess: (data: any) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success(`User deleted`);
-      setDeleteUser(null);
+      toast.success("User deleted");
+      setDeleteTarget(null);
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Reset TFA mutation
   const resetTFAMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const { data, error } = await supabase.rpc("admin_reset_user_tfa", {
-        p_user_id: userId,
-      });
+      const { error } = await supabase.rpc("admin_reset_user_tfa", { p_user_id: userId });
       if (error) throw error;
-      return data;
     },
-    onSuccess: () => toast.success("TFA reset successfully"),
-    onError: (error: any) => toast.error(error.message),
+    onSuccess: () => toast.success("TFA reset"),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Adjust tokens mutation
   const adjustTokensMutation = useMutation({
     mutationFn: async ({ userId, amount, operation }: { userId: string; amount: number; operation: string }) => {
       const { data, error } = await supabase.rpc("admin_adjust_tokens", {
-        p_user_id: userId,
-        p_amount: amount,
-        p_operation: operation,
+        p_user_id: userId, p_amount: amount, p_operation: operation,
       });
       if (error) throw error;
       return data;
@@ -201,248 +128,148 @@ export default function AdminUsers() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
       toast.success(`Tokens: ${data?.old_balance} → ${data?.new_balance}`);
-      setShowTokenDialog(false);
+      setTokenDialog(null);
       setTokenAmount("");
     },
-    onError: (error: any) => toast.error(error.message),
+    onError: (e: any) => toast.error(e.message),
   });
 
-  // Helper functions
-  const isSuperAdmin = (user: UserRow) => user.app_roles?.some((r) => r.role === "super_admin");
-  const isSystemRole = (user: UserRow) => user.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
-  const isClinician = (user: UserRow) => !isSystemRole(user);
+  const isSuperAdmin = (u: UserRow) => u.app_roles?.some((r) => r.role === "super_admin");
+  const isSystemRole = (u: UserRow) => u.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
+  const primaryRole = (u: UserRow) => u.app_roles?.[0]?.role || "—";
 
-  // Filter users
-  const filteredUsers = useMemo(() => {
+  const filtered = useMemo(() => {
     if (!users) return [];
-    return users.filter((user) => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch =
-          user.email.toLowerCase().includes(query) ||
-          user.full_name?.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
+    return users.filter((u) => {
+      if (search) {
+        const q = search.toLowerCase();
+        if (!u.email.toLowerCase().includes(q) && !u.full_name?.toLowerCase().includes(q)) return false;
       }
       if (clinicFilter !== "all") {
-        const inClinic = user.clinics?.some((c) => c.clinic_id === clinicFilter);
-        if (!inClinic) return false;
+        if (!u.clinics?.some((c) => c.clinic_id === clinicFilter)) return false;
       }
       return true;
     });
-  }, [users, searchQuery, clinicFilter]);
-
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case "super_admin": return "destructive";
-      case "management": return "default";
-      case "clinician": return "secondary";
-      default: return "outline";
-    }
-  };
-
-  const handleOpenTokenDialog = (user: UserRow) => {
-    setSelectedUser(user);
-    setTokenAmount(String(user.tokens));
-    setShowTokenDialog(true);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
+  }, [users, search, clinicFilter]);
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      {/* Header */}
+    <div className="space-y-6 max-w-5xl">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Users</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Manage clinicians and their tokens. To add new clinicians, use "Onboard Clinic".
+        <h1 className="text-lg font-semibold tracking-tight">Users</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {users?.length ?? 0} users across {clinics?.length ?? 0} clinics
         </p>
       </div>
 
-      {/* Internal Team (Management accounts) */}
       <InternalTeamManagement />
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-card border">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold">{stats.total}</p>
-              <p className="text-xs text-muted-foreground">Total Users</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-              <User className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold">{stats.clinicians}</p>
-              <p className="text-xs text-muted-foreground">Clinicians</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card border">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center">
-              <Building2 className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold">{clinics?.length || 0}</p>
-              <p className="text-xs text-muted-foreground">Clinics</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Filters */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search by email or name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            placeholder="Email or name…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
           />
         </div>
         <Select value={clinicFilter} onValueChange={setClinicFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by clinic" />
+          <SelectTrigger className="w-40 h-8 text-sm">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Clinics</SelectItem>
-            {clinics?.map((clinic) => (
-              <SelectItem key={clinic.id} value={clinic.id}>
-                {clinic.name}
-              </SelectItem>
+            <SelectItem value="all">All clinics</SelectItem>
+            {clinics?.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Users Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>User</TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead className="text-center">Tokens</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-10"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id} className={cn(user.is_disabled && "opacity-50")}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{user.full_name || "—"}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      </div>
+      {/* Table */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-48">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="rounded-lg border border-border/60 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/40 bg-muted/30">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">User</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Clinic</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Role</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Tokens</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Joined</th>
+                <th className="px-4 py-2.5 w-10" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/40">
+              {filtered.map((user) => (
+                <tr key={user.id} className={cn("hover:bg-accent/20 transition-colors", user.is_disabled && "opacity-50")}>
+                  <td className="px-4 py-3">
+                    <div>
+                      <p className="text-sm font-medium leading-none">{user.full_name || "—"}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    {user.clinics?.length > 0 ? (
-                      <Badge variant="outline" className="text-xs">
-                        {user.clinics[0].clinic_name}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {user.clinics?.[0]?.clinic_name || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge
+                      variant="secondary"
+                      className={cn("text-[10px] h-4 px-1.5", ROLE_STYLE[primaryRole(user)] || "bg-muted text-muted-foreground")}
+                    >
+                      {primaryRole(user)}
+                    </Badge>
+                    {user.is_disabled && (
+                      <Badge variant="destructive" className="text-[10px] h-4 px-1.5 ml-1">suspended</Badge>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    {user.app_roles?.length > 0 ? (
-                      <Badge
-                        variant={getRoleBadgeVariant(user.app_roles[0].role) as any}
-                        className="text-xs"
-                      >
-                        {user.app_roles[0].role}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className="font-mono text-sm">
-                      {isSystemRole(user) ? "—" : user.tokens}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {user.is_disabled ? (
-                      <Badge variant="destructive" className="text-xs">
-                        <Ban className="h-3 w-3 mr-1" />
-                        Suspended
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-green-600 border-green-200">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Active
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {user.created_at ? format(new Date(user.created_at), "MMM d, yyyy") : "—"}
-                  </TableCell>
-                  <TableCell>
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    {isSystemRole(user) ? "—" : user.tokens ?? 0}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {user.created_at
+                      ? formatDistanceToNow(new Date(user.created_at), { addSuffix: true })
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <MoreHorizontal className="h-3.5 w-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => sendResetMutation.mutate(user.email)}
-                          disabled={sendResetMutation.isPending}
-                        >
-                          <KeyRound className="h-4 w-4 mr-2" />
-                          Send Password Reset
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem onClick={() => sendResetMutation.mutate(user.email)}>
+                          <KeyRound className="h-3.5 w-3.5 mr-2" />
+                          Reset password
                         </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => resetTFAMutation.mutate(user.id)}
-                          disabled={resetTFAMutation.isPending}
-                        >
-                          <ShieldOff className="h-4 w-4 mr-2" />
+                        <DropdownMenuItem onClick={() => resetTFAMutation.mutate(user.id)}>
+                          <ShieldOff className="h-3.5 w-3.5 mr-2" />
                           Reset TFA
                         </DropdownMenuItem>
-                        {isClinician(user) && (
-                          <DropdownMenuItem onClick={() => handleOpenTokenDialog(user)}>
-                            <Coins className="h-4 w-4 mr-2" />
-                            Adjust Tokens
+                        {!isSystemRole(user) && (
+                          <DropdownMenuItem onClick={() => { setTokenDialog(user); setTokenAmount(String(user.tokens ?? 0)); }}>
+                            <Coins className="h-3.5 w-3.5 mr-2" />
+                            Adjust tokens
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
                         {user.is_disabled ? (
-                          <DropdownMenuItem
-                            onClick={() => suspendMutation.mutate({ userId: user.id, suspend: false })}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-2" />
+                          <DropdownMenuItem onClick={() => suspendMutation.mutate({ userId: user.id, suspend: false })}>
+                            <CheckCircle className="h-3.5 w-3.5 mr-2" />
                             Reactivate
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem
-                            onClick={() => suspendMutation.mutate({ userId: user.id, suspend: true })}
                             className="text-destructive"
+                            onClick={() => suspendMutation.mutate({ userId: user.id, suspend: true })}
                           >
-                            <Ban className="h-4 w-4 mr-2" />
+                            <Ban className="h-3.5 w-3.5 mr-2" />
                             Suspend
                           </DropdownMenuItem>
                         )}
@@ -450,100 +277,95 @@ export default function AdminUsers() {
                           <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => setDeleteUser(user)}
                               className="text-destructive"
+                              onClick={() => setDeleteTarget(user)}
                             >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete User
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />
+                              Delete user
                             </DropdownMenuItem>
                           </>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+                  </td>
+                </tr>
               ))}
-              {filteredUsers.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                    No users found
-                  </TableCell>
-                </TableRow>
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                    No users match filters
+                  </td>
+                </tr>
               )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Adjust Tokens Dialog */}
-      <Dialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={!!tokenDialog} onOpenChange={(o) => !o && setTokenDialog(null)}>
+        <DialogContent className="max-w-xs">
           <DialogHeader>
-            <DialogTitle>Adjust Tokens</DialogTitle>
-            <DialogDescription>
-              Set token balance for {selectedUser?.full_name || selectedUser?.email}
-            </DialogDescription>
+            <DialogTitle>Adjust tokens</DialogTitle>
+            <DialogDescription>{tokenDialog?.full_name || tokenDialog?.email}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Current Balance</Label>
-              <p className="text-2xl font-mono font-bold">{selectedUser?.tokens || 0}</p>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label className="text-xs text-muted-foreground">Current</Label>
+              <p className="text-2xl font-mono font-semibold">{tokenDialog?.tokens ?? 0}</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-tokens">New Balance</Label>
+            <div>
+              <Label htmlFor="token-input" className="text-xs text-muted-foreground">New balance</Label>
               <Input
-                id="new-tokens"
+                id="token-input"
                 type="number"
                 value={tokenAmount}
                 onChange={(e) => setTokenAmount(e.target.value)}
+                className="font-mono mt-1 h-8"
                 min={0}
-                className="font-mono"
               />
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowTokenDialog(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" size="sm" onClick={() => setTokenDialog(null)}>Cancel</Button>
             <Button
-              onClick={() => {
-                if (selectedUser) {
-                  const newAmount = parseInt(tokenAmount) || 0;
-                  const diff = newAmount - (selectedUser.tokens || 0);
-                  adjustTokensMutation.mutate({
-                    userId: selectedUser.id,
-                    amount: Math.abs(diff),
-                    operation: diff >= 0 ? "credit" : "debit",
-                  });
-                }
-              }}
+              size="sm"
               disabled={adjustTokensMutation.isPending}
+              onClick={() => {
+                if (!tokenDialog) return;
+                const newAmt = parseInt(tokenAmount) || 0;
+                const diff = newAmt - (tokenDialog.tokens || 0);
+                adjustTokensMutation.mutate({
+                  userId: tokenDialog.id,
+                  amount: Math.abs(diff),
+                  operation: diff >= 0 ? "credit" : "debit",
+                });
+              }}
             >
-              {adjustTokensMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Update Tokens
+              {adjustTokensMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Update
             </Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete User Confirmation */}
-      <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
+      {/* Delete User */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete User?</AlertDialogTitle>
+            <AlertDialogTitle>Delete user?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete {deleteUser?.email} and all their data.
-              This action cannot be undone.
+              <code className="font-mono text-xs">{deleteTarget?.email}</code> and all their data will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteUser && deleteUserMutation.mutate(deleteUser.id)}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              disabled={deleteMutation.isPending}
             >
-              {deleteUserMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Delete
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
