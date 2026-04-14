@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import InternalTeamManagement from "@/components/admin/InternalTeamManagement";
 import { Badge } from "@/components/ui/badge";
@@ -20,12 +21,18 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  Tabs, TabsContent, TabsList, TabsTrigger,
+} from "@/components/ui/tabs";
 import { toast } from "sonner";
 import {
   Loader2, Search, MoreHorizontal, Ban, CheckCircle,
-  KeyRound, ShieldOff, Trash2, Coins,
+  KeyRound, ShieldOff, Trash2, Coins, Copy, Check, User,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 type UserRow = {
@@ -42,17 +49,30 @@ type UserRow = {
 const ROLE_STYLE: Record<string, string> = {
   super_admin: "bg-red-500/10 text-red-500",
   management:  "bg-violet-500/10 text-violet-500",
-  neurologist: "bg-blue-500/10 text-blue-500",
   clinician:   "bg-muted text-muted-foreground",
 };
 
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      className="ml-1.5 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+      onClick={() => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3" />}
+    </button>
+  );
+}
+
 export default function AdminUsers() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [clinicFilter, setClinicFilter] = useState("all");
   const [tokenDialog, setTokenDialog] = useState<UserRow | null>(null);
   const [tokenAmount, setTokenAmount] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
 
   const { data: users, isLoading } = useQuery<UserRow[]>({
     queryKey: ["admin-all-users"],
@@ -134,6 +154,32 @@ export default function AdminUsers() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  // User detail sheet queries
+  const { data: userStudies, isLoading: studiesLoading } = useQuery({
+    queryKey: ["admin-user-studies", selectedUser?.id],
+    enabled: !!selectedUser,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_get_all_studies");
+      if (error) throw error;
+      return (data || []).filter((s: any) => s.owner === selectedUser?.id);
+    },
+  });
+
+  const { data: userAudit, isLoading: auditLoading } = useQuery({
+    queryKey: ["admin-user-audit", selectedUser?.id],
+    enabled: !!selectedUser,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("id, event_type, event_data, created_at")
+        .eq("actor_id", selectedUser!.id)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const isSuperAdmin = (u: UserRow) => u.app_roles?.some((r) => r.role === "super_admin");
   const isSystemRole = (u: UserRow) => u.app_roles?.some((r) => r.role === "super_admin" || r.role === "management");
   const primaryRole = (u: UserRow) => u.app_roles?.[0]?.role || "—";
@@ -207,7 +253,7 @@ export default function AdminUsers() {
             </thead>
             <tbody className="divide-y divide-border/40">
               {filtered.map((user) => (
-                <tr key={user.id} className={cn("hover:bg-accent/20 transition-colors", user.is_disabled && "opacity-50")}>
+                <tr key={user.id} onClick={() => setSelectedUser(user)} className={cn("hover:bg-accent/20 transition-colors cursor-pointer", user.is_disabled && "opacity-50")}>
                   <td className="px-4 py-3">
                     <div>
                       <p className="text-sm font-medium leading-none">{user.full_name || "—"}</p>
@@ -236,7 +282,7 @@ export default function AdminUsers() {
                       ? formatDistanceToNow(new Date(user.created_at), { addSuffix: true })
                       : "—"}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -370,6 +416,156 @@ export default function AdminUsers() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* User Detail Sheet */}
+      <Sheet open={!!selectedUser} onOpenChange={(o) => !o && setSelectedUser(null)}>
+        <SheetContent className="w-[500px] sm:w-[560px] overflow-y-auto">
+          {selectedUser && (
+            <>
+              <SheetHeader className="pb-4 border-b border-border/40">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <User className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <SheetTitle className="text-base leading-tight">{selectedUser.full_name || selectedUser.email}</SheetTitle>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{selectedUser.email}</p>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              <Tabs defaultValue="profile" className="mt-4">
+                <TabsList className="h-8 text-xs">
+                  <TabsTrigger value="profile" className="text-xs px-3">Profile</TabsTrigger>
+                  <TabsTrigger value="studies" className="text-xs px-3">Studies</TabsTrigger>
+                  <TabsTrigger value="activity" className="text-xs px-3">Activity</TabsTrigger>
+                </TabsList>
+
+                {/* Profile Tab */}
+                <TabsContent value="profile" className="mt-4 space-y-4">
+                  <div className="rounded-lg border border-border/60 overflow-hidden">
+                    {[
+                      { label: "User ID", value: selectedUser.id, mono: true, copyable: true },
+                      { label: "Email", value: selectedUser.email },
+                      { label: "Full Name", value: selectedUser.full_name || "—" },
+                      { label: "Status", value: selectedUser.is_disabled ? "Suspended" : "Active" },
+                      { label: "Role", value: primaryRole(selectedUser) },
+                      { label: "Clinic", value: selectedUser.clinics?.[0]?.clinic_name || "—" },
+                      { label: "Tokens", value: isSystemRole(selectedUser) ? "N/A" : String(selectedUser.tokens ?? 0) },
+                      { label: "Joined", value: selectedUser.created_at ? format(new Date(selectedUser.created_at), "d MMM yyyy, HH:mm") : "—" },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center justify-between px-3 py-2.5 border-b border-border/40 last:border-0">
+                        <span className="text-xs text-muted-foreground w-24 shrink-0">{row.label}</span>
+                        <span className={cn("text-xs text-right flex items-center gap-0.5 min-w-0", row.mono && "font-mono")}>
+                          <span className="truncate">{row.value}</span>
+                          {row.copyable && row.value !== "—" && <CopyButton value={row.value} />}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* All roles */}
+                  {selectedUser.app_roles && selectedUser.app_roles.length > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">All roles</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedUser.app_roles.map((r, i) => (
+                          <Badge key={i} variant="secondary" className={cn("text-[10px] h-5 px-2", ROLE_STYLE[r.role] || "bg-muted text-muted-foreground")}>
+                            {r.role}{r.clinic_id ? ` · ${selectedUser.clinics?.find(c => c.clinic_id === r.clinic_id)?.clinic_name || r.clinic_id.slice(0,8)}` : ""}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick actions */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => sendResetMutation.mutate(selectedUser.email)}>
+                      <KeyRound className="h-3 w-3 mr-1.5" /> Reset password
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => resetTFAMutation.mutate(selectedUser.id)}>
+                      <ShieldOff className="h-3 w-3 mr-1.5" /> Reset TFA
+                    </Button>
+                    {selectedUser.is_disabled ? (
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => suspendMutation.mutate({ userId: selectedUser.id, suspend: false })}>
+                        <CheckCircle className="h-3 w-3 mr-1.5" /> Reactivate
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => suspendMutation.mutate({ userId: selectedUser.id, suspend: true })}>
+                        <Ban className="h-3 w-3 mr-1.5" /> Suspend
+                      </Button>
+                    )}
+                  </div>
+                </TabsContent>
+
+                {/* Studies Tab */}
+                <TabsContent value="studies" className="mt-4">
+                  {studiesLoading ? (
+                    <div className="flex items-center justify-center h-24"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                  ) : userStudies && userStudies.length > 0 ? (
+                    <div className="rounded-lg border border-border/60 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/30 border-b border-border/40">
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Study</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Patient</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">State</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/40">
+                          {userStudies.map((s: any) => (
+                            <tr key={s.id} className="hover:bg-accent/20 cursor-pointer" onClick={() => { setSelectedUser(null); navigate(`/admin/studies/${s.id}`); }}>
+                              <td className="px-3 py-2 font-mono text-muted-foreground">{(s.study_key || s.id).slice(0, 10)}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{s.meta?.patient_id || "—"}</td>
+                              <td className="px-3 py-2">
+                                <Badge variant="secondary" className={cn("text-[9px] h-4 px-1", {
+                                  "bg-emerald-500/10 text-emerald-600": s.state === "complete" || s.state === "signed",
+                                  "bg-red-500/10 text-red-500": s.state === "failed",
+                                  "bg-amber-500/10 text-amber-500": s.state === "processing",
+                                  "bg-violet-500/10 text-violet-500": s.state === "ai_draft",
+                                })}>{s.state || "pending"}</Badge>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="text-center text-xs text-muted-foreground py-12">No studies</div>
+                  )}
+                </TabsContent>
+
+                {/* Activity Tab */}
+                <TabsContent value="activity" className="mt-4">
+                  {auditLoading ? (
+                    <div className="flex items-center justify-center h-24"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+                  ) : userAudit && userAudit.length > 0 ? (
+                    <div className="space-y-0 rounded-lg border border-border/60 overflow-hidden">
+                      {userAudit.map((log: any) => (
+                        <div key={log.id} className="flex items-start justify-between px-3 py-2.5 border-b border-border/40 last:border-0 hover:bg-accent/10 transition-colors">
+                          <div className="min-w-0 mr-3">
+                            <p className="text-xs font-mono text-foreground truncate">{log.event_type}</p>
+                            <p className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">
+                              {log.event_data?.clinic_name || log.event_data?.study_id?.slice(0, 8) || ""}
+                            </p>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground/50 shrink-0 whitespace-nowrap">
+                            {formatDistanceToNow(new Date(log.created_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center text-xs text-muted-foreground py-12">No activity</div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

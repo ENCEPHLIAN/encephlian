@@ -20,6 +20,9 @@ import {
   Wrench,
   BarChart3,
   BookOpen,
+  Trash2,
+  RotateCcw,
+  Ticket,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -41,7 +44,6 @@ const NAV_SECTIONS = [
     title: "Pipeline",
     items: [
       { name: "Studies", href: "/admin/studies", icon: BarChart3 },
-      { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
       { name: "Read API", href: "/admin/read-api", icon: Zap },
     ],
   },
@@ -51,6 +53,15 @@ const NAV_SECTIONS = [
       { name: "Health", href: "/admin/health", icon: Activity },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Wrench },
       { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+      { name: "Tickets", href: "/admin/tickets", icon: Ticket },
+    ],
+  },
+  {
+    title: "Tools",
+    items: [
+      { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
+      { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
+      { name: "Restore", href: "/admin/restore", icon: RotateCcw },
     ],
   },
   {
@@ -68,16 +79,16 @@ export default function AdminLayout() {
   const location = useLocation();
   const { signOut } = useUserSession();
 
-  const currentSection = useMemo(() => {
+  const currentPage = useMemo(() => {
     for (const section of NAV_SECTIONS) {
       for (const item of section.items) {
-        if (location.pathname === item.href || 
+        if (location.pathname === item.href ||
             (item.href !== "/admin" && location.pathname.startsWith(item.href))) {
-          return section.title;
+          return { section: section.title, name: item.name };
         }
       }
     }
-    return "Overview";
+    return { section: "Overview", name: "Dashboard" };
   }, [location.pathname]);
 
   return (
@@ -153,7 +164,9 @@ export default function AdminLayout() {
           <div className="flex items-center gap-2 text-sm">
             <span className="text-muted-foreground">Admin</span>
             <span className="text-muted-foreground/50">/</span>
-            <span className="font-medium">{currentSection}</span>
+            <span className="text-muted-foreground">{currentPage.section}</span>
+            <span className="text-muted-foreground/50">/</span>
+            <span className="font-medium">{currentPage.name}</span>
           </div>
         </header>
 
