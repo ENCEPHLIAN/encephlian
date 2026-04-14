@@ -12,6 +12,7 @@ import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { EdfChunkReader } from "@/lib/eeg/edf-reader";
+import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 // If the resolved API base is a local address, skip the key requirement.
@@ -150,7 +151,8 @@ export default function EEGViewer() {
   const edfReader        = useRef<EdfChunkReader | null>(null);
   const [rawEdfMode, setRawEdfMode] = useState(false);
   // Upgrade polling: once in raw mode, check if canonical becomes available
-  const upgradeTimerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const upgradeTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [esfPollAttempt, setEsfPollAttempt] = useState(0);
   // Signal layer toggle: "esf" = canonical zarr (default), "raw" = raw EDF bytes
   const [signalLayer, setSignalLayer] = useState<"esf" | "raw">("esf");
   const signalLayerRef   = useRef<"esf" | "raw">("esf");
@@ -218,9 +220,10 @@ export default function EEGViewer() {
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
     setSignalLayer("esf"); signalLayerRef.current = "esf";
+    setEsfPollAttempt(0);
     cache.current.clear(); didSeek.current = false; edfReader.current = null;
     rawEdfRef.current = null; rawMetaRef.current = null; canonicalMetaRef.current = null;
-    if (upgradeTimerRef.current) { clearInterval(upgradeTimerRef.current); upgradeTimerRef.current = null; }
+    if (upgradeTimerRef.current) { clearTimeout(upgradeTimerRef.current); upgradeTimerRef.current = null; }
 
     if (!studyId) { setLoadingMeta(false); return; }
 
@@ -272,22 +275,55 @@ export default function EEGViewer() {
           setRawEdfMode(true);
           setFatalError(null);
 
-          // Poll for canonical upgrade every 30s
-          upgradeTimerRef.current = setInterval(async () => {
-            const r2 = await tryCanonical().catch(() => ({ ok: false }));
-            if (r2.ok) {
-              if (upgradeTimerRef.current) clearInterval(upgradeTimerRef.current);
-              const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
-              canonicalMetaRef.current = newMeta;
-              // Auto-upgrade only if user hasn't explicitly chosen raw layer
-              if (signalLayerRef.current === "esf") {
-                edfReader.current = null;
-                cache.current.clear();
-                setRawEdfMode(false);
-                setMeta(newMeta);
+          // Poll for canonical upgrade — fast backoff: 5s × 12 (first minute), then 30s
+          let pollCount = 0;
+          const scheduleEsfCheck = () => {
+            const delay = pollCount < 12 ? 5000 : 30000;
+            upgradeTimerRef.current = setTimeout(async () => {
+              if (!alive) return;
+              pollCount++;
+              setEsfPollAttempt(pollCount);
+
+              // Primary signal: Supabase triage_status / triage_progress
+              let dbReady = false;
+              try {
+                const { data } = await supabase
+                  .from("studies")
+                  .select("triage_status, triage_progress")
+                  .eq("id", studyId)
+                  .single();
+                dbReady =
+                  data?.triage_status === "completed" ||
+                  (data?.triage_progress ?? 0) >= 50;
+              } catch { /* network issue — fall through to zarr check */ }
+
+              // Check zarr meta when DB says ready, or every 6th poll as a fallback
+              if (dbReady || pollCount % 6 === 0) {
+                const r2 = await tryCanonical().catch(() => ({ ok: false }));
+                if (!alive) return;
+                if (r2.ok) {
+                  if (upgradeTimerRef.current) clearTimeout(upgradeTimerRef.current);
+                  upgradeTimerRef.current = null;
+                  const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
+                  canonicalMetaRef.current = newMeta;
+                  // Auto-upgrade only if user hasn't explicitly switched to raw
+                  if (signalLayerRef.current === "esf") {
+                    edfReader.current = null;
+                    cache.current.clear();
+                    setRawEdfMode(false);
+                    setSignalLayer("esf");
+                    signalLayerRef.current = "esf";
+                    setMeta(newMeta);
+                    toast.success("Enhanced signal view ready");
+                  }
+                  return; // stop polling
+                }
               }
-            }
-          }, 30000);
+
+              if (alive) scheduleEsfCheck();
+            }, delay);
+          };
+          scheduleEsfCheck();
         } catch (e2) {
           if (alive) setFatalError(String((e2 as Error)?.message || e2));
         }
@@ -296,7 +332,7 @@ export default function EEGViewer() {
 
     return () => {
       alive = false;
-      if (upgradeTimerRef.current) { clearInterval(upgradeTimerRef.current); upgradeTimerRef.current = null; }
+      if (upgradeTimerRef.current) { clearTimeout(upgradeTimerRef.current); upgradeTimerRef.current = null; }
     };
   }, [studyId]);
 
@@ -573,7 +609,10 @@ export default function EEGViewer() {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
           <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
           <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-            Showing raw signal — enhanced canonical view processing in background
+            Raw signal — enhanced view processing
+            {esfPollAttempt > 0 && (
+              <span className="opacity-50 ml-1">(check {esfPollAttempt})</span>
+            )}
           </span>
           <Loader2 className="h-3 w-3 text-amber-500 animate-spin shrink-0" />
         </div>
