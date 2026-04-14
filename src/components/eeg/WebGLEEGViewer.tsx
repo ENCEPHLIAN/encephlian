@@ -1,5 +1,8 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
 interface Marker {
@@ -66,7 +69,7 @@ const THEME_COLORS = {
     gridStrong: 0x262626,
     text: "#e5e5e5",
     textMuted: "#737373",
-    cursor: "#737373",
+    cursor: "#22d3ee",
     labelBg: "rgba(10,10,10,0.88)",
     labelPanelBg: "rgba(14,14,14,1)",
     labelPanelBorder: "rgba(38,38,38,1)",
@@ -81,7 +84,7 @@ const THEME_COLORS = {
     gridStrong: 0xd5d5d5,
     text: "#1a1a1a",
     textMuted: "#6b7280",
-    cursor: "#9ca3af",
+    cursor: "#6366f1",
     labelBg: "rgba(247,247,247,1)",
     labelPanelBg: "rgba(245,245,245,1)",
     labelPanelBorder: "rgba(209,213,219,1)",
@@ -92,22 +95,17 @@ const THEME_COLORS = {
   },
 };
 
-// Alternating red/blue for light mode (clinical Natus-style)
-// Odd display index → red, even → blue
-const LIGHT_CHANNEL_RED  = 0xcc2222;
-const LIGHT_CHANNEL_BLUE = 0x1a4fc4;
-
 const DEFAULT_CHANNEL_PALETTE = [
   0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171, 0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8, 0xa3e635,
   0xe879f9, 0xfcd34d, 0x6ee7b7, 0x93c5fd, 0xc084fc, 0xfdba74, 0x86efac, 0xfca5a5, 0x67e8f9,
 ];
 
 const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }> = {
-  frontal: { dark: 0x60a5fa, light: 0x2563eb },
-  central: { dark: 0x4ade80, light: 0x16a34a },
-  temporal: { dark: 0xfbbf24, light: 0xd97706 },
-  occipital: { dark: 0xa78bfa, light: 0x7c3aed },
-  other: { dark: 0x94a3b8, light: 0x64748b },
+  frontal:  { dark: 0x60a5fa, light: 0x1d4ed8 },
+  central:  { dark: 0x4ade80, light: 0x047857 },
+  temporal: { dark: 0xfbbf24, light: 0xb45309 },
+  occipital:{ dark: 0xa78bfa, light: 0x6d28d9 },
+  other:    { dark: 0x94a3b8, light: 0x374151 },
 };
 
 function parseColorToHex(color: string): number {
@@ -226,11 +224,18 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   const gridRef = useRef<THREE.Line[]>([]);
   const cursorLineRef = useRef<THREE.Line | null>(null);
 
-  // Dimensions snapshot — written by drawFull, read by updateCursor
-  const dimsRef = useRef({ w: 0, h: 0, labelW: 72, signalW: 0 });
+  // Dimensions snapshot — written by draw, read by updateCursor
+  const dimsRef = useRef({ w: 0, h: 0, labelW: 72, signalW: 0, signalH: 0 });
 
-  // per-channel drawable state
-  const lineStateRef = useRef<Map<number, { line: THREE.Line; geom: THREE.BufferGeometry; pos: Float32Array }>>(
+  // Time axis
+  const TIME_AXIS_H = 20;
+  const timeAxisRef = useRef<HTMLDivElement | null>(null);
+
+  // Stable ref to current draw — allows calling from resize observer
+  const drawRef = useRef<(() => void) | null>(null);
+
+  // per-channel drawable state (LineSegments2 = proper pixel-width lines via triangle strips)
+  const lineStateRef = useRef<Map<number, { line: LineSegments2; geom: LineSegmentsGeometry; pos: Float32Array }>>(
     new Map(),
   );
 
@@ -266,7 +271,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       alpha: true,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3));
     renderer.setSize(w, h);
     renderer.setClearColor(colors.background);
 
@@ -291,6 +296,20 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     container.appendChild(labels);
     labelsRef.current = labels;
 
+    const timeAxis = document.createElement("div");
+    timeAxis.style.cssText = [
+      "position:absolute",
+      "bottom:0",
+      "left:0",
+      "right:0",
+      `height:${TIME_AXIS_H}px`,
+      "pointer-events:none",
+      "z-index:3",
+      "overflow:visible",
+    ].join(";");
+    container.appendChild(timeAxis);
+    timeAxisRef.current = timeAxis;
+
     const rebuildOnResize = () => {
       const c = containerRef.current;
       const r = rendererRef.current;
@@ -303,6 +322,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       cam2.top = 0;
       cam2.bottom = hh;
       cam2.updateProjectionMatrix();
+      requestAnimationFrame(() => drawRef.current?.());
     };
 
     const ro = new ResizeObserver(rebuildOnResize);
@@ -314,6 +334,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       container.removeChild(canvas);
       if (artifactRef.current) container.removeChild(artifactRef.current);
       if (labelsRef.current) container.removeChild(labelsRef.current);
+      if (timeAxisRef.current) { container.removeChild(timeAxisRef.current); timeAxisRef.current = null; }
       artifactRef.current = null;
       labelsRef.current = null;
 
@@ -366,12 +387,14 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     if (artifactRef.current) artifactRef.current.innerHTML = "";
 
     const PAD = 6;
-    const laneH = (h - PAD * 2) / nCh;
-    const laneHalf = Math.max(4, laneH * 0.4);
 
-    // Label column geometry
+    // Label column / signal area geometry
     const labelW = Math.max(0, labelColumnWidth);
     const signalW = Math.max(1, w - labelW);
+    const signalH = h - TIME_AXIS_H;
+
+    const laneH = (signalH - PAD * 2) / nCh;
+    const laneHalf = Math.max(4, laneH * 0.4);
 
     // build a suppress mask from artifactIntervals if requested
     // mask is per-sample per-channel, but we keep it cheap: only build if suppressArtifacts is on and artifacts exist
@@ -510,7 +533,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
     for (let i = 0; i <= timeWindow; i += interval) {
       const x = labelW + (i / timeWindow) * signalW;
-      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, h, 0)]);
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, signalH, 0)]);
       const line = new THREE.Line(geom, i % (interval * 2) === 0 ? gridStrongMat : gridMat);
       scene.add(line);
       gridRef.current.push(line);
@@ -533,7 +556,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     }
     {
       const initX = labelW; // will be corrected by updateCursor immediately after
-      const cursorPos = new THREE.Float32BufferAttribute([initX, 0, 0, initX, h, 0], 3);
+      const cursorPos = new THREE.Float32BufferAttribute([initX, 0, 0, initX, signalH, 0], 3);
       cursorPos.setUsage(THREE.DynamicDrawUsage);
       const geom = new THREE.BufferGeometry();
       geom.setAttribute("position", cursorPos);
@@ -544,7 +567,35 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     }
 
     // Snapshot dims so updateCursor can work without re-running draw
-    dimsRef.current = { w, h, labelW, signalW };
+    dimsRef.current = { w, h, labelW, signalW, signalH };
+
+    // Time axis tick labels
+    if (timeAxisRef.current) {
+      timeAxisRef.current.innerHTML = "";
+      timeAxisRef.current.style.left = `${labelW}px`;
+      timeAxisRef.current.style.right = "0";
+      timeAxisRef.current.style.borderTop = `1px solid ${theme !== "dark" ? "#d1d5db" : "#2a2a2a"}`;
+      timeAxisRef.current.style.background = theme !== "dark" ? "rgba(250,250,250,0.95)" : "rgba(10,10,10,0.95)";
+
+      for (let i = 0; i <= timeWindow; i += interval) {
+        const x = (i / timeWindow) * signalW;
+        const span = document.createElement("span");
+        span.textContent = i === timeWindow ? `${i}s` : String(i);
+        span.style.cssText = [
+          "position:absolute",
+          `left:${x}px`,
+          "transform:translateX(-50%)",
+          "top:3px",
+          "font-size:9px",
+          "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
+          `color:${colors.textMuted}`,
+          "pointer-events:none",
+          "user-select:none",
+          "white-space:nowrap",
+        ].join(";");
+        timeAxisRef.current.appendChild(span);
+      }
+    }
 
     // markers (treat as window-relative if within [0,timeWindow], else convert absolute -> window-relative by subtracting window start upstream)
     for (const m of markers) {
@@ -552,7 +603,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       if (t < 0 || t > timeWindow) continue;
       const x = labelW + (t / timeWindow) * signalW;
       const mat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.85 });
-      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, h, 0)]);
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, signalH, 0)]);
       const line = new THREE.Line(geom, mat);
       scene.add(line);
       gridRef.current.push(line);
@@ -589,15 +640,15 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       let colorHex: number;
       if (channelColors[chIdx]) {
         colorHex = parseColorToHex(channelColors[chIdx]);
-      } else if (theme !== "dark") {
-        // Alternating red/blue by display index
-        colorHex = di % 2 === 0 ? LIGHT_CHANNEL_RED : LIGHT_CHANNEL_BLUE;
       } else {
         const colorInfo = getChannelColor(label);
         const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
-        colorHex =
-          CHANNEL_THEME_COLORS[groupKey]?.dark ??
-          DEFAULT_CHANNEL_PALETTE[di % DEFAULT_CHANNEL_PALETTE.length];
+        const palette = CHANNEL_THEME_COLORS[groupKey];
+        if (palette) {
+          colorHex = theme !== "dark" ? palette.light : palette.dark;
+        } else {
+          colorHex = DEFAULT_CHANNEL_PALETTE[di % DEFAULT_CHANNEL_PALETTE.length];
+        }
       }
 
       // display gain: p95-based robust estimate
@@ -615,17 +666,23 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const mask = buildMaskForChannel(chIdx);
       const pos = buildEnvelopePositions(sig, signalW, h, laneMid, laneHalf, gain, mask, labelW);
 
-      // create or update line
+      // create or update line — LineSegments2 renders as triangle strips so linewidth > 1px actually works
       const existing = lineStateRef.current.get(chIdx);
       if (existing) {
         existing.pos = pos;
-        existing.geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        existing.geom.computeBoundingSphere();
+        existing.geom.setPositions(pos);
+        (existing.line.material as LineMaterial).color.setHex(colorHex);
+        (existing.line.material as LineMaterial).resolution.set(w, h);
       } else {
-        const geom = new THREE.BufferGeometry();
-        geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.92 });
-        const line = new THREE.LineSegments(geom, mat);
+        const geom = new LineSegmentsGeometry();
+        geom.setPositions(pos);
+        const mat = new LineMaterial({
+          color: colorHex,
+          linewidth: 1.5,
+          worldUnits: false,
+          resolution: new THREE.Vector2(w, h),
+        });
+        const line = new LineSegments2(geom, mat);
         scene.add(line);
         lineStateRef.current.set(chIdx, { line, geom, pos });
       }
@@ -680,20 +737,23 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     labelColumnWidth,
   ]);
 
+  // Keep drawRef in sync so resize observer can call it
+  useEffect(() => { drawRef.current = draw; }, [draw]);
+
   // Fast cursor update — only moves 2 vertices and re-renders; does NOT rebuild scene
   const updateCursor = useCallback(() => {
     const renderer = rendererRef.current;
     const scene = sceneRef.current;
     const cam = cameraRef.current;
     if (!renderer || !scene || !cam) return;
-    const { h, labelW, signalW } = dimsRef.current;
+    const { labelW, signalW, signalH, h } = dimsRef.current;
     if (!signalW) return;
     const cursorX = labelW + clamp(currentTime / Math.max(timeWindow, 1e-6), 0, 1) * signalW;
     const line = cursorLineRef.current;
     if (line) {
       const pos = line.geometry.attributes.position as THREE.BufferAttribute;
       pos.setXYZ(0, cursorX, 0, 0);
-      pos.setXYZ(1, cursorX, h, 0);
+      pos.setXYZ(1, cursorX, signalH || h, 0);
       pos.needsUpdate = true;
     }
     renderer.render(scene, cam);
