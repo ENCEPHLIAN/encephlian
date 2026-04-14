@@ -226,6 +226,9 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   const gridRef = useRef<THREE.Line[]>([]);
   const cursorLineRef = useRef<THREE.Line | null>(null);
 
+  // Dimensions snapshot — written by drawFull, read by updateCursor
+  const dimsRef = useRef({ w: 0, h: 0, labelW: 72, signalW: 0 });
+
   // per-channel drawable state
   const lineStateRef = useRef<Map<number, { line: THREE.Line; geom: THREE.BufferGeometry; pos: Float32Array }>>(
     new Map(),
@@ -521,8 +524,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       gridRef.current.push(line);
     }
 
-    // cursor line (local)
-    const cursorX = labelW + (clamp(currentTime, 0, timeWindow) / timeWindow) * signalW;
+    // Cursor line — use DynamicDrawUsage so updateCursor can update in-place
     if (cursorLineRef.current) {
       scene.remove(cursorLineRef.current);
       cursorLineRef.current.geometry.dispose();
@@ -530,15 +532,19 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       cursorLineRef.current = null;
     }
     {
+      const initX = labelW; // will be corrected by updateCursor immediately after
+      const cursorPos = new THREE.Float32BufferAttribute([initX, 0, 0, initX, h, 0], 3);
+      cursorPos.setUsage(THREE.DynamicDrawUsage);
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute("position", cursorPos);
       const mat = new THREE.LineBasicMaterial({ color: parseColorToHex(colors.cursor) });
-      const geom = new THREE.BufferGeometry().setFromPoints([
-        new THREE.Vector3(cursorX, 0, 0),
-        new THREE.Vector3(cursorX, h, 0),
-      ]);
       const line = new THREE.Line(geom, mat);
       scene.add(line);
       cursorLineRef.current = line;
     }
+
+    // Snapshot dims so updateCursor can work without re-running draw
+    dimsRef.current = { w, h, labelW, signalW };
 
     // markers (treat as window-relative if within [0,timeWindow], else convert absolute -> window-relative by subtracting window start upstream)
     for (const m of markers) {
@@ -658,7 +664,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     signals,
     channelLabels,
     sampleRate,
-    currentTime,
+    // currentTime intentionally omitted — cursor updated by updateCursor below
     timeWindow,
     amplitudeScale,
     visibleChannels,
@@ -674,11 +680,36 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     labelColumnWidth,
   ]);
 
-  // draw on raf to avoid thrash
+  // Fast cursor update — only moves 2 vertices and re-renders; does NOT rebuild scene
+  const updateCursor = useCallback(() => {
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const cam = cameraRef.current;
+    if (!renderer || !scene || !cam) return;
+    const { h, labelW, signalW } = dimsRef.current;
+    if (!signalW) return;
+    const cursorX = labelW + clamp(currentTime / Math.max(timeWindow, 1e-6), 0, 1) * signalW;
+    const line = cursorLineRef.current;
+    if (line) {
+      const pos = line.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, cursorX, 0, 0);
+      pos.setXYZ(1, cursorX, h, 0);
+      pos.needsUpdate = true;
+    }
+    renderer.render(scene, cam);
+  }, [currentTime, timeWindow]);
+
+  // Full scene rebuild on data changes (one-shot RAF)
   useEffect(() => {
     let raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [draw]);
+
+  // Cursor-only update on time changes (one-shot RAF)
+  useEffect(() => {
+    let raf = requestAnimationFrame(updateCursor);
+    return () => cancelAnimationFrame(raf);
+  }, [updateCursor]);
 
   return (
     <div
