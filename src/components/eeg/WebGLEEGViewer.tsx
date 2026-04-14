@@ -355,6 +355,14 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const w = container.clientWidth;
     const h = container.clientHeight;
 
+    // Keep camera in sync with actual container size (not just on resize)
+    if (cam.right !== w || cam.bottom !== h) {
+      cam.right = w;
+      cam.bottom = h;
+      renderer.setSize(w, h);
+      cam.updateProjectionMatrix();
+    }
+
     // channels to render (stable order)
     const visibleIdx = Array.from(visibleChannels).sort((a, b) => a - b);
     const channels = visibleIdx.length ? visibleIdx : signals.map((_, i) => i);
@@ -662,6 +670,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           resolution: new THREE.Vector2(w, h),
         });
         const line = new Line2(geom, mat);
+        line.frustumCulled = false;
         scene.add(line);
         lineStateRef.current.set(chIdx, { line, geom, pos });
       }
