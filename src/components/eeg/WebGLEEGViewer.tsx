@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
-import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { Line2 } from "three/addons/lines/Line2.js";
+import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
 
@@ -101,11 +101,11 @@ const DEFAULT_CHANNEL_PALETTE = [
 ];
 
 const CHANNEL_THEME_COLORS: Record<ChannelGroup, { dark: number; light: number }> = {
-  frontal:  { dark: 0x60a5fa, light: 0x1d4ed8 },
-  central:  { dark: 0x4ade80, light: 0x047857 },
-  temporal: { dark: 0xfbbf24, light: 0xb45309 },
-  occipital:{ dark: 0xa78bfa, light: 0x6d28d9 },
-  other:    { dark: 0x94a3b8, light: 0x374151 },
+  frontal:  { dark: 0x7eb8f7, light: 0x2563c8 },
+  central:  { dark: 0x5ec994, light: 0x15803d },
+  temporal: { dark: 0xd4a44a, light: 0xb45309 },
+  occipital:{ dark: 0xb09de0, light: 0x6d28d9 },
+  other:    { dark: 0x8b9cb3, light: 0x4b5563 },
 };
 
 function parseColorToHex(color: string): number {
@@ -125,67 +125,46 @@ function clamp(n: number, lo: number, hi: number) {
 }
 
 /**
- * Min/max envelope per pixel column (fast + avoids aliasing).
- * Returns positions array sized (2*pxCount) points: (x,y) pairs per vertex.
- * xOffset: left offset in world px (for label column separation).
+ * Connected polyline — one averaged sample per pixel column.
+ * Returns flat xyz array for Line2/LineGeometry.setPositions().
  */
-function buildEnvelopePositions(
+function buildPolylinePositions(
   sig: number[],
   signalAreaWidth: number,
-  heightPx: number,
   laneMidY: number,
   laneHalfHeight: number,
   gain: number,
   suppressMask: Uint8Array | null,
   xOffset: number = 0,
 ): Float32Array {
-  const pxCount = Math.max(2, Math.min(signalAreaWidth, 2400));
-  const out = new Float32Array(pxCount * 2 * 3); // two vertices per column, xyz
+  const pxCount = Math.max(2, Math.min(Math.round(signalAreaWidth), 2400));
+  const out = new Float32Array(pxCount * 3); // one vertex per column, xyz
   const n = sig.length;
   const spp = n / pxCount;
 
-  let o = 0;
   for (let px = 0; px < pxCount; px++) {
     const s0 = Math.floor(px * spp);
     const s1 = Math.min(n, Math.ceil((px + 1) * spp));
-    let minV = Infinity,
-      maxV = -Infinity;
 
-    for (let i = s0; i < s1; i++) {
-      const raw = sig[i];
-      const v = raw; // RAW ONLY (no filter, no baseline)
-      if (v < minV) minV = v;
-      if (v > maxV) maxV = v;
-    }
+    // Average samples in this pixel column for smooth, anti-aliased waveform
+    let sum = 0, count = 0;
+    for (let i = s0; i < s1; i++) { sum += sig[i]; count++; }
+    const v = count > 0 ? sum / count : 0;
 
-    if (minV === Infinity) {
-      minV = 0;
-      maxV = 0;
-    }
-
-    // apply suppress (display-only): if any sample in this column is suppressed, dim amplitude
+    // suppress: dim artifacts (display-only)
     let sup = 1.0;
     if (suppressMask) {
       for (let i = s0; i < s1; i++) {
-        if (suppressMask[i] === 1) {
-          sup = 0.25;
-          break;
-        }
+        if (suppressMask[i] === 1) { sup = 0.25; break; }
       }
     }
 
     const x = xOffset + (px / (pxCount - 1)) * signalAreaWidth;
+    const y = laneMidY - clamp(v * gain * sup, -laneHalfHeight, laneHalfHeight);
 
-    const yMax = laneMidY - clamp(maxV * gain * sup, -laneHalfHeight, laneHalfHeight);
-    const yMin = laneMidY - clamp(minV * gain * sup, -laneHalfHeight, laneHalfHeight);
-
-    // vertical segment: (x, yMax) then (x, yMin)
-    out[o++] = x;
-    out[o++] = yMax;
-    out[o++] = 0;
-    out[o++] = x;
-    out[o++] = yMin;
-    out[o++] = 0;
+    out[px * 3]     = x;
+    out[px * 3 + 1] = y;
+    out[px * 3 + 2] = 0;
   }
   return out;
 }
@@ -234,8 +213,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   // Stable ref to current draw — allows calling from resize observer
   const drawRef = useRef<(() => void) | null>(null);
 
-  // per-channel drawable state (LineSegments2 = proper pixel-width lines via triangle strips)
-  const lineStateRef = useRef<Map<number, { line: LineSegments2; geom: LineSegmentsGeometry; pos: Float32Array }>>(
+  // per-channel drawable state (Line2 = connected polyline with real pixel-width via triangle strips)
+  const lineStateRef = useRef<Map<number, { line: Line2; geom: LineGeometry; pos: Float32Array }>>(
     new Map(),
   );
 
@@ -664,9 +643,9 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const mask = buildMaskForChannel(chIdx);
-      const pos = buildEnvelopePositions(sig, signalW, h, laneMid, laneHalf, gain, mask, labelW);
+      const pos = buildPolylinePositions(sig, signalW, laneMid, laneHalf, gain, mask, labelW);
 
-      // create or update line — LineSegments2 renders as triangle strips so linewidth > 1px actually works
+      // create or update line — Line2 renders connected polyline at real pixel width
       const existing = lineStateRef.current.get(chIdx);
       if (existing) {
         existing.pos = pos;
@@ -674,15 +653,15 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         (existing.line.material as LineMaterial).color.setHex(colorHex);
         (existing.line.material as LineMaterial).resolution.set(w, h);
       } else {
-        const geom = new LineSegmentsGeometry();
+        const geom = new LineGeometry();
         geom.setPositions(pos);
         const mat = new LineMaterial({
           color: colorHex,
-          linewidth: 1.5,
+          linewidth: 1.0,
           worldUnits: false,
           resolution: new THREE.Vector2(w, h),
         });
-        const line = new LineSegments2(geom, mat);
+        const line = new Line2(geom, mat);
         scene.add(line);
         lineStateRef.current.set(chIdx, { line, geom, pos });
       }
@@ -702,7 +681,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           "justify-content:flex-end",
           "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
           "font-size:10px",
-          "font-weight:600",
+          "font-weight:400",
           `color:${colors.text}`,
           `padding-right:6px`,
           `border-right:2px solid #${colorHex.toString(16).padStart(6, "0")}`,
