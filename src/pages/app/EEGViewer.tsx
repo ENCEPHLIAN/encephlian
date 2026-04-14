@@ -801,6 +801,8 @@ export default function EEGViewer() {
             segmentOverlays={winSegments}
             showArtifactsAsRed={true}
             suppressArtifacts={suppressArts}
+            hfFilter={hfFilter}
+            lfFilter={lfFilter}
             labelColumnWidth={72}
             onTimeClick={t => setCursor(clamp(t, 0, windowSec))}
           />

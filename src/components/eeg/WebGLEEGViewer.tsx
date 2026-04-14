@@ -58,6 +58,8 @@ export interface WebGLEEGViewerProps {
   showArtifactsAsRed?: boolean;
   suppressArtifacts?: boolean; // display-only (dims segments)
   labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
+  hfFilter?: number;         // high-frequency cutoff Hz (lowpass) — 0 = off
+  lfFilter?: number;         // low-frequency cutoff Hz (highpass) — 0 = off
   onTimeClick?: (time: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
@@ -124,6 +126,54 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+// ── Biquad DSP ────────────────────────────────────────────────────────────────
+
+/** 2nd-order Butterworth lowpass coefficients [b0,b1,b2,a1,a2]. Returns null if fc out of range. */
+function biquadLP(fc: number, fs: number): [number,number,number,number,number] | null {
+  if (fc <= 0 || fc >= fs / 2) return null;
+  const w0 = (2 * Math.PI * fc) / fs;
+  const cosw = Math.cos(w0), sinw = Math.sin(w0);
+  const alpha = sinw / (2 * 0.7071); // Q = 1/√2 = Butterworth
+  const a0 = 1 + alpha;
+  return [
+    ((1 - cosw) / 2) / a0,
+     (1 - cosw)       / a0,
+    ((1 - cosw) / 2) / a0,
+    (-2 * cosw)      / a0,
+     (1 - alpha)     / a0,
+  ];
+}
+
+/** 2nd-order Butterworth highpass coefficients [b0,b1,b2,a1,a2]. Returns null if fc out of range. */
+function biquadHP(fc: number, fs: number): [number,number,number,number,number] | null {
+  if (fc <= 0 || fc >= fs / 2) return null;
+  const w0 = (2 * Math.PI * fc) / fs;
+  const cosw = Math.cos(w0), sinw = Math.sin(w0);
+  const alpha = sinw / (2 * 0.7071);
+  const a0 = 1 + alpha;
+  return [
+     ((1 + cosw) / 2) / a0,
+    -(1 + cosw)       / a0,
+     ((1 + cosw) / 2) / a0,
+    (-2 * cosw)       / a0,
+     (1 - alpha)      / a0,
+  ];
+}
+
+/** Direct Form II Transposed biquad — numerically stable, O(n). */
+function applyBiquad(sig: number[], b0: number, b1: number, b2: number, a1: number, a2: number): number[] {
+  const out = new Array(sig.length);
+  let w1 = 0, w2 = 0;
+  for (let i = 0; i < sig.length; i++) {
+    const x = sig[i];
+    const y = b0 * x + w1;
+    w1 = b1 * x - a1 * y + w2;
+    w2 = b2 * x - a2 * y;
+    out[i] = y;
+  }
+  return out;
+}
+
 /**
  * Connected polyline — one averaged sample per pixel column.
  * Returns flat xyz array for Line2/LineGeometry.setPositions().
@@ -187,6 +237,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     showArtifactsAsRed = true,
     suppressArtifacts = false,
     labelColumnWidth = 72,
+    hfFilter = 0,
+    lfFilter = 0,
     onTimeClick,
   } = props;
 
@@ -638,7 +690,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         }
       }
 
-      // display gain: p95-based robust estimate
+      // display gain: p95-based robust estimate (computed on raw signal pre-filter)
       let p95 = 1e-6;
       {
         const abs = new Array(sig.length);
@@ -647,11 +699,27 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         const idx = Math.min(abs.length - 1, Math.floor(abs.length * 0.95));
         p95 = abs[idx] || 1e-6;
       }
+
+      // Channel quality classification (in µV)
+      const quality: "flat" | "noisy" | "ok" =
+        p95 < 1.0 ? "flat" : p95 > 300 ? "noisy" : "ok";
+
+      // Apply DSP filters (highpass then lowpass — order matters for numerical stability)
+      let filteredSig: number[] = sig;
+      if (lfFilter > 0) {
+        const hp = biquadHP(lfFilter, sampleRate);
+        if (hp) filteredSig = applyBiquad(filteredSig, hp[0], hp[1], hp[2], hp[3], hp[4]);
+      }
+      if (hfFilter > 0 && hfFilter < sampleRate / 2) {
+        const lp = biquadLP(hfFilter, sampleRate);
+        if (lp) filteredSig = applyBiquad(filteredSig, lp[0], lp[1], lp[2], lp[3], lp[4]);
+      }
+
       const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const mask = buildMaskForChannel(chIdx);
-      const pos = buildPolylinePositions(sig, signalW, laneMid, laneHalf, gain, mask, labelW);
+      const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, mask, labelW);
 
       // create or update line — Line2 renders connected polyline at real pixel width
       const existing = lineStateRef.current.get(chIdx);
@@ -677,8 +745,12 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
       // label — inside the dedicated label panel column
       if (labelsRef.current && labelW > 0) {
+        const qualityColor = quality === "flat" ? "#ef4444" : quality === "noisy" ? "#f59e0b" : colors.text;
         const el = document.createElement("div");
-        el.textContent = label;
+        // Quality dot + label text
+        el.innerHTML = `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${
+          quality === "flat" ? "#ef4444" : quality === "noisy" ? "#f59e0b" : "#22c55e"
+        };margin-right:3px;flex-shrink:0;"></span>${label}`;
         el.style.cssText = [
           "position:absolute",
           "left:0",
@@ -691,7 +763,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
           "font-size:10px",
           "font-weight:400",
-          `color:${colors.text}`,
+          `color:${qualityColor}`,
           `padding-right:6px`,
           `border-right:2px solid #${colorHex.toString(16).padStart(6, "0")}`,
           "pointer-events:none",
@@ -723,6 +795,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     suppressArtifacts,
     colors,
     labelColumnWidth,
+    hfFilter,
+    lfFilter,
   ]);
 
   // Keep drawRef in sync so resize observer can call it
