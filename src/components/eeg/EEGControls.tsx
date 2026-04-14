@@ -1,20 +1,84 @@
-import { useRef, useCallback } from "react";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { 
-  Play, 
-  Pause, 
-  SkipBack, 
-  SkipForward, 
-  ZoomIn, 
-  ZoomOut,
-  Download
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
-interface EEGControlsProps {
+// ── Clinical speed options ────────────────────────────────────────────────────
+// Speed (mm/sec) ↔ time window (seconds) — based on standard EEG paper speeds
+export const SPEED_OPTIONS = [
+  { mmSec: 6,   windowSec: 60 },
+  { mmSec: 8,   windowSec: 45 },
+  { mmSec: 10,  windowSec: 30 },
+  { mmSec: 15,  windowSec: 20 },
+  { mmSec: 20,  windowSec: 15 },
+  { mmSec: 30,  windowSec: 10 },
+  { mmSec: 60,  windowSec: 5  },
+  { mmSec: 120, windowSec: 2  },
+  { mmSec: 240, windowSec: 1  },
+] as const;
+
+// ── Amplitude options ─────────────────────────────────────────────────────────
+// μV/mm ↔ amplitude multiplier (10 μV/mm = 1.0x baseline)
+export const AMP_OPTIONS = [
+  { uvmm: 2,    label: "2.0",    scale: 5.0    },
+  { uvmm: 3,    label: "3.0",    scale: 3.333  },
+  { uvmm: 5,    label: "5.0",    scale: 2.0    },
+  { uvmm: 7,    label: "7.0",    scale: 1.429  },
+  { uvmm: 10,   label: "10.0",   scale: 1.0    },
+  { uvmm: 15,   label: "15.0",   scale: 0.667  },
+  { uvmm: 20,   label: "20.0",   scale: 0.5    },
+  { uvmm: 30,   label: "30.0",   scale: 0.333  },
+  { uvmm: 70,   label: "70.0",   scale: 0.143  },
+  { uvmm: 100,  label: "100.0",  scale: 0.1    },
+  { uvmm: 200,  label: "200.0",  scale: 0.05   },
+  { uvmm: 300,  label: "300.0",  scale: 0.033  },
+  { uvmm: 1000, label: "1000.0", scale: 0.01   },
+] as const;
+
+// ── Filter options ────────────────────────────────────────────────────────────
+export const HF_OPTIONS = [30, 35, 40, 50, 70, 100, 150, 200, 300, 500, 1000, 1500] as const;
+export const LF_OPTIONS = [0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.6, 5.0] as const;
+
+// ── Montage options ───────────────────────────────────────────────────────────
+const MONTAGE_OPTIONS = [
+  { value: "avg",     label: "Comm av (19/25)" },
+  { value: "long",    label: "Long (19/20)"    },
+  { value: "trans",   label: "Trans (19/10-20)" },
+  { value: "bipolar", label: "My bipolar avg"  },
+  { value: "input",   label: "Input Montage"   },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+export function windowSecToMmSec(windowSec: number): number {
+  let best = SPEED_OPTIONS[5]; // 30 mm/s default
+  let bestDiff = Math.abs(windowSec - best.windowSec);
+  for (const o of SPEED_OPTIONS) {
+    const d = Math.abs(windowSec - o.windowSec);
+    if (d < bestDiff) { best = o; bestDiff = d; }
+  }
+  return best.mmSec;
+}
+
+export function mmSecToWindowSec(mmSec: number): number {
+  return SPEED_OPTIONS.find(o => o.mmSec === mmSec)?.windowSec ?? 10;
+}
+
+export function scaleToUVMM(scale: number): number {
+  const target = 10 / Math.max(0.001, scale);
+  let best = AMP_OPTIONS[4]; // 10 μV/mm
+  let bestDiff = Math.abs(target - best.uvmm);
+  for (const o of AMP_OPTIONS) {
+    const d = Math.abs(target - o.uvmm);
+    if (d < bestDiff) { best = o; bestDiff = d; }
+  }
+  return best.uvmm;
+}
+
+function fmtTime(s: number): string {
+  const m = Math.floor(s / 60);
+  return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
+}
+
+// ── Interface ─────────────────────────────────────────────────────────────────
+export interface EEGControlsProps {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
@@ -29,255 +93,196 @@ interface EEGControlsProps {
   onSkipBackward: () => void;
   onSkipForward: () => void;
   onExport: () => void;
+  // Clinical filter controls
+  hfFilter?: number;
+  onHFFilterChange?: (hz: number) => void;
+  lfFilter?: number;
+  onLFFilterChange?: (hz: number) => void;
+  // Montage
+  montage?: string;
+  onMontageChange?: (m: string) => void;
+  // Channel info
+  visibleChannelCount?: number;
 }
 
+// ── Toolbar separator ─────────────────────────────────────────────────────────
+function Sep() {
+  return <div className="h-4 w-px bg-border/70 shrink-0 mx-0.5" />;
+}
+
+// ── Labeled toolbar control ───────────────────────────────────────────────────
+function CtrlLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] font-medium text-muted-foreground/80 select-none whitespace-nowrap">
+      {children}
+    </span>
+  );
+}
+
+// ── Main toolbar ──────────────────────────────────────────────────────────────
 export function EEGControls({
   isPlaying,
   currentTime,
   duration,
   timeWindow,
   amplitudeScale,
-  playbackSpeed,
   onPlayPause,
-  onTimeChange,
   onTimeWindowChange,
   onAmplitudeScaleChange,
-  onPlaybackSpeedChange,
   onSkipBackward,
   onSkipForward,
-  onExport,
+  hfFilter = 70,
+  onHFFilterChange,
+  lfFilter = 0.5,
+  onLFFilterChange,
+  montage = "avg",
+  onMontageChange,
+  visibleChannelCount,
 }: EEGControlsProps) {
-  const skipBackwardIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const skipForwardIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const holdStartTimeRef = useRef<number>(0);
 
-  // Click and hold for skip buttons with speed acceleration
-  const handleSkipBackwardMouseDown = useCallback(() => {
-    holdStartTimeRef.current = Date.now();
-    onSkipBackward();
-    
-    skipBackwardIntervalRef.current = setInterval(() => {
-      const holdDuration = (Date.now() - holdStartTimeRef.current) / 1000;
-      const speed = holdDuration > 3 ? 3 : holdDuration > 1 ? 2 : 1;
-      for (let i = 0; i < speed; i++) {
-        onSkipBackward();
-      }
-    }, 150);
-  }, [onSkipBackward]);
-
-  const handleSkipForwardMouseDown = useCallback(() => {
-    holdStartTimeRef.current = Date.now();
-    onSkipForward();
-    
-    skipForwardIntervalRef.current = setInterval(() => {
-      const holdDuration = (Date.now() - holdStartTimeRef.current) / 1000;
-      const speed = holdDuration > 3 ? 3 : holdDuration > 1 ? 2 : 1;
-      for (let i = 0; i < speed; i++) {
-        onSkipForward();
-      }
-    }, 150);
-  }, [onSkipForward]);
-
-  const handleMouseUp = useCallback(() => {
-    if (skipBackwardIntervalRef.current) {
-      clearInterval(skipBackwardIntervalRef.current);
-      skipBackwardIntervalRef.current = null;
-    }
-    if (skipForwardIntervalRef.current) {
-      clearInterval(skipForwardIntervalRef.current);
-      skipForwardIntervalRef.current = null;
-    }
-  }, []);
-
-  // Amplitude controls with click and hold
-  const amplitudeDecreaseRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const amplitudeIncreaseRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const currentAmplitudeRef = useRef(amplitudeScale);
-  currentAmplitudeRef.current = amplitudeScale;
-
-  const handleAmplitudeDecreaseDown = useCallback(() => {
-    onAmplitudeScaleChange(Math.max(0.001, currentAmplitudeRef.current - 0.001));
-    amplitudeDecreaseRef.current = setInterval(() => {
-      currentAmplitudeRef.current = Math.max(0.001, currentAmplitudeRef.current - 0.001);
-      onAmplitudeScaleChange(currentAmplitudeRef.current);
-    }, 80);
-  }, [onAmplitudeScaleChange]);
-
-  const handleAmplitudeIncreaseDown = useCallback(() => {
-    onAmplitudeScaleChange(currentAmplitudeRef.current + 0.001);
-    amplitudeIncreaseRef.current = setInterval(() => {
-      currentAmplitudeRef.current = currentAmplitudeRef.current + 0.001;
-      onAmplitudeScaleChange(currentAmplitudeRef.current);
-    }, 80);
-  }, [onAmplitudeScaleChange]);
-
-  const handleAmplitudeMouseUp = useCallback(() => {
-    if (amplitudeDecreaseRef.current) {
-      clearInterval(amplitudeDecreaseRef.current);
-      amplitudeDecreaseRef.current = null;
-    }
-    if (amplitudeIncreaseRef.current) {
-      clearInterval(amplitudeIncreaseRef.current);
-      amplitudeIncreaseRef.current = null;
-    }
-  }, []);
+  const mmSec = windowSecToMmSec(timeWindow);
+  const uvmm  = scaleToUVMM(amplitudeScale);
 
   return (
-    <div className="space-y-1.5 border-b px-3 py-2 bg-background flex-shrink-0">
-      {/* Playback Controls */}
-      <div className="flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              onMouseDown={handleSkipBackwardMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              disabled={currentTime <= 0}
-              className="transition-all duration-150 hover:scale-105 active:scale-95"
-            >
-              <SkipBack className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Skip backward (hold for fast)</TooltipContent>
-        </Tooltip>
-        
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="default"
-              size="icon"
-              onClick={onPlayPause}
-              className="transition-all duration-150 hover:scale-105 active:scale-95"
-            >
-              {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isPlaying ? "Pause" : "Play"}</TooltipContent>
-        </Tooltip>
-        
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              onMouseDown={handleSkipForwardMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              disabled={currentTime >= duration - timeWindow}
-              className="transition-all duration-150 hover:scale-105 active:scale-95"
-            >
-              <SkipForward className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Skip forward (hold for fast)</TooltipContent>
-        </Tooltip>
+    <div className="flex items-center h-8 px-1 border-b bg-background flex-shrink-0 overflow-x-auto gap-px">
 
-        <div className="flex-1 px-4">
-          <Slider
-            value={[currentTime]}
-            min={0}
-            max={Math.max(0, duration - timeWindow)}
-            step={0.1}
-            onValueChange={([value]) => onTimeChange(value)}
-            className="w-full"
-          />
-        </div>
+      {/* Navigation: prev page / play / next page */}
+      <button
+        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
+        onClick={onSkipBackward}
+        title="Previous page (←)"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </button>
 
-        <span className="text-sm font-mono text-foreground min-w-[100px] text-right">
-          {formatTime(currentTime)} / {formatTime(duration)}
-        </span>
+      <button
+        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
+        onClick={onPlayPause}
+        title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+      >
+        {isPlaying
+          ? <Pause className="h-3.5 w-3.5 fill-current" />
+          : <Play  className="h-3.5 w-3.5 fill-current" />
+        }
+      </button>
+
+      <button
+        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
+        onClick={onSkipForward}
+        title="Next page (→)"
+      >
+        <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+
+      <Sep />
+
+      {/* Time readout */}
+      <span className="text-[11px] font-mono text-muted-foreground tabular-nums whitespace-nowrap px-1 shrink-0">
+        {fmtTime(currentTime)}&thinsp;/&thinsp;{fmtTime(duration)}
+      </span>
+
+      <Sep />
+
+      {/* Montage */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>Montage</CtrlLabel>
+        <Select value={montage} onValueChange={onMontageChange ?? (() => {})}>
+          <SelectTrigger className="h-6 w-[130px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MONTAGE_OPTIONS.map(o => (
+              <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Control Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {/* Time Window */}
-        <div className="space-y-2">
-          <Label className="text-xs">Time Window</Label>
-          <Select value={timeWindow.toString()} onValueChange={(v) => onTimeWindowChange(Number(v))}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="10">10 seconds</SelectItem>
-              <SelectItem value="30">30 seconds</SelectItem>
-              <SelectItem value="60">60 seconds</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+      <Sep />
 
-        {/* Amplitude Scale */}
-        <div className="space-y-2">
-          <Label className="text-xs">Amplitude Scale</Label>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
-                  onMouseDown={handleAmplitudeDecreaseDown}
-                  onMouseUp={handleAmplitudeMouseUp}
-                  onMouseLeave={handleAmplitudeMouseUp}
-                >
-                  <ZoomOut className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Decrease amplitude (hold for continuous)</TooltipContent>
-            </Tooltip>
-            <span className="text-xs font-mono flex-1 text-center">{amplitudeScale.toFixed(3)}x</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="h-8 w-8 rounded border border-border bg-background hover:bg-muted flex items-center justify-center transition-all duration-150 hover:scale-105 active:scale-95"
-                  onMouseDown={handleAmplitudeIncreaseDown}
-                  onMouseUp={handleAmplitudeMouseUp}
-                  onMouseLeave={handleAmplitudeMouseUp}
-                >
-                  <ZoomIn className="h-3 w-3" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Increase amplitude (hold for continuous)</TooltipContent>
-            </Tooltip>
+      {/* Speed */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>Speed</CtrlLabel>
+        <Select value={String(mmSec)} onValueChange={v => onTimeWindowChange(mmSecToWindowSec(Number(v)))}>
+          <SelectTrigger className="h-6 w-[52px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SPEED_OPTIONS.map(o => (
+              <SelectItem key={o.mmSec} value={String(o.mmSec)} className="text-xs">{o.mmSec}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <CtrlLabel>mm/s</CtrlLabel>
+      </div>
+
+      <Sep />
+
+      {/* Channel count (read-only for now) */}
+      {visibleChannelCount != null && (
+        <>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <CtrlLabel>Chs</CtrlLabel>
+            <span className="text-[11px] font-medium px-2 tabular-nums">{visibleChannelCount}</span>
           </div>
-        </div>
+          <Sep />
+        </>
+      )}
 
-        {/* Playback Speed */}
-        <div className="space-y-2">
-          <Label className="text-xs">Playback Speed</Label>
-          <Select value={playbackSpeed.toString()} onValueChange={(v) => onPlaybackSpeedChange(Number(v))}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0.5">0.5x</SelectItem>
-              <SelectItem value="1">1x</SelectItem>
-              <SelectItem value="2">2x</SelectItem>
-              <SelectItem value="4">4x</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Export */}
-        <div className="space-y-2">
-          <Label className="text-xs">Actions</Label>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" onClick={onExport} className="w-full transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]">
-                <Download className="h-4 w-4 mr-2" />
-                Export
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Export annotations as JSON</TooltipContent>
-          </Tooltip>
-        </div>
+      {/* Amplitude */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>Amp</CtrlLabel>
+        <Select value={String(uvmm)} onValueChange={v => onAmplitudeScaleChange(10 / Number(v))}>
+          <SelectTrigger className="h-6 w-[60px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {AMP_OPTIONS.map(o => (
+              <SelectItem key={o.uvmm} value={String(o.uvmm)} className="text-xs">{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <CtrlLabel>μV/mm</CtrlLabel>
       </div>
+
+      <Sep />
+
+      {/* High-frequency filter */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>HF</CtrlLabel>
+        <Select value={String(hfFilter)} onValueChange={v => onHFFilterChange?.(Number(v))}>
+          <SelectTrigger className="h-6 w-[56px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {HF_OPTIONS.map(v => (
+              <SelectItem key={v} value={String(v)} className="text-xs">{v}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <CtrlLabel>Hz</CtrlLabel>
+      </div>
+
+      <Sep />
+
+      {/* Low-frequency filter */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>LF</CtrlLabel>
+        <Select value={String(lfFilter)} onValueChange={v => onLFFilterChange?.(Number(v))}>
+          <SelectTrigger className="h-6 w-[68px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LF_OPTIONS.map(v => (
+              <SelectItem key={v} value={String(v)} className="text-xs">
+                {v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : v.toFixed(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <CtrlLabel>Hz</CtrlLabel>
+      </div>
+
     </div>
   );
-}
-
-function formatTime(seconds: number): string {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }

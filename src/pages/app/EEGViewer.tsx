@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
-import { EEGControls } from "@/components/eeg/EEGControls";
+import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
@@ -130,6 +130,10 @@ export default function EEGViewer() {
   const [suppressArts, setSuppressArts]     = useState(false);
   const [showSegments, setShowSegments]     = useState(true);
   const [sidebarOpen, setSidebarOpen]       = useState(true);
+  // Clinical display controls (display-only for now; filtering applied in future)
+  const [hfFilter, setHfFilter]             = useState(70);
+  const [lfFilter, setLfFilter]             = useState(0.5);
+  const [montage, setMontage]               = useState("avg");
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const [signals, setSignals]         = useState<number[][] | null>(null);
@@ -608,101 +612,74 @@ export default function EEGViewer() {
         </div>
       )}
 
-      {/* ── Info + overlay toggles ── */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b flex-shrink-0 flex-wrap">
-        {/* Signal metadata */}
-        <span className="text-xs text-muted-foreground tabular-nums font-mono">
-          {meta.n_channels}ch · {meta.sampling_rate_hz}Hz · {fmtTime(duration)}
-        </span>
-
-        {loadingWin && (
-          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+      {/* ── Overlay toggles + signal layer ── */}
+      <div className="flex items-center gap-1.5 px-3 h-7 border-b flex-shrink-0 overflow-x-auto">
+        {artifactCount > 0 && (
+          <button
+            onClick={() => setShowArtifacts(v => !v)}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+              showArtifacts
+                ? "bg-muted/70 border border-border/60 text-foreground"
+                : "text-muted-foreground/60 border border-transparent"
+            }`}
+            title="Toggle artifact overlays"
+          >
+            {Object.entries(artifactTypeCounts).map(([type, count]) => {
+              const ac = artifactColor(type);
+              return (
+                <span key={type} className="flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full inline-block" style={{ background: ac.border }} />
+                  <span style={{ color: ac.border }}>{ac.label} {count}</span>
+                </span>
+              );
+            })}
+          </button>
         )}
-
-        <div className="h-3 border-l mx-1" />
-
-        {/* Overlay toggles — pill buttons */}
-        <div className="flex items-center gap-1">
-          {artifactCount > 0 && (
-            <button
-              onClick={() => setShowArtifacts(v => !v)}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
-                showArtifacts
-                  ? "bg-muted/60 border border-muted-foreground/20 text-foreground"
-                  : "bg-muted text-muted-foreground border border-transparent"
-              }`}
-              title="Toggle artifact overlays"
-            >
-              {Object.entries(artifactTypeCounts).map(([type, count]) => {
-                const ac = artifactColor(type);
-                return (
-                  <span key={type} className="flex items-center gap-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full inline-block" style={{ background: ac.border }} />
-                    <span style={{ color: ac.border }}>{ac.label} {count}</span>
-                  </span>
-                );
-              })}
-            </button>
-          )}
-
-          {annotationCount > 0 && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-500/10 text-blue-500 border border-blue-500/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />
-              {annotationCount} annotation{annotationCount !== 1 ? "s" : ""}
-            </div>
-          )}
-
-          {segments.length > 0 && (
-            <button
-              onClick={() => setShowSegments(v => !v)}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-colors ${
-                showSegments
-                  ? "bg-primary/10 text-primary border border-primary/25"
-                  : "bg-muted text-muted-foreground border border-transparent"
-              }`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />
-              {segments.length} finding{segments.length !== 1 ? "s" : ""}
-            </button>
-          )}
-
-          {artifactCount > 0 && showArtifacts && (
-            <button
-              onClick={() => setSuppressArts(v => !v)}
-              className={`px-2 py-0.5 rounded-full text-xs transition-colors ${
-                suppressArts
-                  ? "bg-muted-foreground/20 text-foreground border border-border"
-                  : "bg-muted text-muted-foreground border border-transparent"
-              }`}
-            >
-              suppress
-            </button>
-          )}
-        </div>
+        {annotationCount > 0 && (
+          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+            <span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />
+            {annotationCount} ann.
+          </div>
+        )}
+        {segments.length > 0 && (
+          <button
+            onClick={() => setShowSegments(v => !v)}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+              showSegments
+                ? "bg-primary/10 text-primary border border-primary/25"
+                : "text-muted-foreground/60 border border-transparent"
+            }`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-current inline-block" />
+            {segments.length} finding{segments.length !== 1 ? "s" : ""}
+          </button>
+        )}
+        {artifactCount > 0 && showArtifacts && (
+          <button
+            onClick={() => setSuppressArts(v => !v)}
+            className={`px-2 py-0.5 rounded-full text-[11px] transition-colors ${
+              suppressArts
+                ? "bg-muted-foreground/20 text-foreground border border-border"
+                : "text-muted-foreground/60 border border-transparent"
+            }`}
+          >
+            suppress
+          </button>
+        )}
 
         <div className="flex-1" />
 
-        {/* Signal layer toggle: Raw EEG ↔ ESF */}
-        <div className="flex items-center rounded-md border border-border/60 overflow-hidden text-xs">
+        {/* Signal layer toggle: ESF ↔ Raw */}
+        <div className="flex items-center rounded border border-border/60 overflow-hidden text-[11px] shrink-0">
           <button
-            onClick={() => {
-              if (signalLayer === "raw") return;
-              // No-op if already ESF — this is the default
-            }}
-            className={`px-2 py-0.5 transition-colors ${
-              signalLayer === "esf"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            title="ESF canonical — 19ch 250Hz normalized"
-          >
-            ESF
-          </button>
+            onClick={() => { if (signalLayer === "raw") return; }}
+            className={`px-2 py-0.5 transition-colors ${signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="ESF canonical"
+          >ESF</button>
           <button
             onClick={async () => {
               if (signalLayer === "raw") return;
               if (!studyId) return;
-              // If already loaded, just switch
               if (rawEdfRef.current && rawMetaRef.current) {
                 edfReader.current = rawEdfRef.current;
                 cache.current.clear();
@@ -711,7 +688,6 @@ export default function EEGViewer() {
                 setSignalLayer("raw");
                 return;
               }
-              // Load raw EDF from C-Plane read-token
               setLoadingRaw(true);
               try {
                 const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
@@ -742,15 +718,9 @@ export default function EEGViewer() {
               }
             }}
             disabled={loadingRaw}
-            className={`px-2 py-0.5 transition-colors ${
-              signalLayer === "raw"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-            title="Raw immutable EDF — original sample rate, unfiltered"
-          >
-            {loadingRaw ? "…" : "Raw"}
-          </button>
+            className={`px-2 py-0.5 transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            title="Raw immutable EDF"
+          >{loadingRaw ? "…" : "Raw"}</button>
           {signalLayer === "raw" && (
             <button
               onClick={() => {
@@ -761,24 +731,14 @@ export default function EEGViewer() {
                 signalLayerRef.current = "esf";
                 setSignalLayer("esf");
               }}
-              className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground transition-colors border-l border-border/60"
-              title="Switch back to ESF canonical"
-            >
-              ✕
-            </button>
+              className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground border-l border-border/60 transition-colors"
+              title="Back to ESF"
+            >✕</button>
           )}
         </div>
-
-        {/* Keyboard hint */}
-        <span className="text-[10px] text-muted-foreground/50 hidden sm:block">
-          <kbd className="px-1 bg-muted rounded">Space</kbd> ·{" "}
-          <kbd className="px-1 bg-muted rounded">←/→</kbd> ·{" "}
-          <kbd className="px-1 bg-muted rounded">+/−</kbd> ·{" "}
-          <kbd className="px-1 bg-muted rounded">N/P</kbd>
-        </span>
       </div>
 
-      {/* ── Playback controls ── */}
+      {/* ── Clinical toolbar ── */}
       <EEGControls
         isPlaying={playing}
         onPlayPause={() => setPlaying(p => !p)}
@@ -800,6 +760,13 @@ export default function EEGViewer() {
         onSkipBackward={() => seekTo(globalTime - windowSec)}
         onSkipForward={() => seekTo(globalTime + windowSec)}
         onExport={() => {}}
+        hfFilter={hfFilter}
+        onHFFilterChange={setHfFilter}
+        lfFilter={lfFilter}
+        onLFFilterChange={setLfFilter}
+        montage={montage}
+        onMontageChange={setMontage}
+        visibleChannelCount={meta?.n_channels}
       />
 
       {/* ── Mini-map timeline ── */}
@@ -859,6 +826,7 @@ export default function EEGViewer() {
             segmentOverlays={winSegments}
             showArtifactsAsRed={true}
             suppressArtifacts={suppressArts}
+            labelColumnWidth={72}
             onTimeClick={t => setCursor(clamp(t, 0, windowSec))}
           />
         </div>
@@ -871,6 +839,35 @@ export default function EEGViewer() {
             onToggle={() => setSidebarOpen(o => !o)}
             onSegmentClick={gotoSegment}
           />
+        )}
+      </div>
+
+      {/* ── Status bar ── */}
+      <div className="flex items-center gap-3 px-3 h-6 border-t bg-muted/20 flex-shrink-0 overflow-hidden">
+        <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
+          {fmtTime(globalTime)}
+        </span>
+        <span className="text-[10px] text-muted-foreground/40">·</span>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {meta.n_channels}ch · {meta.sampling_rate_hz} Hz
+        </span>
+        {rawEdfMode && (
+          <>
+            <span className="text-[10px] text-muted-foreground/40">·</span>
+            <span className="text-[10px] text-amber-600 dark:text-amber-400">Raw EDF</span>
+          </>
+        )}
+        <span className="text-[10px] text-muted-foreground/40">·</span>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {windowSecToMmSec(windowSec)} mm/s · {scaleToUVMM(amplitude).toFixed(1)} μV/mm
+        </span>
+        <span className="text-[10px] text-muted-foreground/40">·</span>
+        <span className="text-[10px] font-mono text-muted-foreground">
+          {hfFilter} Hz HF · {lfFilter === 0 ? "LF Off" : `${lfFilter < 0.1 ? lfFilter.toFixed(3) : lfFilter.toFixed(1)} Hz LF`} · Notch Off
+        </span>
+        <div className="flex-1" />
+        {loadingWin && (
+          <Loader2 className="h-2.5 w-2.5 animate-spin text-muted-foreground/50 shrink-0" />
         )}
       </div>
     </div>

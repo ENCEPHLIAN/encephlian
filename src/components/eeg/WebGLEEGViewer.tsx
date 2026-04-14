@@ -54,6 +54,7 @@ export interface WebGLEEGViewerProps {
   channelColors?: string[];
   showArtifactsAsRed?: boolean;
   suppressArtifacts?: boolean; // display-only (dims segments)
+  labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
   onTimeClick?: (time: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
@@ -65,25 +66,36 @@ const THEME_COLORS = {
     gridStrong: 0x262626,
     text: "#e5e5e5",
     textMuted: "#737373",
-    cursor: "#e5e5e5",
+    cursor: "#737373",
+    labelBg: "rgba(10,10,10,0.88)",
+    labelPanelBg: "rgba(14,14,14,1)",
+    labelPanelBorder: "rgba(38,38,38,1)",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
     artifactBorderRed: "rgba(239, 68, 68, 0.55)",
     highlightBg: "rgba(59, 130, 246, 0.15)",
     highlightBorder: "rgba(59, 130, 246, 0.6)",
   },
   light: {
-    background: 0xfafafa,
-    grid: 0xf0f0f0,
-    gridStrong: 0xe0e0e0,
-    text: "#171717",
-    textMuted: "#525252",
-    cursor: "#171717",
-    artifactBgRed: "rgba(239, 68, 68, 0.18)",
-    artifactBorderRed: "rgba(239, 68, 68, 0.55)",
-    highlightBg: "rgba(59, 130, 246, 0.15)",
-    highlightBorder: "rgba(59, 130, 246, 0.6)",
+    background: 0xffffff,
+    grid: 0xebebeb,
+    gridStrong: 0xd5d5d5,
+    text: "#1a1a1a",
+    textMuted: "#6b7280",
+    cursor: "#9ca3af",
+    labelBg: "rgba(247,247,247,1)",
+    labelPanelBg: "rgba(245,245,245,1)",
+    labelPanelBorder: "rgba(209,213,219,1)",
+    artifactBgRed: "rgba(220, 38, 38, 0.12)",
+    artifactBorderRed: "rgba(220, 38, 38, 0.45)",
+    highlightBg: "rgba(37, 99, 235, 0.10)",
+    highlightBorder: "rgba(37, 99, 235, 0.55)",
   },
 };
+
+// Alternating red/blue for light mode (clinical Natus-style)
+// Odd display index → red, even → blue
+const LIGHT_CHANNEL_RED  = 0xcc2222;
+const LIGHT_CHANNEL_BLUE = 0x1a4fc4;
 
 const DEFAULT_CHANNEL_PALETTE = [
   0x60a5fa, 0x4ade80, 0xfbbf24, 0xa78bfa, 0xf87171, 0x34d399, 0xfb923c, 0x818cf8, 0xf472b6, 0x22d3d8, 0xa3e635,
@@ -117,17 +129,19 @@ function clamp(n: number, lo: number, hi: number) {
 /**
  * Min/max envelope per pixel column (fast + avoids aliasing).
  * Returns positions array sized (2*pxCount) points: (x,y) pairs per vertex.
+ * xOffset: left offset in world px (for label column separation).
  */
 function buildEnvelopePositions(
   sig: number[],
-  widthPx: number,
+  signalAreaWidth: number,
   heightPx: number,
   laneMidY: number,
   laneHalfHeight: number,
   gain: number,
   suppressMask: Uint8Array | null,
+  xOffset: number = 0,
 ): Float32Array {
-  const pxCount = Math.max(2, Math.min(widthPx, 2400));
+  const pxCount = Math.max(2, Math.min(signalAreaWidth, 2400));
   const out = new Float32Array(pxCount * 2 * 3); // two vertices per column, xyz
   const n = sig.length;
   const spp = n / pxCount;
@@ -162,7 +176,7 @@ function buildEnvelopePositions(
       }
     }
 
-    const x = (px / (pxCount - 1)) * widthPx;
+    const x = xOffset + (px / (pxCount - 1)) * signalAreaWidth;
 
     const yMax = laneMidY - clamp(maxV * gain * sup, -laneHalfHeight, laneHalfHeight);
     const yMin = laneMidY - clamp(minV * gain * sup, -laneHalfHeight, laneHalfHeight);
@@ -195,6 +209,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     channelColors = [],
     showArtifactsAsRed = true,
     suppressArtifacts = false,
+    labelColumnWidth = 72,
     onTimeClick,
   } = props;
 
@@ -222,10 +237,12 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
-      const t = (x / rect.width) * timeWindow;
-      onTimeClick?.(t);
+      const lw = Math.max(0, labelColumnWidth);
+      if (x < lw) return; // click on label panel — ignore
+      const signalFraction = (x - lw) / Math.max(1, rect.width - lw);
+      onTimeClick?.(signalFraction * timeWindow);
     },
-    [onTimeClick, timeWindow],
+    [onTimeClick, timeWindow, labelColumnWidth],
   );
 
   // init scene once
@@ -349,6 +366,10 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const laneH = (h - PAD * 2) / nCh;
     const laneHalf = Math.max(4, laneH * 0.4);
 
+    // Label column geometry
+    const labelW = Math.max(0, labelColumnWidth);
+    const signalW = Math.max(1, w - labelW);
+
     // build a suppress mask from artifactIntervals if requested
     // mask is per-sample per-channel, but we keep it cheap: only build if suppressArtifacts is on and artifacts exist
     const buildMaskForChannel = (chIdx: number): Uint8Array | null => {
@@ -371,8 +392,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const s1 = clamp(a.end_sec, 0, timeWindow);
       if (s1 <= 0 || s0 >= timeWindow) continue;
 
-      const x1 = (s0 / timeWindow) * w;
-      const x2 = (s1 / timeWindow) * w;
+      const x1 = labelW + (s0 / timeWindow) * signalW;
+      const x2 = labelW + (s1 / timeWindow) * signalW;
       const bg = (a as any).color ?? (showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBgRed);
       const br = (a as any).borderColor ?? (showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorderRed);
 
@@ -405,9 +426,9 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const s0 = clamp(seg.start_sec, 0, timeWindow);
       const s1 = clamp(seg.end_sec, 0, timeWindow);
       if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
-      
-      const x1 = (s0 / timeWindow) * w;
-      const x2 = (s1 / timeWindow) * w;
+
+      const x1 = labelW + (s0 / timeWindow) * signalW;
+      const x2 = labelW + (s1 / timeWindow) * signalW;
       
       // If segment has a specific channel, render only on that channel lane
       if (seg.channel != null) {
@@ -454,8 +475,8 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const s0 = clamp(highlightInterval.start_sec, 0, timeWindow);
       const s1 = clamp(highlightInterval.end_sec, 0, timeWindow);
       if (s1 > 0 && s0 < timeWindow && s1 > s0) {
-        const x1 = (s0 / timeWindow) * w;
-        const x2 = (s1 / timeWindow) * w;
+        const x1 = labelW + (s0 / timeWindow) * signalW;
+        const x2 = labelW + (s1 / timeWindow) * signalW;
         
         const el = document.createElement("div");
         el.style.cssText = [
@@ -485,7 +506,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
     const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
     for (let i = 0; i <= timeWindow; i += interval) {
-      const x = (i / timeWindow) * w;
+      const x = labelW + (i / timeWindow) * signalW;
       const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, h, 0)]);
       const line = new THREE.Line(geom, i % (interval * 2) === 0 ? gridStrongMat : gridMat);
       scene.add(line);
@@ -493,14 +514,15 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     }
     for (let i = 0; i <= nCh; i++) {
       const y = PAD + i * laneH;
-      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, y, 0), new THREE.Vector3(w, y, 0)]);
+      // Horizontal dividers span from label column edge to right
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(labelW, y, 0), new THREE.Vector3(w, y, 0)]);
       const line = new THREE.Line(geom, gridMat);
       scene.add(line);
       gridRef.current.push(line);
     }
 
     // cursor line (local)
-    const cursorX = (clamp(currentTime, 0, timeWindow) / timeWindow) * w;
+    const cursorX = labelW + (clamp(currentTime, 0, timeWindow) / timeWindow) * signalW;
     if (cursorLineRef.current) {
       scene.remove(cursorLineRef.current);
       cursorLineRef.current.geometry.dispose();
@@ -522,12 +544,27 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     for (const m of markers) {
       const t = m.timestamp_sec;
       if (t < 0 || t > timeWindow) continue;
-      const x = (t / timeWindow) * w;
+      const x = labelW + (t / timeWindow) * signalW;
       const mat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.85 });
       const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, h, 0)]);
       const line = new THREE.Line(geom, mat);
       scene.add(line);
       gridRef.current.push(line);
+    }
+
+    // Label panel background (rendered before channel labels)
+    if (labelsRef.current && labelW > 0) {
+      const panel = document.createElement("div");
+      panel.style.cssText = [
+        "position:absolute",
+        "left:0", "top:0",
+        `width:${labelW}px`, "height:100%",
+        `background:${colors.labelPanelBg}`,
+        `border-right:1px solid ${colors.labelPanelBorder}`,
+        "pointer-events:none",
+        "z-index:3",
+      ].join(";");
+      labelsRef.current.appendChild(panel);
     }
 
     // render channels
@@ -539,24 +576,25 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const laneTop = PAD + di * laneH;
       const laneMid = laneTop + laneH / 2;
 
-      // choose color
+      // choose color — light mode: alternating red/blue (clinical Natus style)
       const rawLabel = channelLabels[chIdx] || `Ch${chIdx + 1}`;
       const label = normalizeChanLabel(rawLabel);
 
       let colorHex: number;
       if (channelColors[chIdx]) {
         colorHex = parseColorToHex(channelColors[chIdx]);
+      } else if (theme !== "dark") {
+        // Alternating red/blue by display index
+        colorHex = di % 2 === 0 ? LIGHT_CHANNEL_RED : LIGHT_CHANNEL_BLUE;
       } else {
         const colorInfo = getChannelColor(label);
         const groupKey = colorInfo.label.toLowerCase() as ChannelGroup;
         colorHex =
-          CHANNEL_THEME_COLORS[groupKey]?.[theme === "dark" ? "dark" : "light"] ??
+          CHANNEL_THEME_COLORS[groupKey]?.dark ??
           DEFAULT_CHANNEL_PALETTE[di % DEFAULT_CHANNEL_PALETTE.length];
       }
 
-      // display gain: keep it boring and deterministic
-      // map typical EEG microvolt ranges by using a robust per-window scale estimate WITHOUT filtering
-      // p95 of |sig|
+      // display gain: p95-based robust estimate
       let p95 = 1e-6;
       {
         const abs = new Array(sig.length);
@@ -569,7 +607,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const mask = buildMaskForChannel(chIdx);
-      const pos = buildEnvelopePositions(sig, w, h, laneMid, laneHalf, gain, mask);
+      const pos = buildEnvelopePositions(sig, signalW, h, laneMid, laneHalf, gain, mask, labelW);
 
       // create or update line
       const existing = lineStateRef.current.get(chIdx);
@@ -580,29 +618,36 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       } else {
         const geom = new THREE.BufferGeometry();
         geom.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-        const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.95 });
+        const mat = new THREE.LineBasicMaterial({ color: colorHex, transparent: true, opacity: 0.92 });
         const line = new THREE.LineSegments(geom, mat);
         scene.add(line);
         lineStateRef.current.set(chIdx, { line, geom, pos });
       }
 
-      // label
-      if (labelsRef.current) {
+      // label — inside the dedicated label panel column
+      if (labelsRef.current && labelW > 0) {
         const el = document.createElement("div");
         el.textContent = label;
         el.style.cssText = [
           "position:absolute",
-          `left:8px`,
-          `top:${laneTop + 2}px`,
-          "font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          "left:0",
+          `width:${labelW - 1}px`,
+          `top:${laneTop}px`,
+          `height:${laneH}px`,
+          "display:flex",
+          "align-items:center",
+          "justify-content:flex-end",
+          "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
           "font-size:10px",
           "font-weight:600",
           `color:${colors.text}`,
-          `background:${theme === "dark" ? "rgba(10,10,10,0.75)" : "rgba(250,250,250,0.85)"}`,
-          "padding:2px 6px",
-          "border-radius:3px",
-          `border-left:3px solid #${colorHex.toString(16).padStart(6, "0")}`,
+          `padding-right:6px`,
+          `border-right:2px solid #${colorHex.toString(16).padStart(6, "0")}`,
           "pointer-events:none",
+          "box-sizing:border-box",
+          "z-index:4",
+          "white-space:nowrap",
+          "overflow:hidden",
         ].join(";");
         labelsRef.current.appendChild(el);
       }
@@ -626,6 +671,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     showArtifactsAsRed,
     suppressArtifacts,
     colors,
+    labelColumnWidth,
   ]);
 
   // draw on raf to avoid thrash
