@@ -260,7 +260,7 @@ export default function StudyDetail() {
   const isProcessing = study.triage_status === "processing";
   const canGenerateReport = !hasReport && !isProcessing &&
     (study.state === "uploaded" || study.state === "parsed");
-  const canReview = study.state === "ai_draft" || study.state === "in_review" || study.state === "complete";
+  const canReview = study.state === "ai_draft" || study.state === "in_review" || study.state === "complete" || study.state === "completed";
   const StateIcon = stateConfig.icon;
 
   return (

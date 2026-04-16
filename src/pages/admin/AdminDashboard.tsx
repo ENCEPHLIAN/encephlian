@@ -70,7 +70,7 @@ export default function AdminDashboard() {
       const { data, error } = await supabase.rpc("admin_get_all_studies");
       if (error) throw error;
       return (data || [])
-        .filter((s: any) => s.state === "complete" || s.state === "signed")
+        .filter((s: any) => s.state === "complete" || s.state === "completed" || s.state === "signed")
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 5);
     },

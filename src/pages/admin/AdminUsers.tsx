@@ -520,7 +520,7 @@ export default function AdminUsers() {
                               <td className="px-3 py-2 text-muted-foreground">{s.meta?.patient_id || "—"}</td>
                               <td className="px-3 py-2">
                                 <Badge variant="secondary" className={cn("text-[9px] h-4 px-1", {
-                                  "bg-emerald-500/10 text-emerald-600": s.state === "complete" || s.state === "signed",
+                                  "bg-emerald-500/10 text-emerald-600": s.state === "complete" || s.state === "completed" || s.state === "signed",
                                   "bg-red-500/10 text-red-500": s.state === "failed",
                                   "bg-amber-500/10 text-amber-500": s.state === "processing",
                                   "bg-violet-500/10 text-violet-500": s.state === "ai_draft",
