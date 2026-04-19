@@ -122,6 +122,12 @@ function App() {
                   <Route path="viewer" element={<EEGViewer />} />
                   {/* Legacy alias — redirects to /app/viewer preserving query string */}
                   <Route path="eeg-viewer" element={<LegacyEegViewerRedirect />} />
+                  {/*
+                    AdminReportV0 is user-facing despite the name/location.
+                    Reached via the "Generate Report" button on /app/reports.
+                    Reads are scoped by Read API key + Supabase RLS — no admin data leaks.
+                    TODO(rename): move src/pages/admin/AdminReportV0.tsx → src/pages/app/GenerateReport.tsx
+                  */}
                   <Route path="report-v0" element={<AdminReportV0 />} />
                   <Route path="notes" element={<Notes />} />
                   <Route path="files" element={<Files />} />
