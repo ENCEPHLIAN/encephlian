@@ -12,7 +12,7 @@ import AdminRestore from "@/pages/admin/AdminRestore";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
 import { UserSessionProvider } from "@/contexts/UserSessionContext";
 import Login from "./pages/Login";
@@ -57,6 +57,13 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Legacy route alias — /app/eeg-viewer?studyId=X was the old path; canonical is /app/viewer.
+// Preserves query string so existing links/bookmarks keep working.
+function LegacyEegViewerRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/app/viewer${location.search}${location.hash}`} replace />;
+}
 
 function App() {
   return (
@@ -113,7 +120,8 @@ function App() {
                   <Route path="reports" element={<Reports />} />
                   <Route path="reports/:id" element={<ReportDetail />} />
                   <Route path="viewer" element={<EEGViewer />} />
-                  <Route path="eeg-viewer" element={<EEGViewer />} />
+                  {/* Legacy alias — redirects to /app/viewer preserving query string */}
+                  <Route path="eeg-viewer" element={<LegacyEegViewerRedirect />} />
                   <Route path="report-v0" element={<AdminReportV0 />} />
                   <Route path="notes" element={<Notes />} />
                   <Route path="files" element={<Files />} />
