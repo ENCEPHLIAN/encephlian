@@ -3,7 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, Building2, FileText, Users, AlertTriangle, CheckCircle2, Clock, RotateCcw, ArrowRight, Activity } from "lucide-react";
+import {
+  Loader2,
+  Building2,
+  FileText,
+  Users,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  RotateCcw,
+  ArrowRight,
+  Activity,
+  Coins,
+} from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +28,14 @@ type DashboardStats = {
   active_users: number;
 };
 
+type Study = {
+  id: string;
+  state: string;
+  created_at: string;
+  updated_at?: string;
+  meta?: { patient_id?: string } | null;
+};
+
 const STATE_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
   awaiting_sla: { label: "Awaiting",   color: "text-muted-foreground", dot: "bg-muted-foreground/40" },
   pending:      { label: "Pending",    color: "text-muted-foreground", dot: "bg-muted-foreground/40" },
@@ -26,6 +46,8 @@ const STATE_CONFIG: Record<string, { label: string; color: string; dot: string }
   signed:       { label: "Signed",     color: "text-emerald-600",      dot: "bg-emerald-600" },
   failed:       { label: "Failed",     color: "text-red-500",          dot: "bg-red-500" },
 };
+
+const COMPLETE_STATES = new Set(["complete", "completed", "signed"]);
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -40,6 +62,29 @@ export default function AdminDashboard() {
     refetchInterval: 30000,
   });
 
+  // Single authoritative fetch of the studies table. Previously the page
+  // was calling admin_get_all_studies TWICE (once for failed, once for
+  // recent-complete). Now we fetch once and derive both lists in-memory.
+  const { data: studiesView } = useQuery({
+    queryKey: ["admin-dashboard-studies-view"],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("admin_get_all_studies");
+      if (error) throw error;
+      const rows = (data as Study[] | null) ?? [];
+      const failed = rows.filter((s) => s.state === "failed").slice(0, 5);
+      const recentComplete = rows
+        .filter((s) => COMPLETE_STATES.has(s.state))
+        .sort(
+          (a, b) =>
+            new Date(b.updated_at ?? b.created_at).getTime() -
+            new Date(a.updated_at ?? a.created_at).getTime(),
+        )
+        .slice(0, 5);
+      return { failed, recentComplete };
+    },
+    refetchInterval: 30000,
+  });
+
   const { data: recentAudit } = useQuery({
     queryKey: ["admin-recent-audit"],
     queryFn: async () => {
@@ -47,32 +92,9 @@ export default function AdminDashboard() {
         .from("audit_logs")
         .select("id, event_type, created_at, event_data")
         .order("created_at", { ascending: false })
-        .limit(10);
+        .limit(8);
       if (error) throw error;
       return data;
-    },
-    refetchInterval: 30000,
-  });
-
-  const { data: failedStudies } = useQuery({
-    queryKey: ["admin-failed-studies"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("admin_get_all_studies");
-      if (error) throw error;
-      return (data || []).filter((s: any) => s.state === "failed").slice(0, 5);
-    },
-    refetchInterval: 30000,
-  });
-
-  const { data: recentComplete } = useQuery({
-    queryKey: ["admin-recent-complete"],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("admin_get_all_studies");
-      if (error) throw error;
-      return (data || [])
-        .filter((s: any) => s.state === "complete" || s.state === "completed" || s.state === "signed")
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 5);
     },
     refetchInterval: 30000,
   });
@@ -86,39 +108,66 @@ export default function AdminDashboard() {
   }
 
   const states = stats?.studies_by_state || {};
-  const failed = states["failed"] || 0;
+  const failedCount = states["failed"] || 0;
   const processing = states["processing"] || 0;
   const complete = (states["complete"] || 0) + (states["signed"] || 0);
   const total = stats?.total_studies || 0;
+  const tokensSold = stats?.total_tokens_sold ?? 0;
+  const tokensConsumed = stats?.total_tokens_consumed ?? 0;
+  const completePct = total > 0 ? Math.round((complete / total) * 100) : 0;
+
+  const failedStudies = studiesView?.failed ?? [];
+  const recentComplete = studiesView?.recentComplete ?? [];
 
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Operations</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Operations</h1>
+            <Badge
+              variant="secondary"
+              className="h-5 text-[10px] font-mono bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+            >
+              LIVE
+            </Badge>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {format(new Date(), "EEEE, d MMMM yyyy · HH:mm")}
+            {format(new Date(), "EEEE, d MMMM yyyy · HH:mm")} · Central India
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => navigate("/admin/health")}>
-          <Activity className="h-3.5 w-3.5 mr-1.5" />
-          Service Health
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate("/admin/health")}>
+            <Activity className="h-3.5 w-3.5 mr-1.5" />
+            Service Health
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate("/admin/infra")}>
+            <Coins className="h-3.5 w-3.5 mr-1.5" />
+            Infrastructure
+          </Button>
+        </div>
       </div>
 
-      {/* KPI Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* KPI Row — 5 tiles, tighter metrics band */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Clinics", value: stats?.total_clinics || 0, icon: Building2, href: "/admin/clinics" },
+          { label: "Clinics", value: stats?.total_clinics ?? 0, icon: Building2, href: "/admin/clinics" },
           { label: "Studies", value: total, icon: FileText, href: "/admin/studies" },
-          { label: "Active Users", value: stats?.active_users || 0, icon: Users, href: "/admin/users" },
+          { label: "Users", value: stats?.active_users ?? 0, icon: Users, href: "/admin/users" },
           {
             label: "Complete",
-            value: total > 0 ? `${Math.round((complete / total) * 100)}%` : "—",
+            value: total > 0 ? `${completePct}%` : "—",
             icon: CheckCircle2,
-            href: "/admin/studies",
+            href: "/admin/studies?state=complete",
             accent: complete > 0 ? "text-emerald-500" : undefined,
+          },
+          {
+            label: "Tokens",
+            value: `${tokensConsumed}/${tokensSold}`,
+            icon: Coins,
+            href: "/admin/wallets",
+            sub: "used / sold",
           },
         ].map((kpi) => (
           <button
@@ -131,6 +180,9 @@ export default function AdminDashboard() {
               <kpi.icon className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
             </div>
             <span className={cn("text-2xl font-semibold tabular-nums", kpi.accent)}>{kpi.value}</span>
+            {kpi.sub && (
+              <span className="block text-[10px] text-muted-foreground/50 mt-0.5">{kpi.sub}</span>
+            )}
           </button>
         ))}
       </div>
@@ -152,7 +204,7 @@ export default function AdminDashboard() {
                 className={cn(
                   "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors",
                   "border border-transparent hover:border-border/60 hover:bg-accent/40",
-                  count === 0 ? "opacity-40" : ""
+                  count === 0 ? "opacity-40" : "",
                 )}
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", cfg.dot)} />
@@ -175,24 +227,43 @@ export default function AdminDashboard() {
         <div className="rounded-lg border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
             <div className="flex items-center gap-2">
-              <AlertTriangle className={cn("h-3.5 w-3.5", failed > 0 ? "text-red-500" : "text-muted-foreground/40")} />
+              <AlertTriangle
+                className={cn(
+                  "h-3.5 w-3.5",
+                  failedCount > 0 ? "text-red-500" : "text-muted-foreground/40",
+                )}
+              />
               <span className="text-sm font-medium">Failed</span>
-              {failed > 0 && (
-                <Badge variant="destructive" className="h-4 text-[10px] px-1.5">{failed}</Badge>
+              {failedCount > 0 && (
+                <Badge variant="destructive" className="h-4 text-[10px] px-1.5">
+                  {failedCount}
+                </Badge>
               )}
             </div>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => navigate("/admin/studies?state=failed")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => navigate("/admin/studies?state=failed")}
+            >
               View all <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
           <div className="divide-y divide-border/40">
-            {failedStudies && failedStudies.length > 0 ? (
-              failedStudies.map((s: any) => (
-                <div key={s.id} className="flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors">
+            {failedStudies.length > 0 ? (
+              failedStudies.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors"
+                >
                   <div className="min-w-0">
-                    <span className="font-mono text-xs text-muted-foreground">{s.id.slice(0, 8)}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {s.id.slice(0, 8)}
+                    </span>
                     {s.meta?.patient_id && (
-                      <span className="ml-2 text-xs text-muted-foreground/60">{s.meta.patient_id}</span>
+                      <span className="ml-2 text-xs text-muted-foreground/60">
+                        {s.meta.patient_id}
+                      </span>
                     )}
                   </div>
                   <Button
@@ -221,7 +292,12 @@ export default function AdminDashboard() {
               <Clock className="h-3.5 w-3.5 text-muted-foreground/60" />
               <span className="text-sm font-medium">Activity</span>
             </div>
-            <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => navigate("/admin/audit")}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={() => navigate("/admin/audit")}
+            >
               Full log <ArrowRight className="h-3 w-3 ml-1" />
             </Button>
           </div>
@@ -246,8 +322,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Recently Completed */}
-      {recentComplete && recentComplete.length > 0 && (
+      {/* Recently Completed (only when there is content) */}
+      {recentComplete.length > 0 && (
         <div className="rounded-lg border border-border/60 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
             <div className="flex items-center gap-2">
@@ -256,24 +332,33 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="divide-y divide-border/40">
-            {recentComplete.map((s: any) => (
+            {recentComplete.map((s) => (
               <button
                 key={s.id}
                 onClick={() => navigate(`/admin/studies/${s.id}`)}
                 className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-accent/20 transition-colors text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className="font-mono text-xs text-muted-foreground">{s.id.slice(0, 8)}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {s.id.slice(0, 8)}
+                  </span>
                   {s.meta?.patient_id && (
-                    <span className="text-xs text-muted-foreground/60 truncate">{s.meta.patient_id}</span>
+                    <span className="text-xs text-muted-foreground/60 truncate">
+                      {s.meta.patient_id}
+                    </span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  >
                     {s.state}
                   </Badge>
                   <span className="text-[10px] text-muted-foreground/50">
-                    {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
+                    {formatDistanceToNow(new Date(s.updated_at ?? s.created_at), {
+                      addSuffix: true,
+                    })}
                   </span>
                 </div>
               </button>
