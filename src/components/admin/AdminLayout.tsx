@@ -23,6 +23,7 @@ import {
   Trash2,
   RotateCcw,
   Ticket,
+  Cloud,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -51,6 +52,7 @@ const NAV_SECTIONS = [
     title: "Operations",
     items: [
       { name: "Health", href: "/admin/health", icon: Activity },
+      { name: "Infrastructure", href: "/admin/infra", icon: Cloud },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Wrench },
       { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
       { name: "Tickets", href: "/admin/tickets", icon: Ticket },

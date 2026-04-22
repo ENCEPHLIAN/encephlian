@@ -49,6 +49,7 @@ import AdminHealth from "./pages/admin/AdminHealth";
 import AdminDiagnostics from "./pages/admin/AdminDiagnostics";
 import AdminEegPush from "./pages/admin/AdminEegPush";
 import AdminReportV0 from "./pages/admin/AdminReportV0";
+import AdminInfra from "./pages/admin/AdminInfra";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -102,6 +103,7 @@ function App() {
                   <Route path="eeg-push" element={<AdminEegPush />} />
                   <Route path="read-api" element={<AdminReadApi />} />
                   <Route path="report-v0" element={<AdminReportV0 />} />
+                  <Route path="infra" element={<AdminInfra />} />
                   <Route path="account" element={<AdminAccount />} />
                   <Route path="docs" element={<Documentation />} />
                 </Route>
