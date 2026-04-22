@@ -233,7 +233,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
               <img src={logoUrl || logo} alt="Logo" className="h-8 w-8 object-contain flex-shrink-0" />
-              <h1 className="text-xl md:text-2xl font-bold logo-text">
+              <h1 className="brand-encephlian text-xl md:text-2xl">
                 {brandName}<sup className="text-[10px] align-super">™</sup>
               </h1>
             </div>

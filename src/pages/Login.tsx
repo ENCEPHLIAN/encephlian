@@ -140,14 +140,7 @@ export default function Login() {
       {/* STATE 1: HERO LANDING */}
       {!showForm && (
         <div className="text-center space-y-12 animate-fade-in">
-          <h1
-            className="text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter leading-none text-foreground"
-            style={{
-              fontFamily: "Montserrat",
-              fontWeight: 900,
-              letterSpacing: "-0.05em",
-            }}
-          >
+          <h1 className="brand-mind text-7xl md:text-8xl lg:text-9xl leading-none text-foreground">
             MIND<sup className="text-sm md:text-base lg:text-lg ml-1.5 align-top relative top-[0.15em] font-light opacity-60">™</sup>
           </h1>
 
@@ -155,14 +148,7 @@ export default function Login() {
             Machine Intelligence for Neural Data
           </p>
 
-          <p
-            className="text-sm font-light tracking-tight opacity-40"
-            style={{
-              fontFamily: "Montserrat",
-              fontWeight: 300,
-              letterSpacing: "-0.02em",
-            }}
-          >
+          <p className="brand-encephlian text-sm opacity-40">
             ENCEPHLIAN<sup className="text-[7px] align-top relative top-[0.1em] font-light">™</sup>
           </p>
 
@@ -178,27 +164,13 @@ export default function Login() {
           {/* Header with logo */}
           <div className="absolute top-6 left-6 flex items-center gap-3">
             <img src={logo} alt="ENCEPHLIAN Logo" className="h-16 w-16" />
-            <span
-              className="text-2xl font-extrabold tracking-tight text-foreground leading-none"
-              style={{
-                fontFamily: "Montserrat",
-                fontWeight: 800,
-                letterSpacing: "-0.03em",
-              }}
-            >
+            <span className="brand-encephlian text-2xl text-foreground leading-none">
               ENCEPHLIAN<sup className="text-[8px] align-top relative top-[0.1em] font-light">™</sup>
             </span>
           </div>
 
           <div className="flex flex-col items-center justify-center">
-            <h1
-              className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter leading-none text-foreground"
-              style={{
-                fontFamily: "Montserrat",
-                fontWeight: 900,
-                letterSpacing: "-0.05em",
-              }}
-            >
+            <h1 className="brand-mind text-4xl md:text-5xl lg:text-6xl leading-none text-foreground">
               MIND<sup className="text-xs md:text-sm lg:text-base ml-1 align-top relative top-[0.15em] font-light opacity-60">™</sup>
             </h1>
 
