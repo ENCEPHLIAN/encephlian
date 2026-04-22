@@ -380,11 +380,15 @@ export default function AdminUsers() {
               onClick={() => {
                 if (!tokenDialog) return;
                 const newAmt = parseInt(tokenAmount) || 0;
-                const diff = newAmt - (tokenDialog.tokens || 0);
+                // The dialog asks for the target balance, so always use
+                // operation='set' — it matches what admin_adjust_tokens expects
+                // ('add' | 'remove' | 'set'). Previously we computed a diff and
+                // passed 'credit' | 'debit', which the RPC rejects with
+                // "Invalid operation" and silently toasted an error.
                 adjustTokensMutation.mutate({
                   userId: tokenDialog.id,
-                  amount: Math.abs(diff),
-                  operation: diff >= 0 ? "credit" : "debit",
+                  amount: newAmt,
+                  operation: "set",
                 });
               }}
             >
