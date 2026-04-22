@@ -15,7 +15,11 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const razorpayKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET')!;
+    // Prefer a dedicated webhook secret (Razorpay Dashboard → Webhooks → Secret).
+    // Fall back to the API key-secret for backwards compatibility with older deployments.
+    const webhookSecret =
+      Deno.env.get('RAZORPAY_WEBHOOK_SECRET') ||
+      Deno.env.get('RAZORPAY_KEY_SECRET')!;
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -27,7 +31,7 @@ serve(async (req) => {
 
     // Verify webhook signature using HMAC SHA256
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(razorpayKeySecret);
+    const keyData = encoder.encode(webhookSecret);
     const key = await crypto.subtle.importKey(
       "raw",
       keyData,
@@ -52,78 +56,148 @@ serve(async (req) => {
     console.log('Signature verified successfully ✅');
 
     const event = JSON.parse(body);
-    console.log('Webhook event:', event.event, 'for payment:', event.payload?.payment?.entity?.id);
+    const eventName: string = event.event || "unknown";
+    console.log(
+      `Webhook event: ${eventName}`,
+      `payment: ${event.payload?.payment?.entity?.id ?? "-"}`,
+      `order: ${event.payload?.order?.entity?.id ?? event.payload?.payment?.entity?.order_id ?? "-"}`,
+    );
 
-    // Handle payment.captured event
-    if (event.event === 'payment.captured') {
-      const payment = event.payload.payment.entity;
-      const orderId = payment.order_id;
-      const paymentId = payment.id;
+    // ── Handlers ──────────────────────────────────────────────────────────
+    // We acknowledge every event (200 OK) so Razorpay does not retry.
+    // Only events that mutate wallet/payment state do DB work; everything
+    // else is logged for ops visibility.
 
-      console.log(`Processing payment ${paymentId} for order ${orderId}`);
+    if (eventName === "payment.captured" || eventName === "order.paid") {
+      // order.paid fires after the capture is booked; treated identically
+      // to payment.captured for safety-net reconciliation.
+      const entity =
+        eventName === "payment.captured"
+          ? event.payload.payment.entity
+          : event.payload.payment?.entity ?? {};
+      const orderId = entity.order_id;
+      const paymentId = entity.id;
 
-      // Get payment record
-      const { data: paymentRecord, error: fetchError } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('order_id', orderId)
-        .single();
+      if (!orderId) {
+        console.error(`${eventName}: missing order_id in payload`);
+      } else {
+        const { data: paymentRecord, error: fetchError } = await supabase
+          .from("payments")
+          .select("*")
+          .eq("order_id", orderId)
+          .single();
 
-      if (fetchError || !paymentRecord) {
-        console.error('Payment record not found:', fetchError);
-        throw new Error('Payment record not found');
+        if (fetchError || !paymentRecord) {
+          console.error(`${eventName}: payment record not found for order ${orderId}`, fetchError);
+        } else if (paymentRecord.status === "completed") {
+          // Already credited (by verify_payment or an earlier webhook delivery).
+          // This is the common case: Razorpay delivers webhooks even after the
+          // frontend-triggered verify_payment has already credited the wallet.
+          console.log(`${eventName}: order ${orderId} already completed, skipping (idempotent)`);
+        } else if (paymentRecord.status === "refunded") {
+          console.log(`${eventName}: order ${orderId} already refunded, skipping`);
+        } else {
+          const { error: updateError } = await supabase
+            .from("payments")
+            .update({
+              payment_id: paymentId,
+              status: "completed",
+              signature_valid: true,
+            })
+            .eq("order_id", orderId)
+            .eq("status", "created"); // only flip from created → completed
+
+          if (updateError) {
+            console.error(`${eventName}: failed to update payment ${orderId}:`, updateError);
+            throw updateError;
+          }
+
+          const { error: creditError } = await supabase.rpc("credit_wallet", {
+            p_user_id: paymentRecord.user_id,
+            p_tokens: paymentRecord.credits_purchased,
+          });
+
+          if (creditError) {
+            console.error(`${eventName}: failed to credit wallet for ${orderId}:`, creditError);
+            throw creditError;
+          }
+
+          console.log(
+            `${eventName}: credited ${paymentRecord.credits_purchased} tokens to user ${paymentRecord.user_id} (order ${orderId})`,
+          );
+        }
       }
+    } else if (eventName === "payment.failed") {
+      const entity = event.payload.payment.entity;
+      const orderId = entity.order_id;
 
-      // Update payment status
       const { error: updateError } = await supabase
-        .from('payments')
+        .from("payments")
         .update({
-          payment_id: paymentId,
-          status: 'completed',
-          signature_valid: true,
-        })
-        .eq('order_id', orderId);
-
-      if (updateError) {
-        console.error('Failed to update payment:', updateError);
-        throw updateError;
-      }
-
-      // Credit the user's wallet
-      const { error: creditError } = await supabase.rpc('credit_wallet', {
-        p_user_id: paymentRecord.user_id,
-        p_tokens: paymentRecord.credits_purchased,
-      });
-
-      if (creditError) {
-        console.error('Failed to credit wallet:', creditError);
-        throw creditError;
-      }
-
-      console.log(`Credited ${paymentRecord.credits_purchased} credits to user ${paymentRecord.user_id}`);
-    } else if (event.event === 'payment.failed') {
-      const payment = event.payload.payment.entity;
-      const orderId = payment.order_id;
-
-      console.log(`Payment failed for order ${orderId}`);
-
-      // Update payment status to failed
-      const { error: updateError } = await supabase
-        .from('payments')
-        .update({
-          payment_id: payment.id,
-          status: 'failed',
+          payment_id: entity.id,
+          status: "failed",
           signature_valid: false,
         })
-        .eq('order_id', orderId);
+        .eq("order_id", orderId)
+        .in("status", ["created", "attempted"]);
 
       if (updateError) {
-        console.error('Failed to update payment status:', updateError);
+        console.error(`payment.failed: failed to update ${orderId}:`, updateError);
+      } else {
+        console.log(`payment.failed: marked order ${orderId} as failed`);
       }
+    } else if (
+      eventName === "refund.created" ||
+      eventName === "refund.processed" ||
+      eventName === "refund.failed"
+    ) {
+      // A refund happened at Razorpay (merchant-initiated or dispute outcome).
+      // We flag the payment row so Ops can reconcile. We do NOT auto-debit the
+      // user's token wallet here — tokens may already have been consumed to
+      // sign reports; the business decision on clawback is human-driven via
+      // the admin wallet page.
+      const entity = event.payload.refund?.entity ?? {};
+      const paymentId = entity.payment_id;
+      const refundId = entity.id;
+      const refundStatus = entity.status ?? "created";
+
+      if (paymentId) {
+        const newStatus = eventName === "refund.failed" ? "refund_failed" : "refunded";
+        const { error: updErr } = await supabase
+          .from("payments")
+          .update({ status: newStatus })
+          .eq("payment_id", paymentId);
+
+        if (updErr) {
+          console.error(`${eventName}: failed to mark payment ${paymentId} as ${newStatus}:`, updErr);
+        } else {
+          console.log(
+            `${eventName}: marked payment ${paymentId} as ${newStatus} (refund_id=${refundId}, status=${refundStatus}) — ops must decide on token clawback`,
+          );
+        }
+      } else {
+        console.warn(`${eventName}: refund payload missing payment_id; skipping`);
+      }
+    } else if (
+      eventName.startsWith("payment.dispute.") ||
+      eventName.startsWith("payment.downtime.")
+    ) {
+      // Disputes and downtime windows: log-only. A pilot at 140 reports/month
+      // does not justify a dispute pipeline yet; Ops sees these via Supabase
+      // function logs + Razorpay dashboard.
+      console.warn(`${eventName}: logged for ops (no automatic handling)`, {
+        payment_id: event.payload?.payment?.entity?.id,
+        dispute_id: event.payload?.dispute?.entity?.id,
+        downtime_id: event.payload?.downtime?.entity?.id,
+      });
+    } else {
+      // order.notification.*, invoice.*, settlement.*, fund_account.*, payout.*,
+      // account.*, payment_link.* → acknowledged but not actioned.
+      console.log(`${eventName}: acknowledged, no handler`);
     }
 
     return new Response(
-      JSON.stringify({ received: true }),
+      JSON.stringify({ received: true, event: eventName }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
