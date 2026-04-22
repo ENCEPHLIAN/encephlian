@@ -14,6 +14,11 @@ export default function AdminAccount() {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleChangePassword = async () => {
+    if (!currentPassword) {
+      toast.error("Enter your current password");
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       toast.error("New passwords do not match");
       return;
@@ -24,8 +29,30 @@ export default function AdminAccount() {
       return;
     }
 
+    if (currentPassword === newPassword) {
+      toast.error("New password must differ from current password");
+      return;
+    }
+
     setIsUpdating(true);
     try {
+      // Supabase's updateUser does NOT verify the current password, so an
+      // attacker with a hijacked session could silently rotate it. Re-auth
+      // first with the email+currentPassword pair; on success we know the
+      // session is actually the owner.
+      const { data: userData, error: getUserErr } = await supabase.auth.getUser();
+      if (getUserErr) throw getUserErr;
+      const email = userData.user?.email;
+      if (!email) throw new Error("No email on current session");
+
+      const { error: reauthErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword,
+      });
+      if (reauthErr) {
+        throw new Error("Current password is incorrect");
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -92,7 +119,7 @@ export default function AdminAccount() {
           </div>
           <Button
             onClick={handleChangePassword}
-            disabled={isUpdating || !newPassword || !confirmPassword}
+            disabled={isUpdating || !currentPassword || !newPassword || !confirmPassword}
             className="w-full"
           >
             {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
