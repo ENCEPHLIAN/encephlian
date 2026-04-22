@@ -77,15 +77,23 @@ export default function AdminSettings() {
   const { data: sysInfo } = useQuery({
     queryKey: ["admin-sys-info"],
     queryFn: async () => {
-      const { data: clinics } = await supabase.from("clinics").select("id", { count: "exact", head: true });
-      const { count: userCount } = await supabase.from("profiles").select("id", { count: "exact", head: true });
-      const { count: studyCount } = await supabase.rpc("admin_get_all_studies").then(r => ({ count: r.data?.length ?? 0 }));
+      // With { head: true } the `data` payload is null and the row count
+      // lives on `count`. Reading `.length` on it was always returning 0.
+      const { count: clinicCount } = await supabase
+        .from("clinics")
+        .select("id", { count: "exact", head: true });
+      const { count: userCount } = await supabase
+        .from("profiles")
+        .select("id", { count: "exact", head: true });
+      const { data: studies } = await supabase.rpc("admin_get_all_studies");
       return {
-        clinics: (clinics as any)?.length ?? 0,
+        clinics: clinicCount ?? 0,
         users: userCount ?? 0,
-        studies: studyCount,
+        studies: studies?.length ?? 0,
         supabaseUrl: import.meta.env.VITE_SUPABASE_URL ?? "not set",
-        buildTime: new Date().toISOString(),
+        // These two are baked in by vite at build time (see vite.config.ts).
+        buildTime: __BUILD_TIME__,
+        buildSha: __BUILD_SHA__,
       };
     },
   });
@@ -198,6 +206,24 @@ export default function AdminSettings() {
         </Row>
         <Row label="Resource group">
           <span className="text-xs font-mono text-muted-foreground">enceph-mvp-rg</span>
+        </Row>
+        <Row label="Build" desc="Frontend build metadata">
+          <span className="text-xs font-mono text-muted-foreground">
+            {sysInfo?.buildSha ?? "—"}
+            {sysInfo?.buildTime && (
+              <>
+                {" · "}
+                {format(new Date(sysInfo.buildTime), "yyyy-MM-dd HH:mm")}
+              </>
+            )}
+          </span>
+        </Row>
+        <Row label="Counts" desc="Live from Supabase">
+          <span className="text-xs font-mono text-muted-foreground">
+            {sysInfo
+              ? `${sysInfo.clinics} clinics · ${sysInfo.users} users · ${sysInfo.studies} studies`
+              : "—"}
+          </span>
         </Row>
       </Section>
 
