@@ -1,11 +1,12 @@
 // src/pages/app/EEGViewer.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
-import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
+import { EEGControls, SPEED_OPTIONS, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
@@ -146,7 +147,10 @@ export default function EEGViewer() {
 
   const cache       = useRef<Map<string, number[][]>>(new Map());
   const reqId       = useRef(0);
-  const didSeek     = useRef(false);
+  /** One-time hydrate from URL (?viewT / ?viewW / segment ?t) per study load */
+  const urlViewHydratedRef = useRef(false);
+  /** Skip pushing viewT to URL until hydrate finished (avoids clobbering deep links) */
+  const urlWriteReadyRef = useRef(false);
   // Raw EDF fallback — set when canonical zarr not yet available
   const edfReader        = useRef<EdfChunkReader | null>(null);
   const [rawEdfMode, setRawEdfMode] = useState(false);
@@ -221,7 +225,9 @@ export default function EEGViewer() {
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
     setSignalLayer("esf"); signalLayerRef.current = "esf";
     setEsfPollAttempt(0);
-    cache.current.clear(); didSeek.current = false; edfReader.current = null;
+    urlViewHydratedRef.current = false;
+    urlWriteReadyRef.current = false;
+    cache.current.clear(); edfReader.current = null;
     rawEdfRef.current = null; rawMetaRef.current = null; canonicalMetaRef.current = null;
     if (upgradeTimerRef.current) { clearTimeout(upgradeTimerRef.current); upgradeTimerRef.current = null; }
 
@@ -344,14 +350,57 @@ export default function EEGViewer() {
     fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
   }, [studyId]);
 
-  // ── Effects: auto-seek from ?t= ───────────────────────────────────────────────
+  // ── Effects: hydrate timeline from URL (?viewT / ?viewW / segment ?t) ─────────
   useEffect(() => {
-    if (!meta || didSeek.current) return;
-    const t = parseFloat(searchParams.get("t") ?? "");
-    if (!isFinite(t)) return;
-    seekTo(t);
-    didSeek.current = true;
-  }, [meta, searchParams, seekTo]);
+    if (!meta || !studyId || urlViewHydratedRef.current) return;
+    urlViewHydratedRef.current = true;
+    urlWriteReadyRef.current = false;
+
+    const dur = meta.n_samples / meta.sampling_rate_hz;
+    const viewWParsed = parseFloat(searchParams.get("viewW") ?? "");
+    let wSec = 10;
+    if (isFinite(viewWParsed)) wSec = snapViewWindowSec(viewWParsed);
+    flushSync(() => {
+      setWindowSec(wSec);
+    });
+
+    const focusSeg = searchParams.get("focus") === "segment";
+    const tParam = parseFloat(searchParams.get("t") ?? "");
+    const viewT = parseFloat(searchParams.get("viewT") ?? "");
+
+    let target: number | null = null;
+    if (focusSeg && isFinite(tParam)) target = tParam;
+    else if (isFinite(viewT)) target = viewT;
+    else if (!focusSeg && isFinite(tParam)) target = tParam;
+
+    if (target != null && isFinite(target)) {
+      const tt = clamp(target, 0, Math.max(0, dur - 1e-6));
+      const stride = wSec / 2;
+      const ws = clamp(Math.floor(tt / stride) * stride, 0, Math.max(0, dur - wSec));
+      setPlaying(false);
+      setWindowStart(ws);
+      setCursor(clamp(tt - ws, 0, wSec));
+    }
+
+    urlWriteReadyRef.current = true;
+  }, [meta, studyId, searchParams]);
+
+  // ── Effects: persist viewer window in URL (debounced) ────────────────────────
+  useEffect(() => {
+    if (!studyId || !meta || !urlWriteReadyRef.current) return;
+    const t = setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          p.set("viewT", (windowStart + cursor).toFixed(3));
+          p.set("viewW", String(windowSec));
+          return p;
+        },
+        { replace: true },
+      );
+    }, 450);
+    return () => clearTimeout(t);
+  }, [windowStart, cursor, windowSec, studyId, meta, setSearchParams]);
 
   // ── Effects: window fetch ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -369,7 +418,11 @@ export default function EEGViewer() {
     const k         = keyFor(startSamp, len);
 
     const hit = cache.current.get(k);
-    if (hit) { setSignals(hit); setLoadingWin(false); return; }
+    if (hit && hit.length === meta.n_channels) {
+      setSignals(hit);
+      setLoadingWin(false);
+      return;
+    }
 
     setLoadingWin(true);
     const id = ++reqId.current;
@@ -590,15 +643,18 @@ export default function EEGViewer() {
     );
   }
 
-  // ── Render: loading ───────────────────────────────────────────────────────────
-  if (loadingMeta || !meta || !signals) {
+  // ── Render: loading (study meta only — plot area handles signal fetch) ────────
+  if (loadingMeta || !meta) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-xs">{loadingMeta ? "Loading study…" : "Fetching signal…"}</span>
+        <span className="text-xs">Loading study…</span>
       </div>
     );
   }
+
+  const plotSignalsReady =
+    !!signals && signals.length === meta.n_channels && signals[0]?.length > 0;
 
   // ── Render: main ──────────────────────────────────────────────────────────────
   return (
@@ -749,18 +805,56 @@ export default function EEGViewer() {
 
         {/* ESF / Raw toggle — float bottom-right */}
         <div className="absolute bottom-0.5 right-1 flex items-center rounded border border-border/50 overflow-hidden text-[10px] z-10 bg-background/80" onClick={e => e.stopPropagation()}>
-          <button onClick={() => { if (signalLayer !== "esf") { edfReader.current = null; cache.current.clear(); if (canonicalMetaRef.current) { setMeta(canonicalMetaRef.current); signalLayerRef.current = "esf"; setSignalLayer("esf"); } } }}
-            className={`px-2 py-px transition-colors ${signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>ESF</button>
           <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (signalLayer === "esf") return;
+              reqId.current += 1;
+              edfReader.current = null;
+              cache.current.clear();
+              const canon = canonicalMetaRef.current;
+              if (!canon) return;
+              setSignals(null);
+              setMeta(canon);
+              signalLayerRef.current = "esf";
+              setSignalLayer("esf");
+            }}
+            className={`px-2 py-px transition-colors ${signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            ESF
+          </button>
+          <button
+            type="button"
             disabled={loadingRaw}
-            onClick={async e => {
+            onClick={async (e) => {
               e.stopPropagation();
               if (signalLayer === "raw") return;
               if (!studyId) return;
+              reqId.current += 1;
               if (rawEdfRef.current && rawMetaRef.current) {
-                edfReader.current = rawEdfRef.current; cache.current.clear();
-                setMeta(rawMetaRef.current); signalLayerRef.current = "raw"; setSignalLayer("raw"); return;
+                edfReader.current = rawEdfRef.current;
+                cache.current.clear();
+                const rawM = rawMetaRef.current;
+                const fs = rawM.sampling_rate_hz;
+                const startSamp = Math.floor(windowStart * fs);
+                const len = Math.max(1, Math.floor(windowSec * fs));
+                try {
+                  const sig = rawEdfRef.current.getChunk(startSamp, len);
+                  setMeta(rawM);
+                  setSignals(sig);
+                  signalLayerRef.current = "raw";
+                  setSignalLayer("raw");
+                } catch (err) {
+                  console.warn("[viewer] raw chunk:", err);
+                  setSignals(null);
+                  setMeta(rawM);
+                  signalLayerRef.current = "raw";
+                  setSignalLayer("raw");
+                }
+                return;
               }
+              setSignals(null);
               setLoadingRaw(true);
               try {
                 const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
@@ -771,41 +865,67 @@ export default function EEGViewer() {
                 if (!res.ok) throw new Error(`EDF fetch ${res.status}`);
                 const buf = await res.arrayBuffer();
                 const reader = new EdfChunkReader(buf);
-                const rawM: Meta = { n_channels: reader.nChannels, sampling_rate_hz: reader.sampleRate, n_samples: reader.totalSamples, channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })) };
-                rawEdfRef.current = reader; rawMetaRef.current = rawM; edfReader.current = reader;
-                cache.current.clear(); setMeta(rawM); signalLayerRef.current = "raw"; setSignalLayer("raw");
-              } catch (e2) { console.warn("[viewer] raw EDF load failed:", e2); }
-              finally { setLoadingRaw(false); }
+                const rawM: Meta = {
+                  n_channels: reader.nChannels,
+                  sampling_rate_hz: reader.sampleRate,
+                  n_samples: reader.totalSamples,
+                  channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+                };
+                rawEdfRef.current = reader;
+                rawMetaRef.current = rawM;
+                edfReader.current = reader;
+                cache.current.clear();
+                const fs = rawM.sampling_rate_hz;
+                const startSamp = Math.floor(windowStart * fs);
+                const len = Math.max(1, Math.floor(windowSec * fs));
+                const sig = reader.getChunk(startSamp, len);
+                setMeta(rawM);
+                setSignals(sig);
+                signalLayerRef.current = "raw";
+                setSignalLayer("raw");
+              } catch (e2) {
+                console.warn("[viewer] raw EDF load failed:", e2);
+              } finally {
+                setLoadingRaw(false);
+              }
             }}
-            className={`px-2 py-px transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+            className={`px-2 py-px transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+          >
             {loadingRaw ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Raw"}
           </button>
         </div>
       </div>
 
-      {/* ── Canvas + sidebar ── */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 min-w-0">
-          <WebGLEEGViewer
-            signals={signals}
-            channelLabels={channelLabels}
-            sampleRate={meta.sampling_rate_hz}
-            currentTime={cursor}
-            timeWindow={windowSec}
-            amplitudeScale={amplitude}
-            visibleChannels={visibleChannels}
-            theme={theme ?? "dark"}
-            markers={winMarkers}
-            artifactIntervals={winArtifacts}
-            highlightInterval={winHighlight}
-            segmentOverlays={winSegments}
-            showArtifactsAsRed={true}
-            suppressArtifacts={suppressArts}
-            hfFilter={hfFilter}
-            lfFilter={lfFilter}
-            labelColumnWidth={72}
-            onTimeClick={t => setCursor(clamp(t, 0, windowSec))}
-          />
+      {/* ── Canvas + sidebar (relative: collapsed sidebar is a floating control) ─ */}
+      <div className="relative flex-1 flex overflow-hidden min-h-0">
+        <div className="flex-1 min-w-0 min-h-0">
+          {plotSignalsReady ? (
+            <WebGLEEGViewer
+              signals={signals}
+              channelLabels={channelLabels}
+              sampleRate={meta.sampling_rate_hz}
+              currentTime={cursor}
+              timeWindow={windowSec}
+              amplitudeScale={amplitude}
+              visibleChannels={visibleChannels}
+              theme={theme ?? "dark"}
+              markers={winMarkers}
+              artifactIntervals={winArtifacts}
+              highlightInterval={winHighlight}
+              segmentOverlays={winSegments}
+              showArtifactsAsRed={true}
+              suppressArtifacts={suppressArts}
+              hfFilter={hfFilter}
+              lfFilter={lfFilter}
+              labelColumnWidth={72}
+              onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-xs">Loading waveform…</span>
+            </div>
+          )}
         </div>
 
         {segments.length > 0 && (
@@ -813,7 +933,7 @@ export default function EEGViewer() {
             segments={segments}
             currentSegmentIndex={segIdx}
             isOpen={sidebarOpen}
-            onToggle={() => setSidebarOpen(o => !o)}
+            onToggle={() => setSidebarOpen((o) => !o)}
             onSegmentClick={gotoSegment}
           />
         )}

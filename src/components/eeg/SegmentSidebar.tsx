@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, List } from "lucide-react";
+import { ChevronRight, List } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Segment {
@@ -70,24 +70,24 @@ export function SegmentSidebar({
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [segments]);
 
+  // Collapsed: do not reserve flex width — parent is `relative` so waveforms use full width.
   if (!isOpen) {
     return (
-      <div className="h-full flex flex-col border-l bg-background">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggle}
-          className="m-1 h-8 w-8 p-0"
-          title="Open segment list"
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1 flex items-center justify-center">
-          <div className="writing-mode-vertical text-xs text-muted-foreground transform -rotate-180" style={{ writingMode: "vertical-rl" }}>
-            {segments.length} Segments
-          </div>
-        </div>
-      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="icon"
+        onClick={onToggle}
+        title={`Segments (${segments.length})`}
+        className="absolute right-2 top-1/2 z-20 h-9 w-9 -translate-y-1/2 rounded-md border border-border/60 bg-background/95 shadow-md backdrop-blur-sm"
+      >
+        <List className="h-4 w-4" />
+        {segments.length > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium text-primary-foreground">
+            {segments.length > 99 ? "99+" : segments.length}
+          </span>
+        )}
+      </Button>
     );
   }
 

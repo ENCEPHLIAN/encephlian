@@ -421,6 +421,18 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const nCh = channels.length;
     if (nCh === 0) return;
 
+    // Drop Line2 state for channels no longer present (e.g. Raw → ESF fewer ch)
+    // so old traces are not left in the scene overlapping the new layout.
+    const keep = new Set(channels);
+    for (const [chIdx, state] of [...lineStateRef.current.entries()]) {
+      if (!keep.has(chIdx)) {
+        scene.remove(state.line);
+        state.geom.dispose();
+        (state.line.material as THREE.Material).dispose();
+        lineStateRef.current.delete(chIdx);
+      }
+    }
+
     // clear DOM overlays each draw (cheap; small lists)
     if (labelsRef.current) labelsRef.current.innerHTML = "";
     if (artifactRef.current) artifactRef.current.innerHTML = "";

@@ -267,6 +267,57 @@ function AzureTile({ s }: { s: ProviderStatus }) {
                 </span>
               }
             />
+            {typeof d.month_to_date_cost === "number" &&
+              Number.isFinite(d.month_to_date_cost) && (
+                <KV
+                  label="MTD cost (pre-tax)"
+                  value={
+                    <span>
+                      {d.month_to_date_currency
+                        ? `${d.month_to_date_currency} `
+                        : ""}
+                      {d.month_to_date_cost.toFixed(2)}
+                    </span>
+                  }
+                />
+              )}
+            {d.cost_query_error && (
+              <KV label="Cost query" value={<span className="text-amber-600">{d.cost_query_error}</span>} />
+            )}
+            {Array.isArray(d.credits) && d.credits.length > 0 && (
+              <div className="mt-2 rounded-md border border-border/50 bg-muted/20 p-2 space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  Azure credits (remaining)
+                </p>
+                {d.credits.map((c: any, i: number) => (
+                  <div key={i} className="flex justify-between text-[11px] font-mono gap-2">
+                    <span className="truncate text-muted-foreground" title={c.name ?? ""}>
+                      {(c.name ?? "Balance").replace(/^.*\//, "").slice(0, 28)}
+                    </span>
+                    <span className="shrink-0 tabular-nums">
+                      {c.currency ? `${c.currency} ` : ""}
+                      {typeof c.amount === "number" ? c.amount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {Array.isArray(d.credits) &&
+              d.credits.length === 0 &&
+              typeof d.credits_http_status === "number" &&
+              d.credits_http_status !== 200 && (
+                <KV
+                  label="Credits API"
+                  value={
+                    <span className="text-muted-foreground">
+                      HTTP {d.credits_http_status}
+                      {d.credits_http_status === 404
+                        ? " — not exposed for this subscription type"
+                        : ""}
+                    </span>
+                  }
+                />
+              )}
             {Array.isArray(d.resource_groups) && (
               <div className="mt-3 border-t border-border/40 pt-2">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">

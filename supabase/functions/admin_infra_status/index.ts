@@ -180,7 +180,7 @@ async function azureStatus(): Promise<ProviderStatus> {
     }
     const { access_token } = await tokenRes.json();
 
-    const [rgRes, subRes] = await Promise.all([
+    const [rgRes, subRes, credRes, costRes] = await Promise.all([
       fetch(
         `https://management.azure.com/subscriptions/${subscription}/resourcegroups?api-version=2022-09-01`,
         { headers: { Authorization: `Bearer ${access_token}` } },
@@ -189,13 +189,102 @@ async function azureStatus(): Promise<ProviderStatus> {
         `https://management.azure.com/subscriptions/${subscription}?api-version=2022-12-01`,
         { headers: { Authorization: `Bearer ${access_token}` } },
       ),
+      fetch(
+        `https://management.azure.com/subscriptions/${subscription}/providers/Microsoft.Consumption/credits?api-version=2021-10-30`,
+        { headers: { Authorization: `Bearer ${access_token}` } },
+      ),
+      fetch(
+        `https://management.azure.com/subscriptions/${subscription}/providers/Microsoft.CostManagement/query?api-version=2023-03-01`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'ActualCost',
+            timeframe: 'MonthToDate',
+            dataset: {
+              granularity: 'None',
+              aggregation: {
+                totalCost: { name: 'PreTaxCost', function: 'Sum' },
+              },
+            },
+          }),
+        },
+      ),
     ]);
+
     const resourceGroups = rgRes.ok
       ? ((await rgRes.json()).value as Array<{ name: string; location: string }>)
       : [];
-    const subInfo = subRes.ok
-      ? (await subRes.json())
-      : null;
+    const subInfo = subRes.ok ? await subRes.json() : null;
+
+    const creditBalances: Array<{
+      name: string | null;
+      amount: number;
+      currency: string | null;
+    }> = [];
+    if (credRes.ok) {
+      try {
+        const cj = (await credRes.json()) as {
+          value?: Array<{
+            name?: string;
+            properties?: {
+              balanceSummary?: {
+                currentBalance?: { amount?: number; currency?: string };
+              };
+            };
+          }>;
+        };
+        for (const v of cj.value ?? []) {
+          const cur = v?.properties?.balanceSummary?.currentBalance;
+          if (cur && typeof cur.amount === 'number') {
+            creditBalances.push({
+              name: v?.name ?? null,
+              amount: cur.amount,
+              currency: cur.currency ?? null,
+            });
+          }
+        }
+      } catch {
+        /* ignore malformed credits payload */
+      }
+    }
+
+    let month_to_date_cost: number | null = null;
+    let month_to_date_currency: string | null = null;
+    let cost_query_error: string | null = null;
+    if (costRes.ok) {
+      try {
+        const qj = (await costRes.json()) as {
+          properties?: { rows?: number[][]; columns?: Array<{ name: string }> };
+        };
+        const rows = qj.properties?.rows;
+        const cols = qj.properties?.columns;
+        if (rows?.length && cols?.length) {
+          const idx = cols.findIndex((c) =>
+            /cost|pretax/i.test(String(c.name ?? ''))
+          );
+          const col = idx >= 0 ? idx : 0;
+          const cell = rows[0]?.[col];
+          const n =
+            typeof cell === 'number' ? cell : parseFloat(String(cell ?? ''));
+          if (Number.isFinite(n)) month_to_date_cost = n;
+          const curCol = cols.findIndex((c) =>
+            /currency/i.test(String(c.name ?? ''))
+          );
+          if (curCol >= 0 && rows[0]?.[curCol] != null) {
+            month_to_date_currency = String(rows[0][curCol]);
+          }
+        }
+      } catch {
+        cost_query_error = 'cost response parse failed';
+      }
+    } else {
+      const t = await costRes.text().catch(() => '');
+      cost_query_error = `cost query ${costRes.status}: ${t.slice(0, 160)}`;
+    }
 
     return {
       configured: true,
@@ -208,9 +297,14 @@ async function azureStatus(): Promise<ProviderStatus> {
           name: rg.name,
           location: rg.location,
         })),
+        credits: creditBalances,
+        credits_http_status: credRes.status,
+        month_to_date_cost,
+        month_to_date_currency,
+        cost_query_error,
         note:
-          'Cost-management and credit-unlock details are on the roadmap; ' +
-          'requires Consumption / CostManagement API scope on the service principal.',
+          'Grant the service principal Cost Management Reader on the subscription to populate MTD cost. ' +
+          'Prepaid credits appear when Microsoft.Consumption/credits applies to your offer (e.g. credits, some EA scenarios).',
       },
       fetched_at: now(),
     };
