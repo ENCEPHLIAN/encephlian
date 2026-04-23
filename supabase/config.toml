@@ -37,6 +37,10 @@ verify_jwt = false
 [functions.read_api_proxy]
 verify_jwt = false
 
+# Proxies C-Plane read-token + Azure blob to the browser (avoids blob storage CORS).
+[functions.read_raw_edf]
+verify_jwt = false
+
 # --- Report Generation ---
 [functions.generate_ai_report]
 verify_jwt = false

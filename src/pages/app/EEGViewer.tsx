@@ -94,6 +94,62 @@ function fetchChunk(studyId: string, start: number, len: number) {
   );
 }
 
+/** Raw EDF bytes: Edge proxies blob (fixes Azure Storage CORS "Failed to fetch"); falls back to C-Plane + SAS in dev. */
+async function downloadRawEdfBuffer(studyId: string): Promise<ArrayBuffer> {
+  const supabaseUrl = String((import.meta as any).env?.VITE_SUPABASE_URL || "").replace(/\/+$/, "");
+  const anon = String((import.meta as any).env?.VITE_SUPABASE_PUBLISHABLE_KEY || "").trim();
+
+  const viaEdge = async (): Promise<ArrayBuffer> => {
+    if (!supabaseUrl || !anon) throw new Error("Supabase URL/key not configured");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not signed in");
+    const url = `${supabaseUrl}/functions/v1/read_raw_edf?study_id=${encodeURIComponent(studyId)}`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: anon,
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    });
+    const buf = await res.arrayBuffer();
+    if (!res.ok) {
+      let msg = `read_raw_edf HTTP ${res.status}`;
+      try {
+        const t = new TextDecoder().decode(buf.slice(0, 4096));
+        const j = JSON.parse(t) as { error?: string; detail?: string; hint?: string };
+        if (j.detail || j.error) msg = [j.error, j.detail, j.hint].filter(Boolean).join(" — ");
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    return buf;
+  };
+
+  const viaCplaneDirect = async (): Promise<ArrayBuffer> => {
+    const CPLANE_BASE = String((import.meta as any).env?.VITE_CPLANE_BASE || "").replace(/\/+$/, "");
+    if (!CPLANE_BASE) throw new Error("VITE_CPLANE_BASE not set");
+    const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${encodeURIComponent(studyId)}`);
+    if (!tokenRes.ok) throw new Error(`read-token failed (${tokenRes.status})`);
+    const { sas_url: sasUrl } = await tokenRes.json() as { sas_url?: string };
+    if (!sasUrl) throw new Error("read-token: no sas_url");
+    const res = await fetch(sasUrl);
+    if (!res.ok) throw new Error(`EDF fetch ${res.status}`);
+    return await res.arrayBuffer();
+  };
+
+  try {
+    return await viaEdge();
+  } catch (e1) {
+    try {
+      return await viaCplaneDirect();
+    } catch (e2) {
+      const m1 = e1 instanceof Error ? e1.message : String(e1);
+      const m2 = e2 instanceof Error ? e2.message : String(e2);
+      throw new Error(`${m1}${m2 && m2 !== m1 ? ` · direct: ${m2}` : ""}`);
+    }
+  }
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 export default function EEGViewer() {
   const { theme } = useTheme();
@@ -239,17 +295,8 @@ export default function EEGViewer() {
       fetchJson<any>(`/studies/${studyId}/meta?root=.`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY });
 
     const tryRawEdf = async () => {
-      // Get a read SAS URL from C-Plane for the raw EDF in Azure Blob
-      const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
-
-      const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
-      if (!tokenRes.ok) {
-        throw new Error("EDF not found in Azure storage");
-      }
-      const { sas_url: sasUrl } = await tokenRes.json();
-      const res = await fetch(sasUrl);
-      if (!res.ok) throw new Error(`EDF download failed: ${res.status}`);
-      return new Blob([await res.arrayBuffer()]);
+      const buf = await downloadRawEdfBuffer(studyId);
+      return new Blob([buf]);
     };
 
     tryCanonical()
@@ -384,19 +431,13 @@ export default function EEGViewer() {
   useEffect(() => {
     if (!studyId || rawEdfRef.current || rawEdfMode) return;
     if (!canonicalPresent) return;
-    const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
-    if (!CPLANE_BASE) return;
 
     let alive = true;
     const tid = setTimeout(() => {
       void (async () => {
         try {
-          const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
-          if (!alive || !tokenRes.ok) return;
-          const { sas_url: sasUrl } = await tokenRes.json();
-          const res = await fetch(sasUrl);
-          if (!alive || !res.ok) return;
-          const buf = await res.arrayBuffer();
+          const buf = await downloadRawEdfBuffer(studyId);
+          if (!alive) return;
           const reader = new EdfChunkReader(buf);
           const rawM: Meta = {
             n_channels: reader.nChannels,
@@ -766,13 +807,16 @@ export default function EEGViewer() {
         visibleChannelCount={meta?.n_channels}
       />
 
-      {/* ── Timeline (mini-map + overlay chips merged) ── */}
+      {/* ── Timeline (mini-map) + ESF/Raw overlaid on the right (same h-8, no extra row) ── */}
       <div className="relative h-8 border-t bg-muted/10 flex-shrink-0 select-none overflow-hidden">
-        {/* Seekable map area */}
-        <div className="absolute inset-0 cursor-crosshair" onClick={e => {
-          const r = e.currentTarget.getBoundingClientRect();
-          seekTo(((e.clientX - r.left) / r.width) * duration);
-        }}>
+        {/* Seekable map — leave right rail for layer toggle */}
+        <div
+          className="absolute inset-y-0 left-0 right-[4.75rem] cursor-crosshair"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            seekTo(((e.clientX - r.left) / r.width) * duration);
+          }}
+        >
           {showArtifacts && artifacts.map((a, i) => (
             <div key={`a${i}`} className="absolute top-0 bottom-0 bg-red-500/20 pointer-events-none"
               style={{ left: `${(a.start_sec / duration) * 100}%`, width: `${Math.max(0.15, ((a.end_sec - a.start_sec) / duration) * 100)}%` }} />
@@ -830,115 +874,107 @@ export default function EEGViewer() {
             )}
           </div>
         )}
-      </div>
 
-      {/* ESF / Raw — own row under minimap (no overlap with timeline) */}
-      <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-border/40 bg-muted/5 px-2 py-1">
-        <span className="mr-auto text-[10px] text-muted-foreground">Signal</span>
+        {/* ESF / Raw — top of minimap strip, right edge (does not add vertical space) */}
         <div
-          className="flex items-center overflow-hidden rounded border border-border/50 bg-background text-[10px] shadow-sm"
+          className="absolute inset-y-0 right-0 z-20 flex items-stretch border-l border-border/50 bg-background/95 pl-0.5 backdrop-blur-sm"
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            disabled={!canonicalPresent}
-            title={!canonicalPresent ? "Enhanced (ESF) view not available for this study yet" : "Canonical ESF view"}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (signalLayer === "esf") return;
-              reqId.current += 1;
-              edfReader.current = null;
-              cache.current.clear();
-              const canon = canonicalMetaRef.current;
-              if (!canon) {
-                toast.message("ESF view not ready", { description: "Try again after processing completes." });
-                return;
-              }
-              setSignals(null);
-              setMeta(canon);
-              signalLayerRef.current = "esf";
-              setSignalLayer("esf");
-            }}
-            className={`px-2.5 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-              signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            ESF
-          </button>
-          <button
-            type="button"
-            disabled={loadingRaw}
-            title="Source EDF (all channels)"
-            onClick={async (e) => {
-              e.stopPropagation();
-              if (signalLayer === "raw") return;
-              if (!studyId) return;
-              reqId.current += 1;
-              if (rawEdfRef.current && rawMetaRef.current) {
-                edfReader.current = rawEdfRef.current;
+          <div className="flex h-full items-stretch overflow-hidden rounded-sm border border-border/40 text-[10px] leading-none">
+            <button
+              type="button"
+              disabled={!canonicalPresent}
+              title={!canonicalPresent ? "Enhanced (ESF) view not available for this study yet" : "Canonical ESF view"}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (signalLayer === "esf") return;
+                reqId.current += 1;
+                edfReader.current = null;
                 cache.current.clear();
-                const rawM = rawMetaRef.current;
-                const fs = rawM.sampling_rate_hz;
-                const startSamp = Math.floor(windowStart * fs);
-                const len = Math.max(1, Math.floor(windowSec * fs));
+                const canon = canonicalMetaRef.current;
+                if (!canon) {
+                  toast.message("ESF view not ready", { description: "Try again after processing completes." });
+                  return;
+                }
+                setSignals(null);
+                setMeta(canon);
+                signalLayerRef.current = "esf";
+                setSignalLayer("esf");
+              }}
+              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              ESF
+            </button>
+            <button
+              type="button"
+              disabled={loadingRaw}
+              title="Source EDF (all channels)"
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (signalLayer === "raw") return;
+                if (!studyId) return;
+                reqId.current += 1;
+                if (rawEdfRef.current && rawMetaRef.current) {
+                  edfReader.current = rawEdfRef.current;
+                  cache.current.clear();
+                  const rawM = rawMetaRef.current;
+                  const fs = rawM.sampling_rate_hz;
+                  const startSamp = Math.floor(windowStart * fs);
+                  const len = Math.max(1, Math.floor(windowSec * fs));
+                  try {
+                    const sig = rawEdfRef.current.getChunk(startSamp, len);
+                    setMeta(rawM);
+                    setSignals(sig);
+                    signalLayerRef.current = "raw";
+                    setSignalLayer("raw");
+                  } catch (err) {
+                    console.warn("[viewer] raw chunk:", err);
+                    toast.error("Could not read raw window", {
+                      description: err instanceof Error ? err.message : String(err),
+                    });
+                  }
+                  return;
+                }
+                setSignals(null);
+                setLoadingRaw(true);
                 try {
-                  const sig = rawEdfRef.current.getChunk(startSamp, len);
+                  const buf = await downloadRawEdfBuffer(studyId);
+                  const reader = new EdfChunkReader(buf);
+                  const rawM: Meta = {
+                    n_channels: reader.nChannels,
+                    sampling_rate_hz: reader.sampleRate,
+                    n_samples: reader.totalSamples,
+                    channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+                  };
+                  rawEdfRef.current = reader;
+                  rawMetaRef.current = rawM;
+                  edfReader.current = reader;
+                  cache.current.clear();
+                  const fs = rawM.sampling_rate_hz;
+                  const startSamp = Math.floor(windowStart * fs);
+                  const len = Math.max(1, Math.floor(windowSec * fs));
+                  const sig = reader.getChunk(startSamp, len);
                   setMeta(rawM);
                   setSignals(sig);
                   signalLayerRef.current = "raw";
                   setSignalLayer("raw");
-                } catch (err) {
-                  console.warn("[viewer] raw chunk:", err);
-                  toast.error("Could not read raw window", {
-                    description: err instanceof Error ? err.message : String(err),
-                  });
+                } catch (e2) {
+                  const msg = e2 instanceof Error ? e2.message : String(e2);
+                  console.warn("[viewer] raw EDF load failed:", e2);
+                  toast.error("Could not load raw file", { description: msg });
+                } finally {
+                  setLoadingRaw(false);
                 }
-                return;
-              }
-              setSignals(null);
-              setLoadingRaw(true);
-              try {
-                const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
-                if (!CPLANE_BASE) throw new Error("VITE_CPLANE_BASE is not configured");
-                const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
-                if (!tokenRes.ok) throw new Error(`read-token failed (${tokenRes.status})`);
-                const { sas_url: sasUrl } = await tokenRes.json();
-                const res = await fetch(sasUrl);
-                if (!res.ok) throw new Error(`EDF fetch ${res.status}`);
-                const buf = await res.arrayBuffer();
-                const reader = new EdfChunkReader(buf);
-                const rawM: Meta = {
-                  n_channels: reader.nChannels,
-                  sampling_rate_hz: reader.sampleRate,
-                  n_samples: reader.totalSamples,
-                  channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
-                };
-                rawEdfRef.current = reader;
-                rawMetaRef.current = rawM;
-                edfReader.current = reader;
-                cache.current.clear();
-                const fs = rawM.sampling_rate_hz;
-                const startSamp = Math.floor(windowStart * fs);
-                const len = Math.max(1, Math.floor(windowSec * fs));
-                const sig = reader.getChunk(startSamp, len);
-                setMeta(rawM);
-                setSignals(sig);
-                signalLayerRef.current = "raw";
-                setSignalLayer("raw");
-              } catch (e2) {
-                const msg = e2 instanceof Error ? e2.message : String(e2);
-                console.warn("[viewer] raw EDF load failed:", e2);
-                toast.error("Could not load raw file", { description: msg });
-              } finally {
-                setLoadingRaw(false);
-              }
-            }}
-            className={`px-2.5 py-1 transition-colors ${
-              signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
-          </button>
+              }}
+              className={`flex items-center px-1.5 transition-colors ${
+                signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
+            </button>
+          </div>
         </div>
       </div>
 
