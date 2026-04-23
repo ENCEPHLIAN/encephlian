@@ -3,61 +3,71 @@ project_id = "mngkbtsummbknrbpjbye"
 # ============================================
 # ENCEPHLIAN Edge Functions Configuration
 # ============================================
+#
+# JWT verification at the Edge gateway (verify_jwt = true) does not accept
+# session access tokens signed with ES256 (asymmetric JWT signing keys).
+# Those requests fail before the function runs with errors like
+# "unsupported JWT algorithm ES256". Each function below validates the
+# caller with supabase.auth.getUser(...) (or anon + forwarded Authorization)
+# which delegates to the Auth service and supports ES256.
+#
+# See: https://github.com/supabase/supabase/issues/42810
+#
 
 # --- Payment Processing (Razorpay) ---
 [functions.create_order]
-verify_jwt = true
+verify_jwt = false
 
 [functions.verify_payment]
-verify_jwt = true
+verify_jwt = false
 
 [functions.razorpay_webhook]
 verify_jwt = false
 
 [functions.send_payment_receipt]
-verify_jwt = true
+verify_jwt = false
 
 # --- EEG Processing Pipeline ---
 [functions.parse_eeg_study]
-verify_jwt = true
+verify_jwt = false
 
 [functions.create_study_from_upload]
-verify_jwt = true
+verify_jwt = false
+
+[functions.read_api_proxy]
+verify_jwt = false
 
 # --- Report Generation ---
 [functions.generate_ai_report]
-verify_jwt = true
+verify_jwt = false
 
 [functions.generate_report_pdf]
-verify_jwt = true
+verify_jwt = false
 
 [functions.sign_report]
-verify_jwt = true
+verify_jwt = false
 
 # --- Support & Communication ---
 [functions.submit_support_ticket]
-verify_jwt = true
-
-[functions.send_support_email]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send_triage_notification]
-verify_jwt = true
+verify_jwt = false
 
 [functions.join_waitlist]
-verify_jwt = true
+verify_jwt = false
 
 # --- Account Management ---
 [functions.admin_create_user]
-verify_jwt = true
+verify_jwt = false
+
+[functions.admin_onboard_value_unit]
+verify_jwt = false
 
 [functions.delete_account]
-verify_jwt = true
+verify_jwt = false
 
 # --- Admin Infrastructure Cockpit ---
-# verify_jwt = false here because the function does its own JWT verification
-# (extracts the Bearer token, calls auth.getUser, checks super_admin role).
-# Letting the gateway pre-verify made supabase-js invoke(GET)/invoke(POST)
-# inconsistent and returned generic 401s with no detail in the body.
+# Same pattern: gateway must not pre-verify ES256; function calls auth.getUser.
 [functions.admin_infra_status]
 verify_jwt = false
