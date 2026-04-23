@@ -134,7 +134,7 @@ export function usePilotData() {
         },
         (payload) => {
           if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => refetchStudies(), 400);
+          debounce = setTimeout(() => refetchStudies(), 120);
 
           // Toast on triage completion
           if (payload.eventType === "UPDATE") {
@@ -209,7 +209,7 @@ export function usePilotData() {
                 if (r.ok) aiDraft = await r.json();
               } catch {}
             }
-            await supabase
+            const { error: upErr } = await supabase
               .from("studies")
               .update({
                 triage_status: "completed",
@@ -219,12 +219,14 @@ export function usePilotData() {
                 ...(aiDraft ? { ai_draft_json: aiDraft } : {}),
               })
               .eq("id", study.id);
+            if (!upErr) void refetchStudies();
           } else if (newProgress !== (study.triage_progress ?? 5)) {
             // Update progress percentage
-            await supabase
+            const { error: upErr } = await supabase
               .from("studies")
               .update({ triage_progress: newProgress })
               .eq("id", study.id);
+            if (!upErr) void refetchStudies();
           }
         } catch (err) {
           console.error("[pilot] C-Plane status poll failed", study.id, err);
@@ -233,11 +235,9 @@ export function usePilotData() {
     };
 
     checkStatus(); // immediate on mount / when processing list changes
-    const interval = setInterval(checkStatus, 15_000);
+    const interval = setInterval(checkStatus, 4_000);
     return () => clearInterval(interval);
-    // Only re-register when isAuthenticated changes — processingRef handles dynamic updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  }, [isAuthenticated, refetchStudies]);
 
   // Memoized categorization — no heavy metrics, just buckets
   const categorized = useMemo(() => {

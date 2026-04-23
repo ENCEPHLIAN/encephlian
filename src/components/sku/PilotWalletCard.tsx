@@ -174,10 +174,13 @@ export function PilotWalletCard() {
                   : "Payment confirmed (already credited).",
             });
           } catch (e: unknown) {
+            await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
             toast({
               variant: "destructive",
-              title: "Could not confirm payment",
-              description: e instanceof Error ? e.message : "Unknown error",
+              title: "Could not confirm from this browser",
+              description:
+                (e instanceof Error ? e.message : "Unknown error") +
+                " If checkout succeeded, your balance may still update in a few seconds — check the wallet.",
             });
           }
         },

@@ -37,8 +37,9 @@ import TriageReportView from "@/components/report/TriageReportView";
 import MindReportView from "@/components/report/MindReportView";
 import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSku } from "@/hooks/useSku";
+import { useUserSession } from "@/contexts/UserSessionContext";
 import { SkuGate } from "@/components/SkuGate";
 import { fetchJson } from "@/shared/readApiClient";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
@@ -75,6 +76,8 @@ export default function StudyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isAuthenticated } = useUserSession();
+  const studyRtRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   
   const { can, capabilities, isPilot } = useSku();
   const { setActiveStudyLabel } = useStudyBreadcrumb();
@@ -121,17 +124,54 @@ export default function StudyDetail() {
     },
     enabled: !!id,
     retry: 1,
-    // Auto-poll while pipeline is running — stops once complete/signed
+    // Auto-poll while pipeline is running — triage can be "processing" while state stays "uploaded"
     refetchInterval: (query) => {
-      const state = (query.state.data as any)?.state;
+      const row = query.state.data as { state?: string; triage_status?: string } | undefined;
+      if (!row) return false;
+      if (row.triage_status === "processing") return 3_000;
+      const state = row.state;
       return state === "processing" ||
         state === "uploaded" ||
         state === "pending" ||
         state === "awaiting_sla"
-        ? 8000
+        ? 5_000
         : false;
     },
   });
+
+  // Live study row → progress bar and actions update without full page refresh
+  useEffect(() => {
+    if (!id || !isAuthenticated) return;
+    if (studyRtRef.current) return;
+
+    let t: ReturnType<typeof setTimeout> | null = null;
+    const ch = supabase
+      .channel(`study-detail-rt-${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "studies", filter: `id=eq.${id}` },
+        () => {
+          if (t) clearTimeout(t);
+          t = setTimeout(() => {
+            void queryClient.invalidateQueries({ queryKey: ["study-detail", id] });
+            void queryClient.invalidateQueries({ queryKey: ["study", id] });
+            void queryClient.invalidateQueries({ queryKey: ["mind-report", id] });
+            void queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
+            void queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
+          }, 100);
+        },
+      )
+      .subscribe();
+
+    studyRtRef.current = ch;
+    return () => {
+      if (t) clearTimeout(t);
+      if (studyRtRef.current) {
+        supabase.removeChannel(studyRtRef.current);
+        studyRtRef.current = null;
+      }
+    };
+  }, [id, isAuthenticated, queryClient]);
 
   // Fetch MIND® report from I-Plane blob (mind.report.v1 format)
   // Use study_key (blob UUID) when available, fallback to Supabase id
@@ -147,11 +187,18 @@ export default function StudyDetail() {
     enabled: !!id && !!IPLANE_BASE && !isLoading,
     staleTime: 30_000,
     retry: false,
-    // Poll every 15s while no report yet and study is still processing
+    // Poll while report not yet available and pipeline may still be writing I-Plane blob
     refetchInterval: (query) => {
-      if (query.state.data) return false; // already have report
-      const state = (study as any)?.state;
-      return (state === "uploaded" || state === "processing" || state === "ai_draft") ? 15_000 : false;
+      if (query.state.data) return false;
+      const row = queryClient.getQueryData(["study-detail", id]) as
+        | { state?: string; triage_status?: string }
+        | undefined;
+      if (!row) return false;
+      if (row.triage_status === "processing") return 4_000;
+      const state = row.state;
+      if (state === "uploaded" || state === "processing" || state === "ai_draft") return 6_000;
+      if (row.triage_status === "completed" && (state === "completed" || state === "complete")) return 5_000;
+      return false;
     },
   });
 
@@ -311,7 +358,11 @@ export default function StudyDetail() {
   const gateTriageActions = !triagePaid && study.state !== "signed";
   const canReview =
     triagePaid &&
-    (study.state === "ai_draft" || study.state === "in_review" || study.state === "complete" || study.state === "completed");
+    (study.triage_status === "completed" ||
+      study.state === "ai_draft" ||
+      study.state === "in_review" ||
+      study.state === "complete" ||
+      study.state === "completed");
   const StateIcon = stateConfig.icon;
   const studyHandle = getStudyHandle(study);
   const defaultStudyTab =

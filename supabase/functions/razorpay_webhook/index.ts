@@ -7,6 +7,110 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-razorpay-signature',
 };
 
+const PILOT_SUB_BONUS_TOKENS = 10;
+
+/** First successful subscription charge → bonus tokens (idempotent by payment id). Matches verify_pilot_subscription. */
+async function maybeCreditPilotSubscriptionFromWebhook(
+  supabase: ReturnType<typeof createClient>,
+  paymentId: string | undefined,
+  subscriptionId: string | undefined,
+  source: string,
+) {
+  if (!paymentId || !subscriptionId) {
+    console.log(`${source}: pilot subscription skip — missing payment_id or subscription_id`);
+    return;
+  }
+
+  const { data: subRow, error: subErr } = await supabase
+    .from("pilot_subscriptions")
+    .select("id, user_id, status")
+    .eq("razorpay_subscription_id", subscriptionId)
+    .maybeSingle();
+
+  if (subErr || !subRow) {
+    console.log(`${source}: no pilot_subscriptions for subscription ${subscriptionId}`);
+    return;
+  }
+
+  const { data: existing } = await supabase
+    .from("pilot_subscription_charges")
+    .select("razorpay_payment_id")
+    .eq("razorpay_payment_id", paymentId)
+    .maybeSingle();
+
+  if (existing) {
+    console.log(`${source}: payment ${paymentId} already recorded (idempotent)`);
+    return;
+  }
+
+  const { count, error: cntErr } = await supabase
+    .from("pilot_subscription_charges")
+    .select("razorpay_payment_id", { count: "exact", head: true })
+    .eq("razorpay_subscription_id", subscriptionId);
+
+  if (cntErr) {
+    console.error(`${source}: count pilot_subscription_charges failed`, cntErr);
+    return;
+  }
+
+  const priorCharges = count ?? 0;
+  if (priorCharges > 0) {
+    console.log(
+      `${source}: subscription ${subscriptionId} already had a credited charge — renewal, no bonus`,
+    );
+    return;
+  }
+
+  const { error: insErr } = await supabase.from("pilot_subscription_charges").insert({
+    razorpay_payment_id: paymentId,
+    user_id: subRow.user_id,
+    razorpay_subscription_id: subscriptionId,
+    tokens_credited: PILOT_SUB_BONUS_TOKENS,
+  });
+
+  if (insErr) {
+    console.error(`${source}: insert pilot_subscription_charges`, insErr);
+    return;
+  }
+
+  const { error: credErr } = await supabase.rpc("credit_wallet", {
+    p_user_id: subRow.user_id,
+    p_tokens: PILOT_SUB_BONUS_TOKENS,
+    p_reason: `Pilot plan · webhook ${source} · ${paymentId}`,
+  });
+
+  if (credErr) {
+    console.error(`${source}: credit_wallet failed`, credErr);
+    throw credErr;
+  }
+
+  await supabase
+    .from("pilot_subscriptions")
+    .update({ status: "active", updated_at: new Date().toISOString() })
+    .eq("id", subRow.id);
+
+  console.log(
+    `${source}: pilot subscription first charge — credited ${PILOT_SUB_BONUS_TOKENS} tokens to ${subRow.user_id}`,
+  );
+}
+
+function extractSubscriptionPaymentIds(
+  eventName: string,
+  payload: Record<string, unknown>,
+): { subscriptionId?: string; paymentId?: string } {
+  const p = payload as Record<string, Record<string, Record<string, string>>>;
+  if (eventName === "subscription.charged" || eventName === "subscription.authenticated") {
+    const pay = p?.payment?.entity;
+    const sub = p?.subscription?.entity;
+    return { subscriptionId: sub?.id, paymentId: pay?.id };
+  }
+  if (eventName === "invoice.paid") {
+    const inv = p?.invoice?.entity;
+    return { subscriptionId: inv?.subscription_id, paymentId: inv?.payment_id };
+  }
+  return {};
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -181,6 +285,16 @@ serve(async (req) => {
       } else {
         console.warn(`${eventName}: refund payload missing payment_id; skipping`);
       }
+    } else if (
+      eventName === "subscription.charged" ||
+      eventName === "subscription.authenticated" ||
+      eventName === "invoice.paid"
+    ) {
+      const { subscriptionId, paymentId } = extractSubscriptionPaymentIds(
+        eventName,
+        (event.payload || {}) as Record<string, unknown>,
+      );
+      await maybeCreditPilotSubscriptionFromWebhook(supabase, paymentId, subscriptionId, eventName);
     } else if (
       eventName.startsWith("payment.dispute.") ||
       eventName.startsWith("payment.downtime.")
