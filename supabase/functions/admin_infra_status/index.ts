@@ -138,6 +138,191 @@ async function supabaseStatus(admin: ReturnType<typeof createClient>): Promise<P
   }
 }
 
+// ───────────────────────────────────────────────────────────── Azure cost ──
+/** Cost Management /usage returns different column names by type and API version. */
+function pickCostColumnIndex(columns: Array<{ name: string }>): number {
+  const names = columns.map((c) => String(c.name ?? ''));
+  const matchers = [
+    /^PreTaxCost$/i,
+    /^CostInBillingCurrency$/i,
+    /^CostInUsd$/i,
+    /^Cost$/i,
+    /PreTax/i,
+    /BillingCurrency.*Cost/i,
+  ];
+  for (const re of matchers) {
+    const i = names.findIndex((n) => re.test(n));
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+function pickCurrencyColumnIndex(columns: Array<{ name: string }>): number {
+  const names = columns.map((c) => String(c.name ?? ''));
+  return names.findIndex((n) => /currency/i.test(n));
+}
+
+function parseCostManagementRows(
+  rows: unknown[][] | undefined,
+  columns: Array<{ name: string }> | undefined,
+): { cost: number | null; currency: string | null } {
+  if (!rows?.length || !columns?.length) return { cost: null, currency: null };
+  const costIdx = pickCostColumnIndex(columns);
+  if (costIdx < 0) return { cost: null, currency: null };
+  let sum = 0;
+  let any = false;
+  for (const row of rows) {
+    const cell = row[costIdx];
+    const n = typeof cell === 'number' ? cell : parseFloat(String(cell ?? ''));
+    if (Number.isFinite(n)) {
+      sum += n;
+      any = true;
+    }
+  }
+  if (!any) return { cost: null, currency: null };
+  const curIdx = pickCurrencyColumnIndex(columns);
+  let currency: string | null = null;
+  if (curIdx >= 0 && rows[0]?.[curIdx] != null) {
+    currency = String(rows[0][curIdx]).trim() || null;
+  }
+  return { cost: sum, currency };
+}
+
+async function fetchSubscriptionMtdPreTaxCost(
+  accessToken: string,
+  subscriptionId: string,
+): Promise<{
+  month_to_date_cost: number | null;
+  month_to_date_currency: string | null;
+  cost_query_error: string | null;
+  cost_query_variant: string | null;
+}> {
+  const sid = subscriptionId.trim();
+  const url = (apiVer: string) =>
+    `https://management.azure.com/subscriptions/${sid}/providers/Microsoft.CostManagement/query?api-version=${apiVer}`;
+
+  const attempts: Array<{ label: string; apiVer: string; body: Record<string, unknown> }> = [
+    {
+      label: 'ActualCost+None+PreTaxCost',
+      apiVer: '2023-11-01',
+      body: {
+        type: 'ActualCost',
+        timeframe: 'MonthToDate',
+        dataset: {
+          granularity: 'None',
+          aggregation: { totalCost: { name: 'PreTaxCost', function: 'Sum' } },
+        },
+      },
+    },
+    {
+      label: 'ActualCost+Daily+PreTaxCost',
+      apiVer: '2023-11-01',
+      body: {
+        type: 'ActualCost',
+        timeframe: 'MonthToDate',
+        dataset: {
+          granularity: 'Daily',
+          aggregation: { totalCost: { name: 'PreTaxCost', function: 'Sum' } },
+        },
+      },
+    },
+    {
+      label: 'Usage+Daily+PreTaxCost',
+      apiVer: '2023-11-01',
+      body: {
+        type: 'Usage',
+        timeframe: 'MonthToDate',
+        dataset: {
+          granularity: 'Daily',
+          aggregation: { totalCost: { name: 'PreTaxCost', function: 'Sum' } },
+        },
+      },
+    },
+    {
+      label: 'ActualCost+Daily+Cost',
+      apiVer: '2023-11-01',
+      body: {
+        type: 'ActualCost',
+        timeframe: 'MonthToDate',
+        dataset: {
+          granularity: 'Daily',
+          aggregation: { totalCost: { name: 'Cost', function: 'Sum' } },
+        },
+      },
+    },
+  ];
+
+  let lastErr: string | null = null;
+
+  for (const { label, apiVer, body } of attempts) {
+    const res = await fetch(url(apiVer), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    const rawText = await res.text().catch(() => '');
+
+    if (!res.ok) {
+      lastErr = `${label} → HTTP ${res.status}: ${rawText.slice(0, 280)}`;
+      continue;
+    }
+
+    let qj: Record<string, unknown>;
+    try {
+      qj = JSON.parse(rawText) as Record<string, unknown>;
+    } catch {
+      lastErr = `${label} → invalid JSON`;
+      continue;
+    }
+
+    const topErr = (qj as { error?: { message?: string; code?: string } }).error;
+    if (topErr?.message) {
+      lastErr = `${label} → ${topErr.code ?? 'Error'}: ${topErr.message}`;
+      continue;
+    }
+
+    const props = qj.properties as
+      | { rows?: unknown[][]; columns?: Array<{ name: string }> }
+      | undefined;
+    const rows = props?.rows;
+    const cols = props?.columns;
+
+    if (Array.isArray(rows) && rows.length === 0) {
+      return {
+        month_to_date_cost: 0,
+        month_to_date_currency: null,
+        cost_query_error: null,
+        cost_query_variant: `${label} (empty usage)`,
+      };
+    }
+
+    const parsed = parseCostManagementRows(rows, cols);
+    if (parsed.cost != null) {
+      return {
+        month_to_date_cost: parsed.cost,
+        month_to_date_currency: parsed.currency,
+        cost_query_error: null,
+        cost_query_variant: label,
+      };
+    }
+
+    lastErr = `${label} → 200 but no parseable cost column (columns: ${
+      (cols ?? []).map((c) => c.name).join(', ')
+    })`.slice(0, 400);
+  }
+
+  return {
+    month_to_date_cost: null,
+    month_to_date_currency: null,
+    cost_query_error: lastErr ?? 'Cost Management query failed',
+    cost_query_variant: null,
+  };
+}
+
 // ────────────────────────────────────────────────────────────────── Azure ──
 async function azureStatus(): Promise<ProviderStatus> {
   const required = [
@@ -154,7 +339,7 @@ async function azureStatus(): Promise<ProviderStatus> {
     const tenant = Deno.env.get('AZURE_TENANT_ID')!;
     const clientId = Deno.env.get('AZURE_SP_CLIENT_ID')!;
     const clientSecret = Deno.env.get('AZURE_SP_CLIENT_SECRET')!;
-    const subscription = Deno.env.get('AZURE_SUBSCRIPTION_ID')!;
+    const subscription = Deno.env.get('AZURE_SUBSCRIPTION_ID')!.trim();
 
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
@@ -180,7 +365,7 @@ async function azureStatus(): Promise<ProviderStatus> {
     }
     const { access_token } = await tokenRes.json();
 
-    const [rgRes, subRes, credRes, costRes] = await Promise.all([
+    const [rgRes, subRes, credRes] = await Promise.all([
       fetch(
         `https://management.azure.com/subscriptions/${subscription}/resourcegroups?api-version=2022-09-01`,
         { headers: { Authorization: `Bearer ${access_token}` } },
@@ -193,27 +378,9 @@ async function azureStatus(): Promise<ProviderStatus> {
         `https://management.azure.com/subscriptions/${subscription}/providers/Microsoft.Consumption/credits?api-version=2021-10-30`,
         { headers: { Authorization: `Bearer ${access_token}` } },
       ),
-      fetch(
-        `https://management.azure.com/subscriptions/${subscription}/providers/Microsoft.CostManagement/query?api-version=2023-03-01`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            type: 'ActualCost',
-            timeframe: 'MonthToDate',
-            dataset: {
-              granularity: 'None',
-              aggregation: {
-                totalCost: { name: 'PreTaxCost', function: 'Sum' },
-              },
-            },
-          }),
-        },
-      ),
     ]);
+
+    const costOut = await fetchSubscriptionMtdPreTaxCost(access_token, subscription);
 
     const resourceGroups = rgRes.ok
       ? ((await rgRes.json()).value as Array<{ name: string; location: string }>)
@@ -252,39 +419,10 @@ async function azureStatus(): Promise<ProviderStatus> {
       }
     }
 
-    let month_to_date_cost: number | null = null;
-    let month_to_date_currency: string | null = null;
-    let cost_query_error: string | null = null;
-    if (costRes.ok) {
-      try {
-        const qj = (await costRes.json()) as {
-          properties?: { rows?: number[][]; columns?: Array<{ name: string }> };
-        };
-        const rows = qj.properties?.rows;
-        const cols = qj.properties?.columns;
-        if (rows?.length && cols?.length) {
-          const idx = cols.findIndex((c) =>
-            /cost|pretax/i.test(String(c.name ?? ''))
-          );
-          const col = idx >= 0 ? idx : 0;
-          const cell = rows[0]?.[col];
-          const n =
-            typeof cell === 'number' ? cell : parseFloat(String(cell ?? ''));
-          if (Number.isFinite(n)) month_to_date_cost = n;
-          const curCol = cols.findIndex((c) =>
-            /currency/i.test(String(c.name ?? ''))
-          );
-          if (curCol >= 0 && rows[0]?.[curCol] != null) {
-            month_to_date_currency = String(rows[0][curCol]);
-          }
-        }
-      } catch {
-        cost_query_error = 'cost response parse failed';
-      }
-    } else {
-      const t = await costRes.text().catch(() => '');
-      cost_query_error = `cost query ${costRes.status}: ${t.slice(0, 160)}`;
-    }
+    const month_to_date_cost = costOut.month_to_date_cost;
+    const month_to_date_currency = costOut.month_to_date_currency;
+    const cost_query_error = costOut.cost_query_error;
+    const cost_query_variant = costOut.cost_query_variant;
 
     let credits_total_amount: number | null = null;
     let credits_total_currency: string | null = null;
@@ -315,8 +453,9 @@ async function azureStatus(): Promise<ProviderStatus> {
         month_to_date_cost,
         month_to_date_currency,
         cost_query_error,
+        cost_query_variant,
         note:
-          'SP needs Cost Management Reader for MTD spend. Credits API applies to some offers only.',
+          'Cost Management Reader on the subscription enables MTD pre-tax spend. Credits API applies to some offers only.',
       },
       fetched_at: now(),
     };

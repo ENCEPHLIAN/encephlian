@@ -304,7 +304,17 @@ function AzureTile({ s }: { s: ProviderStatus }) {
                   Month-to-date (pre-tax)
                 </p>
                 {mtd != null ? (
-                  <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{mtd}</p>
+                  <>
+                    <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{mtd}</p>
+                    {d.cost_query_variant ? (
+                      <p
+                        className="mt-1 truncate text-[9px] text-muted-foreground/70"
+                        title={String(d.cost_query_variant)}
+                      >
+                        {String(d.cost_query_variant)}
+                      </p>
+                    ) : null}
+                  </>
                 ) : (
                   <p className="mt-1 text-xs text-muted-foreground leading-snug">
                     {d.cost_query_error
