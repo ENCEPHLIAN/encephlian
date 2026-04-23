@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Clock, Zap, Coins, AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { selectSlaAndStartPipeline } from "@/lib/triagePipeline";
 
 interface Study {
   id: string;
@@ -25,17 +25,6 @@ interface SlaSelectionModalProps {
 
 type SlaType = "TAT" | "STAT";
 
-// Trigger C-Plane processing (idempotent — safe to call even if already running)
-function triggerCPlane(studyId: string) {
-  const cplaneBase = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
-  if (!cplaneBase) return;
-  fetch(`${cplaneBase}/process`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ study_id: studyId }),
-  }).catch((e) => console.warn("[SLA] C-Plane trigger failed:", e));
-}
-
 export default function SlaSelectionModal({
   open,
   onOpenChange,
@@ -49,18 +38,19 @@ export default function SlaSelectionModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    if (!open) {
+      setIsConfirming(false);
+      setSelectedSla(null);
+      setIsSubmitting(false);
+    }
+  }, [open]);
+
   const submitTriage = async (sla: SlaType) => {
     if (!study) return;
     setIsSubmitting(true);
     try {
-      const { data, error } = await supabase.rpc("select_sla_and_start_triage", {
-        p_study_id: study.id,
-        p_sla: sla,
-      });
-
-      if (error) throw error;
-
-      const result = data as { success: boolean; error?: string; new_balance?: number; tokens_deducted?: number };
+      const result = await selectSlaAndStartPipeline(study.id, sla);
 
       if (!result.success) {
         if (result.error === "insufficient_tokens") {
@@ -75,6 +65,8 @@ export default function SlaSelectionModal({
         queryClient.invalidateQueries({ queryKey: ["wallet-balance"] }),
         queryClient.invalidateQueries({ queryKey: ["pilot-studies"] }),
         queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] }),
+        queryClient.invalidateQueries({ queryKey: ["study-detail", study.id] }),
+        queryClient.invalidateQueries({ queryKey: ["study", study.id] }),
       ]);
 
       toast.success(
@@ -84,12 +76,12 @@ export default function SlaSelectionModal({
         </div>
       );
 
-      // Ensure C-Plane is running (idempotent)
-      triggerCPlane(study.id);
-      handleClose();
-    } catch (err: any) {
+      onOpenChange(false);
+      setIsConfirming(false);
+      setSelectedSla(null);
+    } catch (err: unknown) {
       console.error("SLA selection error:", err);
-      toast.error(err.message || "Failed to start triage");
+      toast.error(err instanceof Error ? err.message : "Failed to start triage");
     } finally {
       setIsSubmitting(false);
     }
@@ -102,9 +94,8 @@ export default function SlaSelectionModal({
       return;
     }
 
-    // Pilot mode: TAT (1 token) goes straight through, no confirmation
     if (isPilot && sla === "TAT") {
-      submitTriage(sla);
+      void submitTriage(sla);
       return;
     }
 
@@ -113,16 +104,10 @@ export default function SlaSelectionModal({
   };
 
   const handleConfirm = () => {
-    if (selectedSla) submitTriage(selectedSla);
+    if (selectedSla) void submitTriage(selectedSla);
   };
 
   const handleCancel = () => {
-    setIsConfirming(false);
-    setSelectedSla(null);
-  };
-
-  const handleClose = () => {
-    onOpenChange(false);
     setIsConfirming(false);
     setSelectedSla(null);
   };
@@ -131,8 +116,8 @@ export default function SlaSelectionModal({
   const newBalance = tokenBalance - tokensRequired;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg z-[100]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
@@ -145,7 +130,6 @@ export default function SlaSelectionModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Token Balance */}
         <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border">
           <div className="flex items-center gap-2">
             <Coins className="h-4 w-4 text-primary" />
@@ -158,7 +142,6 @@ export default function SlaSelectionModal({
 
         {!isConfirming ? (
           <div className="grid grid-cols-2 gap-4 mt-2">
-            {/* TAT */}
             <Card
               className={`p-4 cursor-pointer transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 ${
                 tokenBalance < 1 ? "opacity-50 pointer-events-none" : ""
@@ -183,7 +166,6 @@ export default function SlaSelectionModal({
               </div>
             </Card>
 
-            {/* STAT */}
             <Card
               className={`p-4 cursor-pointer transition-all hover:border-destructive/50 hover:shadow-lg hover:shadow-destructive/5 ${
                 tokenBalance < 2 ? "opacity-50 pointer-events-none" : ""

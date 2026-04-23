@@ -19,7 +19,7 @@ export const PILOT_ACCESS_SUBSCRIPTION = {
   amountInr: 3000,
   bonusTokens: 10,
   title: "Pilot access",
-  subtitle: "One-time subscription checkout · Razorpay invoice",
+  subtitle: "Monthly pilot plan · first payment includes bonus triage tokens",
   bullets: [
     "Covers pilot clinic access to the triage workflow",
     "10 bonus tokens credited to this wallet immediately",

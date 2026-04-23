@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.verify_payment]
 verify_jwt = false
 
+[functions.create_pilot_subscription]
+verify_jwt = false
+
+[functions.verify_pilot_subscription]
+verify_jwt = false
+
 [functions.razorpay_webhook]
 verify_jwt = false
 

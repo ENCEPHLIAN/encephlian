@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle
@@ -226,6 +226,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
   }, [selectedSla, SLA_OPTIONS]);
 
+  const wizardSteps = useMemo(() => (isPilot ? STEPS.slice(0, 2) : STEPS), [isPilot]);
+
   // Network connectivity detection
   useEffect(() => {
     const onOnline  = () => setIsOffline(false);
@@ -424,7 +426,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       owner: userId,
       clinic_id: clinicId,
       state: "awaiting_sla",
-      sla: selectedSla,
+      sla: isPilot ? "pending" : selectedSla,
       uploaded_file_path: `blob:eeg-raw/pending`,
       original_format: fileExt,
       indication: patientData.indication || null,
@@ -508,58 +510,70 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
 
     onProgress(84, `Registering...`);
-    await supabase
-      .from("studies")
-      .update({ state: "uploaded", uploaded_file_path: blobName })
-      .eq("id", studyId);
 
-    // C-Plane: canonicalize in background (reads from Azure Blob directly)
-    fetch(`${cplaneBase}/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ study_id: studyId }),
-    }).catch((err) => console.warn("C-Plane trigger failed:", err));
+    if (isPilot) {
+      await supabase
+        .from("studies")
+        .update({
+          state: "awaiting_sla",
+          sla: "pending",
+          triage_status: "pending",
+          triage_progress: 0,
+          uploaded_file_path: blobName,
+        })
+        .eq("id", studyId);
+      onProgress(100, "File saved — choose triage on Studies");
+    } else {
+      await supabase
+        .from("studies")
+        .update({ state: "uploaded", uploaded_file_path: blobName })
+        .eq("id", studyId);
 
-    // I-Plane: MIND® analysis — await so the result is ready before navigating
-    const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
-    if (iplaneBase && !isProprietaryFormat) {
-      onProgress(88, `Running MIND® analysis...`);
-      try {
-        const controller = new AbortController();
-        activeIPlaneControllerRef.current = controller;
-        const timer = setTimeout(() => controller.abort(), 300_000); // 5 min max
-        const form = new FormData();
-        form.append("file", targetFile, targetFile.name);
-        form.append("study_id", studyId);
-        const iRes = await fetch(`${iplaneBase}/mind/run-edf`, {
-          method: "POST",
-          body: form,
-          signal: controller.signal,
-        });
-        clearTimeout(timer);
-        activeIPlaneControllerRef.current = null;
-        if (iRes.ok) {
-          const report = await iRes.json();
-          onProgress(97, `Saving analysis...`);
-          await supabase.from("studies").update({
-            state: "ai_draft",
-            triage_status: "completed",
-            triage_progress: 100,
-            ai_draft_json: report,
-          }).eq("id", studyId);
+      fetch(`${cplaneBase}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ study_id: studyId }),
+      }).catch((err) => console.warn("C-Plane trigger failed:", err));
+
+      const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
+      if (iplaneBase && !isProprietaryFormat) {
+        onProgress(88, `Running MIND® analysis...`);
+        try {
+          const controller = new AbortController();
+          activeIPlaneControllerRef.current = controller;
+          const timer = setTimeout(() => controller.abort(), 300_000);
+          const form = new FormData();
+          form.append("file", targetFile, targetFile.name);
+          form.append("study_id", studyId);
+          const iRes = await fetch(`${iplaneBase}/mind/run-edf`, {
+            method: "POST",
+            body: form,
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          activeIPlaneControllerRef.current = null;
+          if (iRes.ok) {
+            const report = await iRes.json();
+            onProgress(97, `Saving analysis...`);
+            await supabase.from("studies").update({
+              state: "ai_draft",
+              triage_status: "completed",
+              triage_progress: 100,
+              ai_draft_json: report,
+            }).eq("id", studyId);
+          }
+        } catch (e: any) {
+          activeIPlaneControllerRef.current = null;
+          if (e?.name !== "AbortError") {
+            console.warn("[upload] I-Plane analysis failed:", e);
+          }
         }
-      } catch (e: any) {
-        activeIPlaneControllerRef.current = null;
-        if (e?.name !== "AbortError") {
-          console.warn("[upload] I-Plane analysis failed:", e);
-        }
-        // Analysis failed/cancelled — study stays in "uploaded" state, user can retry from study page
       }
+      onProgress(100, "Done");
     }
 
-    onProgress(100, "Done");
     return { studyId };
-  }, [userId, clinicId, selectedSla, patientData, edfMeta, file, isProprietaryFormat]);
+  }, [userId, clinicId, selectedSla, patientData, edfMeta, file, isProprietaryFormat, isPilot]);
 
   // Submit the study (single or batch)
   const handleSubmit = useCallback(async () => {
@@ -605,12 +619,18 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             ? "This file matches a study you already uploaded — opening it."
             : isProprietaryFormat
               ? "Proprietary format — export as EDF for analysis."
-              : "Analysis pipeline started.",
-          action: "Opening study...",
+              : isPilot
+                ? "File is stored. Pick Standard or Priority on Studies to start analysis (tokens apply then)."
+                : "Analysis pipeline started.",
+          action: isPilot && !duplicate ? "Opening Studies…" : "Opening study…",
         });
         onOpenChange(false);
         resetWizard();
-        navigate(`/app/studies/${studyId}`);
+        if (isPilot && !duplicate) {
+          navigate("/app/studies");
+        } else {
+          navigate(`/app/studies/${studyId}`);
+        }
       } else {
         // Batch path — upload all files, show queue progress
         const progress = filesToUpload.map(f => ({ name: f.name, status: "pending" as const }));
@@ -659,12 +679,12 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       setIsUploading(false);
       setUploadStage("");
     }
-  }, [file, fileQueue, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, uploadOneFile, navigate, onOpenChange, resetWizard]);
+  }, [file, fileQueue, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, isPilot, uploadOneFile, navigate, onOpenChange, resetWizard]);
 
   // Validation
   const canProceedStep1 = !!file;
   const canProceedStep2 = true;
-  const canSubmit = !!file && !!selectedSla;
+  const canSubmit = !!file && (isPilot || !!selectedSla);
 
   const ExtractedBadge = () => (
     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-normal gap-0.5">
@@ -678,20 +698,25 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       if (!o) resetWizard();
       onOpenChange(o);
     }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg z-[100]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5 text-primary" />
-            Upload EEG Study
+            {isPilot ? "Upload recording" : "Upload EEG Study"}
           </DialogTitle>
           <DialogDescription>
-            Step {step} of 3: {STEPS[step - 1].label}
+            Step {step} of {wizardSteps.length}: {wizardSteps[step - 1]?.label ?? ""}
+            {isPilot && (
+              <span className="block mt-1 text-xs">
+                After upload, pick Standard or Priority on Studies — tokens apply only then.
+              </span>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-6">
-          {STEPS.map((s, idx) => {
+          {wizardSteps.map((s, idx) => {
             const Icon = s.icon;
             const isActive = s.id === step;
             const isCompleted = s.id < step;
@@ -712,7 +737,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     <Icon className="h-5 w-5" />
                   )}
                 </div>
-                {idx < STEPS.length - 1 && (
+                {idx < wizardSteps.length - 1 && (
                   <div className={cn(
                     "w-12 h-0.5 mx-2",
                     isCompleted ? "bg-primary" : "bg-muted"
@@ -722,6 +747,58 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             );
           })}
         </div>
+
+        {isUploading && (
+          <div className="space-y-2 mb-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{uploadStage || "Preparing..."}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs">{uploadProgress}%</span>
+                <button
+                  type="button"
+                  onClick={handleCancelUpload}
+                  className="text-xs text-muted-foreground underline hover:text-destructive"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+            <Progress value={uploadProgress} />
+            {batchProgress.length > 1 && (
+              <div className="space-y-1 mt-1">
+                {batchProgress.map((bp, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    {bp.status === "done" && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
+                    {bp.status === "uploading" && <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />}
+                    {bp.status === "pending" && <span className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />}
+                    {bp.status === "error" && <AlertCircle className="h-3 w-3 text-destructive shrink-0" />}
+                    <span className={`truncate ${bp.status === "done" ? "text-muted-foreground line-through" : bp.status === "error" ? "text-destructive" : ""}`}>
+                      {bp.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {uploadError && !isUploading && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 space-y-2 mb-4">
+            <div className="flex items-start gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{uploadError}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full"
+              onClick={() => { setUploadError(null); void handleSubmit(); }}
+            >
+              <RotateCcw className="h-3.5 w-3.5 mr-2" />
+              Retry
+            </Button>
+          </div>
+        )}
 
         {/* Step 1: File Upload */}
         {step === 1 && (
@@ -933,15 +1010,30 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
               <Button variant="ghost" onClick={() => setStep(1)}>
                 <ArrowLeft className="h-4 w-4 mr-2" /> Back
               </Button>
-              <Button onClick={() => setStep(3)} disabled={!canProceedStep2}>
-                Next <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
+              {isPilot ? (
+                <Button onClick={() => void handleSubmit()} disabled={!canProceedStep2 || isUploading || !clinicId}>
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Uploading…
+                    </>
+                  ) : (
+                    <>
+                      Upload <ArrowRight className="h-4 w-4 ml-2" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button onClick={() => setStep(3)} disabled={!canProceedStep2}>
+                  Next <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              )}
             </div>
           </div>
         )}
 
-        {/* Step 3: SLA Selection */}
-        {step === 3 && (
+        {/* Step 3: SLA Selection (internal / demo — pilot chooses SLA on Studies after upload) */}
+        {!isPilot && step === 3 && (
           <div className="space-y-4">
             <RadioGroup
               value={selectedSla}
@@ -1005,60 +1097,6 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 >
                   Refresh
                 </button>
-              </div>
-            )}
-
-            {/* Upload Progress */}
-            {isUploading && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">{uploadStage || "Preparing..."}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs">{uploadProgress}%</span>
-                    <button
-                      type="button"
-                      onClick={handleCancelUpload}
-                      className="text-xs text-muted-foreground underline hover:text-destructive"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-                <Progress value={uploadProgress} />
-                {batchProgress.length > 1 && (
-                  <div className="space-y-1 mt-1">
-                    {batchProgress.map((bp, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs">
-                        {bp.status === "done" && <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />}
-                        {bp.status === "uploading" && <Loader2 className="h-3 w-3 animate-spin text-primary shrink-0" />}
-                        {bp.status === "pending" && <span className="h-3 w-3 rounded-full border border-muted-foreground/40 shrink-0" />}
-                        {bp.status === "error" && <AlertCircle className="h-3 w-3 text-destructive shrink-0" />}
-                        <span className={`truncate ${bp.status === "done" ? "text-muted-foreground line-through" : bp.status === "error" ? "text-destructive" : ""}`}>
-                          {bp.name}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Upload error with retry */}
-            {uploadError && !isUploading && (
-              <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 space-y-2">
-                <div className="flex items-start gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{uploadError}</span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => { setUploadError(null); handleSubmit(); }}
-                >
-                  <RotateCcw className="h-3.5 w-3.5 mr-2" />
-                  Retry Upload
-                </Button>
               </div>
             )}
 

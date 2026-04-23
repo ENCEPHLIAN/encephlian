@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,22 +8,19 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileText, CheckCircle2, Clock,
-  Loader2, Zap, Download, Brain,
+  Loader2, Download, Brain,
   AlertTriangle, Activity,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
 import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
-import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
-import { useUserSession } from "@/contexts/UserSessionContext";
+import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 export default function PilotStudiesView() {
   const navigate = useNavigate();
-  const [selectedStudy, setSelectedStudy] = useState<PilotStudy | null>(null);
-  const [slaModalOpen, setSlaModalOpen] = useState(false);
   const [uploadWizardOpen, setUploadWizardOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
 
@@ -34,15 +31,10 @@ export default function PilotStudiesView() {
     pending: pendingStudies,
     processing: processingStudies,
     completed: completedStudies,
+    refetchStudies,
   } = usePilotData();
 
-  const handleSelectSla = useCallback((study: PilotStudy) => {
-    setSelectedStudy(study);
-    setSlaModalOpen(true);
-  }, []);
-
   const handleInsufficientTokens = useCallback(() => {
-    setSlaModalOpen(false);
     toast.error("Add tokens to continue", {
       action: {
         label: "Add Tokens",
@@ -211,7 +203,7 @@ export default function PilotStudiesView() {
         <section className="space-y-2">
           <div className="flex items-center gap-2 px-1">
             <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <span className="text-sm font-semibold">Ready for Triage</span>
+            <span className="text-sm font-semibold">Choose triage</span>
             <Badge variant="secondary" className="text-[10px] ml-auto tabular-nums">
               {pendingStudies.length}
             </Badge>
@@ -225,7 +217,7 @@ export default function PilotStudiesView() {
                 className="bg-amber-500/5 border-amber-500/20"
               >
                 <CardContent className="p-3.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
                         <FileText className="h-4 w-4 text-amber-600" />
@@ -242,14 +234,13 @@ export default function PilotStudiesView() {
                         )}
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSelectSla(study)}
-                      className="gap-1.5 shrink-0 rounded-full h-8 px-4"
-                    >
-                      <Zap className="h-3 w-3" />
-                      Start
-                    </Button>
+                    <PilotInlineSla
+                      study={study}
+                      tokenBalance={tokenBalance}
+                      onNeedTokens={handleInsufficientTokens}
+                      onStarted={() => refetchStudies()}
+                      compact
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -399,15 +390,6 @@ export default function PilotStudiesView() {
       )}
 
       {/* Modals */}
-      <SlaSelectionModal
-        open={slaModalOpen}
-        onOpenChange={setSlaModalOpen}
-        study={selectedStudy}
-        tokenBalance={tokenBalance}
-        onInsufficientTokens={handleInsufficientTokens}
-        isPilot
-      />
-
       <StudyUploadWizard
         open={uploadWizardOpen}
         onOpenChange={setUploadWizardOpen}

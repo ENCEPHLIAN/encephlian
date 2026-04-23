@@ -8,6 +8,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 export interface PilotStudy {
   id: string;
   study_key: string | null;
+  sla_selected_at?: string | null;
   reference?: string | null;
   sla: string;
   state: string;
@@ -22,7 +23,7 @@ export interface PilotStudy {
 }
 
 const STUDY_COLUMNS =
-  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
+  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, sla_selected_at";
 
 /** If PostgREST/schema lags, fall back without optional columns so pilot never goes blank. */
 const STUDY_COLUMNS_FALLBACK =
@@ -175,10 +176,9 @@ export function usePilotData() {
       (studies || []).filter(
         (s) =>
           s.triage_status === "processing" ||
-          s.state === "ai_draft" ||
-          s.state === "in_review"
+          (s.state === "processing" && s.triage_status !== "completed"),
       ),
-    [studies]
+    [studies],
   );
   processingRef.current = processingStudies;
 
@@ -204,7 +204,8 @@ export function usePilotData() {
             let aiDraft: any = null;
             if (IPLANE_BASE) {
               try {
-                const r = await fetch(`${IPLANE_BASE}/mind/report/${study.id}`);
+                const blobId = study.study_key || study.id;
+                const r = await fetch(`${IPLANE_BASE}/mind/report/${blobId}`);
                 if (r.ok) aiDraft = await r.json();
               } catch {}
             }
@@ -242,17 +243,29 @@ export function usePilotData() {
   const categorized = useMemo(() => {
     const all = studies || [];
     return {
-      pending: all.filter(
-        (s) =>
+      pending: all.filter((s) => {
+        if ((s.tokens_deducted ?? 0) > 0) return false;
+        if (s.state === "signed" || s.state === "failed") return false;
+        if (s.triage_status === "processing" || s.state === "processing") return false;
+        if (s.triage_status === "completed") return false;
+        return (
           s.state === "awaiting_sla" ||
+          s.sla === "pending" ||
           (s.state === "uploaded" &&
             (!s.triage_status ||
               s.triage_status === "awaiting_sla" ||
               s.triage_status === "pending"))
-      ),
+        );
+      }),
       processing: processingStudies,
       completed: all.filter(
-        (s) => s.state === "signed" || s.triage_status === "completed"
+        (s) =>
+          s.state === "signed" ||
+          s.triage_status === "completed" ||
+          s.state === "ai_draft" ||
+          s.state === "complete" ||
+          s.state === "completed" ||
+          s.state === "in_review",
       ),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

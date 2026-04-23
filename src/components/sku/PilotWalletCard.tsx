@@ -14,7 +14,7 @@ import {
   PILOT_ACCESS_SUBSCRIPTION,
   TOKEN_TOPUP_PACKAGES,
 } from "@/shared/tokenEconomy";
-import { openRazorpayTokenCheckout } from "@/lib/razorpayCheckout";
+import { openPilotSubscriptionCheckout, openRazorpayTokenCheckout } from "@/lib/razorpayCheckout";
 
 export function PilotWalletCard() {
   const { toast } = useToast();
@@ -126,40 +126,68 @@ export function PilotWalletCard() {
     }
   };
 
-  const buyPilotAccess = async () => {
+  const buyPilotSubscription = async () => {
     setPurchasing("pilot_access");
     try {
-      await openRazorpayTokenCheckout(
-        { product: PILOT_ACCESS_SUBSCRIPTION.productId },
-        {
-          description: `Pilot access + ${PILOT_ACCESS_SUBSCRIPTION.bonusTokens} bonus tokens`,
-          onPaid: async (response) => {
-            try {
-              await verifyAndFinish(
-                response,
-                PILOT_ACCESS_SUBSCRIPTION.bonusTokens,
-                PILOT_ACCESS_SUBSCRIPTION.amountInr,
-              );
-              toast({
-                title: "Subscription payment received",
-                description: `${PILOT_ACCESS_SUBSCRIPTION.bonusTokens} bonus tokens credited. Razorpay receipt is available in your Razorpay account; email receipt sends when Resend is configured.`,
-              });
-            } catch (e: unknown) {
-              toast({
-                variant: "destructive",
-                title: "Verification failed",
-                description: e instanceof Error ? e.message : "Unknown error",
-              });
+      const { data, error } = await supabase.functions.invoke("create_pilot_subscription", { body: {} });
+      if (error) {
+        throw new Error(await formatEdgeFunctionError(error, data));
+      }
+      if (!data || typeof data !== "object" || "error" in data) {
+        throw new Error(
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error: string }).error)
+            : "No subscription response",
+        );
+      }
+      const d = data as { subscriptionId?: string; keyId?: string };
+      if (!d.subscriptionId || !d.keyId) {
+        throw new Error("Invalid subscription response — check Edge logs and RAZORPAY_PILOT_PLAN_ID");
+      }
+
+      await openPilotSubscriptionCheckout({
+        subscriptionId: d.subscriptionId,
+        keyId: d.keyId,
+        description: `Pilot plan · ${PILOT_ACCESS_SUBSCRIPTION.bonusTokens} bonus tokens`,
+        onPaid: async (r) => {
+          try {
+            const { data: v, error: ve } = await supabase.functions.invoke("verify_pilot_subscription", {
+              body: {
+                razorpay_payment_id: r.razorpay_payment_id,
+                razorpay_subscription_id: r.razorpay_subscription_id,
+                razorpay_signature: r.razorpay_signature,
+              },
+            });
+            if (ve) throw new Error(await formatEdgeFunctionError(ve, v));
+            if (v && typeof v === "object" && "error" in v) {
+              throw new Error(String((v as { error?: string }).error || "Verification failed"));
             }
-          },
-          onDismiss: () => setPurchasing(null),
+            const credited = (v as { tokens_credited?: number })?.tokens_credited ?? PILOT_ACCESS_SUBSCRIPTION.bonusTokens;
+            await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
+            await queryClient.invalidateQueries({ queryKey: ["wallet-transactions-recent"] });
+            await queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
+            toast({
+              title: "Plan active",
+              description:
+                credited > 0
+                  ? `${credited} bonus tokens added to your wallet.`
+                  : "Payment confirmed (already credited).",
+            });
+          } catch (e: unknown) {
+            toast({
+              variant: "destructive",
+              title: "Could not confirm payment",
+              description: e instanceof Error ? e.message : "Unknown error",
+            });
+          }
         },
-      );
+        onDismiss: () => setPurchasing(null),
+      });
       setPurchasing(null);
     } catch (err: unknown) {
       toast({
         variant: "destructive",
-        title: "Checkout error",
+        title: "Could not start checkout",
         description: err instanceof Error ? err.message : "Unknown error",
       });
       setPurchasing(null);
@@ -222,17 +250,17 @@ export function PilotWalletCard() {
             <div>
               <p className="text-2xl font-bold">₹{PILOT_ACCESS_SUBSCRIPTION.amountInr.toLocaleString("en-IN")}</p>
               <p className="text-[11px] text-muted-foreground">
-                + {PILOT_ACCESS_SUBSCRIPTION.bonusTokens} tokens · Razorpay invoice
+                + {PILOT_ACCESS_SUBSCRIPTION.bonusTokens} bonus tokens on first successful charge
               </p>
             </div>
             <Button
               size="sm"
               className="rounded-full gap-1.5"
               disabled={purchasing !== null}
-              onClick={() => void buyPilotAccess()}
+              onClick={() => void buyPilotSubscription()}
             >
               {purchasing === "pilot_access" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Pay with Razorpay
+              Subscribe
             </Button>
           </div>
         </CardContent>

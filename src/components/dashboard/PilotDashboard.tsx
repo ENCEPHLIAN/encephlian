@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload, FileText, Coins, ArrowRight, Plus,
-  CheckCircle2, Clock, Zap, Loader2, Sparkles,
+  CheckCircle2, Clock, Loader2, Sparkles,
   HelpCircle, Brain, Shield, BarChart3, Eye,
   Download, ChevronRight, Activity, AlertTriangle,
 } from "lucide-react";
@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import dayjs from "dayjs";
 import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
-import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
+import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import RefundDialog from "@/components/dashboard/RefundDialog";
 import PilotOnboarding from "@/components/pilot/PilotOnboarding";
 import SampleReportPreview from "@/components/pilot/SampleReportPreview";
@@ -61,8 +61,6 @@ function getProgressColor(progress: number): string {
 export default function PilotDashboard() {
   const navigate = useNavigate();
   const { profile } = useUserSession();
-  const [selectedStudy, setSelectedStudy] = useState<PilotStudy | null>(null);
-  const [slaModalOpen, setSlaModalOpen] = useState(false);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [refundStudy, setRefundStudy] = useState<PilotStudy | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -75,15 +73,10 @@ export default function PilotDashboard() {
     pending: pendingTriageStudies,
     processing: processingStudies,
     completed: completedReports,
+    refetchStudies,
   } = usePilotData();
 
-  const handleSelectSla = useCallback((study: PilotStudy) => {
-    setSelectedStudy(study);
-    setSlaModalOpen(true);
-  }, []);
-
   const handleInsufficientTokens = useCallback(() => {
-    setSlaModalOpen(false);
     toast.error("Not enough tokens", {
       description: "Add tokens to start triage.",
       action: {
@@ -324,7 +317,7 @@ export default function PilotDashboard() {
                 return (
                   <div
                     key={study.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-background/80 hover:bg-background transition-colors"
+                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 rounded-xl bg-background/80 hover:bg-background transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
@@ -345,14 +338,13 @@ export default function PilotDashboard() {
                         </p>
                       </div>
                     </div>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSelectSla(study)}
-                      className="shrink-0 gap-1.5 rounded-full h-8 px-4"
-                    >
-                      <Zap className="h-3 w-3" />
-                      Start
-                    </Button>
+                    <PilotInlineSla
+                      study={study}
+                      tokenBalance={tokenBalance}
+                      onNeedTokens={handleInsufficientTokens}
+                      onStarted={() => refetchStudies()}
+                      compact
+                    />
                   </div>
                 );
               })}
@@ -455,15 +447,6 @@ export default function PilotDashboard() {
       )}
 
       {/* ─── Modals ─── */}
-      <SlaSelectionModal
-        open={slaModalOpen}
-        onOpenChange={setSlaModalOpen}
-        study={selectedStudy}
-        tokenBalance={tokenBalance}
-        onInsufficientTokens={handleInsufficientTokens}
-        isPilot
-      />
-
       <RefundDialog
         open={refundDialogOpen}
         onOpenChange={setRefundDialogOpen}

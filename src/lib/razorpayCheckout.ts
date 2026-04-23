@@ -78,3 +78,44 @@ export async function openRazorpayTokenCheckout(
   });
   rzp.open();
 }
+
+type SubscriptionHandlerResponse = {
+  razorpay_payment_id: string;
+  razorpay_subscription_id: string;
+  razorpay_signature: string;
+};
+
+/** Razorpay subscription checkout (uses `subscription_id`, not `order_id`). */
+export async function openPilotSubscriptionCheckout(options: {
+  subscriptionId: string;
+  keyId: string;
+  description: string;
+  onPaid: (response: SubscriptionHandlerResponse) => Promise<void>;
+  onDismiss?: () => void;
+}): Promise<void> {
+  await loadRazorpayScript();
+
+  const Razorpay = (window as unknown as { Razorpay: new (opts: Record<string, unknown>) => { open: () => void } })
+    .Razorpay;
+
+  const rzp = new Razorpay({
+    key: options.keyId,
+    subscription_id: options.subscriptionId,
+    name: "ENCEPHLIAN",
+    description: options.description,
+    handler: async (response: Record<string, string>) => {
+      await options.onPaid({
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_subscription_id: response.razorpay_subscription_id,
+        razorpay_signature: response.razorpay_signature,
+      });
+    },
+    prefill: {
+      email: (await supabase.auth.getUser()).data.user?.email || "",
+    },
+    modal: {
+      ondismiss: () => options.onDismiss?.(),
+    },
+  });
+  rzp.open();
+}
