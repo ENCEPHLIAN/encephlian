@@ -141,7 +141,7 @@ export default function SlaSelectionModal({
           <DialogDescription>
             {isConfirming
               ? "Review your selection before starting"
-              : "Choose the turnaround time for this EEG analysis"}
+              : "Choose turnaround for this EEG. Tokens are charged here only — review and sign does not deduct again."}
           </DialogDescription>
         </DialogHeader>
 

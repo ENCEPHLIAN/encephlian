@@ -34,26 +34,44 @@ serve(async (req) => {
       throw new Error("Unauthorized");
     }
 
-    const { tokens } = await req.json();
-
-    // ✅ FIXED: explicit tiered pricing, must match frontend
-    const PRICING: Record<number, number> = {
-      5:   750,   // ₹150 / token (pilot top-up)
-      10:  1500,  // ₹150 / token
-      25:  3499,  // ~₹140 / token
-      50:  6499,  // ~₹130 / token
-      100: 11999, // ~₹120 / token
+    const body = await req.json().catch(() => ({})) as {
+      tokens?: number;
+      product?: string;
     };
 
-    const amountInr = PRICING[tokens];
+    // Token top-ups — amounts must match `src/shared/tokenEconomy.ts` TOKEN_TOPUP_PACKAGES
+    const TOPUP_PRICING: Record<number, number> = {
+      10: 1500,
+      25: 3499,
+      50: 6499,
+      100: 11999,
+    };
 
-    if (!amountInr) {
-      throw new Error("Invalid token package. Allowed: 5, 10, 25, 50, 100.");
+    /** Pilot access: one-time billed access + bonus tokens (subscription-style checkout). */
+    const PILOT_ACCESS = { product: "pilot_access", amountInr: 3000, credits: 10 } as const;
+
+    let amountInr: number;
+    let creditsPurchased: number;
+    let receiptLabel: string;
+
+    if (body.product === PILOT_ACCESS.product) {
+      amountInr = PILOT_ACCESS.amountInr;
+      creditsPurchased = PILOT_ACCESS.credits;
+      receiptLabel = "pilot_access";
+    } else if (typeof body.tokens === "number") {
+      amountInr = TOPUP_PRICING[body.tokens];
+      creditsPurchased = body.tokens;
+      receiptLabel = `tokens_${body.tokens}`;
+      if (!amountInr) {
+        throw new Error("Invalid token package. Allowed: 10, 25, 50, 100.");
+      }
+    } else {
+      throw new Error("Invalid body: send { tokens } for top-up or { product: \"pilot_access\" } for pilot subscription.");
     }
 
     const amountPaise = amountInr * 100;
 
-    console.log(`Creating order for ${tokens} tokens, amount: ₹${amountInr} (₹${amountPaise / 100} shown to user)`);
+    console.log(`Creating order (${receiptLabel}), credits ${creditsPurchased}, amount ₹${amountInr}`);
 
     // Create Razorpay order
     const auth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
@@ -69,7 +87,8 @@ serve(async (req) => {
         receipt: `receipt_${Date.now()}`,
         notes: {
           user_id: user.id,
-          tokens: tokens.toString(),
+          product: receiptLabel,
+          tokens: creditsPurchased.toString(),
         },
       }),
     });
@@ -88,7 +107,7 @@ serve(async (req) => {
       user_id: user.id,
       order_id: order.id,
       amount_inr: amountInr,
-      credits_purchased: tokens,
+      credits_purchased: creditsPurchased,
       status: "created",
       provider: "razorpay",
     });

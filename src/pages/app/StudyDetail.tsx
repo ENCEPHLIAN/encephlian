@@ -44,6 +44,8 @@ import { fetchJson } from "@/shared/readApiClient";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { getStudyDocumentTitle, getStudyHandle, getStudyListTitle, type StudyLike } from "@/lib/studyDisplay";
 import { useStudyBreadcrumb } from "@/contexts/StudyBreadcrumbContext";
+import { StudyFlowProgress } from "@/components/study/StudyFlowProgress";
+import { studyTriageIsPaid } from "@/shared/tokenEconomy";
 
 dayjs.extend(relativeTime);
 
@@ -122,7 +124,12 @@ export default function StudyDetail() {
     // Auto-poll while pipeline is running — stops once complete/signed
     refetchInterval: (query) => {
       const state = (query.state.data as any)?.state;
-      return (state === "processing" || state === "uploaded" || state === "pending") ? 8000 : false;
+      return state === "processing" ||
+        state === "uploaded" ||
+        state === "pending" ||
+        state === "awaiting_sla"
+        ? 8000
+        : false;
     },
   });
 
@@ -300,9 +307,15 @@ export default function StudyDetail() {
   const isProcessing = study.triage_status === "processing";
   const canGenerateReport = !hasReport && !isProcessing &&
     (study.state === "uploaded" || study.state === "parsed");
-  const canReview = study.state === "ai_draft" || study.state === "in_review" || study.state === "complete" || study.state === "completed";
+  const triagePaid = studyTriageIsPaid(study);
+  const gateTriageActions = !triagePaid && study.state !== "signed";
+  const canReview =
+    triagePaid &&
+    (study.state === "ai_draft" || study.state === "in_review" || study.state === "complete" || study.state === "completed");
   const StateIcon = stateConfig.icon;
   const studyHandle = getStudyHandle(study);
+  const defaultStudyTab =
+    gateTriageActions ? "overview" : study.ai_draft_json || mindReport ? "ai-analysis" : "overview";
 
   return (
     <div className="space-y-6 pb-8">
@@ -376,12 +389,17 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run MIND® Analysis — available for all SKUs when I-Plane is configured */}
-              {IPLANE_BASE && study.state !== 'signed' && (
+              {/* Run MIND® Analysis — only after SLA / token gate */}
+              {IPLANE_BASE && study.state !== "signed" && (
                 <Button
                   onClick={handleRunAITriage}
-                  disabled={runningTriage}
+                  disabled={runningTriage || gateTriageActions}
                   className="bg-primary"
+                  title={
+                    gateTriageActions
+                      ? "Select Standard or Priority on the Studies list first (tokens apply there)."
+                      : undefined
+                  }
                 >
                   {runningTriage ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -393,7 +411,12 @@ export default function StudyDetail() {
               )}
               
               {!isPilot && canGenerateReport && (
-                <Button onClick={handleGenerateAIReport} disabled={generating} variant="outline">
+                <Button
+                  onClick={handleGenerateAIReport}
+                  disabled={generating || gateTriageActions}
+                  variant="outline"
+                  title={gateTriageActions ? "Start triage from the Studies list before running tools here." : undefined}
+                >
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -413,7 +436,12 @@ export default function StudyDetail() {
               )}
               
               {hasReport && (
-                <Button variant="outline" onClick={handleDownloadReport} disabled={downloading}>
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadReport}
+                  disabled={downloading || gateTriageActions}
+                  title={gateTriageActions ? "Available after triage has been started from Studies." : undefined}
+                >
                   {downloading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
@@ -443,16 +471,30 @@ export default function StudyDetail() {
         )}
       </Card>
 
+      <StudyFlowProgress study={study} isPilot={isPilot} />
+
+      {gateTriageActions && (
+        <Alert className="border-amber-500/40 bg-amber-500/5">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-900 dark:text-amber-100">Triage not started</AlertTitle>
+          <AlertDescription className="text-sm">
+            {isPilot
+              ? "Go to Studies and tap Start to choose Standard (1 token) or Priority (2). Until then, only the raw viewer is available here."
+              : "From Studies or the queue, choose Standard (1 token) or Priority (2 tokens) for this recording. Tokens are charged at that step only. Until then, use Open Viewer for the raw file; analysis tools stay off so billing stays unambiguous."}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Tabs for different sections */}
-      <Tabs defaultValue={(study.ai_draft_json || mindReport) ? "ai-analysis" : "overview"} className="space-y-4">
+      <Tabs key={study.id} defaultValue={defaultStudyTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {!isPilot && (
-            <TabsTrigger value="report" disabled={!hasReport}>
+            <TabsTrigger value="report" disabled={!hasReport || gateTriageActions}>
               Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
             </TabsTrigger>
           )}
-          <TabsTrigger value="ai-analysis">
+          <TabsTrigger value="ai-analysis" disabled={gateTriageActions}>
             MIND® {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
           {!isPilot && (
@@ -462,6 +504,7 @@ export default function StudyDetail() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
+          {!isPilot ? (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -521,6 +564,7 @@ export default function StudyDetail() {
               )}
             </CardContent>
           </Card>
+          ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
             {/* Patient Information */}
@@ -719,7 +763,7 @@ export default function StudyDetail() {
                   Generate an AI report to get started
                 </p>
                 {canGenerateReport && (
-                  <Button onClick={handleGenerateAIReport} disabled={generating}>
+                  <Button onClick={handleGenerateAIReport} disabled={generating || gateTriageActions}>
                     {generating ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
@@ -746,8 +790,14 @@ export default function StudyDetail() {
               </p>
             </CardHeader>
             <CardContent>
-              {/* Priority: live blob report > cached ai_draft_json > empty state */}
-              {mindLoading ? (
+              {gateTriageActions ? (
+                <div className="text-center py-10 space-y-2 text-muted-foreground text-sm">
+                  <p>MIND® opens after you start triage from Studies (token charge applies there).</p>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link to="/app/studies">Back to Studies</Link>
+                  </Button>
+                </div>
+              ) : mindLoading ? (
                 <div className="flex items-center justify-center py-10 gap-2 text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
                   <span className="text-sm">Loading analysis...</span>
@@ -775,7 +825,7 @@ export default function StudyDetail() {
                       : " Upload an EDF file and wait for the pipeline to complete."}
                   </p>
                   {IPLANE_BASE && (
-                    <Button onClick={handleRunAITriage} disabled={runningTriage} size="sm">
+                    <Button onClick={handleRunAITriage} disabled={runningTriage || gateTriageActions} size="sm">
                       {runningTriage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
                       Run MIND® Analysis
                     </Button>

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, FileSignature, Coins } from "lucide-react";
+import { Loader2, ArrowLeft, FileSignature } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { studyTriageIsPaid, triageTokensForSla } from "@/shared/tokenEconomy";
 
 export default function StudyReview() {
   const { id } = useParams();
@@ -41,6 +42,8 @@ export default function StudyReview() {
       return data;
     }
   });
+
+  const paidTriage = study ? studyTriageIsPaid(study) : false;
 
   const { data: draft, isLoading: draftLoading } = useQuery({
     queryKey: ['ai-draft', id],
@@ -96,26 +99,17 @@ export default function StudyReview() {
     enabled: !!study
   });
 
-  const { data: wallet } = useQuery({
-    queryKey: ['wallet-balance'],
-    queryFn: async () => {
-      const { data } = await supabase.from('wallets').select('tokens').single();
-      return data;
-    }
-  });
-
   const meta = study?.meta as any;
-  const tokenCost = study?.sla === 'STAT' ? 2 : 1;
-  const costInr = tokenCost * 200;
+  const tokensAlreadyCharged = study ? triageTokensForSla(study.sla) : 0;
 
   const currentDraft = editedDraft || draft?.draft;
 
   const handleSign = async () => {
-    if (!wallet || wallet.tokens < tokenCost) {
+    if (!paidTriage) {
       toast({
-        title: "Insufficient tokens",
-        description: `You need ${tokenCost} tokens to sign this report. Please purchase more tokens.`,
-        variant: "destructive"
+        title: "Triage not started",
+        description: "Choose Standard or Priority on the study first — tokens are charged only there.",
+        variant: "destructive",
       });
       return;
     }
@@ -125,7 +119,7 @@ export default function StudyReview() {
       const { data, error } = await supabase.rpc('consume_credit_and_sign', {
         p_user_id: (await supabase.auth.getUser()).data.user?.id,
         p_study_id: id,
-        p_cost: tokenCost,
+        p_cost: 0,
         p_content: currentDraft
       });
 
@@ -134,11 +128,10 @@ export default function StudyReview() {
       const result = data as any;
       toast({
         title: "Report signed successfully!",
-        description: `${result.tokens_remaining} tokens remaining.`
+        description: `Wallet unchanged — ${tokensAlreadyCharged} token(s) were already used when triage started.`,
       });
 
       // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['wallet-balance'] });
       queryClient.invalidateQueries({ queryKey: ['study', id] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-studies'] });
 
@@ -167,6 +160,26 @@ export default function StudyReview() {
     return (
       <div className="flex items-center justify-center h-96">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (study.state === "awaiting_sla" || !paidTriage) {
+    return (
+      <div className="space-y-4 max-w-lg mx-auto">
+        <Button variant="ghost" onClick={() => navigate(`/app/studies/${id}`)}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to study
+        </Button>
+        <Card>
+          <CardContent className="p-8 space-y-2">
+            <p className="font-medium">Triage has not started yet</p>
+            <p className="text-sm text-muted-foreground">
+              Select Standard (1 token) or Priority (2 tokens) from the Studies list first. Signing does not
+              charge tokens again.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -262,27 +275,18 @@ export default function StudyReview() {
           <Card className="bg-muted/50 border-2">
             <CardContent className="pt-6 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Token Cost ({study.sla}):</span>
-                <span className="font-semibold">{tokenCost} tokens (₹{costInr})</span>
+                <span className="text-sm text-muted-foreground">Triage ({study.sla})</span>
+                <span className="font-semibold">{tokensAlreadyCharged} token(s) already used</span>
               </div>
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-sm text-muted-foreground">Your Wallet Balance:</span>
-                <span className="font-semibold flex items-center gap-1">
-                  <Coins className="h-4 w-4" />
-                  {wallet?.tokens || 0} tokens
-                </span>
-              </div>
-              {wallet && wallet.tokens < tokenCost && (
-                <p className="text-sm text-destructive">
-                  ⚠️ Insufficient tokens. Please purchase more tokens.
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground border-t pt-3">
+                Review and sign is included — no extra payment or token deduction at this step.
+              </p>
             </CardContent>
           </Card>
 
           <Button
             onClick={() => setShowConfirm(true)}
-            disabled={signing || (wallet && wallet.tokens < tokenCost)}
+            disabled={signing}
             size="lg"
             className="w-full"
           >
@@ -299,8 +303,8 @@ export default function StudyReview() {
             <AlertDialogDescription className="space-y-2">
               <p>This action will:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Deduct {tokenCost} tokens (₹{costInr}) from your wallet</li>
-                <li>Mark the report as signed and complete</li>
+                <li>Mark the report as signed (no further token charge)</li>
+                <li>Lock the clinical text you edited above</li>
               </ul>
               <p className="font-medium pt-2">Are you sure you want to proceed?</p>
             </AlertDialogDescription>

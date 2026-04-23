@@ -116,7 +116,7 @@ export default function Wallet() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Wallet</h1>
-        <p className="text-muted-foreground">Manage your tokens for signing reports</p>
+        <p className="text-muted-foreground">Top up tokens for triage — charged when you start Standard or Priority analysis</p>
       </div>
 
       {/* Token Balance Card */}
@@ -127,7 +127,7 @@ export default function Wallet() {
             <div className="text-4xl font-bold">
               <AnimatedCounter value={tokenBalance} duration={1500} />
             </div>
-            <div className="text-xs text-muted-foreground">Available for signing reports</div>
+            <div className="text-xs text-muted-foreground">Available when starting triage (not deducted again at sign)</div>
           </div>
         </CardContent>
       </Card>

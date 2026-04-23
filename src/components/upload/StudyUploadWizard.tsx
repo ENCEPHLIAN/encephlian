@@ -19,7 +19,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { cn } from "@/lib/utils";
 import { systemFeedback } from "@/lib/systemFeedback";
-import { sha256HexFromFile } from "@/lib/fileSha256";
+import { isSha256Available, sha256HexFromFile } from "@/lib/fileSha256";
 import { generateEncStudyReference } from "@/lib/studyReference";
 
 interface StudyUploadWizardProps {
@@ -386,43 +386,75 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       studyMeta.edf_channel_labels = edfMeta.channel_labels || null;
     }
 
-    onProgress(2, "Fingerprinting recording…");
-    const sourceContentSha256 = await sha256HexFromFile(targetFile);
-    const { data: dupRow } = await supabase
-      .from("studies")
-      .select("id")
-      .eq("clinic_id", clinicId)
-      .eq("owner", userId)
-      .eq("source_content_sha256", sourceContentSha256)
-      .neq("state", "failed")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (dupRow?.id) {
-      onProgress(100, "Same recording — opening existing study");
-      return { studyId: dupRow.id, duplicate: true };
+    let sourceContentSha256: string | null = null;
+    let reference: string | null = null;
+    try {
+      if (!isSha256Available()) {
+        onProgress(2, "Preparing upload…");
+      } else {
+        onProgress(2, "Fingerprinting recording…");
+        sourceContentSha256 = await sha256HexFromFile(targetFile);
+        const { data: dupRow, error: dupErr } = await supabase
+          .from("studies")
+          .select("id")
+          .eq("clinic_id", clinicId)
+          .eq("owner", userId)
+          .eq("source_content_sha256", sourceContentSha256)
+          .neq("state", "failed")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (dupErr) {
+          console.warn("[upload] dedupe check failed:", dupErr);
+        } else if (dupRow?.id) {
+          onProgress(100, "Same recording — opening existing study");
+          return { studyId: dupRow.id, duplicate: true };
+        }
+        reference = generateEncStudyReference();
+      }
+    } catch (e) {
+      console.warn("[upload] fingerprint/dedupe skipped:", e);
+      sourceContentSha256 = null;
+      reference = null;
+      onProgress(2, "Preparing upload…");
     }
 
     onProgress(5, `Creating study for ${targetFile.name}...`);
-    const reference = generateEncStudyReference();
-    const { data: study, error: studyError } = await supabase
+    const insertRow: Record<string, unknown> = {
+      owner: userId,
+      clinic_id: clinicId,
+      state: "awaiting_sla",
+      sla: selectedSla,
+      uploaded_file_path: `blob:eeg-raw/pending`,
+      original_format: fileExt,
+      indication: patientData.indication || null,
+      srate_hz: edfMeta?.sample_rate || null,
+      duration_min: edfMeta?.duration_sec ? Math.round(edfMeta.duration_sec / 60) : null,
+      meta: studyMeta,
+    };
+    if (reference && sourceContentSha256) {
+      insertRow.reference = reference;
+      insertRow.source_content_sha256 = sourceContentSha256;
+    }
+
+    let { data: study, error: studyError } = await supabase
       .from("studies")
-      .insert({
-        owner: userId,
-        clinic_id: clinicId,
-        state: "awaiting_sla",
-        sla: selectedSla,
-        reference,
-        source_content_sha256: sourceContentSha256,
-        uploaded_file_path: `blob:eeg-raw/pending`,
-        original_format: fileExt,
-        indication: patientData.indication || null,
-        srate_hz: edfMeta?.sample_rate || null,
-        duration_min: edfMeta?.duration_sec ? Math.round(edfMeta.duration_sec / 60) : null,
-        meta: studyMeta,
-      })
+      .insert(insertRow as never)
       .select("id")
       .single();
+
+    if (studyError && reference && sourceContentSha256) {
+      console.warn("[upload] insert with fingerprint fields failed, retrying without:", studyError);
+      delete insertRow.reference;
+      delete insertRow.source_content_sha256;
+      const retry = await supabase
+        .from("studies")
+        .insert(insertRow as never)
+        .select("id")
+        .single();
+      study = retry.data;
+      studyError = retry.error;
+    }
 
     if (studyError || !study?.id) {
       throw new Error(studyError?.message ?? "no id returned");

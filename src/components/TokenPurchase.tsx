@@ -7,16 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
-
-const TOKEN_PACKAGES = [
-  // Base pack – no discount
-  { tokens: 10, price: 1500, popular: false },
-
-  // Volume packs – discounted, all ending with 999
-  { tokens: 25, price: 3499, popular: true }, // ~₹140/token
-  { tokens: 50, price: 6499, popular: false }, // ~₹130/token
-  { tokens: 100, price: 11999, popular: false }, // ~₹120/token
-];
+import { TOKEN_TOPUP_PACKAGES } from "@/shared/tokenEconomy";
+import { loadRazorpayScript } from "@/lib/razorpayCheckout";
 
 export function TokenPurchase() {
   const [loadingPackage, setLoadingPackage] = useState<number | null>(null);
@@ -148,13 +140,14 @@ export function TokenPurchase() {
       <CardHeader>
         <CardTitle className="text-2xl">Purchase Tokens</CardTitle>
         <CardDescription>
-          Base rate ~₹150/token. Larger packages are discounted: 1 TAT report ≈ 1 token • 1 STAT report ≈ 2 tokens.
+          Same packs as pilot. Tokens are charged when you start triage (Standard = 1, Priority = 2); review and sign
+          does not deduct again.
         </CardDescription>
       </CardHeader>
 
       <CardContent>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {TOKEN_PACKAGES.map((pkg) => (
+          {TOKEN_TOPUP_PACKAGES.map((pkg) => (
             <Card
               key={pkg.tokens}
               className={cn(
@@ -177,8 +170,8 @@ export function TokenPurchase() {
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-2xl font-bold">₹{pkg.price.toLocaleString("en-IN")}</div>
-                  <div className="text-xs text-muted-foreground">₹{(pkg.price / pkg.tokens).toFixed(0)}/token</div>
+                  <div className="text-2xl font-bold">₹{pkg.priceInr.toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-muted-foreground">₹{(pkg.priceInr / pkg.tokens).toFixed(0)}/token</div>
                 </div>
 
                 {pkg.tokens >= 50 && (
@@ -189,7 +182,7 @@ export function TokenPurchase() {
                 )}
 
                 <Button
-                  onClick={() => handlePurchase(pkg.tokens, pkg.price)}
+                  onClick={() => handlePurchase(pkg.tokens, pkg.priceInr)}
                   disabled={loadingPackage === pkg.tokens}
                   className={cn("w-full", pkg.popular ? "bg-primary hover:bg-primary/90" : "")}
                 >
@@ -203,10 +196,10 @@ export function TokenPurchase() {
         <div className="mt-6 p-4 bg-muted/50 rounded-lg">
           <h4 className="font-semibold mb-2">What are tokens used for?</h4>
           <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• 1 token ≈ 1 TAT (Turnaround Time) report signing</li>
-            <li>• 2 tokens ≈ 1 STAT (Urgent) report signing</li>
-            <li>• Secure payment via Razorpay</li>
-            <li>• Instant credit after successful payment</li>
+            <li>• 1 token when you start Standard triage (TAT)</li>
+            <li>• 2 tokens when you start Priority triage (STAT)</li>
+            <li>• Review and sign does not use additional tokens</li>
+            <li>• Razorpay checkout — wallet credits immediately after verification</li>
           </ul>
         </div>
       </CardContent>

@@ -1,6 +1,8 @@
 /**
  * SKU Policy System for ENCEPHLIAN
- * 
+ *
+ * Token INR amounts and top-up SKUs live in `tokenEconomy.ts` (keep in sync with `create_order` edge).
+ *
  * Defines clinic-level feature gating. Backend remains identical;
  * this controls what clinicians see/do at the E-plane (frontend).
  * 
@@ -51,8 +53,8 @@ export type NavItemId =
   | 'wallet' 
   | 'support';
 
-/** Pilot: core flow + pipeline visibility + help (internal keeps full nav). */
-const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'wallet', 'support'];
+/** Pilot: dead-simple clinical path only — internal gets full nav + experiments. */
+const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'wallet'];
 const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'wallet', 'support'];
 
 export function getVisibleNavItems(sku: SkuTier): NavItemId[] {

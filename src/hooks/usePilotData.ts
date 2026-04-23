@@ -8,7 +8,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 export interface PilotStudy {
   id: string;
   study_key: string | null;
-  reference: string | null;
+  reference?: string | null;
   sla: string;
   state: string;
   created_at: string;
@@ -23,6 +23,10 @@ export interface PilotStudy {
 
 const STUDY_COLUMNS =
   "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
+
+/** If PostgREST/schema lags, fall back without optional columns so pilot never goes blank. */
+const STUDY_COLUMNS_FALLBACK =
+  "id, study_key, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
 
 /**
  * Single lightweight hook for ALL Pilot SKU data needs.
@@ -53,18 +57,35 @@ export function usePilotData() {
   } = useQuery({
     queryKey: ["pilot-studies", userId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let res = await supabase
         .from("studies")
         .select(STUDY_COLUMNS)
         .or("sample.is.null,sample.eq.false")
         .order("created_at", { ascending: false })
         .limit(50);
 
-      if (error) {
-        console.error("Pilot studies fetch:", error);
+      if (res.error) {
+        const msg = res.error.message || "";
+        const retryable =
+          msg.includes("reference") ||
+          msg.includes("source_content_sha256") ||
+          msg.includes("column") ||
+          res.error.code === "PGRST204";
+        if (retryable) {
+          res = await supabase
+            .from("studies")
+            .select(STUDY_COLUMNS_FALLBACK)
+            .or("sample.is.null,sample.eq.false")
+            .order("created_at", { ascending: false })
+            .limit(50);
+        }
+      }
+
+      if (res.error) {
+        console.error("Pilot studies fetch:", res.error);
         return [] as PilotStudy[];
       }
-      return (data || []) as PilotStudy[];
+      return (res.data || []) as PilotStudy[];
     },
     enabled: isAuthenticated && !!userId,
     staleTime: 20_000,

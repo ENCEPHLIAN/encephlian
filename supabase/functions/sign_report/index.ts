@@ -61,16 +61,13 @@ serve(async (req) => {
       }
     }
 
-    // Calculate token cost
-    const tokenCost = study.sla === "STAT" ? 2 : 1;
-
-    // Use the consume_credit_and_sign function
+    // Triage tokens are deducted at SLA selection; signing does not charge again.
     const { data: result, error: signError } = await supabase.rpc(
       "consume_credit_and_sign",
       {
         p_user_id: user.id,
         p_study_id: studyId,
-        p_cost: tokenCost,
+        p_cost: 0,
         p_content: reportContent
       }
     );

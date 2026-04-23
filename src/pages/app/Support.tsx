@@ -192,7 +192,7 @@ export default function Support() {
             <AccordionItem value="item-6">
               <AccordionTrigger className="text-base font-medium">How do tokens work?</AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
-                Tokens are consumed when you sign reports. Routine TAT reports use 1 token, STAT reports use 2 tokens.
+                Tokens are charged when you start triage (Standard = 1 token, Priority = 2). Review and sign does not charge again.
                 You can top up anytime from the Wallet page.
               </AccordionContent>
             </AccordionItem>
