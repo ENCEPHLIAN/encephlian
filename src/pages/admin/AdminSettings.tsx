@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Type, Save, RefreshCw, Globe, Shield, Database, Cpu, AlertTriangle } from "lucide-react";
+import { Type, Save, RefreshCw, Globe, Shield, Database, Cpu } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -227,14 +227,6 @@ export default function AdminSettings() {
         </Row>
       </Section>
 
-      {/* DB warning */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 mt-0.5 shrink-0" />
-        <p className="text-xs text-muted-foreground">
-          The <code className="font-mono">neurologist</code>, <code className="font-mono">clinic_admin</code>, and <code className="font-mono">ops</code> enum values still exist in the Supabase <code className="font-mono">app_role</code> database type.
-          Run a migration to drop them: <code className="font-mono">ALTER TYPE app_role RENAME VALUE 'neurologist' TO...</code> or recreate the enum with only <code className="font-mono">super_admin</code>, <code className="font-mono">management</code>, <code className="font-mono">clinician</code>.
-        </p>
-      </div>
     </div>
   );
 }

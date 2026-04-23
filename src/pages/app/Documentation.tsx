@@ -438,7 +438,7 @@ const { data } = await supabase.auth.getUser();`}</CodeBlock>
               { state: "awaiting_sla", label: "Awaiting SLA", desc: "Clinician selects TAT (1 token) or STAT (2 tokens). Tokens deducted atomically.", color: "bg-amber-500" },
               { state: "processing", label: "Processing", desc: "EDF parsed → canonicalized → inference triggered. Triage progress tracked 0-100%.", color: "bg-cyan-500" },
               { state: "ai_draft", label: "AI Draft", desc: "AI-generated preliminary interpretation with pattern detection and anomaly identification.", color: "bg-purple-500" },
-              { state: "in_review", label: "In Review", desc: "Board-certified neurologist reviewing, editing, and refining the report.", color: "bg-orange-500" },
+              { state: "in_review", label: "In Review", desc: "Board-certified clinician reviewing, editing, and refining the report.", color: "bg-orange-500" },
               { state: "signed", label: "Signed", desc: "Final report signed. Token consumed via consume_credit_and_sign(). Report PDF available.", color: "bg-emerald-500" },
             ].map((s) => (
               <div key={s.state} className="flex items-center gap-3 p-3 rounded-lg bg-muted/20 border border-border/30">
