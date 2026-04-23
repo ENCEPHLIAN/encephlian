@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { TokenPurchase } from "@/components/TokenPurchase";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useSku } from "@/hooks/useSku";
@@ -9,8 +9,50 @@ import { PilotWalletCard } from "@/components/sku/PilotWalletCard";
 import dayjs from "dayjs";
 
 export default function Wallet() {
-  const { isPilot } = useSku();
+  const { isPilot, hasWallet } = useSku();
 
+  // Admin roles (super_admin / management) have no wallet by design — the DB
+  // trigger `wallets_block_admin_roles` refuses any write for them, and
+  // `credit_wallet` raises P0001 on an admin user_id. We mirror that here so
+  // they see a clear "—" panel instead of a perpetually-zero balance widget
+  // that looks broken. Do this before any wallet query fires so we don't
+  // make a pointless RLS-filtered round trip.
+  if (!hasWallet) {
+    return (
+      <div className="space-y-6 max-w-lg mx-auto">
+        <div>
+          <h1 className="text-xl font-semibold">Wallet</h1>
+          <p className="text-muted-foreground text-sm">
+            Wallets are for clinicians who sign reports.
+          </p>
+        </div>
+        <Card className="border-border/60">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-4">
+              <div className="mt-1 rounded-full bg-muted p-2">
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="space-y-1.5 flex-1">
+                <p className="text-sm font-medium">Not applicable to your role</p>
+                <p className="text-sm text-muted-foreground">
+                  Your account has an administrative role (super_admin or
+                  management). Tokens are the clinical signing unit; admin
+                  actions are free and audited separately.
+                </p>
+                <div className="pt-3">
+                  <p className="text-xs text-muted-foreground">Token balance</p>
+                  <p className="text-2xl font-semibold tabular-nums text-muted-foreground">
+                    —
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
   const { data: walletData, isLoading: walletLoading } = useQuery({
     queryKey: ["wallet-balance"],
     queryFn: async () => {

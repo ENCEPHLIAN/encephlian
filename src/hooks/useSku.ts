@@ -21,6 +21,16 @@ interface UseSkuResult {
   isInternal: boolean;
   /** Whether user is on pilot SKU (production value unit) */
   isPilot: boolean;
+  /**
+   * Whether this user should see / transact in a token wallet.
+   *
+   * FALSE for super_admin and management — they don't sign reports, don't
+   * top up tokens, and the DB refuses to credit them (see migration
+   * 20260423020000_gate_wallets_to_clinicians.sql). UI uses this to hide
+   * the Wallet nav entry, the Billing dropdown, and render a "—" instead
+   * of a balance.
+   */
+  hasWallet: boolean;
   /** Navigation items visible for this SKU */
   visibleNav: NavItemId[];
   /** Check if a nav item is visible */
@@ -33,24 +43,30 @@ interface UseSkuResult {
  * Reads clinic SKU from UserSessionContext and returns
  * computed capabilities for the current tenant.
  * 
- * Admin users (super_admin/management) always see internal capabilities.
+ * Admin roles (super_admin / management) still inherit the `internal` SKU
+ * capability surface so they can access every admin feature, but they are
+ * flagged `hasWallet = false` and the 'wallet' nav item is stripped so
+ * nothing wallet-shaped renders for them.
  */
 export function useSku(): UseSkuResult {
   const { clinicContext, isAdmin } = useUserSession();
-  
+
   return useMemo(() => {
-    // Admins always get internal SKU capabilities
     const rawSku = isAdmin ? 'internal' : (clinicContext?.sku as SkuTier | undefined);
     const sku: SkuTier = rawSku || 'pilot';
     const capabilities = getSkuPolicy(sku);
-    const visibleNav = getVisibleNavItems(sku);
-    
+    const baseNav = getVisibleNavItems(sku);
+
+    const hasWallet = !isAdmin;
+    const visibleNav = hasWallet ? baseNav : baseNav.filter((id) => id !== 'wallet');
+
     return {
       sku,
       capabilities,
       can: (capability: SkuCapability) => hasCapability(sku, capability),
       isInternal: sku === 'internal',
       isPilot: sku === 'pilot',
+      hasWallet,
       visibleNav,
       isNavVisible: (id: NavItemId) => visibleNav.includes(id),
     };

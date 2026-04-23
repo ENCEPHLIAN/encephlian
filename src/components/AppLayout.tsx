@@ -204,6 +204,7 @@ export default function AppLayout() {
   const isMobile = useIsMobile();
   
   const { profile, clinicContext, signOut } = useUserSession();
+  const { hasWallet } = useSku();
 
   const [commandOpen, setCommandOpen] = useState(false);
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
@@ -359,13 +360,15 @@ export default function AppLayout() {
                     </div>
                   </DropdownMenuItem>
                   
-                  <DropdownMenuItem onClick={() => navigate("/app/wallet")} className="py-2.5">
-                    <CreditCard className="mr-3 h-4 w-4" />
-                    <div>
-                      <p className="text-sm">Billing</p>
-                      <p className="text-xs text-muted-foreground">Tokens & payments</p>
-                    </div>
-                  </DropdownMenuItem>
+                  {hasWallet && (
+                    <DropdownMenuItem onClick={() => navigate("/app/wallet")} className="py-2.5">
+                      <CreditCard className="mr-3 h-4 w-4" />
+                      <div>
+                        <p className="text-sm">Billing</p>
+                        <p className="text-xs text-muted-foreground">Tokens & payments</p>
+                      </div>
+                    </DropdownMenuItem>
+                  )}
                   
                   <DropdownMenuSeparator className="my-2" />
                   
