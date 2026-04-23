@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 const TOKEN_PACKAGES = [
   // Base pack – no discount
@@ -34,7 +35,18 @@ export function TokenPurchase() {
         body: { tokens: packageTokens },
       });
 
-      if (orderError) throw orderError;
+      if (orderError) {
+        throw new Error(await formatEdgeFunctionError(orderError, orderData));
+      }
+      if (!orderData || typeof orderData !== "object") {
+        throw new Error("No response from payment server");
+      }
+      if ("error" in orderData && typeof (orderData as { error?: string }).error === "string") {
+        throw new Error((orderData as { error: string }).error);
+      }
+      if (!(orderData as { orderId?: string }).orderId || !(orderData as { keyId?: string }).keyId) {
+        throw new Error("Invalid order response — check Edge Function logs for create_order");
+      }
 
       // Load Razorpay script if not already loaded
       if (!(window as any).Razorpay) {
@@ -46,13 +58,13 @@ export function TokenPurchase() {
       }
 
       const options: any = {
-        key: orderData.keyId,
+        key: (orderData as { keyId: string }).keyId,
         // amount from edge function should already be in INR – Razorpay wants paise
-        amount: orderData.amountPaise,
-        currency: orderData.currency,
+        amount: (orderData as { amountPaise: number }).amountPaise,
+        currency: (orderData as { currency: string }).currency,
         name: "ENCEPHLIAN",
         description: `${packageTokens} tokens`,
-        order_id: orderData.orderId,
+        order_id: (orderData as { orderId: string }).orderId,
 
         handler: async (response: any) => {
           try {
@@ -64,11 +76,16 @@ export function TokenPurchase() {
               },
             });
 
-            if (verifyError) throw verifyError;
+            if (verifyError) {
+              throw new Error(await formatEdgeFunctionError(verifyError, verifyData));
+            }
+            if (verifyData && typeof verifyData === "object" && "error" in verifyData) {
+              throw new Error(String((verifyData as { error?: string }).error || "Verification failed"));
+            }
 
             toast({
               title: "Payment successful! 🎉",
-              description: `${verifyData.tokens_credited} tokens credited`,
+              description: `${(verifyData as { tokens_credited?: number })?.tokens_credited ?? packageTokens} tokens credited`,
             });
 
             // Fire-and-forget receipt email via edge function (uses RESEND_API_KEY)
@@ -88,6 +105,7 @@ export function TokenPurchase() {
             // Refresh wallet + payments
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
             await queryClient.refetchQueries({ queryKey: ["wallet-balance"] });
+            queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
             queryClient.invalidateQueries({ queryKey: ["payments"] });
           } catch (error: any) {
             toast({

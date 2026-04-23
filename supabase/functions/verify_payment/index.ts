@@ -18,9 +18,14 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Authenticate user
-    const authHeader = req.headers.get('Authorization')!;
-    const token = authHeader.replace('Bearer ', '');
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const token = authHeader.replace(/^Bearer\s+/i, '');
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
     if (userError || !user) {
@@ -37,8 +42,12 @@ serve(async (req) => {
       razorpayKeySecret
     );
 
-    if (generatedSignature !== razorpay_signature) {
-      console.error('Signature verification failed');
+    // Razorpay returns hex signatures; compare case-insensitively (some SDKs
+    // upper-case, crypto.subtle output is always lower-case).
+    const gen = generatedSignature.trim().toLowerCase();
+    const got = (razorpay_signature || '').trim().toLowerCase();
+    if (!got || gen.length !== got.length || gen !== got) {
+      console.error('Signature verification failed (length/gen match)');
       throw new Error('Invalid payment signature');
     }
 

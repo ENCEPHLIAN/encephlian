@@ -46,7 +46,9 @@ serve(async (req) => {
 
     console.log('Expected signature:', expectedSignature.substring(0, 10) + '...');
 
-    if (signature !== expectedSignature) {
+    const sigNorm = (signature || '').trim().toLowerCase();
+    const expNorm = expectedSignature.trim().toLowerCase();
+    if (!sigNorm || sigNorm.length !== expNorm.length || sigNorm !== expNorm) {
       console.error('Signature mismatch!');
       console.error('Received:', signature?.substring(0, 20));
       console.error('Expected:', expectedSignature.substring(0, 20));

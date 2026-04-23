@@ -8,6 +8,7 @@ import { Loader2, Zap, CheckCircle, Coins, ArrowRight, Clock } from "lucide-reac
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import dayjs from "dayjs";
 
 const TOP_UP_PACKS = [
@@ -57,8 +58,18 @@ export function PilotWalletCard() {
         body: { tokens },
       });
 
-      if (error) throw error;
-      if (!data?.keyId) throw new Error("Payment configuration not available. Please contact support.");
+      if (error) {
+        throw new Error(await formatEdgeFunctionError(error, data));
+      }
+      if (!data || typeof data !== "object") {
+        throw new Error("No response from payment server");
+      }
+      if ("error" in data && typeof (data as { error?: string }).error === "string") {
+        throw new Error((data as { error: string }).error);
+      }
+      if (!(data as { keyId?: string }).keyId || !(data as { orderId?: string }).orderId) {
+        throw new Error("Payment configuration not available. Please contact support.");
+      }
 
       // Load Razorpay
       if (!(window as any).Razorpay) {
@@ -80,7 +91,7 @@ export function PilotWalletCard() {
         order_id: data.orderId,
         handler: async (response: any) => {
           try {
-            const { error: verifyError } = await supabase.functions.invoke("verify_payment", {
+            const { data: verifyData, error: verifyError } = await supabase.functions.invoke("verify_payment", {
               body: {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -89,7 +100,14 @@ export function PilotWalletCard() {
             });
 
             if (verifyError) {
-              toast({ variant: "destructive", title: "Payment verification failed", description: verifyError.message });
+              const msg = await formatEdgeFunctionError(verifyError, verifyData);
+              toast({ variant: "destructive", title: "Payment verification failed", description: msg });
+            } else if (verifyData && typeof verifyData === "object" && "error" in verifyData) {
+              toast({
+                variant: "destructive",
+                title: "Payment verification failed",
+                description: String((verifyData as { error?: string }).error || "Unknown error"),
+              });
             } else {
               // Refresh wallet data
               await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });

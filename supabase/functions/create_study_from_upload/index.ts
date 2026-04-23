@@ -94,8 +94,15 @@ serve(async (req) => {
 
     const { sas_url, expires_at } = await sasRes.json();
     await supabase.from("studies").update({ uploaded_file_path: blobPath }).eq("id", studyId);
-    await supabase.from("study_files").insert({ study_id: studyId, path: blobPath, kind: fileType })
-      .maybeSingle();
+    const { error: studyFilesErr } = await supabase.from("study_files").insert({
+      study_id: studyId,
+      path: blobPath,
+      kind: fileType,
+    });
+    if (studyFilesErr) {
+      console.error(`[${studyId}] study_files insert:`, studyFilesErr);
+      // Non-fatal — study row + SAS are the critical path; log for ops.
+    }
 
     return new Response(JSON.stringify({
       studyId, sasUrl: sas_url, blobPath, expiresAt: expires_at,

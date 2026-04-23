@@ -13,6 +13,7 @@ import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -208,7 +209,12 @@ function InternalStudiesView() {
       const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
         body: { fileName: file.name },
       });
-      if (createError) throw createError;
+      if (createError) {
+        throw new Error(await formatEdgeFunctionError(createError, data));
+      }
+      if (data && typeof data === "object" && "error" in data && typeof (data as { error?: string }).error === "string") {
+        throw new Error((data as { error: string }).error);
+      }
       if (!data?.studyId) throw new Error("No study ID returned");
 
       const { studyId, sasUrl } = data;
@@ -235,13 +241,17 @@ function InternalStudiesView() {
 
       // Step 3: Trigger real C-Plane pipeline (async, does not wait for completion)
       toast({ title: "Pipeline started — MIND® processing..." });
-      const { error: pipelineError } = await supabase.functions.invoke("generate_ai_report", {
+      const { data: pipeData, error: pipelineError } = await supabase.functions.invoke("generate_ai_report", {
         body: { study_id: studyId },
       });
       if (pipelineError) {
-        console.error("Pipeline trigger error:", pipelineError);
-        // Don't throw — study exists, user can retry from detail page
-        toast({ title: "Study created", description: "Pipeline trigger failed — check status in study detail", variant: "destructive" });
+        const msg = await formatEdgeFunctionError(pipelineError, pipeData);
+        console.error("Pipeline trigger error:", pipelineError, pipeData);
+        toast({
+          title: "Study created",
+          description: `Pipeline trigger failed: ${msg}. Open the study and retry from the detail page.`,
+          variant: "destructive",
+        });
       } else {
         toast({ title: "Upload complete", description: "MIND® is processing your EEG. Results appear in 1–3 minutes." });
       }
