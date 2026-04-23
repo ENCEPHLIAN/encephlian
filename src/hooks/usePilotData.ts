@@ -201,8 +201,8 @@ export function usePilotData() {
               .update({ triage_progress: newProgress })
               .eq("id", study.id);
           }
-        } catch {
-          // Silently ignore individual study failures
+        } catch (err) {
+          console.error("[pilot] C-Plane status poll failed", study.id, err);
         }
       }
     };

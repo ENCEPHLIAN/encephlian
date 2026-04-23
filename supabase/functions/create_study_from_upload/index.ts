@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCplaneBaseUrl } from "../_shared/cplane.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
 
 /**
  * create_study_from_upload — A5: Direct Azure Blob Upload
@@ -14,8 +16,6 @@ import { corsHeaders } from "../_shared/cors.ts";
  *
  * After upload completes, call generate_ai_report({ study_id }) to start pipeline.
  */
-
-const CPLANE_URL = "https://encephlian-cplane.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -80,15 +80,34 @@ serve(async (req) => {
 
     const studyId = study.id;
     const blobPath = `${studyId}.${fileType}`;
+    const correlationId = crypto.randomUUID();
     console.log(`[${studyId}] Study created — fetching SAS token`);
 
+    await insertPipelineEvent(supabase, {
+      study_id: studyId,
+      step: "edge.create_study_from_upload.study_row",
+      status: "ok",
+      source: "supabase_edge",
+      correlation_id: correlationId,
+      detail: { fileName, fileType, user_id: user.id },
+    });
+
     // Get SAS token from C-Plane for direct browser->blob upload
-    const sasRes = await fetch(`${CPLANE_URL}/upload-token/${studyId}`, { method: "POST" });
+    const sasRes = await fetch(`${getCplaneBaseUrl()}/upload-token/${studyId}`, { method: "POST" });
 
     if (!sasRes.ok) {
+      const errBody = await sasRes.text().catch(() => "");
       console.error(`[${studyId}] C-Plane SAS error: ${sasRes.status}`);
+      await insertPipelineEvent(supabase, {
+        study_id: studyId,
+        step: "edge.create_study_from_upload.sas_error",
+        status: "error",
+        source: "supabase_edge",
+        correlation_id: correlationId,
+        detail: { http_status: sasRes.status, body_preview: errBody.slice(0, 2000) },
+      });
       return new Response(JSON.stringify({
-        studyId, sasUrl: null, blobPath, expiresAt: null, fallback: true,
+        studyId, sasUrl: null, blobPath, expiresAt: null, fallback: true, correlation_id: correlationId,
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -104,8 +123,17 @@ serve(async (req) => {
       // Non-fatal — study row + SAS are the critical path; log for ops.
     }
 
+    await insertPipelineEvent(supabase, {
+      study_id: studyId,
+      step: "edge.create_study_from_upload.sas_ok",
+      status: "ok",
+      source: "supabase_edge",
+      correlation_id: correlationId,
+      detail: { blobPath },
+    });
+
     return new Response(JSON.stringify({
-      studyId, sasUrl: sas_url, blobPath, expiresAt: expires_at,
+      studyId, sasUrl: sas_url, blobPath, expiresAt: expires_at, correlation_id: correlationId,
     }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error) {

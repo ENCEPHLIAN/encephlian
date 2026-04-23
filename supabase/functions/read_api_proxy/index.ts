@@ -1,5 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/cors.ts";
+import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
+import { extractStudyIdFromReadApiTail, isReadApiChunkBinPath } from "../_shared/read_api_path.ts";
 
 const EXPOSE_HEADERS = [
   "x-eeg-content-sha256",
@@ -9,6 +12,7 @@ const EXPOSE_HEADERS = [
   "x-eeg-length",
   "x-eeg-channel-count",
   "x-eeg-samples-per-channel",
+  "x-correlation-id",
 ].join(", ");
 
 function trimSlashes(s: string): string {
@@ -75,16 +79,70 @@ serve(async (req) => {
       body = await req.text();
     }
 
+    const studyId = extractStudyIdFromReadApiTail(tail);
+    const isChunk = isReadApiChunkBinPath(tail);
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const svcKey = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").trim();
+    const serviceClient = studyId && svcKey ? createClient(supabaseUrl, svcKey) : null;
+    const correlationId = crypto.randomUUID();
+    const t0 = performance.now();
+
+    if (serviceClient && studyId && !isChunk) {
+      await insertPipelineEvent(serviceClient, {
+        study_id: studyId,
+        step: "edge.read_api_proxy.request",
+        status: "info",
+        source: "supabase_edge",
+        correlation_id: correlationId,
+        detail: { method: req.method, path_tail: tail.slice(0, 500) },
+      });
+    }
+
     const upstream = await fetch(targetUrl, { 
       method: req.method, 
       headers,
       body: req.method === "POST" ? body : undefined,
     });
 
+    const upstreamMs = Math.round(performance.now() - t0);
+
+    if (serviceClient && studyId) {
+      if (upstream.status >= 400) {
+        const prev = await upstream.clone().text().catch(() => "");
+        await insertPipelineEvent(serviceClient, {
+          study_id: studyId,
+          step: "edge.read_api_proxy.upstream_error",
+          status: "error",
+          source: "supabase_edge",
+          correlation_id: correlationId,
+          detail: {
+            http_status: upstream.status,
+            upstream_ms: upstreamMs,
+            path_tail: tail.slice(0, 500),
+            body_preview: prev.slice(0, 800),
+          },
+        });
+      } else if (!isChunk) {
+        await insertPipelineEvent(serviceClient, {
+          study_id: studyId,
+          step: "edge.read_api_proxy.upstream_ok",
+          status: "ok",
+          source: "supabase_edge",
+          correlation_id: correlationId,
+          detail: {
+            http_status: upstream.status,
+            upstream_ms: upstreamMs,
+            path_tail: tail.slice(0, 500),
+          },
+        });
+      }
+    }
+
     const outHeaders = new Headers(upstream.headers);
     // Ensure CORS + header visibility for diagnostics UI
     Object.entries(corsHeaders).forEach(([k, v]) => outHeaders.set(k, v));
     outHeaders.set("Access-Control-Expose-Headers", EXPOSE_HEADERS);
+    if (studyId) outHeaders.set("X-Correlation-Id", correlationId);
 
     return new Response(upstream.body, {
       status: upstream.status,

@@ -564,6 +564,47 @@ export type Database = {
           },
         ]
       }
+      study_pipeline_events: {
+        Row: {
+          id: string
+          study_id: string
+          created_at: string
+          step: string
+          status: string
+          source: string
+          detail: Json
+          correlation_id: string | null
+        }
+        Insert: {
+          id?: string
+          study_id: string
+          created_at?: string
+          step: string
+          status: string
+          source: string
+          detail?: Json
+          correlation_id?: string | null
+        }
+        Update: {
+          id?: string
+          study_id?: string
+          created_at?: string
+          step?: string
+          status?: string
+          source?: string
+          detail?: Json
+          correlation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_pipeline_events_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       service_health_logs: {
         Row: {
           checked_at: string | null

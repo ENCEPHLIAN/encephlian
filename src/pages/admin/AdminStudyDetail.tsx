@@ -89,6 +89,21 @@ export default function AdminStudyDetail() {
     },
   });
 
+  const { data: pipelineEvents = [] } = useQuery({
+    queryKey: ["admin-pipeline-events", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("study_pipeline_events")
+        .select("id, created_at, step, status, source, detail, correlation_id")
+        .eq("study_id", id!)
+        .order("created_at", { ascending: false })
+        .limit(120);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   // Mutations
   const updateStudyMutation = useMutation({
     mutationFn: async (updates: Record<string, any>) => {
@@ -152,6 +167,7 @@ export default function AdminStudyDetail() {
         event: "admin_rerun_canonicalization",
         payload: { cplane: cplaneBase },
       });
+      queryClient.invalidateQueries({ queryKey: ["admin-pipeline-events", id] });
       toast.success("C-Plane processing triggered");
     } catch (err: any) {
       toast.error(`Canonicalization failed: ${err.message}`);
@@ -457,6 +473,40 @@ export default function AdminStudyDetail() {
                 </div>
               ) : (
                 <p className="text-muted-foreground text-center py-4">No files found</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Pipeline trace (infra) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base font-mono">Pipeline trace</CardTitle>
+              <CardDescription>Edge → C-Plane → I-Plane append-only log</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pipelineEvents.length === 0 ? (
+                <p className="text-muted-foreground text-center py-4 text-sm">No pipeline rows</p>
+              ) : (
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {pipelineEvents.map((ev: any) => (
+                    <div key={ev.id} className="border-b border-border/40 pb-2 last:border-0 text-xs font-mono">
+                      <div className="flex flex-wrap gap-2 items-center text-muted-foreground">
+                        <span>{format(new Date(ev.created_at), "MMM d HH:mm:ss")}</span>
+                        <Badge variant={ev.status === "error" ? "destructive" : "outline"}>{ev.status}</Badge>
+                        <Badge variant="secondary">{ev.source}</Badge>
+                      </div>
+                      <p className="mt-1 break-all">{ev.step}</p>
+                      {ev.correlation_id ? (
+                        <p className="text-[10px] text-muted-foreground">corr {ev.correlation_id}</p>
+                      ) : null}
+                      {ev.detail && Object.keys(ev.detail).length > 0 ? (
+                        <pre className="mt-1 bg-muted/40 rounded p-2 max-h-24 overflow-auto whitespace-pre-wrap">
+                          {JSON.stringify(ev.detail, null, 2)}
+                        </pre>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               )}
             </CardContent>
           </Card>

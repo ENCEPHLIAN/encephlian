@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.58.0";
+import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -98,6 +99,7 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let study_id: string | undefined;
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -112,7 +114,9 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { study_id, file_path, file_type }: ParseRequest = await req.json();
+    const body: ParseRequest = await req.json();
+    study_id = body.study_id;
+    const { file_path, file_type } = body;
 
     console.log(`Parsing ${file_type} metadata for study: ${study_id}, file: ${file_path}`);
 
@@ -209,6 +213,19 @@ serve(async (req) => {
 
     console.log(`Uploaded metadata to ${jsonPath}`);
 
+    await insertPipelineEvent(supabase, {
+      study_id,
+      step: "edge.parse_eeg_study.complete",
+      status: "ok",
+      source: "supabase_edge",
+      detail: {
+        user_id: user.id,
+        file_type,
+        num_channels: metadataJson.num_channels,
+        sample_rate: metadataJson.sampleRate,
+      },
+    });
+
     // Update study state
     await supabase
       .from('studies')
@@ -243,6 +260,22 @@ serve(async (req) => {
     );
   } catch (error: any) {
     console.error('Parse error:', error);
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      if (study_id) {
+        const svc = createClient(supabaseUrl, supabaseKey);
+        await insertPipelineEvent(svc, {
+          study_id,
+          step: "edge.parse_eeg_study.error",
+          status: "error",
+          source: "supabase_edge",
+          detail: { message: String(error?.message ?? error) },
+        });
+      }
+    } catch {
+      // ignore secondary logging failures
+    }
     return new Response(
       JSON.stringify({ error: error.message }),
       {

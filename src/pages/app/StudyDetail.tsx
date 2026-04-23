@@ -28,7 +28,8 @@ import {
   Zap,
   FileIcon,
   Eye,
-  Brain
+  Brain,
+  ListOrdered,
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -53,6 +54,8 @@ const STATE_CONFIG: Record<string, { label: string; color: string; icon: any }> 
   complete: { label: "Analysis Ready", color: "bg-cyan-500", icon: Brain },
   in_review: { label: "In Review", color: "bg-orange-500", icon: Eye },
   signed: { label: "Signed", color: "bg-emerald-500", icon: CheckCircle2 },
+  failed: { label: "Failed", color: "bg-red-500", icon: AlertCircle },
+  completed: { label: "Completed", color: "bg-cyan-500", icon: CheckCircle2 },
 };
 
 const TRIAGE_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -75,6 +78,21 @@ export default function StudyDetail() {
   const [runningTriage, setRunningTriage] = useState(false);
 
   const IPLANE_BASE = import.meta.env.VITE_IPLANE_BASE as string | undefined;
+
+  const { data: pipelineEvents = [] } = useQuery({
+    queryKey: ["study-pipeline-events", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("study_pipeline_events")
+        .select("id, created_at, step, status, source, detail, correlation_id")
+        .eq("study_id", id!)
+        .order("created_at", { ascending: false })
+        .limit(80);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!id,
+  });
 
   const { data: study, isLoading, isError, refetch } = useQuery({
     queryKey: ["study-detail", id],
@@ -139,6 +157,7 @@ export default function StudyDetail() {
       toast({ title: "Pipeline started", description: "MIND® is processing. Results appear in 1–3 minutes." });
       refetch();
       refetchMind();
+      queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
     } catch (error) {
       console.error("Triage error:", error);
       toast({
@@ -164,6 +183,7 @@ export default function StudyDetail() {
       
       toast({ title: "AI Report generated!", description: "Report is ready for review" });
       refetch();
+      queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
     } catch (error) {
       console.error("AI generation error:", error);
       toast({
@@ -412,6 +432,66 @@ export default function StudyDetail() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <ListOrdered className="h-4 w-4 text-primary" />
+                Pipeline activity
+              </CardTitle>
+              <CardDescription>
+                Append-only trace from Edge, C-Plane, and I-Plane. Correlation IDs group one upload with its
+                downstream steps.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {pipelineEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No pipeline events yet. They appear after you upload and processing starts.
+                </p>
+              ) : (
+                <ScrollArea className="h-[260px] pr-4">
+                  <ul className="space-y-3 text-sm">
+                    {pipelineEvents.map((ev: any) => (
+                      <li key={ev.id} className="border-b border-border/50 pb-3 last:border-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {dayjs(ev.created_at).format("MMM D, YYYY HH:mm:ss")}
+                          </span>
+                          <Badge
+                            variant={
+                              ev.status === "error"
+                                ? "destructive"
+                                : ev.status === "skipped"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                            className="text-xs"
+                          >
+                            {ev.status}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs font-mono">
+                            {ev.source}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 font-mono text-xs break-all">{ev.step}</p>
+                        {ev.correlation_id ? (
+                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
+                            correlation: {ev.correlation_id}
+                          </p>
+                        ) : null}
+                        {ev.detail && Object.keys(ev.detail).length > 0 ? (
+                          <pre className="mt-2 text-xs bg-muted/60 rounded-md p-2 overflow-x-auto max-h-28 whitespace-pre-wrap">
+                            {JSON.stringify(ev.detail, null, 2)}
+                          </pre>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid gap-4 md:grid-cols-2">
             {/* Patient Information */}
             <Card>

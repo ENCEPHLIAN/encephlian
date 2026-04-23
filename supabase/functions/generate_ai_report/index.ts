@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getCplaneBaseUrl } from "../_shared/cplane.ts";
 import { corsHeaders } from "../_shared/cors.ts";
+import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
 
 /**
  * generate_ai_report — A3/A5: Trigger real C-Plane pipeline
@@ -10,13 +12,11 @@ import { corsHeaders } from "../_shared/cors.ts";
  * and then triggers I-Plane for MIND®Triage inference.
  *
  * The C-Plane processes asynchronously. Study state transitions:
- *   pending → uploaded (this function) → processing → complete (I-Plane)
+ *   pending → uploaded (this function) → processing → completed (I-Plane REST patch)
  *
  * Request:  { study_id: string }
  * Response: { success: true, status: "processing" }
  */
-
-const CPLANE_URL = "https://encephlian-cplane.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -47,6 +47,8 @@ serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 
+    const correlationId = crypto.randomUUID();
+
     // Verify study exists and user has access
     const { data: study, error: studyError } = await supabase
       .from("studies")
@@ -72,21 +74,59 @@ serve(async (req) => {
       );
     }
 
-    // Idempotency: if already processing, complete, or signed — do not re-run
-    if (study.state === "processing" || study.state === "complete" || study.state === "signed") {
+    // Idempotency — I-Plane PATCH uses state=completed (not "complete"); include legacy + review states
+    const noRequeueStates = new Set([
+      "processing",
+      "signed",
+      "completed",
+      "complete",
+      "in_review",
+      "ai_draft",
+    ]);
+    if (noRequeueStates.has(study.state)) {
+      await insertPipelineEvent(supabase, {
+        study_id,
+        step: "edge.generate_ai_report.idempotent_skip",
+        status: "skipped",
+        source: "supabase_edge",
+        correlation_id: correlationId,
+        detail: { state: study.state, user_id: user.id },
+      });
       return new Response(
-        JSON.stringify({ success: true, status: study.state, message: "Pipeline already running or complete" }),
+        JSON.stringify({
+          success: true,
+          status: study.state,
+          message: "Pipeline already running or complete",
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
+
+    await insertPipelineEvent(supabase, {
+      study_id,
+      step: "edge.generate_ai_report.request",
+      status: "info",
+      source: "supabase_edge",
+      correlation_id: correlationId,
+      detail: { user_id: user.id, prior_state: study.state },
+    });
 
     // Mark as uploaded (blob arrived, pipeline starting)
     await supabase.from("studies").update({ state: "uploaded" }).eq("id", study_id);
 
     console.log(`[${study_id}] Triggering C-Plane pipeline`);
 
+    await insertPipelineEvent(supabase, {
+      study_id,
+      step: "edge.generate_ai_report.cplane_dispatch",
+      status: "info",
+      source: "supabase_edge",
+      correlation_id: correlationId,
+      detail: { cplane_base: getCplaneBaseUrl() },
+    });
+
     // Fire-and-forget: C-Plane runs async, I-Plane updates Supabase on completion
-    const cplaneRes = await fetch(`${CPLANE_URL}/process`, {
+    const cplaneRes = await fetch(`${getCplaneBaseUrl()}/process`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ study_id }),
@@ -95,20 +135,48 @@ serve(async (req) => {
     if (!cplaneRes.ok) {
       const errText = await cplaneRes.text();
       console.error(`[${study_id}] C-Plane /process error ${cplaneRes.status}: ${errText}`);
+      await insertPipelineEvent(supabase, {
+        study_id,
+        step: "edge.generate_ai_report.cplane_http_error",
+        status: "error",
+        source: "supabase_edge",
+        correlation_id: correlationId,
+        detail: {
+          http_status: cplaneRes.status,
+          body_preview: errText.slice(0, 2000),
+        },
+      });
       // Revert state so user can retry
       await supabase.from("studies").update({ state: "pending" }).eq("id", study_id);
       return new Response(
-        JSON.stringify({ error: `Pipeline trigger failed: ${cplaneRes.status}` }),
+        JSON.stringify({
+          error: `Pipeline trigger failed: ${cplaneRes.status}`,
+          correlation_id: correlationId,
+        }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
-    // Update to processing — I-Plane will set "complete" when done
-    await supabase.from("studies").update({ state: "processing" }).eq("id", study_id);
+    // Align with dashboard / Lanes (triage_status mirrors C-Plane / I-Plane progress)
+    await supabase.from("studies").update({
+      state: "processing",
+      triage_status: "processing",
+      triage_progress: 10,
+      triage_started_at: new Date().toISOString(),
+    }).eq("id", study_id);
     console.log(`[${study_id}] C-Plane accepted — pipeline running`);
 
+    await insertPipelineEvent(supabase, {
+      study_id,
+      step: "edge.generate_ai_report.cplane_queued",
+      status: "ok",
+      source: "supabase_edge",
+      correlation_id: correlationId,
+      detail: { http_status: cplaneRes.status },
+    });
+
     return new Response(
-      JSON.stringify({ success: true, status: "processing" }),
+      JSON.stringify({ success: true, status: "processing", correlation_id: correlationId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 

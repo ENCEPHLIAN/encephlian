@@ -145,6 +145,17 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
         </div>
       </div>
 
+      {report.inference && (
+        <details className="rounded-lg border bg-muted/20 text-xs">
+          <summary className="cursor-pointer px-3 py-2 font-medium text-foreground">
+            Inference provenance (models and roadmap)
+          </summary>
+          <pre className="px-3 pb-3 overflow-x-auto text-[10px] font-mono whitespace-pre-wrap text-muted-foreground">
+            {JSON.stringify(report.inference, null, 2)}
+          </pre>
+        </details>
+      )}
+
       {/* MIND®Triage + SCORE clinical significance */}
       <div className={`rounded-lg border-2 p-4 ${isAbnormal ? "border-destructive/40 bg-destructive/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
         <div className="flex items-center gap-3">
