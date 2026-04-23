@@ -82,10 +82,12 @@ serve(async (req) => {
 
     console.log('Payment record updated to completed');
 
-    // Credit wallet
+    // Credit wallet (also writes a wallet_transactions row via the DB
+    // function — see 20260423010000_credit_wallet_ledger.sql).
     const { error: creditError } = await supabase.rpc('credit_wallet', {
       p_user_id: user.id,
       p_tokens: payment.credits_purchased,
+      p_reason: `razorpay top-up · order ${razorpay_order_id}`,
     });
 
     if (creditError) {

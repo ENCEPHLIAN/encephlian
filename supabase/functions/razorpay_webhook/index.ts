@@ -115,6 +115,7 @@ serve(async (req) => {
           const { error: creditError } = await supabase.rpc("credit_wallet", {
             p_user_id: paymentRecord.user_id,
             p_tokens: paymentRecord.credits_purchased,
+            p_reason: `razorpay webhook · ${eventName} · order ${orderId}`,
           });
 
           if (creditError) {
