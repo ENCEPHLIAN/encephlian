@@ -41,6 +41,7 @@ import { useState } from "react";
 import { useSku } from "@/hooks/useSku";
 import { SkuGate } from "@/components/SkuGate";
 import { fetchJson } from "@/shared/readApiClient";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 dayjs.extend(relativeTime);
 
@@ -271,6 +272,7 @@ export default function StudyDetail() {
   const patientId = meta?.patient_id || `ID-${study.id.slice(0, 6).toUpperCase()}`;
   const patientAge = meta?.patient_age;
   const patientGender = meta?.patient_gender;
+  const sourceFileLine = formatStudySourceLine(meta, study.original_format ?? null);
   const stateConfig = STATE_CONFIG[study.state || "uploaded"] || STATE_CONFIG.uploaded;
   const triageConfig = TRIAGE_STATUS_CONFIG[study.triage_status || "pending"] || TRIAGE_STATUS_CONFIG.pending;
   const report = study.reports?.[0];
@@ -336,6 +338,12 @@ export default function StudyDetail() {
                 {patientAge && ` • ${patientAge}y`}
                 {patientGender && `/${patientGender.charAt(0).toUpperCase()}`}
               </CardDescription>
+              {sourceFileLine && (
+                <p className="text-sm text-muted-foreground flex items-center gap-2 pt-0.5">
+                  <FileIcon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate" title={sourceFileLine}>{sourceFileLine}</span>
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2">

@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 // Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);
@@ -363,7 +364,8 @@ export default function Dashboard() {
                       patientAge ? `${patientAge}y` : null,
                       patientGender ? patientGender.charAt(0).toUpperCase() : null
                     ].filter(Boolean).join("/");
-                    
+                    const fileLine = formatStudySourceLine(meta, study.original_format ?? null);
+
                     return (
                       <div 
                         key={study.id} 
@@ -390,6 +392,11 @@ export default function Dashboard() {
                             <p className="text-xs text-muted-foreground">
                               {meta?.patient_id || study.id.slice(0, 8)} • {dayjs(study.created_at).format("MMM D, h:mm A")}
                             </p>
+                            {fileLine && (
+                              <p className="text-[11px] text-muted-foreground/90 truncate max-w-[200px] sm:max-w-[280px]" title={fileLine}>
+                                {fileLine}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <Badge variant={isCompleted ? "default" : isProcessing ? "secondary" : "outline"}>

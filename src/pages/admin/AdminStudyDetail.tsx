@@ -29,6 +29,7 @@ import {
 import { format } from "date-fns";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Link } from "react-router-dom";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 export default function AdminStudyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -361,6 +362,7 @@ export default function AdminStudyDetail() {
   }
 
   const meta = study.meta as any;
+  const adminSourceLine = formatStudySourceLine(meta, study.original_format ?? null);
 
   return (
     <div className="space-y-6">
@@ -372,6 +374,11 @@ export default function AdminStudyDetail() {
         <div>
           <h1 className="text-xl font-mono font-bold">Study Detail</h1>
           <p className="text-sm text-muted-foreground font-mono">{id}</p>
+          {adminSourceLine && (
+            <p className="text-sm text-muted-foreground mt-1 max-w-xl truncate" title={adminSourceLine}>
+              {adminSourceLine}
+            </p>
+          )}
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Badge variant={study.sla === "STAT" ? "destructive" : "secondary"} className="font-mono">
@@ -433,11 +440,19 @@ export default function AdminStudyDetail() {
 
               <Separator />
 
-              <div>
-                <Label className="text-xs text-muted-foreground">Uploaded File</Label>
-                <p className="font-mono text-sm mt-1 break-all">
-                  {study.uploaded_file_path || "—"}
-                </p>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Source recording</Label>
+                  <p className="text-sm mt-1 break-words">
+                    {adminSourceLine || "—"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Storage reference</Label>
+                  <p className="font-mono text-xs mt-1 break-all text-muted-foreground">
+                    {study.uploaded_file_path || "—"}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>

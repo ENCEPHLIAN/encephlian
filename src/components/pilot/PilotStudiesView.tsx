@@ -18,6 +18,7 @@ import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { cn } from "@/lib/utils";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 export default function PilotStudiesView() {
   const navigate = useNavigate();
@@ -217,6 +218,7 @@ export default function PilotStudiesView() {
           </div>
           {pendingStudies.map((study) => {
             const meta = study.meta as any;
+            const src = formatStudySourceLine(meta, study.original_format ?? null);
             return (
               <Card
                 key={study.id}
@@ -235,6 +237,9 @@ export default function PilotStudiesView() {
                         <p className="text-[11px] text-muted-foreground">
                           {dayjs(study.created_at).format("MMM D, h:mm A")}
                         </p>
+                        {src && (
+                          <p className="text-[11px] text-muted-foreground/90 truncate" title={src}>{src}</p>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -265,6 +270,7 @@ export default function PilotStudiesView() {
           </div>
           {processingStudies.map((study) => {
             const meta = study.meta as any;
+            const src = formatStudySourceLine(meta, study.original_format ?? null);
             const progress = study.triage_progress || 0;
             const label =
               progress < 30
@@ -285,6 +291,9 @@ export default function PilotStudiesView() {
                           {meta?.patient_name || "Patient"}
                         </p>
                         <p className="text-[11px] text-muted-foreground">{label}</p>
+                        {src && (
+                          <p className="text-[11px] text-muted-foreground/90 truncate" title={src}>{src}</p>
+                        )}
                       </div>
                     </div>
                     <span className="text-xs font-semibold text-primary tabular-nums">
@@ -311,6 +320,7 @@ export default function PilotStudiesView() {
           </div>
           {completedStudies.slice(0, 15).map((study) => {
             const meta = study.meta as any;
+            const src = formatStudySourceLine(meta, study.original_format ?? null);
             const isSigned = study.state === "signed";
             return (
               <Card
@@ -345,6 +355,9 @@ export default function PilotStudiesView() {
                           <span className="mx-1">·</span>
                           {study.sla}
                         </p>
+                        {src && (
+                          <p className="text-[11px] text-muted-foreground/90 truncate" title={src}>{src}</p>
+                        )}
                       </div>
                     </div>
                     <Button

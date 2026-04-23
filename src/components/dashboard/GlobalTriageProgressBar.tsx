@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Sparkles, FileSearch, FileCheck, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 interface ProcessingStudy {
   id: string;
   triage_status?: string;
   triage_progress?: number;
   meta?: any;
+  original_format?: string | null;
 }
 
 interface GlobalTriageProgressBarProps {
@@ -125,8 +127,13 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
   const Icon = currentStage.icon;
 
   // Get patient info for single study display
-  const singleStudyMeta = studies.length === 1 ? (studies[0].meta as any) : null;
+  const singleStudy = studies.length === 1 ? studies[0] : null;
+  const singleStudyMeta = singleStudy ? (singleStudy.meta as any) : null;
   const patientDisplay = singleStudyMeta?.patient_name || singleStudyMeta?.patient_id || null;
+  const fileLine =
+    singleStudy && singleStudyMeta
+      ? formatStudySourceLine(singleStudyMeta, singleStudy.original_format ?? null)
+      : null;
 
   return (
     <div className="fixed top-14 left-0 right-0 z-40">
@@ -155,6 +162,11 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
                   {patientDisplay && (
                     <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                       {patientDisplay}
+                    </span>
+                  )}
+                  {fileLine && (
+                    <span className="text-xs text-muted-foreground bg-muted/80 px-2 py-0.5 rounded-full max-w-[180px] truncate" title={fileLine}>
+                      {fileLine}
                     </span>
                   )}
                 </div>

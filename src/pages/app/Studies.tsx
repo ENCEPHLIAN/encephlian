@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -43,7 +44,8 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
   onNavigate: (path: string) => void;
 }) => {
   const meta = study.meta as any;
-  
+  const sourceLine = formatStudySourceLine(meta, study.original_format ?? null);
+
   // Build anonymized patient demographics string
   const patientAge = meta?.patient_age;
   const patientGender = meta?.patient_gender;
@@ -68,6 +70,11 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             {meta?.patient_id || "N/A"}
             {study.sample && <Badge variant="outline" className="ml-1 text-[10px]">Sample</Badge>}
           </div>
+          {sourceLine && (
+            <div className="text-[11px] text-muted-foreground/90 max-w-[220px] sm:max-w-[280px] truncate mt-0.5" title={sourceLine}>
+              {sourceLine}
+            </div>
+          )}
         </div>
       </TableCell>
       <TableCell className="hidden sm:table-cell text-sm">{(study.clinics as any)?.name || "—"}</TableCell>
@@ -356,7 +363,7 @@ function InternalStudiesView() {
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by patient name or ID..."
+                  placeholder="Search by patient, ID, or recording filename…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10"

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import { useStudiesData, Study } from "@/hooks/useStudiesData";
+import { formatStudySourceLine } from "@/lib/studySourceFile";
 
 /* ── SLA config ─────────────────────────────────── */
 
@@ -72,6 +73,7 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
   ].filter(Boolean).join("/");
 
   const isStat = study.sla === "STAT";
+  const srcLine = formatStudySourceLine(meta, study.original_format ?? null);
 
   return (
     <Card
@@ -106,6 +108,11 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
         <p className="text-[11px] text-muted-foreground font-mono truncate">
           {meta?.patient_id || study.id.slice(0, 8)}
         </p>
+        {srcLine && (
+          <p className="text-[10px] text-muted-foreground/90 truncate" title={srcLine}>
+            {srcLine}
+          </p>
+        )}
 
         {/* Row 3: Progress bar (processing only) */}
         {isProcessing && (

@@ -16,6 +16,7 @@ import { Loader2, Search, Trash2, RotateCcw, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatStudySourceLine, getStudyOriginalFilename } from "@/lib/studySourceFile";
 
 type Study = {
   id: string;
@@ -24,6 +25,7 @@ type Study = {
   sla: string;
   state: string | null;
   meta: any;
+  original_format?: string | null;
   created_at: string;
   study_key?: string | null;
   clinic_name?: string;
@@ -93,10 +95,13 @@ export default function AdminStudies() {
   });
 
   const filtered = studies?.filter((s) => {
+    const fn = getStudyOriginalFilename(s.meta)?.toLowerCase() ?? "";
     const matchSearch = !search
       || s.id.toLowerCase().includes(search.toLowerCase())
       || s.meta?.patient_id?.toLowerCase().includes(search.toLowerCase())
-      || s.clinic_name?.toLowerCase().includes(search.toLowerCase());
+      || s.meta?.patient_name?.toLowerCase().includes(search.toLowerCase())
+      || s.clinic_name?.toLowerCase().includes(search.toLowerCase())
+      || fn.includes(search.toLowerCase());
     const matchState = stateFilter === "all" || s.state === stateFilter;
     return matchSearch && matchState;
   }) ?? [];
@@ -126,7 +131,7 @@ export default function AdminStudies() {
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="ID, patient, clinic…"
+            placeholder="ID, patient, file, clinic…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-8 h-8 text-sm"
@@ -161,6 +166,9 @@ export default function AdminStudies() {
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Study</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Clinic</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Patient</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden lg:table-cell max-w-[200px]">
+                  Recording
+                </th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">State</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
                 <th className="px-4 py-2.5 w-24" />
@@ -182,6 +190,11 @@ export default function AdminStudies() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">{s.clinic_name}</td>
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {s.meta?.patient_id || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell max-w-[200px]">
+                      <span className="line-clamp-2 break-all" title={formatStudySourceLine(s.meta, s.original_format ?? null) || undefined}>
+                        {formatStudySourceLine(s.meta, s.original_format ?? null) || "—"}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <Badge

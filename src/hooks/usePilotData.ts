@@ -12,6 +12,7 @@ export interface PilotStudy {
   state: string;
   created_at: string;
   meta: any;
+  original_format: string | null;
   triage_status: string | null;
   triage_progress: number | null;
   triage_completed_at: string | null;
@@ -19,7 +20,8 @@ export interface PilotStudy {
   tokens_deducted: number | null;
 }
 
-const STUDY_COLUMNS = "id, study_key, sla, state, created_at, meta, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
+const STUDY_COLUMNS =
+  "id, study_key, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted";
 
 /**
  * Single lightweight hook for ALL Pilot SKU data needs.
