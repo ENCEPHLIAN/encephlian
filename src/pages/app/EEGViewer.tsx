@@ -1,12 +1,11 @@
 // src/pages/app/EEGViewer.tsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
-import { EEGControls, SPEED_OPTIONS, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
+import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
@@ -147,10 +146,9 @@ export default function EEGViewer() {
 
   const cache       = useRef<Map<string, number[][]>>(new Map());
   const reqId       = useRef(0);
-  /** One-time hydrate from URL (?viewT / ?viewW / segment ?t) per study load */
-  const urlViewHydratedRef = useRef(false);
-  /** Skip pushing viewT to URL until hydrate finished (avoids clobbering deep links) */
-  const urlWriteReadyRef = useRef(false);
+  const didSeek     = useRef(false);
+  /** Strip legacy ?viewT / ?viewW once per study (old links; no longer used) */
+  const strippedLegacyViewParamsRef = useRef(false);
   // Raw EDF fallback — set when canonical zarr not yet available
   const edfReader        = useRef<EdfChunkReader | null>(null);
   const [rawEdfMode, setRawEdfMode] = useState(false);
@@ -164,6 +162,8 @@ export default function EEGViewer() {
   const rawMetaRef       = useRef<Meta | null>(null);
   const canonicalMetaRef = useRef<Meta | null>(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
+  /** True once canonical (ESF/zarr) meta exists — drives ESF toggle (refs do not re-render). */
+  const [canonicalPresent, setCanonicalPresent] = useState(false);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
   const globalTime = windowStart + cursor;
@@ -225,8 +225,8 @@ export default function EEGViewer() {
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
     setSignalLayer("esf"); signalLayerRef.current = "esf";
     setEsfPollAttempt(0);
-    urlViewHydratedRef.current = false;
-    urlWriteReadyRef.current = false;
+    didSeek.current = false;
+    strippedLegacyViewParamsRef.current = false;
     cache.current.clear(); edfReader.current = null;
     rawEdfRef.current = null; rawMetaRef.current = null; canonicalMetaRef.current = null;
     if (upgradeTimerRef.current) { clearTimeout(upgradeTimerRef.current); upgradeTimerRef.current = null; }
@@ -259,6 +259,7 @@ export default function EEGViewer() {
         const m = (r.data?.meta ?? r.data) as Meta;
         setMeta(m);
         canonicalMetaRef.current = m;
+        setCanonicalPresent(true);
       })
       .catch(async () => {
         if (!alive) return;
@@ -312,6 +313,7 @@ export default function EEGViewer() {
                   upgradeTimerRef.current = null;
                   const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
                   canonicalMetaRef.current = newMeta;
+                  setCanonicalPresent(true);
                   // Auto-upgrade only if user hasn't explicitly switched to raw
                   if (signalLayerRef.current === "esf") {
                     edfReader.current = null;
@@ -350,57 +352,71 @@ export default function EEGViewer() {
     fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
   }, [studyId]);
 
-  // ── Effects: hydrate timeline from URL (?viewT / ?viewW / segment ?t) ─────────
+  // ── Effects: auto-seek from ?t= (segment deep links) ──────────────────────────
   useEffect(() => {
-    if (!meta || !studyId || urlViewHydratedRef.current) return;
-    urlViewHydratedRef.current = true;
-    urlWriteReadyRef.current = false;
+    if (!meta || didSeek.current) return;
+    const t = parseFloat(searchParams.get("t") ?? "");
+    if (!isFinite(t)) return;
+    seekTo(t);
+    didSeek.current = true;
+  }, [meta, searchParams, seekTo]);
 
-    const dur = meta.n_samples / meta.sampling_rate_hz;
-    const viewWParsed = parseFloat(searchParams.get("viewW") ?? "");
-    let wSec = 10;
-    if (isFinite(viewWParsed)) wSec = snapViewWindowSec(viewWParsed);
-    flushSync(() => {
-      setWindowSec(wSec);
-    });
-
-    const focusSeg = searchParams.get("focus") === "segment";
-    const tParam = parseFloat(searchParams.get("t") ?? "");
-    const viewT = parseFloat(searchParams.get("viewT") ?? "");
-
-    let target: number | null = null;
-    if (focusSeg && isFinite(tParam)) target = tParam;
-    else if (isFinite(viewT)) target = viewT;
-    else if (!focusSeg && isFinite(tParam)) target = tParam;
-
-    if (target != null && isFinite(target)) {
-      const tt = clamp(target, 0, Math.max(0, dur - 1e-6));
-      const stride = wSec / 2;
-      const ws = clamp(Math.floor(tt / stride) * stride, 0, Math.max(0, dur - wSec));
-      setPlaying(false);
-      setWindowStart(ws);
-      setCursor(clamp(tt - ws, 0, wSec));
+  // ── Effects: drop legacy viewT/viewW query keys (one-time per study) ─────────
+  useEffect(() => {
+    if (!meta || strippedLegacyViewParamsRef.current) return;
+    if (!searchParams.has("viewT") && !searchParams.has("viewW")) {
+      strippedLegacyViewParamsRef.current = true;
+      return;
     }
+    strippedLegacyViewParamsRef.current = true;
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        p.delete("viewT");
+        p.delete("viewW");
+        return p;
+      },
+      { replace: true },
+    );
+  }, [meta, searchParams, setSearchParams]);
 
-    urlWriteReadyRef.current = true;
-  }, [meta, studyId, searchParams]);
-
-  // ── Effects: persist viewer window in URL (debounced) ────────────────────────
+  // ── Effects: preload raw EDF in background when ESF is available (fast Raw) ──
   useEffect(() => {
-    if (!studyId || !meta || !urlWriteReadyRef.current) return;
-    const t = setTimeout(() => {
-      setSearchParams(
-        (prev) => {
-          const p = new URLSearchParams(prev);
-          p.set("viewT", (windowStart + cursor).toFixed(3));
-          p.set("viewW", String(windowSec));
-          return p;
-        },
-        { replace: true },
-      );
-    }, 450);
-    return () => clearTimeout(t);
-  }, [windowStart, cursor, windowSec, studyId, meta, setSearchParams]);
+    if (!studyId || rawEdfRef.current || rawEdfMode) return;
+    if (!canonicalPresent) return;
+    const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
+    if (!CPLANE_BASE) return;
+
+    let alive = true;
+    const tid = setTimeout(() => {
+      void (async () => {
+        try {
+          const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
+          if (!alive || !tokenRes.ok) return;
+          const { sas_url: sasUrl } = await tokenRes.json();
+          const res = await fetch(sasUrl);
+          if (!alive || !res.ok) return;
+          const buf = await res.arrayBuffer();
+          const reader = new EdfChunkReader(buf);
+          const rawM: Meta = {
+            n_channels: reader.nChannels,
+            sampling_rate_hz: reader.sampleRate,
+            n_samples: reader.totalSamples,
+            channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+          };
+          if (!alive) return;
+          rawEdfRef.current = reader;
+          rawMetaRef.current = rawM;
+        } catch {
+          /* non-fatal: Raw still works on demand */
+        }
+      })();
+    }, 500);
+    return () => {
+      alive = false;
+      clearTimeout(tid);
+    };
+  }, [studyId, canonicalPresent, rawEdfMode]);
 
   // ── Effects: window fetch ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -654,11 +670,23 @@ export default function EEGViewer() {
   }
 
   const plotSignalsReady =
-    !!signals && signals.length === meta.n_channels && signals[0]?.length > 0;
+    !!signals && signals.length === meta.n_channels && (signals[0]?.length ?? 0) > 0;
 
   // ── Render: main ──────────────────────────────────────────────────────────────
   return (
     <div className="h-full flex flex-col overflow-hidden bg-background" tabIndex={-1}>
+
+      {/* Always-visible escape hatch (avoids trap on loading / errors) */}
+      <div className="flex flex-shrink-0 items-center gap-2 border-b bg-background px-2 py-1.5">
+        <Button variant="outline" size="sm" className="h-7 gap-1 text-xs shrink-0" onClick={() => navigate(-1)}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+        <span className="min-w-0 flex-1 truncate text-center text-[10px] font-mono text-muted-foreground" title={studyId}>
+          {studyId}
+        </span>
+        <span className="w-[72px] shrink-0" aria-hidden />
+      </div>
 
       {/* ── Raw EDF mode banner ── */}
       {rawEdfMode && (
@@ -769,7 +797,7 @@ export default function EEGViewer() {
 
         {/* Overlay chips — float bottom-left, block seek clicks */}
         {(artifactCount > 0 || annotationCount > 0 || segments.length > 0) && (
-          <div className="absolute bottom-0.5 left-1 flex items-center gap-1 z-10" onClick={e => e.stopPropagation()}>
+          <div className="absolute bottom-0.5 left-1 z-10 flex items-center gap-1" onClick={e => e.stopPropagation()}>
             {artifactCount > 0 && (
               <button onClick={() => setShowArtifacts(v => !v)}
                 className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] transition-colors ${showArtifacts ? "bg-background/80 border border-border/60 text-foreground" : "text-muted-foreground/40"}`}>
@@ -802,11 +830,19 @@ export default function EEGViewer() {
             )}
           </div>
         )}
+      </div>
 
-        {/* ESF / Raw toggle — float bottom-right */}
-        <div className="absolute bottom-0.5 right-1 flex items-center rounded border border-border/50 overflow-hidden text-[10px] z-10 bg-background/80" onClick={e => e.stopPropagation()}>
+      {/* ESF / Raw — own row under minimap (no overlap with timeline) */}
+      <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-border/40 bg-muted/5 px-2 py-1">
+        <span className="mr-auto text-[10px] text-muted-foreground">Signal</span>
+        <div
+          className="flex items-center overflow-hidden rounded border border-border/50 bg-background text-[10px] shadow-sm"
+          onClick={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
+            disabled={!canonicalPresent}
+            title={!canonicalPresent ? "Enhanced (ESF) view not available for this study yet" : "Canonical ESF view"}
             onClick={(e) => {
               e.stopPropagation();
               if (signalLayer === "esf") return;
@@ -814,19 +850,25 @@ export default function EEGViewer() {
               edfReader.current = null;
               cache.current.clear();
               const canon = canonicalMetaRef.current;
-              if (!canon) return;
+              if (!canon) {
+                toast.message("ESF view not ready", { description: "Try again after processing completes." });
+                return;
+              }
               setSignals(null);
               setMeta(canon);
               signalLayerRef.current = "esf";
               setSignalLayer("esf");
             }}
-            className={`px-2 py-px transition-colors ${signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-2.5 py-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+              signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
             ESF
           </button>
           <button
             type="button"
             disabled={loadingRaw}
+            title="Source EDF (all channels)"
             onClick={async (e) => {
               e.stopPropagation();
               if (signalLayer === "raw") return;
@@ -847,10 +889,9 @@ export default function EEGViewer() {
                   setSignalLayer("raw");
                 } catch (err) {
                   console.warn("[viewer] raw chunk:", err);
-                  setSignals(null);
-                  setMeta(rawM);
-                  signalLayerRef.current = "raw";
-                  setSignalLayer("raw");
+                  toast.error("Could not read raw window", {
+                    description: err instanceof Error ? err.message : String(err),
+                  });
                 }
                 return;
               }
@@ -858,8 +899,9 @@ export default function EEGViewer() {
               setLoadingRaw(true);
               try {
                 const CPLANE_BASE = (import.meta.env.VITE_CPLANE_BASE as string | undefined) || "";
+                if (!CPLANE_BASE) throw new Error("VITE_CPLANE_BASE is not configured");
                 const tokenRes = await fetch(`${CPLANE_BASE}/read-token/${studyId}`);
-                if (!tokenRes.ok) throw new Error("read-token failed");
+                if (!tokenRes.ok) throw new Error(`read-token failed (${tokenRes.status})`);
                 const { sas_url: sasUrl } = await tokenRes.json();
                 const res = await fetch(sasUrl);
                 if (!res.ok) throw new Error(`EDF fetch ${res.status}`);
@@ -884,14 +926,18 @@ export default function EEGViewer() {
                 signalLayerRef.current = "raw";
                 setSignalLayer("raw");
               } catch (e2) {
+                const msg = e2 instanceof Error ? e2.message : String(e2);
                 console.warn("[viewer] raw EDF load failed:", e2);
+                toast.error("Could not load raw file", { description: msg });
               } finally {
                 setLoadingRaw(false);
               }
             }}
-            className={`px-2 py-px transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            className={`px-2.5 py-1 transition-colors ${
+              signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            {loadingRaw ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : "Raw"}
+            {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
           </button>
         </div>
       </div>
