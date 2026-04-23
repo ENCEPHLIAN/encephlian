@@ -19,6 +19,8 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { cn } from "@/lib/utils";
 import { systemFeedback } from "@/lib/systemFeedback";
+import { sha256HexFromFile } from "@/lib/fileSha256";
+import { generateEncStudyReference } from "@/lib/studyReference";
 
 interface StudyUploadWizardProps {
   open: boolean;
@@ -362,7 +364,11 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     targetFile: File,
     cplaneBase: string,
     onProgress: (pct: number, stage: string) => void,
-  ): Promise<string> => {
+  ): Promise<{ studyId: string; duplicate?: boolean }> => {
+    if (!userId || !clinicId) {
+      throw new Error("Missing authentication or clinic");
+    }
+
     const fileExt = targetFile.name.split(".").pop()?.toUpperCase() || "UNKNOWN";
     const studyMeta: Record<string, any> = {
       patient_name: patientData.patient_name || null,
@@ -380,7 +386,25 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       studyMeta.edf_channel_labels = edfMeta.channel_labels || null;
     }
 
+    onProgress(2, "Fingerprinting recording…");
+    const sourceContentSha256 = await sha256HexFromFile(targetFile);
+    const { data: dupRow } = await supabase
+      .from("studies")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("owner", userId)
+      .eq("source_content_sha256", sourceContentSha256)
+      .neq("state", "failed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (dupRow?.id) {
+      onProgress(100, "Same recording — opening existing study");
+      return { studyId: dupRow.id, duplicate: true };
+    }
+
     onProgress(5, `Creating study for ${targetFile.name}...`);
+    const reference = generateEncStudyReference();
     const { data: study, error: studyError } = await supabase
       .from("studies")
       .insert({
@@ -388,6 +412,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         clinic_id: clinicId,
         state: "awaiting_sla",
         sla: selectedSla,
+        reference,
+        source_content_sha256: sourceContentSha256,
         uploaded_file_path: `blob:eeg-raw/pending`,
         original_format: fileExt,
         indication: patientData.indication || null,
@@ -500,7 +526,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     }
 
     onProgress(100, "Done");
-    return studyId;
+    return { studyId };
   }, [userId, clinicId, selectedSla, patientData, edfMeta, file, isProprietaryFormat]);
 
   // Submit the study (single or batch)
@@ -535,15 +561,19 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       if (filesToUpload.length === 1) {
         // Single-file path — navigate to study on completion
         setUploadStage("Starting upload...");
-        const studyId = await uploadOneFile(filesToUpload[0], CPLANE_BASE, (pct, stage) => {
+        const { studyId, duplicate } = await uploadOneFile(filesToUpload[0], CPLANE_BASE, (pct, stage) => {
           setUploadProgress(pct);
           setUploadStage(stage);
         });
         lastStudyIds.push(studyId);
         systemFeedback.report({
           severity: "info",
-          what: "Study uploaded",
-          why: isProprietaryFormat ? "Proprietary format — export as EDF for analysis." : "Analysis pipeline started.",
+          what: duplicate ? "Same recording" : "Study uploaded",
+          why: duplicate
+            ? "This file matches a study you already uploaded — opening it."
+            : isProprietaryFormat
+              ? "Proprietary format — export as EDF for analysis."
+              : "Analysis pipeline started.",
           action: "Opening study...",
         });
         onOpenChange(false);
@@ -558,7 +588,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         for (let i = 0; i < filesToUpload.length; i++) {
           setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "uploading" } : p));
           try {
-            const studyId = await uploadOneFile(filesToUpload[i], CPLANE_BASE, (pct, stage) => {
+            const { studyId } = await uploadOneFile(filesToUpload[i], CPLANE_BASE, (pct, stage) => {
               setUploadProgress(Math.round(((i + pct / 100) / filesToUpload.length) * 100));
               setUploadStage(`[${i + 1}/${filesToUpload.length}] ${stage}`);
             });

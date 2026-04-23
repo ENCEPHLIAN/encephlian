@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { AlertCircle, Clock, ArrowRight } from "lucide-react";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 
@@ -15,6 +16,8 @@ interface Study {
   state: string;
   created_at: string;
   meta: any;
+  reference?: string | null;
+  original_format?: string | null;
 }
 
 interface UrgentQueueProps {
@@ -58,6 +61,7 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
             const age = meta.patient_age || meta.age || 'N/A';
             const gender = meta.patient_gender || meta.gender || 'N/A';
             const fileLine = formatStudySourceLine(meta, study.original_format ?? null);
+            const handle = getStudyHandle(study);
 
             return (
               <div
@@ -74,6 +78,7 @@ export default function UrgentQueue({ studies: initialStudies }: UrgentQueueProp
                     <div className="text-sm text-muted-foreground">
                       {age !== 'N/A' ? `${age}y` : ''} {gender !== 'N/A' ? gender.charAt(0).toUpperCase() : ''} • {study.state.replace('_', ' ')}
                     </div>
+                    <div className="text-[10px] font-mono text-muted-foreground/90">{handle}</div>
                     {fileLine && (
                       <div className="text-xs text-muted-foreground truncate max-w-[240px] sm:max-w-[320px]" title={fileLine}>
                         {fileLine}

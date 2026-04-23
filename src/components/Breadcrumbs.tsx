@@ -2,18 +2,30 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, Home, ArrowLeft, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { useStudyBreadcrumb } from "@/contexts/StudyBreadcrumbContext";
+
+const UUID_SEG = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function Breadcrumbs() {
   const location = useLocation();
   const navigate = useNavigate();
   const pathnames = location.pathname.split("/").filter((x) => x);
   const [isExpanded, setIsExpanded] = useState(false);
+  const { activeStudyLabel } = useStudyBreadcrumb();
+
+  const studyTailLabel = useMemo(() => {
+    if (pathnames[0] !== "app" || pathnames[1] !== "studies") return null;
+    const seg = pathnames[2];
+    if (!seg || !UUID_SEG.test(seg) || pathnames.length > 3) return null;
+    return activeStudyLabel || "Study";
+  }, [pathnames, activeStudyLabel]);
 
   const breadcrumbNames: Record<string, string> = {
     app: "Dashboard",
     dashboard: "Dashboard",
     studies: "Studies",
+    lanes: "Lanes",
     viewer: "EEG Viewer",
     files: "Files",
     wallet: "Wallet",
@@ -28,7 +40,11 @@ export default function Breadcrumbs() {
   if (pathnames.length <= 1 && !showBackButton) return null;
 
   // Collapsed view - just back button and current page
-  const currentPage = breadcrumbNames[pathnames[pathnames.length - 1]] || pathnames[pathnames.length - 1];
+  const rawTail = pathnames[pathnames.length - 1];
+  const currentPage =
+    studyTailLabel && pathnames.length === 3 && pathnames[1] === "studies"
+      ? studyTailLabel
+      : breadcrumbNames[rawTail] || rawTail;
 
   return (
     <nav className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
@@ -64,7 +80,14 @@ export default function Breadcrumbs() {
               {pathnames.slice(1).map((pathname, index) => {
                 const routeTo = `/${pathnames.slice(0, index + 2).join("/")}`;
                 const isLast = index === pathnames.length - 2;
-                const displayName = breadcrumbNames[pathname] || pathname;
+                const isStudyUuid =
+                  index === 1 &&
+                  pathnames[0] === "app" &&
+                  pathnames[1] === "studies" &&
+                  UUID_SEG.test(pathname);
+                const displayName = isStudyUuid
+                  ? (studyTailLabel || "Study")
+                  : breadcrumbNames[pathname] || pathname;
 
                 return (
                   <div key={routeTo} className="flex items-center gap-2">

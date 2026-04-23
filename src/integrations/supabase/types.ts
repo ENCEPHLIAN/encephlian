@@ -687,6 +687,7 @@ export type Database = {
           sample: boolean | null
           sla: string
           sla_selected_at: string | null
+          source_content_sha256: string | null
           srate_hz: number | null
           state: string | null
           storage_backend: string | null
@@ -720,6 +721,7 @@ export type Database = {
           sample?: boolean | null
           sla?: string
           sla_selected_at?: string | null
+          source_content_sha256?: string | null
           srate_hz?: number | null
           state?: string | null
           storage_backend?: string | null
@@ -753,6 +755,7 @@ export type Database = {
           sample?: boolean | null
           sla?: string
           sla_selected_at?: string | null
+          source_content_sha256?: string | null
           srate_hz?: number | null
           state?: string | null
           storage_backend?: string | null
@@ -1107,6 +1110,7 @@ export type Database = {
           sample: boolean | null
           sla: string
           sla_selected_at: string | null
+          source_content_sha256: string | null
           srate_hz: number | null
           state: string | null
           storage_backend: string | null

@@ -14,6 +14,7 @@ import {
 import dayjs from "dayjs";
 import { useStudiesData, Study } from "@/hooks/useStudiesData";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 
 /* ── SLA config ─────────────────────────────────── */
 
@@ -74,6 +75,7 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
 
   const isStat = study.sla === "STAT";
   const srcLine = formatStudySourceLine(meta, study.original_format ?? null);
+  const handle = getStudyHandle(study);
 
   return (
     <Card
@@ -105,8 +107,9 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
         </div>
 
         {/* Row 2: Patient ID */}
-        <p className="text-[11px] text-muted-foreground font-mono truncate">
-          {meta?.patient_id || study.id.slice(0, 8)}
+        <p className="text-[10px] font-mono text-muted-foreground truncate" title={handle}>{handle}</p>
+        <p className="text-[11px] text-muted-foreground truncate">
+          {meta?.patient_id || "—"}
         </p>
         {srcLine && (
           <p className="text-[10px] text-muted-foreground/90 truncate" title={srcLine}>

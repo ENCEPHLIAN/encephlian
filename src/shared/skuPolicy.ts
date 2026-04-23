@@ -51,7 +51,8 @@ export type NavItemId =
   | 'wallet' 
   | 'support';
 
-const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'wallet'];
+/** Pilot: core flow + pipeline visibility + help (internal keeps full nav). */
+const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'wallet', 'support'];
 const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'wallet', 'support'];
 
 export function getVisibleNavItems(sku: SkuTier): NavItemId[] {

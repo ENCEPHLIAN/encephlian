@@ -3,12 +3,14 @@ import { Progress } from "@/components/ui/progress";
 import { Loader2, Sparkles, FileSearch, FileCheck, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 
 interface ProcessingStudy {
   id: string;
   triage_status?: string;
   triage_progress?: number;
   meta?: any;
+  reference?: string | null;
   original_format?: string | null;
 }
 
@@ -134,6 +136,7 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
     singleStudy && singleStudyMeta
       ? formatStudySourceLine(singleStudyMeta, singleStudy.original_format ?? null)
       : null;
+  const handleLine = singleStudy ? getStudyHandle(singleStudy) : null;
 
   return (
     <div className="fixed top-14 left-0 right-0 z-40">
@@ -162,6 +165,11 @@ export default function GlobalTriageProgressBar({ studies: initialStudies }: Glo
                   {patientDisplay && (
                     <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                       {patientDisplay}
+                    </span>
+                  )}
+                  {handleLine && (
+                    <span className="text-[10px] font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-full shrink-0">
+                      {handleLine}
                     </span>
                   )}
                   {fileLine && (

@@ -25,6 +25,7 @@ type Study = {
   sla: string;
   state: string | null;
   meta: any;
+  reference?: string | null;
   original_format?: string | null;
   created_at: string;
   study_key?: string | null;
@@ -183,8 +184,8 @@ export default function AdminStudies() {
                     className="hover:bg-accent/20 transition-colors cursor-pointer group"
                   >
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {s.study_key || s.id.slice(0, 8)}
+                      <span className="font-mono text-xs text-muted-foreground" title={s.id}>
+                        {s.reference?.trim() || s.study_key || s.id.slice(0, 8)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{s.clinic_name}</td>

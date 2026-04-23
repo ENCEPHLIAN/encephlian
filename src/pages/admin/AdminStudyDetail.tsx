@@ -30,6 +30,7 @@ import { format } from "date-fns";
 import { resolveReadApiBase, getReadApiKey } from "@/shared/readApiConfig";
 import { Link } from "react-router-dom";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 
 export default function AdminStudyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -363,6 +364,7 @@ export default function AdminStudyDetail() {
 
   const meta = study.meta as any;
   const adminSourceLine = formatStudySourceLine(meta, study.original_format ?? null);
+  const adminHandle = getStudyHandle(study);
 
   return (
     <div className="space-y-6">
@@ -373,6 +375,7 @@ export default function AdminStudyDetail() {
         </Button>
         <div>
           <h1 className="text-xl font-mono font-bold">Study Detail</h1>
+          <p className="text-xs text-muted-foreground font-mono">{adminHandle}</p>
           <p className="text-sm text-muted-foreground font-mono">{id}</p>
           {adminSourceLine && (
             <p className="text-sm text-muted-foreground mt-1 max-w-xl truncate" title={adminSourceLine}>

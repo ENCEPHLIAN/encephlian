@@ -10,9 +10,12 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, StickyNote, Settings, Moon, Sun } from "lucide-react";
+import { FileText, Coins, Search, LayoutDashboard, Activity, FolderOpen, StickyNote, Settings, Moon, Sun, Layers, Braces, HelpCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 import dayjs from "dayjs";
+import { useSku } from "@/hooks/useSku";
+import type { NavItemId } from "@/shared/skuPolicy";
+import { getStudyListTitle } from "@/lib/studyDisplay";
 
 interface CommandPaletteProps {
   open?: boolean;
@@ -24,6 +27,7 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const { setTheme, theme } = useTheme();
+  const { isNavVisible } = useSku();
 
   // Use external state if provided, otherwise use internal state
   const open = externalOpen !== undefined ? externalOpen : internalOpen;
@@ -45,10 +49,11 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
       }
 
       // Search by patient name, ID, or age
+      const q = `%${searchQuery}%`;
       const { data, error } = await supabase
         .from("studies")
         .select("*")
-        .or(`meta->>patient_name.ilike.%${searchQuery}%,meta->>patient_id.ilike.%${searchQuery}%,meta->>patient_age.ilike.%${searchQuery}%`)
+        .or(`meta->>patient_name.ilike.${q},meta->>patient_id.ilike.${q},meta->>patient_age.ilike.${q},reference.ilike.${q}`)
         .order("created_at", { ascending: false })
         .limit(20);
       
@@ -148,39 +153,30 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
         <CommandEmpty>No results found.</CommandEmpty>
         
         <CommandGroup heading="Navigation">
-          <CommandItem onSelect={() => { navigate("/app/dashboard"); setOpen(false); }}>
-            <LayoutDashboard className="mr-2 h-4 w-4" />
-            <span>Dashboard</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { navigate("/app/studies"); setOpen(false); }}>
-            <FileText className="mr-2 h-4 w-4" />
-            <span>Studies</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { navigate("/app/viewer"); setOpen(false); }}>
-            <Activity className="mr-2 h-4 w-4" />
-            <span>EEG Viewer</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { navigate("/app/notes"); setOpen(false); }}>
-            <StickyNote className="mr-2 h-4 w-4" />
-            <span>Notes</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { navigate("/app/files"); setOpen(false); }}>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            <span>Files</span>
-          </CommandItem>
-          <CommandItem onSelect={() => { navigate("/app/wallet"); setOpen(false); }}>
-            <Coins className="mr-2 h-4 w-4" />
-            <span>Wallet</span>
-          </CommandItem>
+          {([
+            { id: "dashboard" as NavItemId, to: "/app/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+            { id: "studies" as NavItemId, to: "/app/studies", icon: FileText, label: "Studies" },
+            { id: "lanes" as NavItemId, to: "/app/lanes", icon: Layers, label: "Lanes" },
+            { id: "viewer" as NavItemId, to: "/app/viewer", icon: Braces, label: "EEG Viewer" },
+            { id: "notes" as NavItemId, to: "/app/notes", icon: StickyNote, label: "Notes" },
+            { id: "files" as NavItemId, to: "/app/files", icon: FolderOpen, label: "Files" },
+            { id: "wallet" as NavItemId, to: "/app/wallet", icon: Coins, label: "Wallet" },
+            { id: "support" as NavItemId, to: "/app/support", icon: HelpCircle, label: "Support" },
+          ] as const)
+            .filter((item) => isNavVisible(item.id))
+            .map(({ id, to, icon: Icon, label }) => (
+              <CommandItem key={id} onSelect={() => { navigate(to); setOpen(false); }}>
+                <Icon className="mr-2 h-4 w-4" />
+                <span>{label}</span>
+              </CommandItem>
+            ))}
         </CommandGroup>
 
         <CommandGroup heading={searchQuery ? "Search Results" : "Recent Studies"}>
           {studies?.map((study) => {
             const meta = study.meta as any;
-            const patientId = meta?.patient_id || 'Unknown';
-            const patientName = meta?.patient_name || '';
-            const patientAge = meta?.patient_age || '';
-            
+            const title = getStudyListTitle(study);
+
             return (
               <CommandItem
                 key={study.id}
@@ -190,12 +186,10 @@ export default function CommandPalette({ open: externalOpen, onOpenChange: exter
                 }}
               >
                 <FileText className="mr-2 h-4 w-4" />
-                <div className="flex-1">
-                  <div className="font-medium">
-                    {patientId} - {patientName}
-                  </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium truncate">{title}</div>
                   <div className="text-xs text-muted-foreground">
-                    Age: {patientAge} • {dayjs(study.created_at).format('MMM D, YYYY')}
+                    {dayjs(study.created_at).format("MMM D, YYYY")}
                   </div>
                 </div>
               </CommandItem>

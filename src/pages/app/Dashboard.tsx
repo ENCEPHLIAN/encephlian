@@ -21,6 +21,7 @@ import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 
 // Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);
@@ -365,6 +366,7 @@ export default function Dashboard() {
                       patientGender ? patientGender.charAt(0).toUpperCase() : null
                     ].filter(Boolean).join("/");
                     const fileLine = formatStudySourceLine(meta, study.original_format ?? null);
+                    const handle = getStudyHandle(study);
 
                     return (
                       <div 
@@ -390,7 +392,9 @@ export default function Dashboard() {
                               )}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {meta?.patient_id || study.id.slice(0, 8)} • {dayjs(study.created_at).format("MMM D, h:mm A")}
+                              <span className="font-mono text-[11px]">{handle}</span>
+                              <span className="mx-1">·</span>
+                              {dayjs(study.created_at).format("MMM D, h:mm A")}
                             </p>
                             {fileLine && (
                               <p className="text-[11px] text-muted-foreground/90 truncate max-w-[200px] sm:max-w-[280px]" title={fileLine}>

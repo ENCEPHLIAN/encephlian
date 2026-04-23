@@ -15,6 +15,8 @@ import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { sha256HexFromFile } from "@/lib/fileSha256";
+import { getStudyHandle } from "@/lib/studyDisplay";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -45,6 +47,7 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
 }) => {
   const meta = study.meta as any;
   const sourceLine = formatStudySourceLine(meta, study.original_format ?? null);
+  const handle = getStudyHandle(study);
 
   // Build anonymized patient demographics string
   const patientAge = meta?.patient_age;
@@ -58,13 +61,18 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
     <TableRow>
       <TableCell>
         <div>
-          <div className="font-medium text-sm">
-            {meta?.patient_name || "Unknown"}
-            {demographicsStr && (
-              <span className="text-muted-foreground font-normal ml-1.5 text-xs">
-                ({demographicsStr})
-              </span>
-            )}
+          <div className="font-medium text-sm flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span>
+              {meta?.patient_name || "Unknown"}
+              {demographicsStr && (
+                <span className="text-muted-foreground font-normal ml-1.5 text-xs">
+                  ({demographicsStr})
+                </span>
+              )}
+            </span>
+            <Badge variant="outline" className="text-[10px] font-mono font-normal px-1.5 py-0 shrink-0" title="Study reference">
+              {handle}
+            </Badge>
           </div>
           <div className="text-xs text-muted-foreground">
             {meta?.patient_id || "N/A"}
@@ -211,10 +219,13 @@ function InternalStudiesView() {
     }
 
     try {
+      toast({ title: "Fingerprinting file…", description: "Same recording opens your existing study." });
+      const contentSha256 = await sha256HexFromFile(file);
+
       // Step 1: Create study + get Azure Blob SAS token from edge function
       toast({ title: "Creating study..." });
       const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
-        body: { fileName: file.name },
+        body: { fileName: file.name, contentSha256 },
       });
       if (createError) {
         throw new Error(await formatEdgeFunctionError(createError, data));
@@ -224,7 +235,21 @@ function InternalStudiesView() {
       }
       if (!data?.studyId) throw new Error("No study ID returned");
 
-      const { studyId, sasUrl } = data;
+      const { studyId, sasUrl, duplicate, message } = data as {
+        studyId: string;
+        sasUrl?: string | null;
+        duplicate?: boolean;
+        message?: string;
+      };
+
+      if (duplicate) {
+        toast({
+          title: "Same recording",
+          description: message || "Opening your existing study.",
+        });
+        navigate(`/app/studies/${studyId}`);
+        return;
+      }
 
       if (sasUrl) {
         // Step 2: Upload directly to Azure Blob via SAS URL (bypasses Supabase Storage)

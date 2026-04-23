@@ -4,6 +4,15 @@ import { getCplaneBaseUrl } from "../_shared/cplane.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
 
+function generateEncStudyReference(): string {
+  const d = new Date();
+  const yy = String(d.getFullYear()).slice(-2);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const rand = crypto.randomUUID().replace(/-/g, "").slice(0, 4).toUpperCase();
+  return `ENC-${yy}${mm}${dd}-${rand}`;
+}
+
 /**
  * create_study_from_upload — A5: Direct Azure Blob Upload
  *
@@ -11,8 +20,8 @@ import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
  * frontend can upload the EDF/BDF directly to Azure with parallel block upload.
  * No Supabase Storage involved — EEG files go straight to Azure Blob.
  *
- * Request:  { fileName: string }
- * Response: { studyId, sasUrl, blobPath, expiresAt }
+ * Request:  { fileName: string, contentSha256?: string }
+ * Response: { studyId, sasUrl, blobPath, expiresAt } | duplicate: { studyId, duplicate: true, message }
  *
  * After upload completes, call generate_ai_report({ study_id }) to start pipeline.
  */
@@ -33,11 +42,27 @@ serve(async (req) => {
     );
     if (authError || !user) throw new Error("Unauthorized");
 
-    const { fileName } = await req.json();
+    const body = await req.json() as {
+      fileName?: string;
+      contentSha256?: string;
+    };
+    const fileName = body.fileName;
     if (!fileName) return new Response(
       JSON.stringify({ error: "fileName is required" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
+
+    let contentSha256: string | null = null;
+    if (typeof body.contentSha256 === "string") {
+      const h = body.contentSha256.trim().toLowerCase().replace(/[^a-f0-9]/g, "");
+      if (h.length > 0 && h.length !== 64) {
+        return new Response(
+          JSON.stringify({ error: "contentSha256 must be 64 hex characters when provided" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      contentSha256 = h.length === 64 ? h : null;
+    }
 
     const lowerName = (fileName as string).toLowerCase();
     const isBdf = lowerName.endsWith(".bdf");
@@ -64,6 +89,44 @@ serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 
+    const correlationId = crypto.randomUUID();
+
+    if (contentSha256) {
+      const { data: dup } = await supabase
+        .from("studies")
+        .select("id, state")
+        .eq("clinic_id", clinicId)
+        .eq("owner", user.id)
+        .eq("source_content_sha256", contentSha256)
+        .neq("state", "failed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (dup?.id) {
+        await insertPipelineEvent(supabase, {
+          study_id: dup.id,
+          step: "edge.create_study_from_upload.dedupe_hit",
+          status: "info",
+          source: "supabase_edge",
+          correlation_id: correlationId,
+          detail: { fileName, fileType, duplicate_of: dup.id, state: dup.state },
+        });
+        return new Response(
+          JSON.stringify({
+            studyId: dup.id,
+            duplicate: true,
+            message: "This recording is already in your workspace — opening the existing study.",
+            state: dup.state,
+            correlation_id: correlationId,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
+    const reference = generateEncStudyReference();
+
     // Create study record — state=pending until blob upload completes
     const { data: study, error: studyError } = await supabase
       .from("studies")
@@ -72,6 +135,8 @@ serve(async (req) => {
         clinic_id: clinicId,
         state: "pending",
         sla: "TAT",
+        reference,
+        source_content_sha256: contentSha256,
         meta: { patient_name: "Pending", patient_id: `PT-${Date.now()}`, original_filename: fileName },
         original_format: fileType,
       })
@@ -80,7 +145,6 @@ serve(async (req) => {
 
     const studyId = study.id;
     const blobPath = `${studyId}.${fileType}`;
-    const correlationId = crypto.randomUUID();
     console.log(`[${studyId}] Study created — fetching SAS token`);
 
     await insertPipelineEvent(supabase, {

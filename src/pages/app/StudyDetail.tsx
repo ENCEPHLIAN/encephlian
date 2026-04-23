@@ -37,11 +37,13 @@ import TriageReportView from "@/components/report/TriageReportView";
 import MindReportView from "@/components/report/MindReportView";
 import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSku } from "@/hooks/useSku";
 import { SkuGate } from "@/components/SkuGate";
 import { fetchJson } from "@/shared/readApiClient";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyDocumentTitle, getStudyHandle, getStudyListTitle, type StudyLike } from "@/lib/studyDisplay";
+import { useStudyBreadcrumb } from "@/contexts/StudyBreadcrumbContext";
 
 dayjs.extend(relativeTime);
 
@@ -73,6 +75,7 @@ export default function StudyDetail() {
   const { toast } = useToast();
   
   const { can, capabilities, isPilot } = useSku();
+  const { setActiveStudyLabel } = useStudyBreadcrumb();
   const queryClient = useQueryClient();
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -144,6 +147,21 @@ export default function StudyDetail() {
       return (state === "uploaded" || state === "processing" || state === "ai_draft") ? 15_000 : false;
     },
   });
+
+  useEffect(() => {
+    if (!study) {
+      setActiveStudyLabel(null);
+      return;
+    }
+    const label = getStudyListTitle(study as StudyLike);
+    setActiveStudyLabel(label);
+    const prevTitle = document.title;
+    document.title = getStudyDocumentTitle(study as StudyLike);
+    return () => {
+      setActiveStudyLabel(null);
+      document.title = prevTitle;
+    };
+  }, [study, setActiveStudyLabel]);
 
   // Re-trigger the full C-Plane → I-Plane pipeline via edge function
   const handleRunAITriage = async () => {
@@ -284,6 +302,7 @@ export default function StudyDetail() {
     (study.state === "uploaded" || study.state === "parsed");
   const canReview = study.state === "ai_draft" || study.state === "in_review" || study.state === "complete" || study.state === "completed";
   const StateIcon = stateConfig.icon;
+  const studyHandle = getStudyHandle(study);
 
   return (
     <div className="space-y-6 pb-8">
@@ -302,6 +321,9 @@ export default function StudyDetail() {
             <div className="space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <CardTitle className="text-2xl">{patientName}</CardTitle>
+                <Badge variant="outline" className="font-mono text-xs font-normal shrink-0" title="Stable study reference">
+                  {studyHandle}
+                </Badge>
                 <Badge className={`${stateConfig.color} text-white`}>
                   <StateIcon className="h-3 w-3 mr-1" />
                   {stateConfig.label}

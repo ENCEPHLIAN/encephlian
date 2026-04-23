@@ -19,6 +19,7 @@ import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getStudyHandle } from "@/lib/studyDisplay";
 
 export default function PilotStudiesView() {
   const navigate = useNavigate();
@@ -219,6 +220,7 @@ export default function PilotStudiesView() {
           {pendingStudies.map((study) => {
             const meta = study.meta as any;
             const src = formatStudySourceLine(meta, study.original_format ?? null);
+            const handle = getStudyHandle(study);
             return (
               <Card
                 key={study.id}
@@ -231,6 +233,7 @@ export default function PilotStudiesView() {
                         <FileText className="h-4 w-4 text-amber-600" />
                       </div>
                       <div className="min-w-0">
+                        <p className="text-[10px] font-mono text-muted-foreground">{handle}</p>
                         <p className="font-medium text-sm truncate">
                           {meta?.patient_name || "Patient"}
                         </p>
@@ -271,6 +274,7 @@ export default function PilotStudiesView() {
           {processingStudies.map((study) => {
             const meta = study.meta as any;
             const src = formatStudySourceLine(meta, study.original_format ?? null);
+            const handle = getStudyHandle(study);
             const progress = study.triage_progress || 0;
             const label =
               progress < 30
@@ -287,6 +291,7 @@ export default function PilotStudiesView() {
                         <Loader2 className="h-4 w-4 text-primary animate-spin" />
                       </div>
                       <div className="min-w-0">
+                        <p className="text-[10px] font-mono text-muted-foreground">{handle}</p>
                         <p className="font-medium text-sm truncate">
                           {meta?.patient_name || "Patient"}
                         </p>
@@ -340,6 +345,7 @@ export default function PilotStudiesView() {
                           : <FileText className="h-4 w-4 text-primary" />}
                       </div>
                       <div className="min-w-0 flex-1">
+                        <p className="text-[10px] font-mono text-muted-foreground">{handle}</p>
                         <div className="flex items-center gap-2 min-w-0">
                           <p className="font-medium text-sm truncate">
                             {meta?.patient_name || "Patient"}

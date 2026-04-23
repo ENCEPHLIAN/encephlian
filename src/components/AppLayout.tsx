@@ -27,6 +27,7 @@ import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
 import { NavItemId } from "@/shared/skuPolicy";
+import { StudyBreadcrumbProvider } from "@/contexts/StudyBreadcrumbContext";
 
 // --------------- NAV DATA ---------------
 const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
@@ -394,8 +395,10 @@ export default function AppLayout() {
             !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
             "transition-[margin] duration-200 ease-out"
           )}>
-            <Breadcrumbs />
-            <Outlet />
+            <StudyBreadcrumbProvider>
+              <Breadcrumbs />
+              <Outlet />
+            </StudyBreadcrumbProvider>
           </main>
         </div>
 
