@@ -125,6 +125,22 @@ function KV({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function formatMoneyAmount(amount: number, currency: string | null | undefined) {
+  const c = (currency ?? "").trim().toUpperCase();
+  if (c.length === 3) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: c,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch {
+      /* fall through */
+    }
+  }
+  return amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
 // ── Tiles ────────────────────────────────────────────────────────────────
 function RazorpayTile({ s }: { s: ProviderStatus }) {
   const d = s.data;
@@ -232,98 +248,99 @@ function SupabaseTile({ s }: { s: ProviderStatus }) {
 
 function AzureTile({ s }: { s: ProviderStatus }) {
   const d = s.data;
+  const mtd =
+    typeof d?.month_to_date_cost === "number" && Number.isFinite(d.month_to_date_cost)
+      ? formatMoneyAmount(d.month_to_date_cost, d.month_to_date_currency)
+      : null;
+  const creditsTotal =
+    typeof d?.credits_total_amount === "number" && Number.isFinite(d.credits_total_amount)
+      ? formatMoneyAmount(d.credits_total_amount, d.credits_total_currency)
+      : null;
+  const creditsRows = Array.isArray(d?.credits) ? d.credits : [];
+  const showCreditLineBreakdown = creditsRows.length > 1 && creditsTotal == null;
+
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm flex items-center gap-2">
           <Cloud className="h-4 w-4 text-muted-foreground" />
           Azure
         </CardTitle>
         <StatusPill s={s} />
       </CardHeader>
-      <CardContent className="space-y-1">
+      <CardContent className="space-y-2">
         <RequiredEnvBlock s={s} />
         <ErrorBlock s={s} />
         {d && (
           <>
-            <KV
-              label="Subscription"
-              value={
-                <>
-                  {d.display_name ?? "—"}{" "}
-                  {d.state && (
-                    <Badge variant="secondary" className="h-3 text-[9px] px-1 ml-1">
-                      {d.state}
-                    </Badge>
-                  )}
-                </>
-              }
-            />
-            <KV
-              label="ID"
-              value={
-                <span className="text-[10px] opacity-70">
-                  {(d.subscription_id ?? "").slice(0, 8)}…
-                </span>
-              }
-            />
-            {typeof d.month_to_date_cost === "number" &&
-              Number.isFinite(d.month_to_date_cost) && (
-                <KV
-                  label="MTD cost (pre-tax)"
-                  value={
-                    <span>
-                      {d.month_to_date_currency
-                        ? `${d.month_to_date_currency} `
-                        : ""}
-                      {d.month_to_date_cost.toFixed(2)}
-                    </span>
-                  }
-                />
-              )}
-            {d.cost_query_error && (
-              <KV label="Cost query" value={<span className="text-amber-600">{d.cost_query_error}</span>} />
-            )}
-            {Array.isArray(d.credits) && d.credits.length > 0 && (
-              <div className="mt-2 rounded-md border border-border/50 bg-muted/20 p-2 space-y-1">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Azure credits (remaining)
+            {/* Portal-style headline: credits + MTD spend (not subscription boilerplate) */}
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <div className="rounded-lg border border-border/60 bg-gradient-to-br from-sky-500/10 to-transparent p-3 dark:from-sky-500/15">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Credits remaining
                 </p>
-                {d.credits.map((c: any, i: number) => (
-                  <div key={i} className="flex justify-between text-[11px] font-mono gap-2">
+                {creditsTotal != null ? (
+                  <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{creditsTotal}</p>
+                ) : showCreditLineBreakdown ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Multiple currencies — see lines below
+                  </p>
+                ) : typeof d.credits_http_status === "number" && d.credits_http_status === 404 ? (
+                  <p className="mt-1 text-xs text-muted-foreground leading-snug">
+                    Not reported for this subscription type (credits API unavailable).
+                  </p>
+                ) : creditsRows.length === 0 && d.credits_http_status === 200 ? (
+                  <p className="mt-1 text-xs text-muted-foreground">No credit buckets returned.</p>
+                ) : typeof d.credits_http_status === "number" && d.credits_http_status !== 200 ? (
+                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                    Credits API HTTP {d.credits_http_status}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">—</p>
+                )}
+              </div>
+              <div className="rounded-lg border border-border/60 bg-gradient-to-br from-violet-500/10 to-transparent p-3 dark:from-violet-500/15">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Month-to-date (pre-tax)
+                </p>
+                {mtd != null ? (
+                  <p className="mt-1 text-2xl font-semibold tabular-nums tracking-tight">{mtd}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground leading-snug">
+                    {d.cost_query_error
+                      ? "Cost query failed — check SP has Cost Management Reader."
+                      : "No cost data for this period yet."}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {d.cost_query_error && mtd == null && (
+              <p className="text-[10px] text-amber-600 dark:text-amber-400 font-mono break-all">{d.cost_query_error}</p>
+            )}
+
+            {showCreditLineBreakdown && (
+              <div className="rounded-md border border-border/40 bg-muted/15 px-2 py-1.5 space-y-0.5">
+                <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Credit lines</p>
+                {creditsRows.map((c: any, i: number) => (
+                  <div key={i} className="flex justify-between gap-2 text-[11px] font-mono">
                     <span className="truncate text-muted-foreground" title={c.name ?? ""}>
-                      {(c.name ?? "Balance").replace(/^.*\//, "").slice(0, 28)}
+                      {(c.name ?? "Balance").replace(/^.*\//, "").slice(0, 32)}
                     </span>
                     <span className="shrink-0 tabular-nums">
-                      {c.currency ? `${c.currency} ` : ""}
-                      {typeof c.amount === "number" ? c.amount.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                      {formatMoneyAmount(typeof c.amount === "number" ? c.amount : 0, c.currency)}
                     </span>
                   </div>
                 ))}
               </div>
             )}
-            {Array.isArray(d.credits) &&
-              d.credits.length === 0 &&
-              typeof d.credits_http_status === "number" &&
-              d.credits_http_status !== 200 && (
-                <KV
-                  label="Credits API"
-                  value={
-                    <span className="text-muted-foreground">
-                      HTTP {d.credits_http_status}
-                      {d.credits_http_status === 404
-                        ? " — not exposed for this subscription type"
-                        : ""}
-                    </span>
-                  }
-                />
-              )}
-            {Array.isArray(d.resource_groups) && (
-              <div className="mt-3 border-t border-border/40 pt-2">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">
+
+            {Array.isArray(d.resource_groups) && d.resource_groups.length > 0 && (
+              <details className="rounded-md border border-border/40 bg-muted/10 text-xs">
+                <summary className="cursor-pointer select-none px-2 py-1.5 text-muted-foreground hover:text-foreground">
                   Resource groups ({d.resource_groups.length})
-                </p>
-                <div className="flex flex-wrap gap-1">
+                </summary>
+                <div className="flex flex-wrap gap-1 border-t border-border/30 px-2 py-2">
                   {d.resource_groups.map((rg: any) => (
                     <Badge
                       key={rg.name}
@@ -335,11 +352,30 @@ function AzureTile({ s }: { s: ProviderStatus }) {
                     </Badge>
                   ))}
                 </div>
+              </details>
+            )}
+
+            <details className="text-[10px] text-muted-foreground">
+              <summary className="cursor-pointer select-none hover:text-foreground">Subscription scope</summary>
+              <div className="mt-1 space-y-0.5 rounded border border-border/30 bg-background/50 p-2 font-mono">
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">State</span>
+                  <span>{d.state ?? "—"}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Name</span>
+                  <span className="truncate text-right" title={d.display_name ?? ""}>
+                    {d.display_name ?? "—"}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-muted-foreground">Subscription ID</span>
+                  <span className="break-all text-right text-[9px] opacity-80">{d.subscription_id ?? "—"}</span>
+                </div>
               </div>
-            )}
-            {d.note && (
-              <p className="mt-3 text-[10px] text-muted-foreground/70 italic">{d.note}</p>
-            )}
+            </details>
+
+            {d.note && <p className="text-[10px] text-muted-foreground/70">{d.note}</p>}
           </>
         )}
       </CardContent>

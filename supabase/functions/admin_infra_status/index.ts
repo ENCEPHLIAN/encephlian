@@ -286,6 +286,17 @@ async function azureStatus(): Promise<ProviderStatus> {
       cost_query_error = `cost query ${costRes.status}: ${t.slice(0, 160)}`;
     }
 
+    let credits_total_amount: number | null = null;
+    let credits_total_currency: string | null = null;
+    if (creditBalances.length) {
+      const cur0 = creditBalances[0].currency;
+      const same = cur0 && creditBalances.every((c) => c.currency === cur0);
+      if (same) {
+        credits_total_currency = cur0;
+        credits_total_amount = creditBalances.reduce((a, c) => a + c.amount, 0);
+      }
+    }
+
     return {
       configured: true,
       ok: true,
@@ -298,13 +309,14 @@ async function azureStatus(): Promise<ProviderStatus> {
           location: rg.location,
         })),
         credits: creditBalances,
+        credits_total_amount,
+        credits_total_currency,
         credits_http_status: credRes.status,
         month_to_date_cost,
         month_to_date_currency,
         cost_query_error,
         note:
-          'Grant the service principal Cost Management Reader on the subscription to populate MTD cost. ' +
-          'Prepaid credits appear when Microsoft.Consumption/credits applies to your offer (e.g. credits, some EA scenarios).',
+          'SP needs Cost Management Reader for MTD spend. Credits API applies to some offers only.',
       },
       fetched_at: now(),
     };
