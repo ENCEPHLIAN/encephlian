@@ -53,3 +53,11 @@ verify_jwt = true
 
 [functions.delete_account]
 verify_jwt = true
+
+# --- Admin Infrastructure Cockpit ---
+# verify_jwt = false here because the function does its own JWT verification
+# (extracts the Bearer token, calls auth.getUser, checks super_admin role).
+# Letting the gateway pre-verify made supabase-js invoke(GET)/invoke(POST)
+# inconsistent and returned generic 401s with no detail in the body.
+[functions.admin_infra_status]
+verify_jwt = false

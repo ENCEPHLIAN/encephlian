@@ -363,11 +363,28 @@ export default function AdminInfra() {
     setLoading(true);
     setError(null);
     try {
+      // Use POST (default) so supabase-js attaches the session JWT + body
+      // reliably. The edge function treats GET/POST the same.
       const { data: res, error: fnErr } = await supabase.functions.invoke(
         "admin_infra_status",
-        { method: "GET" },
+        { body: {} },
       );
-      if (fnErr) throw fnErr;
+      if (fnErr) {
+        // supabase-js wraps FunctionsHttpError; dig the actual response body
+        // so the user sees 'anon_key_not_user_session' etc. instead of the
+        // generic 'non-2xx status code'.
+        let detail = fnErr.message ?? "Edge function error";
+        try {
+          const ctx = (fnErr as any).context as Response | undefined;
+          if (ctx && typeof ctx.text === "function") {
+            const body = await ctx.text();
+            if (body) detail = `${detail} — ${body}`;
+          }
+        } catch {
+          /* swallow */
+        }
+        throw new Error(detail);
+      }
       setData(res as InfraResponse);
     } catch (e: any) {
       setError(e?.message ?? "Failed to load infrastructure status");

@@ -289,31 +289,82 @@ async function vercelStatus(): Promise<ProviderStatus> {
 // ─────────────────────────────────────────────────────────────── handler ──
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', {
+      headers: {
+        ...corsHeaders,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      },
+    });
   }
 
   try {
+    // We accept both GET (no-body probe) and POST (explicit invoke) so that
+    // supabase-js `functions.invoke(..., { method })` works regardless of
+    // what the SDK decides to do with an empty body.
     const authz = req.headers.get('Authorization');
+    const apikey = req.headers.get('apikey');
     if (!authz) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      console.warn('admin_infra_status: missing Authorization header', {
+        method: req.method,
+        hasApikey: !!apikey,
       });
+      return new Response(
+        JSON.stringify({
+          error: 'Unauthorized',
+          reason: 'missing_authorization_header',
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
 
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authz } } },
+    // Strip any accidental "Bearer Bearer " double prefix.
+    const rawToken = authz.replace(/^Bearer\s+/i, '').trim();
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+
+    // If the caller sent the anon key as Bearer (i.e. no session), bail early
+    // with a clear message instead of a generic 401.
+    if (rawToken === anonKey) {
+      console.warn('admin_infra_status: anon key sent as Bearer (no session)');
+      return new Response(
+        JSON.stringify({
+          error: 'Unauthorized',
+          reason: 'anon_key_not_user_session',
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${rawToken}` } },
+    });
+
+    const { data: userData, error: userErr } = await userClient.auth.getUser(
+      rawToken,
     );
-
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    if (userErr || !userData?.user) {
+      console.warn('admin_infra_status: auth.getUser failed', {
+        err: userErr?.message,
+        tokenPrefix: rawToken.slice(0, 12) + '…',
       });
+      return new Response(
+        JSON.stringify({
+          error: 'Unauthorized',
+          reason: userErr?.message ?? 'auth_get_user_null',
+        }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        },
+      );
     }
+    const user = userData.user;
 
     const admin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -330,8 +381,16 @@ Deno.serve(async (req) => {
       .eq('role', 'super_admin');
 
     if (!roles || roles.length === 0) {
+      console.warn('admin_infra_status: caller is not super_admin', {
+        userId: user.id,
+        email: user.email,
+      });
       return new Response(
-        JSON.stringify({ error: 'Forbidden: super_admin access required' }),
+        JSON.stringify({
+          error: 'Forbidden: super_admin access required',
+          user_id: user.id,
+          email: user.email,
+        }),
         {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
