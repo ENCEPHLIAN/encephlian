@@ -205,6 +205,8 @@ export default function EEGViewer() {
   const didSeek     = useRef(false);
   /** Strip legacy ?viewT / ?viewW once per study (old links; no longer used) */
   const strippedLegacyViewParamsRef = useRef(false);
+  const wheelAccumRef = useRef(0);
+  const wheelRafRef   = useRef<number | null>(null);
   // Raw EDF fallback — set when canonical zarr not yet available
   const edfReader        = useRef<EdfChunkReader | null>(null);
   const [rawEdfMode, setRawEdfMode] = useState(false);
@@ -273,6 +275,23 @@ export default function EEGViewer() {
     ["focus", "t", "t_end", "label", "ch", "score"].forEach(k => p.delete(k));
     setSearchParams(p, { replace: true });
   }, [searchParams, setSearchParams]);
+
+  const handleWheelScroll = useCallback((e: React.WheelEvent) => {
+    if (playing || !meta) return;
+    e.preventDefault();
+    const px = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    wheelAccumRef.current += (px / 300) * windowSec;
+    if (wheelRafRef.current) return;
+    wheelRafRef.current = requestAnimationFrame(() => {
+      wheelRafRef.current = null;
+      const step = wheelAccumRef.current;
+      wheelAccumRef.current = 0;
+      if (Math.abs(step) < 0.01) return;
+      const dur = meta.n_samples / meta.sampling_rate_hz;
+      const maxWs = Math.max(0, dur - windowSec);
+      setWindowStart(ws => clamp(ws + step, 0, maxWs));
+    });
+  }, [playing, meta, windowSec]);
 
   // ── Effects: meta (reset on study change) ─────────────────────────────────────
   useEffect(() => {
@@ -980,7 +999,7 @@ export default function EEGViewer() {
 
       {/* ── Canvas + sidebar (relative: collapsed sidebar is a floating control) ─ */}
       <div className="relative flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 min-w-0 min-h-0">
+        <div className="flex-1 min-w-0 min-h-0" onWheel={handleWheelScroll} style={{ touchAction: "none" }}>
           {plotSignalsReady ? (
             <WebGLEEGViewer
               signals={signals}

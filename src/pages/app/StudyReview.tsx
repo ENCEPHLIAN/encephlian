@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, FileSignature, PenLine, ShieldCheck } from "lucide-react";
+import { Loader2, ArrowLeft, FileSignature, PenLine, ShieldCheck, Brain, Waves } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -262,6 +263,37 @@ export default function StudyReview() {
         </div>
       </div>
 
+      {/* ── AI triage summary bar ── */}
+      {meta?.triage_result && (
+        <Card className="border-border/60">
+          <CardContent className="py-3 px-4">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <Brain className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-medium text-foreground">AI triage</span>
+              </div>
+              <Badge variant={meta.triage_result === "abnormal" ? "destructive" : "secondary"} className="capitalize">
+                {meta.triage_result}
+              </Badge>
+              {meta?.triage_confidence != null && (
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {Math.round(meta.triage_confidence * 100)}% confidence
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => navigate(`/app/eeg/${study.id}`)}
+              >
+                <Waves className="h-3.5 w-3.5" />
+                Open in viewer
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="overflow-hidden border-border/80 shadow-sm">
         <CardHeader className="space-y-1 pb-4 border-b bg-muted/30">
           <div className="flex items-start gap-3">
@@ -269,62 +301,107 @@ export default function StudyReview() {
               <PenLine className="h-5 w-5 text-primary" />
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-lg sm:text-xl leading-tight">Clinical review</CardTitle>
+              <CardTitle className="text-lg sm:text-xl leading-tight">IFCN SCORE report</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Edit the draft below, then sign once you agree with the wording. Patient:{" "}
+                Edit the AI draft below, then sign once you agree. Patient:{" "}
                 <span className="font-medium text-foreground">{meta?.patient_id || "—"}</span>
               </p>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          <div className="space-y-4">
-            <div>
-              <Label className="text-sm font-medium">Background activity</Label>
-              <Textarea
-                value={currentDraft?.background_activity || ""}
-                onChange={(e) => setEditedDraft({ ...currentDraft, background_activity: e.target.value })}
-                className="mt-2 min-h-[100px]"
-              />
-            </div>
+        <CardContent className="space-y-0 pt-0">
 
+          {/* ── Section 1: Background activity ── */}
+          <div className="py-5 space-y-2">
             <div>
-              <Label className="text-sm font-medium">Sleep architecture</Label>
-              <Textarea
-                value={currentDraft?.sleep_architecture || ""}
-                onChange={(e) => setEditedDraft({ ...currentDraft, sleep_architecture: e.target.value })}
-                className="mt-2 min-h-[72px]"
-              />
+              <Label className="text-sm font-semibold">Background activity</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Dominant rhythm, amplitude, symmetry, reactivity, generalized slowing.
+              </p>
             </div>
-
-            <div>
-              <Label className="text-sm font-medium">Abnormalities</Label>
-              <Textarea
-                value={currentDraft?.abnormalities || ""}
-                onChange={(e) => setEditedDraft({ ...currentDraft, abnormalities: e.target.value })}
-                className="mt-2 min-h-[80px]"
-              />
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">Impression</Label>
-              <Textarea
-                value={currentDraft?.impression || ""}
-                onChange={(e) => setEditedDraft({ ...currentDraft, impression: e.target.value })}
-                className="mt-2 min-h-[100px]"
-              />
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium">Clinical correlates / follow-up</Label>
-              <Textarea
-                value={currentDraft?.clinical_correlates || ""}
-                onChange={(e) => setEditedDraft({ ...currentDraft, clinical_correlates: e.target.value })}
-                className="mt-2 min-h-[80px]"
-              />
-            </div>
+            <Textarea
+              value={currentDraft?.background_activity || ""}
+              onChange={(e) => setEditedDraft({ ...currentDraft, background_activity: e.target.value })}
+              className="min-h-[100px] text-sm"
+              placeholder="e.g. Posterior dominant rhythm at 9–10 Hz, amplitude 40–60 µV, symmetric and reactive to eye opening. No generalized slowing."
+            />
           </div>
 
+          <Separator />
+
+          {/* ── Section 2: Sleep architecture ── */}
+          <div className="py-5 space-y-2">
+            <div>
+              <Label className="text-sm font-semibold">Sleep architecture</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Sleep stages observed, vertex waves, sleep spindles, K-complexes. Leave blank if wake-only.
+              </p>
+            </div>
+            <Textarea
+              value={currentDraft?.sleep_architecture || ""}
+              onChange={(e) => setEditedDraft({ ...currentDraft, sleep_architecture: e.target.value })}
+              className="min-h-[72px] text-sm"
+              placeholder="e.g. Stage 1–2 NREM with vertex waves and sleep spindles. No REM captured."
+            />
+          </div>
+
+          <Separator />
+
+          {/* ── Section 3: Abnormalities (IEDs + ictal) ── */}
+          <div className="py-5 space-y-2">
+            <div>
+              <Label className="text-sm font-semibold">Abnormalities</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Interictal epileptiform discharges (IEDs), ictal patterns, focal slowing, PLEDS/BIPEDS.
+              </p>
+            </div>
+            <Textarea
+              value={currentDraft?.abnormalities || ""}
+              onChange={(e) => setEditedDraft({ ...currentDraft, abnormalities: e.target.value })}
+              className="min-h-[90px] text-sm"
+              placeholder="e.g. Occasional left temporal sharp waves (T3 max). No clear ictal pattern recorded."
+            />
+          </div>
+
+          <Separator />
+
+          {/* ── Section 4: Impression ── */}
+          <div className="py-5 space-y-2">
+            <div>
+              <Label className="text-sm font-semibold">Impression</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Overall interpretation: normal / mildly / moderately / markedly abnormal, and clinical significance.
+              </p>
+            </div>
+            <Textarea
+              value={currentDraft?.impression || ""}
+              onChange={(e) => setEditedDraft({ ...currentDraft, impression: e.target.value })}
+              className="min-h-[100px] text-sm"
+              placeholder="e.g. Mildly abnormal EEG with left temporal epileptiform activity. Correlation with clinical history is recommended."
+            />
+          </div>
+
+          <Separator />
+
+          {/* ── Section 5: Clinical correlates ── */}
+          <div className="py-5 space-y-2">
+            <div>
+              <Label className="text-sm font-semibold">Clinical correlates / follow-up</Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Recommended action: further imaging, repeat EEG, referral, medication review.
+              </p>
+            </div>
+            <Textarea
+              value={currentDraft?.clinical_correlates || ""}
+              onChange={(e) => setEditedDraft({ ...currentDraft, clinical_correlates: e.target.value })}
+              className="min-h-[80px] text-sm"
+              placeholder="e.g. Recommend MRI brain with hippocampal protocol. Neurology follow-up advised."
+            />
+          </div>
+
+        </CardContent>
+
+        <CardContent className="pt-4 pb-5 border-t space-y-4">
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between rounded-xl border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3">
             <div className="flex items-start gap-2 text-sm">
               <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
