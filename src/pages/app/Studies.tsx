@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, FileText, Eye, Download, Upload, Lock, Unlock } from "lucide-react";
+import { Search, FileText, Eye, Download, Upload, Lock, Unlock, Loader2 as Spinner } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -103,10 +104,21 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
         )}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-1.5">
-          <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
-          <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
-        </div>
+        {study.triage_status === "processing" ? (
+          <div className="flex flex-col gap-1 min-w-[90px]">
+            <div className="flex items-center gap-1.5">
+              <Spinner className="h-3 w-3 animate-spin text-blue-500" />
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">Processing</span>
+            </div>
+            <Progress value={study.triage_progress || 0} className="h-1.5" />
+            <span className="text-[10px] text-muted-foreground tabular-nums">{study.triage_progress || 0}%</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
+            <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
+          </div>
+        )}
       </TableCell>
       <TableCell className="hidden sm:table-cell text-xs">{dayjs(study.created_at).format("MMM D, YYYY")}</TableCell>
       <TableCell>

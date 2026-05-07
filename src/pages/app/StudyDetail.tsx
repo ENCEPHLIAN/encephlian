@@ -149,6 +149,13 @@ export default function StudyDetail() {
       .channel(`study-detail-rt-${id}`)
       .on(
         "postgres_changes",
+        { event: "INSERT", schema: "public", table: "study_pipeline_events", filter: `study_id=eq.${id}` },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
+        },
+      )
+      .on(
+        "postgres_changes",
         { event: "*", schema: "public", table: "studies", filter: `id=eq.${id}` },
         () => {
           if (t) clearTimeout(t);
@@ -158,6 +165,7 @@ export default function StudyDetail() {
             void queryClient.invalidateQueries({ queryKey: ["mind-report", id] });
             void queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
             void queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
+            void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
           }, 100);
         },
       )
@@ -573,44 +581,51 @@ export default function StudyDetail() {
                   No pipeline events yet. They appear after you upload and processing starts.
                 </p>
               ) : (
-                <ScrollArea className="h-[260px] pr-4">
-                  <ul className="space-y-3 text-sm">
-                    {pipelineEvents.map((ev: any) => (
-                      <li key={ev.id} className="border-b border-border/50 pb-3 last:border-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {dayjs(ev.created_at).format("MMM D, YYYY HH:mm:ss")}
-                          </span>
-                          <Badge
-                            variant={
-                              ev.status === "error"
-                                ? "destructive"
-                                : ev.status === "skipped"
-                                  ? "secondary"
-                                  : "outline"
-                            }
-                            className="text-xs"
-                          >
-                            {ev.status}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs font-mono">
-                            {ev.source}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 font-mono text-xs break-all">{ev.step}</p>
-                        {ev.correlation_id ? (
-                          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-                            correlation: {ev.correlation_id}
-                          </p>
-                        ) : null}
-                        {ev.detail && Object.keys(ev.detail).length > 0 ? (
-                          <pre className="mt-2 text-xs bg-muted/60 rounded-md p-2 overflow-x-auto max-h-28 whitespace-pre-wrap">
-                            {JSON.stringify(ev.detail, null, 2)}
-                          </pre>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
+                <ScrollArea className="h-[320px] pr-4">
+                  <div className="relative pl-6">
+                    {/* Vertical timeline line */}
+                    <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
+                    <ul className="space-y-0">
+                      {pipelineEvents.map((ev: any, idx: number) => {
+                        const isError = ev.status === "error";
+                        const isSuccess = ev.status === "ok" || ev.status === "completed" || ev.status === "done";
+                        const isLatest = idx === 0;
+                        return (
+                          <li key={ev.id} className="relative pb-4 last:pb-0">
+                            {/* Timeline dot */}
+                            <div className={`absolute -left-6 top-1.5 h-[11px] w-[11px] rounded-full border-2 ${
+                              isError ? "bg-red-500 border-red-300" :
+                              isSuccess ? "bg-emerald-500 border-emerald-300" :
+                              isLatest ? "bg-primary border-primary/50 ring-2 ring-primary/20" :
+                              "bg-muted border-border"
+                            }`} />
+                            <div className="ml-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] text-muted-foreground font-mono tabular-nums">
+                                  {dayjs(ev.created_at).format("HH:mm:ss")}
+                                </span>
+                                <Badge
+                                  variant={isError ? "destructive" : isSuccess ? "secondary" : "outline"}
+                                  className={`text-[10px] h-4 px-1.5 ${isSuccess ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30" : ""}`}
+                                >
+                                  {ev.status}
+                                </Badge>
+                                <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-mono">
+                                  {ev.source}
+                                </Badge>
+                              </div>
+                              <p className="mt-0.5 text-xs font-medium">{ev.step}</p>
+                              {ev.detail && Object.keys(ev.detail).length > 0 && (
+                                <pre className="mt-1 text-[11px] bg-muted/50 rounded p-1.5 overflow-x-auto max-h-20 whitespace-pre-wrap text-muted-foreground">
+                                  {JSON.stringify(ev.detail, null, 2)}
+                                </pre>
+                              )}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 </ScrollArea>
               )}
             </CardContent>

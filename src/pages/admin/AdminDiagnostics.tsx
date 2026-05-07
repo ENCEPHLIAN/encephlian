@@ -467,6 +467,67 @@ async function fetchProbableStudies(isSuperAdmin: boolean): Promise<PickableStud
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Recent Pipeline Errors — shows last 20 error events across all studies
+// ──────────────────────────────────────────────────────────────────────────
+function RecentPipelineErrors() {
+  const [errors, setErrors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("study_pipeline_events")
+        .select("id, created_at, study_id, step, status, source, detail")
+        .eq("status", "error")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      setErrors(data || []);
+      setLoading(false);
+    })();
+  }, []);
+
+  if (loading) return null;
+  if (errors.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          Recent pipeline errors
+          <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+            {errors.length}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 max-h-[200px] overflow-y-auto">
+          {errors.map((ev) => (
+            <div key={ev.id} className="flex items-start gap-3 text-xs border-b border-border/40 pb-2 last:border-0">
+              <span className="text-[10px] text-muted-foreground font-mono tabular-nums shrink-0 pt-0.5">
+                {new Date(ev.created_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-mono">{ev.source}</Badge>
+                  <span className="font-medium truncate">{ev.step}</span>
+                </div>
+                {ev.detail && (
+                  <p className="text-[10px] text-muted-foreground font-mono mt-0.5 truncate" title={JSON.stringify(ev.detail)}>
+                    {typeof ev.detail === "string" ? ev.detail : JSON.stringify(ev.detail).slice(0, 120)}
+                  </p>
+                )}
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono shrink-0">{ev.study_id?.slice(0, 8)}</span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Page
 // ──────────────────────────────────────────────────────────────────────────
 export default function AdminDiagnostics() {
@@ -702,6 +763,9 @@ export default function AdminDiagnostics() {
           <ReadApiTile h={readApi} base={readApiBase} />
         </div>
       )}
+
+      {/* ── Recent pipeline errors ─────────────────────────────────────── */}
+      <RecentPipelineErrors />
 
       {/* ── Data-plane probe ────────────────────────────────────────────── */}
       <Card>

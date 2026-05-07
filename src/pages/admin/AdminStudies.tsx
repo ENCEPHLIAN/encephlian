@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -12,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Search, Trash2, RotateCcw, ExternalLink } from "lucide-react";
+import { Loader2, Search, Trash2, RotateCcw, ExternalLink, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,8 @@ type Study = {
   owner: string;
   sla: string;
   state: string | null;
+  triage_status: string | null;
+  triage_progress: number | null;
   meta: any;
   reference?: string | null;
   original_format?: string | null;
@@ -113,6 +116,24 @@ export default function AdminStudies() {
     return acc;
   }, {}) ?? {};
 
+  const failedStudies = studies?.filter((s) => s.state === "failed") ?? [];
+
+  const bulkRetryMutation = useMutation({
+    mutationFn: async () => {
+      const ids = failedStudies.map((s) => s.id);
+      await Promise.allSettled(
+        ids.map((sid) =>
+          supabase.functions.invoke("generate_ai_report", { body: { study_id: sid } })
+        )
+      );
+    },
+    onSuccess: () => {
+      toast.success(`Retried ${failedStudies.length} failed studies`);
+      queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
+    },
+    onError: (err: any) => toast.error(err.message || "Bulk retry failed"),
+  });
+
   return (
     <div className="space-y-4 max-w-6xl">
       {/* Header */}
@@ -125,6 +146,22 @@ export default function AdminStudies() {
             {counts["processing"] ? ` · ${counts["processing"]} processing` : ""}
           </p>
         </div>
+        {failedStudies.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={() => bulkRetryMutation.mutate()}
+            disabled={bulkRetryMutation.isPending}
+          >
+            {bulkRetryMutation.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Retry all failed ({failedStudies.length})
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -171,6 +208,7 @@ export default function AdminStudies() {
                   Recording
                 </th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">State</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden md:table-cell">Triage</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
                 <th className="px-4 py-2.5 w-24" />
               </tr>
@@ -204,6 +242,27 @@ export default function AdminStudies() {
                       >
                         {s.state || "pending"}
                       </Badge>
+                    </td>
+                    <td className="px-4 py-3 hidden md:table-cell">
+                      {s.triage_status === "processing" ? (
+                        <div className="flex items-center gap-1.5 min-w-[70px]">
+                          <Loader2 className="h-3 w-3 animate-spin text-blue-500 shrink-0" />
+                          <div className="flex-1 space-y-0.5">
+                            <Progress value={s.triage_progress || 0} className="h-1" />
+                            <span className="text-[10px] text-muted-foreground tabular-nums">{s.triage_progress || 0}%</span>
+                          </div>
+                        </div>
+                      ) : s.triage_status === "completed" ? (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1.5 bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                          done
+                        </Badge>
+                      ) : s.triage_status === "failed" ? (
+                        <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+                          failed
+                        </Badge>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
@@ -249,7 +308,7 @@ export default function AdminStudies() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                  <td colSpan={8} className="px-4 py-12 text-center text-xs text-muted-foreground">
                     No studies match the current filters
                   </td>
                 </tr>
