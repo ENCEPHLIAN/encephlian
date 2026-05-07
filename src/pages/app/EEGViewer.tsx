@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
@@ -753,7 +753,8 @@ export default function EEGViewer() {
         <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
           <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
           <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-            Raw signal — enhanced view processing
+            Raw signal ({meta ? `${meta.n_channels}ch · ${meta.sampling_rate_hz} Hz · original labels` : "loading"})
+            {" — "}enhanced view processing
             {esfPollAttempt > 0 && (
               <span className="opacity-50 ml-1">(check {esfPollAttempt})</span>
             )}
@@ -761,6 +762,33 @@ export default function EEGViewer() {
           <Loader2 className="h-3 w-3 text-amber-500 animate-spin shrink-0" />
         </div>
       )}
+
+      {/* ── ESF mode: show channel mapping quality if meta carries quality info ── */}
+      {!rawEdfMode && signalLayer === "esf" && meta && (() => {
+        // C-Plane embeds "input_montage:X | mapped:Y/Z" in ESF notes field
+        const notes: string = (meta as any).notes ?? "";
+        const montageMatch = notes.match(/input_montage:(\w+)/);
+        const mappedMatch  = notes.match(/mapped:(\d+)\/(\d+)/);
+        if (!montageMatch && !mappedMatch) return null;
+        const montage = montageMatch?.[1];
+        const mapped  = mappedMatch ? `${mappedMatch[1]}/${mappedMatch[2]} ch` : null;
+        const isBipolar = montage === "bipolar";
+        return (
+          <div className={`flex items-center gap-2 px-3 py-1 border-b flex-shrink-0 text-xs ${
+            isBipolar
+              ? "bg-destructive/8 border-destructive/20 text-destructive"
+              : "bg-muted/30 border-border/40 text-muted-foreground"
+          }`}>
+            {isBipolar && <AlertCircle className="h-3 w-3 shrink-0" />}
+            <span>
+              {montage ? `Input montage: ${montage.replace(/_/g, " ")}` : ""}
+              {montage && mapped ? " · " : ""}
+              {mapped ? `${mapped} mapped to 10-20` : ""}
+              {isBipolar ? " — bipolar input cannot be re-referenced; ESF view may be empty" : ""}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* ── Focused segment banner ── */}
       {focusedSeg && (

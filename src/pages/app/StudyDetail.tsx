@@ -408,14 +408,23 @@ export default function StudyDetail() {
                     : (study.ai_draft_json as any)?.schema_version === "mind.report.v1" ? study.ai_draft_json
                     : null;
                   if (!activeReport) return null;
-                  const cls = activeReport.triage?.classification;
+                  const cls  = activeReport.triage?.classification;
                   const conf = activeReport.triage?.confidence;
+                  const qflag = activeReport.triage?.quality_flag;
                   if (!cls || cls === "unknown") return null;
+                  if (cls === "inconclusive" || qflag) {
+                    return (
+                      <Badge className="bg-amber-500 text-white" title={activeReport.triage?.quality_detail ?? ""}>
+                        <Brain className="h-3 w-3 mr-1" />
+                        INCONCLUSIVE
+                      </Badge>
+                    );
+                  }
                   return (
                     <Badge className={cls === "abnormal" ? "bg-destructive text-destructive-foreground" : "bg-emerald-500 text-white"}>
                       <Brain className="h-3 w-3 mr-1" />
                       {cls.toUpperCase()}
-                      {conf != null && ` ${(conf * 100).toFixed(0)}%`}
+                      {conf != null && conf >= 0.65 && ` ${(conf * 100).toFixed(0)}%`}
                     </Badge>
                   );
                 })()}
@@ -855,7 +864,63 @@ export default function StudyDetail() {
                 Triage · Clean · Seizure · SCORE — clinician interprets
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* ── Channel mapping quality warning ── */}
+              {(() => {
+                const activeReport = mindReport?.schema_version === "mind.report.v1" ? mindReport
+                  : (study.ai_draft_json as any)?.schema_version === "mind.report.v1" ? study.ai_draft_json
+                  : null;
+                if (!activeReport) return null;
+                const triage = activeReport.triage || {};
+                const qflag = triage.quality_flag;
+                const validCh = triage.valid_channels;
+                const totalCh = triage.total_channels;
+                if (!qflag) return null;
+
+                const messages: Record<string, { title: string; body: string }> = {
+                  insufficient_channels: {
+                    title: "Insufficient channel mapping",
+                    body: `Only ${validCh ?? "?"} of ${totalCh ?? 19} EEG channels could be mapped from this file. The input montage may be bipolar or use non-standard labels. The AI result is not reliable — manual review is required.`,
+                  },
+                  low_confidence: {
+                    title: "Low model confidence",
+                    body: `Model confidence was ${triage.confidence != null ? `${(triage.confidence * 100).toFixed(0)}%` : "below threshold"} — below the 65% minimum for a reliable classification. The recording was processed but results should not be used clinically without manual review.`,
+                  },
+                  nan_in_features: {
+                    title: "Signal quality issue",
+                    body: "Feature extraction encountered non-finite values, likely due to missing or corrupted channels. Results are unreliable.",
+                  },
+                  heuristic_fallback: {
+                    title: "Heuristic model (no ONNX)",
+                    body: "The MIND® ONNX model was not loaded. A simple spectral heuristic was used — not suitable for clinical use.",
+                  },
+                };
+                const msg = messages[qflag] ?? { title: "Quality issue", body: triage.quality_detail ?? "Results may not be reliable." };
+
+                return (
+                  <Alert variant="destructive" className="border-amber-500/50 bg-amber-500/8 text-amber-900 dark:text-amber-200">
+                    <AlertCircle className="h-4 w-4 !text-amber-600" />
+                    <AlertTitle className="text-amber-800 dark:text-amber-300">{msg.title}</AlertTitle>
+                    <AlertDescription className="text-amber-700 dark:text-amber-400 text-sm">
+                      {msg.body}
+                      {validCh != null && totalCh != null && qflag === "insufficient_channels" && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-xs font-mono">
+                            {validCh}/{totalCh} channels valid
+                          </span>
+                          <div className="flex-1 h-1.5 rounded-full bg-amber-200/50 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-amber-500"
+                              style={{ width: `${Math.round((validCh / totalCh) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+
               {gateTriageActions ? (
                 <div className="text-center py-10 space-y-2 text-muted-foreground text-sm">
                   <p>MIND® opens after you start triage from Studies (token charge applies there).</p>
