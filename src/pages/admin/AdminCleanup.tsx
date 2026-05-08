@@ -192,9 +192,9 @@ export default function AdminCleanup() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Cleanup</h1>
-        <p className="text-sm text-muted-foreground font-mono">
-          Remove test, sample, demo files and orphaned storage objects
+        <h1 className="text-lg font-semibold tracking-tight">Cleanup</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Remove test, sample, and orphaned storage objects
         </p>
       </div>
 
@@ -239,7 +239,7 @@ export default function AdminCleanup() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              <CardTitle className="text-lg font-mono">Test/Sample Files Detected</CardTitle>
+              <CardTitle className="text-base font-medium">Test/Sample Files Detected</CardTitle>
             </div>
             <CardDescription>
               Files matching patterns: sample, demo, test, example, or marked as sample studies (bypasses RLS)
@@ -329,7 +329,7 @@ export default function AdminCleanup() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <HardDrive className="h-5 w-5 text-amber-500" />
-              <CardTitle className="text-lg font-mono">Orphaned Storage Files</CardTitle>
+              <CardTitle className="text-base font-medium">Orphaned Storage Files</CardTitle>
             </div>
             <CardDescription>
               Files in storage buckets that are not linked to any study record

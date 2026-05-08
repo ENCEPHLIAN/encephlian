@@ -60,6 +60,7 @@ export interface WebGLEEGViewerProps {
   labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
   hfFilter?: number;         // high-frequency cutoff Hz (lowpass) — 0 = off
   lfFilter?: number;         // low-frequency cutoff Hz (highpass) — 0 = off
+  notchFilter?: 0 | 50 | 60; // powerline notch — 0 = off
   onTimeClick?: (time: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
@@ -160,6 +161,23 @@ function biquadHP(fc: number, fs: number): [number,number,number,number,number] 
   ];
 }
 
+/** 2nd-order IIR band-reject (notch) coefficients [b0,b1,b2,a1,a2]. Bandwidth fixed at 3 Hz. */
+function biquadNotch(fc: number, fs: number): [number,number,number,number,number] | null {
+  if (fc <= 0 || fc >= fs / 2) return null;
+  const w0 = (2 * Math.PI * fc) / fs;
+  const bw = (2 * Math.PI * 3) / fs; // 3 Hz bandwidth
+  const cosw = Math.cos(w0);
+  const alpha = Math.sin(w0) * Math.sinh(Math.log(2) / 2 * bw / Math.sin(w0));
+  const a0 = 1 + alpha;
+  return [
+     1      / a0,
+    (-2 * cosw) / a0,
+     1      / a0,
+    (-2 * cosw) / a0,
+    ((1 - alpha) / a0),
+  ];
+}
+
 /** Direct Form II Transposed biquad — numerically stable, O(n). */
 function applyBiquad(sig: number[], b0: number, b1: number, b2: number, a1: number, a2: number): number[] {
   const out = new Array(sig.length);
@@ -239,6 +257,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     labelColumnWidth = 72,
     hfFilter = 0,
     lfFilter = 0,
+    notchFilter = 0,
     onTimeClick,
   } = props;
 
@@ -716,11 +735,15 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const quality: "flat" | "noisy" | "ok" =
         p95 < 1.0 ? "flat" : p95 > 300 ? "noisy" : "ok";
 
-      // Apply DSP filters (highpass then lowpass — order matters for numerical stability)
+      // Apply DSP filters: highpass → notch → lowpass
       let filteredSig: number[] = sig;
       if (lfFilter > 0) {
         const hp = biquadHP(lfFilter, sampleRate);
         if (hp) filteredSig = applyBiquad(filteredSig, hp[0], hp[1], hp[2], hp[3], hp[4]);
+      }
+      if (notchFilter > 0) {
+        const nt = biquadNotch(notchFilter, sampleRate);
+        if (nt) filteredSig = applyBiquad(filteredSig, nt[0], nt[1], nt[2], nt[3], nt[4]);
       }
       if (hfFilter > 0 && hfFilter < sampleRate / 2) {
         const lp = biquadLP(hfFilter, sampleRate);
@@ -809,6 +832,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     labelColumnWidth,
     hfFilter,
     lfFilter,
+    notchFilter,
   ]);
 
   // Keep drawRef in sync so resize observer can call it

@@ -12,6 +12,7 @@ import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { EdfChunkReader } from "@/lib/eeg/edf-reader";
+import { applyMontage } from "@/lib/eeg/montage-transforms";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -187,10 +188,11 @@ export default function EEGViewer() {
   const [suppressArts, setSuppressArts]     = useState(false);
   const [showSegments, setShowSegments]     = useState(true);
   const [sidebarOpen, setSidebarOpen]       = useState(true);
-  // Clinical display controls (display-only for now; filtering applied in future)
+  // Clinical display controls
   const [hfFilter, setHfFilter]             = useState(70);
   const [lfFilter, setLfFilter]             = useState(0.5);
-  const [montage, setMontage]               = useState("avg");
+  const [notchFilter, setNotchFilter]       = useState<0 | 50 | 60>(50);
+  const [montage, setMontage]               = useState("referential");
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const [signals, setSignals]         = useState<number[][] | null>(null);
@@ -240,11 +242,18 @@ export default function EEGViewer() {
     return [];
   }, [meta]);
 
+  const { signals: displaySignals, labels: displayLabels } = useMemo(() => {
+    if (!signals || !channelLabels.length) return { signals, labels: channelLabels };
+    const result = applyMontage(signals, channelLabels, montage);
+    return { signals: result.signals, labels: result.labels };
+  }, [signals, channelLabels, montage]);
+
   const visibleChannels = useMemo(() => {
     const s = new Set<number>();
-    if (meta) for (let i = 0; i < meta.n_channels; i++) s.add(i);
+    if (displaySignals) for (let i = 0; i < displaySignals.length; i++) s.add(i);
+    else if (meta) for (let i = 0; i < meta.n_channels; i++) s.add(i);
     return s;
-  }, [meta]);
+  }, [displaySignals, meta]);
 
   // ── Seek ─────────────────────────────────────────────────────────────────────
   const seekTo = useCallback((t: number) => {
@@ -849,9 +858,11 @@ export default function EEGViewer() {
         onHFFilterChange={setHfFilter}
         lfFilter={lfFilter}
         onLFFilterChange={setLfFilter}
+        notchFilter={notchFilter}
+        onNotchFilterChange={setNotchFilter}
         montage={montage}
         onMontageChange={setMontage}
-        visibleChannelCount={meta?.n_channels}
+        visibleChannelCount={displayLabels.length || meta?.n_channels}
       />
 
       {/* ── Timeline (mini-map) + ESF/Raw overlaid on the right (same h-8, no extra row) ── */}
@@ -1030,8 +1041,8 @@ export default function EEGViewer() {
         <div className="flex-1 min-w-0 min-h-0" onWheel={handleWheelScroll} style={{ touchAction: "none" }}>
           {plotSignalsReady ? (
             <WebGLEEGViewer
-              signals={signals}
-              channelLabels={channelLabels}
+              signals={displaySignals}
+              channelLabels={displayLabels}
               sampleRate={meta.sampling_rate_hz}
               currentTime={cursor}
               timeWindow={windowSec}
@@ -1046,6 +1057,7 @@ export default function EEGViewer() {
               suppressArtifacts={suppressArts}
               hfFilter={hfFilter}
               lfFilter={lfFilter}
+              notchFilter={notchFilter}
               labelColumnWidth={72}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
@@ -1089,7 +1101,7 @@ export default function EEGViewer() {
         </span>
         <span className="text-[10px] text-muted-foreground/40">·</span>
         <span className="text-[10px] font-mono text-muted-foreground">
-          {hfFilter} Hz HF · {lfFilter === 0 ? "LF Off" : `${lfFilter < 0.1 ? lfFilter.toFixed(3) : lfFilter.toFixed(1)} Hz LF`} · Notch Off
+          {hfFilter} Hz HF · {lfFilter === 0 ? "LF Off" : `${lfFilter < 0.1 ? lfFilter.toFixed(3) : lfFilter.toFixed(1)} Hz LF`} · {notchFilter === 0 ? "Notch Off" : `${notchFilter} Hz Notch`}
         </span>
         <div className="flex-1" />
         {loadingWin && (

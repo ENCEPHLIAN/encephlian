@@ -8,18 +8,16 @@ import { Input } from "@/components/ui/input";
 import { useTheme } from "next-themes";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2, Eye, EyeOff, Shield, ShieldCheck, ShieldOff, Palette, Lock, Monitor, Cloud, Wifi } from "lucide-react";
+import { Loader2, Eye, EyeOff, Shield, ShieldCheck, ShieldOff, Palette, Lock } from "lucide-react";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 
 export default function Settings() {
   const navigate = useNavigate();
   const { theme, setTheme } = useTheme();
   const { userId, profile: contextProfile } = useUserSession();
   const [profile, setProfile] = useState<any>(null);
-  
+
   const [showPasswordSection, setShowPasswordSection] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ newPassword: "", confirmPassword: "" });
   const [showPasswords, setShowPasswords] = useState(false);
@@ -27,14 +25,6 @@ export default function Settings() {
   const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; loading: boolean }>({ enabled: false, loading: true });
   const [tfaLoading, setTfaLoading] = useState(false);
 
-  // Device status - Windows Uploader + Cloud Sync
-  const deviceStatus = {
-    windowsUploader: { connected: false, lastSync: null as string | null },
-    cloudSync: { connected: true, status: "idle" as "idle" | "syncing" | "error" },
-  };
-  const allOnline = deviceStatus.windowsUploader.connected && deviceStatus.cloudSync.connected;
-  const partialOnline = deviceStatus.windowsUploader.connected || deviceStatus.cloudSync.connected;
-  
   useEffect(() => {
     if (contextProfile) setProfile(contextProfile);
     loadTFAStatus();
@@ -94,7 +84,7 @@ export default function Settings() {
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Settings</h1>
           <p className="text-muted-foreground mt-1">Manage your account preferences</p>
         </div>
-        
+
         {/* Appearance */}
         <Card className="bg-card border-border">
           <CardHeader>
@@ -102,13 +92,13 @@ export default function Settings() {
               <Palette className="h-5 w-5 text-primary" />
               <CardTitle>Appearance</CardTitle>
             </div>
-            <CardDescription>Customize the app theme</CardDescription>
+            <CardDescription>Customize the interface theme</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
               <div>
                 <Label>Theme</Label>
-                <p className="text-sm text-muted-foreground">Choose your preferred theme</p>
+                <p className="text-sm text-muted-foreground">Light, dark, or match your system</p>
               </div>
               <Select value={theme} onValueChange={setTheme}>
                 <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
@@ -118,45 +108,6 @@ export default function Settings() {
                   <SelectItem value="system">System</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Device Status */}
-        <Card className="bg-card border-border">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Wifi className="h-5 w-5 text-primary" />
-              <CardTitle>Device Status</CardTitle>
-            </div>
-            <CardDescription>Connection status for your devices</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-              <span className="text-sm font-medium">System Status</span>
-              <Badge variant="outline" className={cn("text-xs", allOnline ? "border-emerald-500 text-emerald-500" : partialOnline ? "border-amber-500 text-amber-500" : "border-muted-foreground text-muted-foreground")}>
-                {allOnline ? "All Online" : partialOnline ? "Partial" : "Offline"}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-3">
-                <Monitor className={cn("h-5 w-5", deviceStatus.windowsUploader.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                <div>
-                  <p className="text-sm font-medium">Windows Uploader</p>
-                  <p className="text-xs text-muted-foreground">{deviceStatus.windowsUploader.connected ? "Connected" : "Not connected"}</p>
-                </div>
-              </div>
-              <div className={cn("h-3 w-3 rounded-full", deviceStatus.windowsUploader.connected ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/30")} />
-            </div>
-            <div className="flex items-center justify-between py-2">
-              <div className="flex items-center gap-3">
-                <Cloud className={cn("h-5 w-5", deviceStatus.cloudSync.connected ? "text-emerald-500" : "text-muted-foreground/50")} />
-                <div>
-                  <p className="text-sm font-medium">Cloud Sync</p>
-                  <p className="text-xs text-muted-foreground capitalize">{deviceStatus.cloudSync.connected ? deviceStatus.cloudSync.status : "Disconnected"}</p>
-                </div>
-              </div>
-              <div className={cn("h-3 w-3 rounded-full", deviceStatus.cloudSync.connected ? "bg-emerald-500" : "bg-muted-foreground/30")} />
             </div>
           </CardContent>
         </Card>
@@ -210,7 +161,7 @@ export default function Settings() {
                     <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDisableTFA} className="bg-destructive hover:bg-destructive/90" disabled={tfaLoading}>{tfaLoading ? "Disabling..." : "Disable"}</AlertDialogAction></AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
-              ) : <Button variant="outline" size="sm" onClick={() => navigate("/app/tfa-setup")}><Shield className="h-4 w-4 mr-2" />Enable</Button>}
+              ) : <Button variant="outline" size="sm" onClick={() => navigate("/app/settings/tfa")}><Shield className="h-4 w-4 mr-2" />Enable</Button>}
             </div>
           </CardContent>
         </Card>

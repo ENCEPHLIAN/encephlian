@@ -176,7 +176,7 @@ export default function TicketManagement() {
                               <SelectTrigger className="mt-1">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent position="popper" sideOffset={4}>
                                 <SelectItem value="open">Open</SelectItem>
                                 <SelectItem value="in_progress">In Progress</SelectItem>
                                 <SelectItem value="resolved">Resolved</SelectItem>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,45 +117,26 @@ export default function AdminTickets() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Support Tickets</h1>
-        <p className="text-sm text-muted-foreground font-mono">
-          Manage customer support requests
+        <h1 className="text-lg font-semibold tracking-tight">Support Tickets</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {tickets?.length ?? 0} total · {openTickets} open · {inProgressTickets} in progress
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card className="bg-muted/30">
-          <CardContent className="p-4 flex items-center gap-3">
-            <MessageSquare className="h-8 w-8 text-primary" />
-            <div>
-              <p className="text-2xl font-mono font-bold">{tickets?.length || 0}</p>
-              <p className="text-xs text-muted-foreground">Total Tickets</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-muted/30">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-yellow-500/20 flex items-center justify-center">
-              <span className="text-yellow-500 font-bold">{openTickets}</span>
-            </div>
-            <div>
-              <p className="text-2xl font-mono font-bold">{openTickets}</p>
-              <p className="text-xs text-muted-foreground">Open</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-muted/30">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <span className="text-blue-500 font-bold">{inProgressTickets}</span>
-            </div>
-            <div>
-              <p className="text-2xl font-mono font-bold">{inProgressTickets}</p>
-              <p className="text-xs text-muted-foreground">In Progress</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg border border-border/60 p-4">
+          <p className="text-xs text-muted-foreground">Total</p>
+          <p className="text-2xl font-semibold tabular-nums mt-1">{tickets?.length || 0}</p>
+        </div>
+        <div className="rounded-lg border border-border/60 p-4">
+          <p className="text-xs text-muted-foreground">Open</p>
+          <p className="text-2xl font-semibold tabular-nums mt-1 text-amber-500">{openTickets}</p>
+        </div>
+        <div className="rounded-lg border border-border/60 p-4">
+          <p className="text-xs text-muted-foreground">In Progress</p>
+          <p className="text-2xl font-semibold tabular-nums mt-1 text-blue-500">{inProgressTickets}</p>
+        </div>
       </div>
 
       {/* Tickets Table */}
@@ -233,7 +214,7 @@ export default function AdminTickets() {
                 <SelectTrigger className="w-[180px]">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="resolved">Resolved</SelectItem>

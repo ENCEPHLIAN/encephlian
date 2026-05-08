@@ -385,7 +385,7 @@ export default function AdminEegPush() {
                       <SelectTrigger>
                         <SelectValue placeholder="Select clinician..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={4}>
                         {users?.map((user) => (
                           <SelectItem key={user.id} value={user.id}>
                             {user.full_name || user.email}
@@ -401,7 +401,7 @@ export default function AdminEegPush() {
                       <SelectTrigger>
                         <SelectValue placeholder="Select clinic..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent position="popper" sideOffset={4}>
                         {clinics?.map((clinic) => (
                           <SelectItem key={clinic.id} value={clinic.id}>
                             {clinic.name} {clinic.city && `(${clinic.city})`}

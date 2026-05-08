@@ -40,14 +40,7 @@ export function TokenPurchase() {
         throw new Error("Invalid order response — check Edge Function logs for create_order");
       }
 
-      // Load Razorpay script if not already loaded
-      if (!(window as any).Razorpay) {
-        const script = document.createElement("script");
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
-        script.async = true;
-        document.body.appendChild(script);
-        await new Promise((resolve) => (script.onload = resolve));
-      }
+      await loadRazorpayScript();
 
       const options: any = {
         key: (orderData as { keyId: string }).keyId,

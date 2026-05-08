@@ -73,9 +73,9 @@ export default function AdminAccount() {
   return (
     <div className="space-y-6 max-w-xl">
       <div>
-        <h1 className="text-2xl font-mono font-bold tracking-tight">Account Settings</h1>
-        <p className="text-sm text-muted-foreground font-mono">
-          Manage your admin account security
+        <h1 className="text-lg font-semibold tracking-tight">Account</h1>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Admin account security settings
         </p>
       </div>
 
@@ -83,7 +83,7 @@ export default function AdminAccount() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <KeyRound className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg font-mono">Change Password</CardTitle>
+            <CardTitle className="text-base font-medium">Change Password</CardTitle>
           </div>
           <CardDescription>
             Update your password regularly to keep your account secure
@@ -132,7 +132,7 @@ export default function AdminAccount() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-muted-foreground" />
-            <CardTitle className="text-lg font-mono">Security Information</CardTitle>
+            <CardTitle className="text-base font-medium">Security Information</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">

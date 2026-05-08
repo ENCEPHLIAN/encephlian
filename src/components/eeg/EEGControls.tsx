@@ -39,11 +39,11 @@ export const LF_OPTIONS = [0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.6, 5.0] as
 
 // ── Montage options ───────────────────────────────────────────────────────────
 const MONTAGE_OPTIONS = [
-  { value: "avg",     label: "Comm av (19/25)" },
-  { value: "long",    label: "Long (19/20)"    },
-  { value: "trans",   label: "Trans (19/10-20)" },
-  { value: "bipolar", label: "My bipolar avg"  },
-  { value: "input",   label: "Input Montage"   },
+  { value: "referential",        label: "Referential (input)" },
+  { value: "average-reference",  label: "Average reference"   },
+  { value: "bipolar-longitudinal", label: "Bipolar longitudinal" },
+  { value: "bipolar-transverse", label: "Bipolar transverse"  },
+  { value: "laplacian",          label: "Laplacian"           },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -98,6 +98,8 @@ export interface EEGControlsProps {
   onHFFilterChange?: (hz: number) => void;
   lfFilter?: number;
   onLFFilterChange?: (hz: number) => void;
+  notchFilter?: 0 | 50 | 60;
+  onNotchFilterChange?: (hz: 0 | 50 | 60) => void;
   // Montage
   montage?: string;
   onMontageChange?: (m: string) => void;
@@ -135,7 +137,9 @@ export function EEGControls({
   onHFFilterChange,
   lfFilter = 0.5,
   onLFFilterChange,
-  montage = "avg",
+  notchFilter = 0,
+  onNotchFilterChange,
+  montage = "referential",
   onMontageChange,
   visibleChannelCount,
 }: EEGControlsProps) {
@@ -278,6 +282,24 @@ export function EEGControls({
                 {v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : v.toFixed(1)}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <CtrlLabel>Hz</CtrlLabel>
+      </div>
+
+      <Sep />
+
+      {/* Notch filter */}
+      <div className="flex items-center gap-0.5 shrink-0">
+        <CtrlLabel>Notch</CtrlLabel>
+        <Select value={String(notchFilter)} onValueChange={v => onNotchFilterChange?.(Number(v) as 0 | 50 | 60)}>
+          <SelectTrigger className="h-6 w-[48px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="0"   className="text-xs">Off</SelectItem>
+            <SelectItem value="50"  className="text-xs">50</SelectItem>
+            <SelectItem value="60"  className="text-xs">60</SelectItem>
           </SelectContent>
         </Select>
         <CtrlLabel>Hz</CtrlLabel>

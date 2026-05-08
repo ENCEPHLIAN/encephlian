@@ -656,7 +656,7 @@ export default function AdminClinics() {
                               <SelectTrigger className="mt-1 h-8 text-xs">
                                 <SelectValue />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent position="popper" sideOffset={4}>
                                 <SelectItem value="add">
                                   <div className="flex items-center gap-1.5 text-xs">
                                     <Plus className="h-3 w-3 text-emerald-500" /> Add
@@ -730,7 +730,7 @@ export default function AdminClinics() {
                 <SelectTrigger className="mt-1 h-8 text-sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   {SKU_TIERS.map((t) => (
                     <SelectItem key={t} value={t}>
                       <Badge variant="secondary" className={cn("text-[10px]", SKU_STYLE[t])}>{SKU_LABELS[t]}</Badge>
@@ -793,7 +793,7 @@ export default function AdminClinics() {
                   <SelectTrigger className="mt-1 h-8 text-sm">
                     <SelectValue placeholder="Select tier…" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper" sideOffset={4}>
                     {SKU_TIERS.map((t) => (
                       <SelectItem key={t} value={t}>
                         <Badge variant="secondary" className={cn("text-[10px]", SKU_STYLE[t])}>{SKU_LABELS[t]}</Badge>

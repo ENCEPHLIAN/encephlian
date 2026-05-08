@@ -204,7 +204,7 @@ export default function Reports() {
 
     try {
       const { data, error } = await supabase.storage
-        .from("reports")
+        .from("eeg-reports")
         .download(report.pdf_path);
 
       if (error) throw error;
@@ -245,11 +245,11 @@ export default function Reports() {
         <div>
           <h1 className="text-2xl font-bold">Reports</h1>
           <p className="text-sm text-muted-foreground">
-            View and manage generated reports
+            View and download signed EEG reports
           </p>
         </div>
-        <Button onClick={() => navigate("/app/report-v0")}>
-          Generate Report
+        <Button variant="outline" onClick={() => navigate("/app/studies")}>
+          Upload Study
         </Button>
       </div>
 

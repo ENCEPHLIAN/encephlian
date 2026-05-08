@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { identifyUser, resetIdentity } from '@/lib/analytics';
 import { Session, User } from '@supabase/supabase-js';
 
 // Simple user session - one source of truth
@@ -129,11 +130,13 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       if (event === 'SIGNED_OUT') {
+        resetIdentity();
         clearSession();
         return;
       }
 
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') && session?.user) {
+        identifyUser(session.user.id, { email: session.user.email });
         loadUserData(session);
         return;
       }

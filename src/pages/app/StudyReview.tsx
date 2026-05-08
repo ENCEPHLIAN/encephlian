@@ -284,7 +284,7 @@ export default function StudyReview() {
                 variant="ghost"
                 size="sm"
                 className="ml-auto h-7 gap-1.5 text-xs"
-                onClick={() => navigate(`/app/eeg/${study.id}`)}
+                onClick={() => navigate(`/app/studies/${study.id}/viewer`)}
               >
                 <Waves className="h-3.5 w-3.5" />
                 Open in viewer

@@ -30,6 +30,7 @@ import {
   Eye,
   Brain,
   ListOrdered,
+  RefreshCw,
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -286,21 +287,26 @@ export default function StudyDetail() {
         return;
       }
 
-      if (!report.pdf_path) {
+      let pdfPath = report.pdf_path;
+      if (!pdfPath) {
         toast({ title: "Generating PDF...", description: "Please wait" });
-        
         const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
-          body: { reportId: report.id }
+          body: { reportId: report.id },
         });
-        
         if (genError) throw new Error(genError.message || "Failed to generate PDF");
-        refetch();
+        const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).single();
+        pdfPath = fresh?.pdf_path;
+        queryClient.invalidateQueries({ queryKey: ["study-detail", id] });
+      }
+
+      if (!pdfPath) {
+        toast({ title: "PDF not ready yet — please try again in a moment." });
         return;
       }
 
       const { data, error } = await supabase.storage
         .from("eeg-reports")
-        .download(report.pdf_path);
+        .download(pdfPath);
 
       if (error) throw error;
 
@@ -364,6 +370,7 @@ export default function StudyDetail() {
     (study.state === "uploaded" || study.state === "parsed");
   const triagePaid = studyTriageIsPaid(study);
   const gateTriageActions = !triagePaid && study.state !== "signed";
+  const lastPipelineError = pipelineEvents.find((e: any) => e.status === "error");
   const canReview =
     triagePaid &&
     (study.triage_status === "completed" ||
@@ -541,6 +548,26 @@ export default function StudyDetail() {
 
       <StudyFlowProgress study={study} isPilot={isPilot} />
 
+      {lastPipelineError && (
+        <Alert className="border-destructive/40 bg-destructive/5">
+          <AlertCircle className="h-4 w-4 text-destructive" />
+          <AlertTitle className="text-destructive">Pipeline error — {lastPipelineError.step}</AlertTitle>
+          <AlertDescription className="text-sm flex flex-col gap-2">
+            <span>{lastPipelineError.detail ? JSON.stringify(lastPipelineError.detail) : "An error occurred during processing."}</span>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="self-start"
+              onClick={handleRunAITriage}
+              disabled={runningTriage}
+            >
+              {runningTriage ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <RefreshCw className="h-3 w-3 mr-1.5" />}
+              Retry pipeline
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {gateTriageActions && (
         <Alert className="border-amber-500/40 bg-amber-500/5">
           <AlertCircle className="h-4 w-4 text-amber-600" />
@@ -716,7 +743,10 @@ export default function StudyDetail() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-medium">ENCEPHLIAN</p>
+                <p className="font-medium">{(study as any).clinics?.name || "—"}</p>
+                {(study as any).clinics?.city && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{(study as any).clinics.city}</p>
+                )}
               </CardContent>
             </Card>
 

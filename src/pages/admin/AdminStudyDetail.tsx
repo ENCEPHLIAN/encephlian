@@ -374,9 +374,9 @@ export default function AdminStudyDetail() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div>
-          <h1 className="text-xl font-mono font-bold">Study Detail</h1>
+          <h1 className="text-lg font-semibold">Study Detail</h1>
           <p className="text-xs text-muted-foreground font-mono">{adminHandle}</p>
-          <p className="text-sm text-muted-foreground font-mono">{id}</p>
+          <p className="text-xs text-muted-foreground font-mono">{id}</p>
           {adminSourceLine && (
             <p className="text-sm text-muted-foreground mt-1 max-w-xl truncate" title={adminSourceLine}>
               {adminSourceLine}
@@ -408,7 +408,7 @@ export default function AdminStudyDetail() {
           {/* Core Fields */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Study Information</CardTitle>
+              <CardTitle className="text-sm font-medium">Study Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -463,7 +463,7 @@ export default function AdminStudyDetail() {
           {/* Files */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Associated Files</CardTitle>
+              <CardTitle className="text-sm font-medium">Associated Files</CardTitle>
               <CardDescription>{studyFiles?.length || 0} files</CardDescription>
             </CardHeader>
             <CardContent>
@@ -498,7 +498,7 @@ export default function AdminStudyDetail() {
           {/* Pipeline trace (infra) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Pipeline trace</CardTitle>
+              <CardTitle className="text-sm font-medium">Pipeline trace</CardTitle>
               <CardDescription>Edge → C-Plane → I-Plane append-only log</CardDescription>
             </CardHeader>
             <CardContent>
@@ -532,7 +532,7 @@ export default function AdminStudyDetail() {
           {/* Events Timeline */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Events Timeline</CardTitle>
+              <CardTitle className="text-sm font-medium">Events Timeline</CardTitle>
               <CardDescription>Chronological processing events</CardDescription>
             </CardHeader>
             <CardContent>
@@ -570,7 +570,7 @@ export default function AdminStudyDetail() {
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Actions</CardTitle>
+              <CardTitle className="text-sm font-medium">Actions</CardTitle>
               <CardDescription>Admin control panel</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -647,7 +647,7 @@ export default function AdminStudyDetail() {
           {/* Source Chip (for viewer) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base font-mono">Data Source</CardTitle>
+              <CardTitle className="text-sm font-medium">Data Source</CardTitle>
             </CardHeader>
             <CardContent>
               <Badge variant="outline" className="font-mono">

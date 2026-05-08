@@ -3,8 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { BookOpen, MessageSquare, Mail, FileQuestion } from "lucide-react";
+import { BookOpen, Mail, FileQuestion } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
@@ -70,47 +69,34 @@ export default function Support() {
       </div>
 
       {/* Quick Help Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card
-          className="cursor-pointer hover:shadow-md hover:border-border/80 transition-all"
-          onClick={() => navigate("/app/documentation")}
+          className="cursor-pointer hover:bg-accent/30 transition-colors"
+          onClick={() => navigate("/app/docs")}
         >
-          <CardHeader className="space-y-2">
-            <BookOpen className="h-7 w-7 text-primary" />
-            <CardTitle className="text-base">Documentation</CardTitle>
+          <CardHeader className="space-y-2 pb-3">
+            <BookOpen className="h-6 w-6 text-primary" />
+            <CardTitle className="text-sm font-semibold">Documentation</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Browse guides on TAT, STAT, SLA tiers and review workflows.
+              Guides on TAT, STAT, SLA tiers, upload formats, and review workflows.
             </p>
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:shadow-none opacity-60">
-          <CardHeader className="space-y-2">
-            <MessageSquare className="h-7 w-7 text-primary" />
-            <CardTitle className="text-base">Live Chat</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
-              Chat with our support team in real time.
-            </p>
-            <Badge variant="secondary">Coming Soon</Badge>
-          </CardContent>
-        </Card>
-
-        <Card className="cursor-pointer hover:shadow-md hover:border-border/80 transition-all">
-          <CardHeader className="space-y-2">
-            <Mail className="h-7 w-7 text-primary" />
-            <CardTitle className="text-base">Email Support</CardTitle>
+        <Card>
+          <CardHeader className="space-y-2 pb-3">
+            <Mail className="h-6 w-6 text-primary" />
+            <CardTitle className="text-sm font-semibold">Email Support</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Email us at{" "}
+              Reach us at{" "}
               <a href="mailto:info@encephlian.cloud" className="font-medium text-primary hover:underline">
                 info@encephlian.cloud
               </a>
-              .
+              . We respond within 1 business day.
             </p>
           </CardContent>
         </Card>

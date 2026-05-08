@@ -181,7 +181,7 @@ export default function PaaSUserManagement() {
                     <SelectTrigger>
                       <SelectValue placeholder="Select clinic" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent position="popper" sideOffset={4}>
                       {clinics?.map((clinic) => (
                         <SelectItem key={clinic.id} value={clinic.id}>
                           {clinic.name}

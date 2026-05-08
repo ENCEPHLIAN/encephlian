@@ -86,8 +86,12 @@ export default function ReportDetail() {
 
   const signMutation = useMutation({
     mutationFn: async () => {
+      if (!report?.study_id) throw new Error("No study linked to this report");
       const { data, error } = await supabase.functions.invoke("sign_report", {
-        body: { report_id: id },
+        body: {
+          studyId: report.study_id,
+          reportContent: isEditing ? editedContent : report.content,
+        },
       });
       if (error) throw error;
       return data;
@@ -121,14 +125,22 @@ export default function ReportDetail() {
   });
 
   const handleDownload = async () => {
-    if (!report?.pdf_path) {
-      // Generate PDF first
+    let pdfPath = report?.pdf_path;
+
+    if (!pdfPath) {
       try {
-        const { data, error } = await supabase.functions.invoke("generate_report_pdf", {
-          body: { report_id: id },
+        const { error } = await supabase.functions.invoke("generate_report_pdf", {
+          body: { reportId: id },
         });
         if (error) throw error;
-        toast.success("PDF generated, downloading...");
+
+        // Fetch fresh report to get the new pdf_path
+        const { data: fresh } = await supabase
+          .from("reports")
+          .select("pdf_path")
+          .eq("id", id)
+          .single();
+        pdfPath = fresh?.pdf_path;
         queryClient.invalidateQueries({ queryKey: ["report-detail", id] });
       } catch (err: any) {
         toast.error("Failed to generate PDF", { description: err?.message });
@@ -136,11 +148,15 @@ export default function ReportDetail() {
       }
     }
 
-    // Download
+    if (!pdfPath) {
+      toast.error("PDF not ready yet — please try again in a moment.");
+      return;
+    }
+
     try {
       const { data, error } = await supabase.storage
-        .from("reports")
-        .download(report?.pdf_path || "");
+        .from("eeg-reports")
+        .download(pdfPath);
 
       if (error) throw error;
 

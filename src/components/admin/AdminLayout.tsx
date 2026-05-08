@@ -98,14 +98,13 @@ export default function AdminLayout() {
       {/* Sidebar */}
       <aside className="w-56 border-r border-border/50 bg-sidebar-background flex flex-col">
         {/* Header */}
-        <div className="flex h-14 items-center justify-between px-4 border-b border-border/50">
+        <div className="flex h-14 items-center px-4 border-b border-border/50">
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
               <Zap className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">Admin</span>
+            <span className="text-sm font-semibold tracking-tight">Encephlian Admin</span>
           </div>
-          <ThemeToggle />
         </div>
 
 
@@ -162,14 +161,15 @@ export default function AdminLayout() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
-        <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-sm flex items-center px-6">
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Admin</span>
-            <span className="text-muted-foreground/50">/</span>
-            <span className="text-muted-foreground">{currentPage.section}</span>
-            <span className="text-muted-foreground/50">/</span>
-            <span className="font-medium">{currentPage.name}</span>
-          </div>
+        <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-between px-6">
+          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="Breadcrumb">
+            <span className="font-medium text-foreground/70">Admin</span>
+            <span className="text-border">/</span>
+            <span>{currentPage.section}</span>
+            <span className="text-border">/</span>
+            <span className="font-semibold text-foreground">{currentPage.name}</span>
+          </nav>
+          <ThemeToggle />
         </header>
 
         {/* Content */}

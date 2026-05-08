@@ -405,7 +405,7 @@ export default function AdminWallets() {
                 <SelectTrigger className="mt-1 h-8 text-sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent position="popper" sideOffset={4}>
                   <SelectItem value="add">
                     <div className="flex items-center gap-2">
                       <Plus className="h-3.5 w-3.5 text-emerald-500" />

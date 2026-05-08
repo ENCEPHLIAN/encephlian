@@ -23,6 +23,7 @@ import CommandPalette from "@/components/CommandPalette";
 import logo from "@/assets/logo.png";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
+import { NotificationBell } from "@/components/NotificationBell";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
@@ -234,7 +235,12 @@ export default function AppLayout() {
           {/* LEFT: sidebar toggle + logo */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
-              <img src={logoUrl || logo} alt="Logo" className="h-8 w-8 object-contain flex-shrink-0" />
+              <img
+                src={logoUrl || logo}
+                alt="Logo"
+                className="h-8 w-8 object-contain flex-shrink-0"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).src = logo; }}
+              />
               <h1 className="brand-encephlian text-xl md:text-2xl">
                 {brandName}<sup className="text-[10px] align-super">™</sup>
               </h1>
@@ -278,6 +284,7 @@ export default function AppLayout() {
             )}
 
             {!isMobile && <QuickTipsDialog />}
+            <NotificationBell />
             {!isMobile && <ThemeToggle />}
 
             {isMobile && (
