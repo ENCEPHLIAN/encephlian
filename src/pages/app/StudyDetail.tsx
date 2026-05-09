@@ -382,7 +382,8 @@ export default function StudyDetail() {
   const canGenerateReport = !hasReport && !isProcessing &&
     (study.state === "uploaded" || study.state === "parsed");
   const triagePaid = studyTriageIsPaid(study);
-  const gateTriageActions = !triagePaid && study.state !== "signed";
+  // Gate only applies to pilot (token-gated). Internal users trigger analysis directly — no payment gate.
+  const gateTriageActions = isPilot && !triagePaid && study.state !== "signed";
   const lastPipelineError = pipelineEvents.find((e: any) => e.status === "error");
   const canReview =
     triagePaid &&

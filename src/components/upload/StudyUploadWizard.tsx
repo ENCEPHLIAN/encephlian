@@ -629,17 +629,13 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             : isProprietaryFormat
               ? "Proprietary format — export as EDF for analysis."
               : isPilot
-                ? "File is stored. Pick Standard or Priority on Studies to start analysis (tokens apply then)."
+                ? "File stored — select Standard or Priority to start analysis."
                 : "Analysis pipeline started.",
-          action: isPilot && !duplicate ? "Opening Studies…" : "Opening study…",
+          action: "Opening study…",
         });
         onOpenChange(false);
         resetWizard();
-        if (isPilot && !duplicate) {
-          navigate("/app/studies");
-        } else {
-          navigate(`/app/studies/${studyId}`);
-        }
+        navigate(`/app/studies/${studyId}`);
       } else {
         // Batch path — upload all files, show queue progress
         const progress = filesToUpload.map(f => ({ name: f.name, status: "pending" as const }));
