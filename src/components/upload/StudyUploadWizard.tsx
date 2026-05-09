@@ -398,7 +398,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         sourceContentSha256 = await sha256HexFromFile(targetFile);
         const { data: dupRow, error: dupErr } = await supabase
           .from("studies")
-          .select("id")
+          .select("id, tokens_deducted, sla_selected_at, triage_status")
           .eq("clinic_id", clinicId)
           .eq("owner", userId)
           .eq("source_content_sha256", sourceContentSha256)
@@ -409,8 +409,17 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         if (dupErr) {
           console.warn("[upload] dedupe check failed:", dupErr);
         } else if (dupRow?.id) {
-          onProgress(100, "Same recording — opening existing study");
-          return { studyId: dupRow.id, duplicate: true };
+          // Only deduplicate if triage has been paid/started on the existing study.
+          // Stale studies (blob deleted by admin, aborted uploads) have tokens_deducted=0
+          // and sla_selected_at=null — allow re-upload in that case.
+          const triageStarted =
+            (dupRow.tokens_deducted ?? 0) > 0 ||
+            !!dupRow.sla_selected_at ||
+            (dupRow.triage_status && dupRow.triage_status !== "pending");
+          if (triageStarted) {
+            onProgress(100, "Same recording — opening existing study");
+            return { studyId: dupRow.id, duplicate: true };
+          }
         }
         reference = generateEncStudyReference();
       }

@@ -48,6 +48,8 @@ import { getStudyDocumentTitle, getStudyHandle, getStudyListTitle, type StudyLik
 import { useStudyBreadcrumb } from "@/contexts/StudyBreadcrumbContext";
 import { StudyFlowProgress } from "@/components/study/StudyFlowProgress";
 import { studyTriageIsPaid } from "@/shared/tokenEconomy";
+import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
+import type { PilotStudy } from "@/hooks/usePilotData";
 
 dayjs.extend(relativeTime);
 
@@ -86,6 +88,17 @@ export default function StudyDetail() {
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
+
+  const { data: wallet } = useQuery({
+    queryKey: ["wallet-balance"],
+    queryFn: async () => {
+      const { data } = await supabase.from("wallets").select("tokens").maybeSingle();
+      return data || { tokens: 0 };
+    },
+    enabled: isPilot,
+    staleTime: 30_000,
+  });
+  const tokenBalance = wallet?.tokens ?? 0;
 
   const IPLANE_BASE = import.meta.env.VITE_IPLANE_BASE as string | undefined;
 
@@ -573,9 +586,22 @@ export default function StudyDetail() {
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-900 dark:text-amber-100">Triage not started</AlertTitle>
           <AlertDescription className="text-sm">
-            {isPilot
-              ? "Go to Studies and tap Start to choose Standard (1 token) or Priority (2). Until then, only the raw viewer is available here."
-              : "From Studies or the queue, choose Standard (1 token) or Priority (2 tokens) for this recording. Tokens are charged at that step only. Until then, use Open Viewer for the raw file; analysis tools stay off so billing stays unambiguous."}
+            {isPilot ? (
+              <div className="flex flex-col gap-3 mt-1">
+                <span>Choose a triage priority to start AI analysis. Tokens are charged now.</span>
+                <PilotInlineSla
+                  study={study as unknown as PilotStudy}
+                  tokenBalance={tokenBalance}
+                  onNeedTokens={() => navigate("/app/wallet")}
+                  onStarted={() => {
+                    queryClient.invalidateQueries({ queryKey: ["study-detail", id] });
+                    queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
+                  }}
+                />
+              </div>
+            ) : (
+              "From Studies or the queue, choose Standard (1 token) or Priority (2 tokens) for this recording. Tokens are charged at that step only. Until then, use Open Viewer for the raw file; analysis tools stay off so billing stays unambiguous."
+            )}
           </AlertDescription>
         </Alert>
       )}
