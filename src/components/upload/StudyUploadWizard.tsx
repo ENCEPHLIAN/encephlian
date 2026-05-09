@@ -633,9 +633,10 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 : "Analysis pipeline started.",
           action: "Opening study…",
         });
-        onOpenChange(false);
-        resetWizard();
+        // Navigate first — unmounts the dialog/wizard cleanly without a
+        // blank flash from resetWizard() clearing content mid-close-animation.
         navigate(`/app/studies/${studyId}`);
+        onOpenChange(false);
       } else {
         // Batch path — upload all files, show queue progress
         const progress = filesToUpload.map(f => ({ name: f.name, status: "pending" as const }));
@@ -663,9 +664,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
           why: "Analysis pipelines started for all uploaded files.",
           action: "Opening studies list...",
         });
-        onOpenChange(false);
-        resetWizard();
         navigate("/app/studies");
+        onOpenChange(false);
       }
     } catch (error: any) {
       const msg = error?.message || String(error);

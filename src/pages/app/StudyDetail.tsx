@@ -38,7 +38,7 @@ import TriageReportView from "@/components/report/TriageReportView";
 import MindReportView from "@/components/report/MindReportView";
 import ErrorPage from "@/components/ErrorPage";
 import { useToast } from "@/hooks/use-toast";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component, type ReactNode } from "react";
 import { useSku } from "@/hooks/useSku";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { SkuGate } from "@/components/SkuGate";
@@ -52,6 +52,21 @@ import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import type { PilotStudy } from "@/hooks/usePilotData";
 
 dayjs.extend(relativeTime);
+
+class ReportErrorBoundary extends Component<{ children: ReactNode }, { crashed: boolean }> {
+  state = { crashed: false };
+  static getDerivedStateFromError() { return { crashed: true }; }
+  render() {
+    if (this.state.crashed) {
+      return (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Report failed to render. Try refreshing or re-generating the analysis.
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // State display configuration
 const STATE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
@@ -991,9 +1006,13 @@ export default function StudyDetail() {
                   <span className="text-sm">Loading analysis...</span>
                 </div>
               ) : mindReport?.schema_version === "mind.report.v1" ? (
-                <MindReportView report={mindReport} studyId={study.id} />
+                <ReportErrorBoundary>
+                  <MindReportView report={mindReport} studyId={study.id} />
+                </ReportErrorBoundary>
               ) : study.ai_draft_json && (study.ai_draft_json as any).schema_version === "mind.report.v1" ? (
-                <MindReportView report={study.ai_draft_json} studyId={study.id} />
+                <ReportErrorBoundary>
+                  <MindReportView report={study.ai_draft_json} studyId={study.id} />
+                </ReportErrorBoundary>
               ) : study.ai_draft_json ? (
                 // Legacy format (old TriageReportView schema)
                 <TriageReportView
