@@ -15,10 +15,14 @@ export interface Segment {
 
 // Label to color mapping
 export const SEGMENT_LABEL_COLORS: Record<string, { bg: string; border: string; badge: string }> = {
-  seizure: { bg: "rgba(239, 68, 68, 0.2)", border: "rgba(239, 68, 68, 0.7)", badge: "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30" },
-  spike: { bg: "rgba(249, 115, 22, 0.2)", border: "rgba(249, 115, 22, 0.7)", badge: "bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30" },
-  artifact: { bg: "rgba(234, 179, 8, 0.2)", border: "rgba(234, 179, 8, 0.7)", badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
-  noisy_channel: { bg: "rgba(234, 179, 8, 0.15)", border: "rgba(234, 179, 8, 0.6)", badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  seizure:       { bg: "rgba(239, 68, 68, 0.2)",   border: "rgba(239, 68, 68, 0.7)",   badge: "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30" },
+  spike:         { bg: "rgba(249, 115, 22, 0.2)",  border: "rgba(249, 115, 22, 0.7)",  badge: "bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30" },
+  // Clean v2 artifact classes
+  eye_movement:  { bg: "rgba(139, 92, 246, 0.2)",  border: "rgba(139, 92, 246, 0.7)",  badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
+  muscle:        { bg: "rgba(249, 115, 22, 0.15)", border: "rgba(249, 115, 22, 0.6)",  badge: "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/30" },
+  electrode:     { bg: "rgba(234, 179, 8, 0.18)",  border: "rgba(234, 179, 8, 0.65)",  badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  artifact:      { bg: "rgba(234, 179, 8, 0.2)",   border: "rgba(234, 179, 8, 0.7)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  noisy_channel: { bg: "rgba(234, 179, 8, 0.15)",  border: "rgba(234, 179, 8, 0.6)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
   sleep_spindle: { bg: "rgba(168, 85, 247, 0.2)", border: "rgba(168, 85, 247, 0.7)", badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
   k_complex: { bg: "rgba(139, 92, 246, 0.2)", border: "rgba(139, 92, 246, 0.7)", badge: "bg-violet-500/20 text-violet-700 dark:text-violet-400 border-violet-500/30" },
   slow_wave: { bg: "rgba(99, 102, 241, 0.2)", border: "rgba(99, 102, 241, 0.7)", badge: "bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border-indigo-500/30" },

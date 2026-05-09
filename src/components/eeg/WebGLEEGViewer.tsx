@@ -377,9 +377,11 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
     const ro = new ResizeObserver(rebuildOnResize);
     ro.observe(container);
+    window.addEventListener("resize", rebuildOnResize);
 
     return () => {
       ro.disconnect();
+      window.removeEventListener("resize", rebuildOnResize);
       renderer.dispose();
       container.removeChild(canvas);
       if (artifactRef.current) container.removeChild(artifactRef.current);

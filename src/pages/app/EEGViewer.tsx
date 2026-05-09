@@ -42,6 +42,7 @@ const ARTIFACT_COLORS: Record<string, { bg: string; border: string; label: strin
   eye_movement:    { bg: "rgba(139,92,246,0.18)",  border: "rgba(139,92,246,0.60)", label: "Eye"      },
   muscle:          { bg: "rgba(249,115,22,0.18)",  border: "rgba(249,115,22,0.60)", label: "Muscle"   },
   electrode_noise: { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.60)",  label: "Noise"    },
+  electrode:       { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.60)",  label: "Noise"    },
   artifact:        { bg: "rgba(239,68,68,0.18)",   border: "rgba(239,68,68,0.55)",  label: "Artifact" },
 };
 function artifactColor(t?: string) {
@@ -671,6 +672,13 @@ export default function EEGViewer() {
     }
     return m;
   }, [artifacts]);
+
+  // Dispatch window resize after sidebar toggle so WebGLEEGViewer's ResizeObserver
+  // sees the updated container width after the flex layout settles.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
+    return () => cancelAnimationFrame(id);
+  }, [sidebarOpen]);
 
   // ── Render: no study selected ────────────────────────────────────────────────
   if (!studyId) {
