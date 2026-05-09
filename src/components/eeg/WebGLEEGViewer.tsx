@@ -484,42 +484,80 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       return mask;
     };
 
-    // artifact overlays (red)
+    // ── Overlay helpers ──────────────────────────────────────────────────────────
+    // Reduce rgba opacity to `alpha` (handles both spaced and unspaced rgba)
+    const faintFill = (css: string, alpha: number) =>
+      css.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/,
+        (_, r, g, b) => `rgba(${r},${g},${b},${alpha})`);
+
+    const LABEL_ABBREV: Record<string, string> = {
+      eye_movement: "Eye", muscle: "Muscle", electrode: "Electrode", electrode_noise: "Noise",
+      artifact: "Artifact", normal: "Normal", seizure: "Seizure", spike: "Spike",
+      sleep_spindle: "Spindle", k_complex: "K-Cplx", slow_wave: "Slow Wave",
+      alpha: "Alpha", beta: "Beta", theta: "Theta", delta: "Delta", noisy_channel: "Noisy",
+    };
+    const abbrev = (lbl: string) =>
+      LABEL_ABBREV[lbl.toLowerCase()] ?? lbl.charAt(0).toUpperCase() + lbl.slice(1).replace(/_/g, " ");
+
+    const makeChip = (text: string, borderColor: string) => {
+      const chip = document.createElement("span");
+      chip.textContent = text;
+      chip.style.cssText = [
+        "position:absolute", "top:4px", "left:4px",
+        `background:${colors.labelBg}`,
+        `border:1px solid ${borderColor}`,
+        `color:${colors.text}`,
+        "font-size:9px", "font-family:ui-monospace,monospace", "font-weight:700",
+        "letter-spacing:0.04em", "text-transform:uppercase",
+        "padding:1px 5px", "border-radius:3px",
+        "pointer-events:none", "white-space:nowrap", "line-height:14px", "z-index:3",
+      ].join(";");
+      return chip;
+    };
+
+    // ── Artifact overlays ────────────────────────────────────────────────────────
+    // Global artifacts (channel=null): single full-height band — thin 3px stripe + faint fill + chip.
+    // Per-channel: thin stripe + subtle fill on that lane only. No 30× stacking.
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
       const s1 = clamp(a.end_sec, 0, timeWindow);
-      if (s1 <= 0 || s0 >= timeWindow) continue;
+      if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
 
       const x1 = labelW + (s0 / timeWindow) * signalW;
       const x2 = labelW + (s1 / timeWindow) * signalW;
-      const bg = (a as any).color ?? (showArtifactsAsRed ? colors.artifactBgRed : colors.artifactBgRed);
-      const br = (a as any).borderColor ?? (showArtifactsAsRed ? colors.artifactBorderRed : colors.artifactBorderRed);
+      const bw = Math.max(2, x2 - x1);
+      const bg = (a as any).color ?? colors.artifactBgRed;
+      const br = (a as any).borderColor ?? colors.artifactBorderRed;
+      const lbl = (a as any).label ?? "Artifact";
 
-      const affected = a.channel != null ? [a.channel] : channels;
-      for (const chIdx of affected) {
-        const di = channels.indexOf(chIdx);
+      if (a.channel != null) {
+        const di = channels.indexOf(a.channel);
         if (di < 0) continue;
         const top = PAD + di * laneH;
-
         const el = document.createElement("div");
         el.style.cssText = [
-          "position:absolute",
-          `left:${x1}px`,
-          `top:${top}px`,
-          `width:${Math.max(1, x2 - x1)}px`,
-          `height:${laneH}px`,
-          `background:${bg}`,
-          `border-left:1px solid ${br}`,
-          `border-right:1px solid ${br}`,
-          "pointer-events:none",
-          "box-sizing:border-box",
+          "position:absolute", `left:${x1}px`, `top:${top}px`,
+          `width:${bw}px`, `height:${laneH}px`,
+          `background:linear-gradient(to bottom,${br} 0,${br} 3px,${faintFill(bg, 0.10)} 3px)`,
+          "pointer-events:none", "box-sizing:border-box",
         ].join(";");
-        if ((a as any).label) el.title = (a as any).label;
+        artifactRef.current?.appendChild(el);
+      } else {
+        const el = document.createElement("div");
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:${PAD}px`,
+          `width:${bw}px`, `height:${signalH - PAD * 2}px`,
+          `background:linear-gradient(to bottom,${br} 0,${br} 3px,${faintFill(bg, 0.05)} 3px)`,
+          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+        ].join(";");
+        if (bw >= 24) el.appendChild(makeChip(abbrev(lbl), br));
         artifactRef.current?.appendChild(el);
       }
     }
 
-    // Segment overlays (colored by label type) - thin border box on specific channel
+    // ── Segment overlays ────────────────────────────────────────────────────────
+    // Global: full-height colored band with left accent + label chip.
+    // Per-channel: bordered box on the specific lane.
     for (const seg of segmentOverlays) {
       const s0 = clamp(seg.start_sec, 0, timeWindow);
       const s1 = clamp(seg.end_sec, 0, timeWindow);
@@ -527,44 +565,37 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
       const x1 = labelW + (s0 / timeWindow) * signalW;
       const x2 = labelW + (s1 / timeWindow) * signalW;
-      
-      // If segment has a specific channel, render only on that channel lane
+      const bw = Math.max(3, x2 - x1);
+
       if (seg.channel != null) {
         const di = channels.indexOf(seg.channel);
-        if (di < 0) continue; // channel not visible
-        
+        if (di < 0) continue;
         const top = PAD + di * laneH;
         const el = document.createElement("div");
         el.style.cssText = [
-          "position:absolute",
-          `left:${x1}px`,
-          `top:${top}px`,
-          `width:${Math.max(2, x2 - x1)}px`,
-          `height:${laneH}px`,
-          "background:transparent",
+          "position:absolute", `left:${x1}px`, `top:${top}px`,
+          `width:${bw}px`, `height:${laneH}px`,
+          `background:${seg.color}`,
           `border:2px solid ${seg.borderColor}`,
-          "border-radius:3px",
-          "pointer-events:none",
-          "box-sizing:border-box",
-          seg.isFocused ? "z-index:10;box-shadow:0 0 8px " + seg.borderColor : "z-index:1",
+          "border-radius:2px", "pointer-events:none", "box-sizing:border-box",
+          seg.isFocused ? `z-index:10;box-shadow:0 0 8px ${seg.borderColor}` : "z-index:1",
         ].join(";");
         artifactRef.current?.appendChild(el);
       } else {
-        // No specific channel - render thin vertical lines at segment boundaries
-        for (const xPos of [x1, x2]) {
-          const el = document.createElement("div");
-          el.style.cssText = [
-            "position:absolute",
-            `left:${xPos - 1}px`,
-            `top:0`,
-            `width:2px`,
-            `height:100%`,
-            `background:${seg.borderColor}`,
-            "pointer-events:none",
-            seg.isFocused ? "z-index:10" : "z-index:1",
-          ].join(";");
-          artifactRef.current?.appendChild(el);
-        }
+        const el = document.createElement("div");
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:0`,
+          `width:${bw}px`, `height:${signalH}px`,
+          `background:${seg.isFocused ? faintFill(seg.color, 0.18) : seg.color}`,
+          `border-left:2px solid ${seg.borderColor}`,
+          `border-right:1px solid ${seg.borderColor}`,
+          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+          seg.isFocused
+            ? `z-index:10;box-shadow:0 0 16px ${seg.borderColor}`
+            : "z-index:1",
+        ].join(";");
+        if (bw >= 16) el.appendChild(makeChip(abbrev(seg.label), seg.borderColor));
+        artifactRef.current?.appendChild(el);
       }
     }
 

@@ -188,7 +188,7 @@ export default function EEGViewer() {
   const [showArtifacts, setShowArtifacts]   = useState(true);
   const [suppressArts, setSuppressArts]     = useState(false);
   const [showSegments, setShowSegments]     = useState(true);
-  const [sidebarOpen, setSidebarOpen]       = useState(true);
+  const [sidebarOpen, setSidebarOpen]       = useState(false);
   // Clinical display controls
   const [hfFilter, setHfFilter]             = useState(70);
   const [lfFilter, setLfFilter]             = useState(0.5);
