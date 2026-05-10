@@ -9,8 +9,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Loader2, Upload, Clock, Brain, Eye, CheckCircle2,
-  ArrowRight, AlertTriangle, Zap, Inbox, RefreshCw, WifiOff
+  ArrowRight, AlertTriangle, Zap, Inbox, RefreshCw, WifiOff,
+  ShieldCheck, AlertCircle
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import { useStudiesData, Study } from "@/hooks/useStudiesData";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
@@ -60,11 +62,23 @@ function getTimeInfo(study: Study): { remaining: number; overdue: boolean; forma
 
 /* ── Study card ─────────────────────────────────── */
 
+function getClassification(study: Study): { cls: string | null; conf: number | null } {
+  const report = (study as any).ai_draft_json;
+  if (!report) return { cls: null, conf: null };
+  const cls = report.classification ?? report.triage?.classification ?? null;
+  const conf = report.triage_confidence ?? report.triage?.confidence ?? null;
+  return { cls, conf };
+}
+
 const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
   const navigate = useNavigate();
   const meta = study.meta as any;
   const timeInfo = getTimeInfo(study);
   const isProcessing = study.triage_status === "processing";
+  const { cls, conf } = getClassification(study);
+  const isNormal = cls === "normal";
+  const isAbnormal = cls === "abnormal";
+  const hasClassification = cls && cls !== "unknown";
 
   const patientAge = meta?.patient_age;
   const patientGender = meta?.patient_gender;
@@ -79,11 +93,13 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
 
   return (
     <Card
-      className={`
-        transition-all duration-150 cursor-pointer group
-        hover:shadow-md hover:border-primary/20
-        ${timeInfo.overdue ? "border-destructive/40" : ""}
-      `}
+      className={cn(
+        "transition-all duration-150 cursor-pointer group hover:shadow-md",
+        timeInfo.overdue ? "border-destructive/40" :
+        isAbnormal ? "border-red-500/25 hover:border-red-500/40" :
+        isNormal   ? "border-emerald-500/25 hover:border-emerald-500/40" :
+                     "hover:border-primary/20"
+      )}
       onClick={() => navigate(`/app/studies/${study.id}`)}
     >
       <CardContent className="p-3 space-y-2">
@@ -127,17 +143,42 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
           </div>
         )}
 
-        {/* Row 4: Time + Arrow */}
-        <div className="flex items-center justify-between">
-          <span
-            className={`text-[11px] font-medium ${
-              timeInfo.overdue ? "text-destructive" : "text-muted-foreground"
-            }`}
-          >
-            {timeInfo.overdue && <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />}
-            {timeInfo.formatted}
-          </span>
-          <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* Row 4: Classification badge + Time + Arrow */}
+        <div className="flex items-center justify-between gap-1">
+          {hasClassification ? (
+            <Badge className={cn(
+              "text-[10px] px-1.5 py-0 h-4 gap-0.5",
+              isNormal
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                : "bg-red-500/10 text-red-600 border-red-500/20"
+            )}>
+              {isNormal
+                ? <ShieldCheck className="h-2.5 w-2.5" />
+                : <AlertCircle className="h-2.5 w-2.5" />}
+              {isNormal ? "Normal" : "Abnormal"}
+              {typeof conf === "number" && conf > 0 && (
+                <span className="opacity-60 ml-0.5">{Math.round(conf * 100)}%</span>
+              )}
+            </Badge>
+          ) : (
+            <span
+              className={`text-[11px] font-medium ${
+                timeInfo.overdue ? "text-destructive" : "text-muted-foreground"
+              }`}
+            >
+              {timeInfo.overdue && <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />}
+              {timeInfo.formatted}
+            </span>
+          )}
+          <div className="flex items-center gap-1 ml-auto">
+            {hasClassification && (
+              <span className={`text-[10px] ${timeInfo.overdue ? "text-destructive" : "text-muted-foreground/70"}`}>
+                {timeInfo.overdue && <AlertTriangle className="h-2.5 w-2.5 inline mr-0.5" />}
+                {timeInfo.formatted}
+              </span>
+            )}
+            <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </div>
         </div>
       </CardContent>
     </Card>
