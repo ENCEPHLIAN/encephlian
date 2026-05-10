@@ -571,6 +571,48 @@
 }
 
 /* -------------------------------------------------- */
+/* NOTIFICATION BELL + PROGRESS INDETERMINATE         */
+/* -------------------------------------------------- */
+
+@keyframes bell-ring {
+  0%, 100% { transform: rotate(0deg); }
+  10%       { transform: rotate(14deg); }
+  20%       { transform: rotate(-12deg); }
+  30%       { transform: rotate(10deg); }
+  40%       { transform: rotate(-8deg); }
+  50%       { transform: rotate(6deg); }
+  60%       { transform: rotate(-4deg); }
+  70%       { transform: rotate(2deg); }
+  80%       { transform: rotate(-1deg); }
+}
+
+.animate-bell-ring {
+  animation: bell-ring 0.8s ease-in-out;
+  transform-origin: top center;
+}
+
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%) scaleX(0.5); }
+  40%  { transform: translateX(0%)    scaleX(0.8); }
+  100% { transform: translateX(200%)  scaleX(0.6); }
+}
+
+.animate-progress-indeterminate {
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+  transform-origin: left;
+  width: 50%;
+}
+
+@keyframes notif-slide-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-notif-in {
+  animation: notif-slide-in 0.2s ease-out forwards;
+}
+
+/* -------------------------------------------------- */
 /* SUCCESS COLOR TOKEN */
 /* -------------------------------------------------- */
 

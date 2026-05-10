@@ -136,10 +136,18 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
         {/* Row 3: Progress bar (processing only) */}
         {isProcessing && (
           <div className="flex items-center gap-2">
-            <Progress value={study.triage_progress || 0} className="h-1 flex-1" />
-            <span className="text-[10px] text-muted-foreground font-mono w-7 text-right">
-              {study.triage_progress || 0}%
-            </span>
+            {study.triage_progress && study.triage_progress > 0 ? (
+              <>
+                <Progress value={study.triage_progress} className="h-1 flex-1" />
+                <span className="text-[10px] text-muted-foreground font-mono w-7 text-right">
+                  {study.triage_progress}%
+                </span>
+              </>
+            ) : (
+              <div className="relative h-1 flex-1 rounded-full bg-secondary overflow-hidden">
+                <div className="absolute inset-y-0 left-0 bg-purple-500/70 rounded-full animate-progress-indeterminate" />
+              </div>
+            )}
           </div>
         )}
 
