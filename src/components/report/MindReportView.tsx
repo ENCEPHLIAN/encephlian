@@ -55,11 +55,26 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
   const durationMin    = durationSec ? Math.round(durationSec / 60) : null;
 
   // SCORE EEG structured fields
-  const bg             = score.background_activity || {};
-  const sigKey         = score.clinical_significance as string | undefined;   // snake_case key
-  const sigLabel       = score.clinical_significance_label as string | undefined; // human label
+  // score.background_activity may be flat (from _build_score) or nested (from libs.score)
+  const _bgRaw         = score.background_activity || {};
+  const _bgPdr         = (_bgRaw as any).pdr || (_bgRaw as any).posterior_dominant_rhythm || {};
+  const bg: Record<string, any> = {
+    pdr_frequency_hz: _bgRaw.pdr_frequency_hz ?? _bgPdr.frequency_hz ?? null,
+    pdr_normal:       _bgRaw.pdr_normal ?? _bgPdr.within_normal_limits ?? _bgPdr.within_normal_limits ?? null,
+    continuity:       _bgRaw.continuity ?? _bgRaw.background_continuity ?? null,
+    symmetry:         _bgRaw.symmetry ?? _bgPdr.symmetry ?? null,
+    reactivity:       _bgRaw.reactivity ?? _bgPdr.reactivity ?? null,
+    generalized_slowing: _bgRaw.generalized_slowing ?? null,
+    interhemispheric_asymmetry: _bgRaw.interhemispheric_asymmetry ?? null,
+  };
+  const sigKey         = score.clinical_significance as string | undefined;
+  const sigLabel       = score.clinical_significance_label as string | undefined;
   const sigColor       = sigKey ? (SIGNIFICANCE_COLOR[sigKey] ?? "bg-muted text-foreground") : null;
-  const impression     = score.impression as string | undefined;
+  // impression may be a string (flat) or {text:string,...} (dataclass serialization)
+  const _impRaw        = score.impression;
+  const impression     = typeof _impRaw === "object" && _impRaw !== null
+    ? (_impRaw as any).text as string | undefined
+    : _impRaw as string | undefined;
   const icdHint        = triage.icd_hint || score.icd_hint as string | undefined;
   const ictNote        = score.ictal_findings?.note as string | undefined;
   const iiedsNote      = score.interictal_findings?.ieds_note as string | undefined;
