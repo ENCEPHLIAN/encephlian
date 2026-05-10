@@ -114,9 +114,26 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             <span className="text-[10px] text-muted-foreground tabular-nums">{study.triage_progress || 0}%</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5">
-            <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
-            <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
+              <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
+            </div>
+            {(() => {
+              const report = (study as any).ai_draft_json;
+              const cls = report?.classification ?? report?.triage?.classification;
+              const conf = report?.triage_confidence ?? report?.triage?.confidence;
+              if (!cls || cls === "unknown") return null;
+              const isNormal = cls === "normal";
+              return (
+                <Badge className={`text-[10px] w-fit ${isNormal ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}>
+                  {isNormal ? "Normal" : "Abnormal"}
+                  {typeof conf === "number" && conf > 0 && (
+                    <span className="ml-1 opacity-60">{Math.round(conf * 100)}%</span>
+                  )}
+                </Badge>
+              );
+            })()}
           </div>
         )}
       </TableCell>

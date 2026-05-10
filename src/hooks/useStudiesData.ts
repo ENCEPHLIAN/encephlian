@@ -24,6 +24,7 @@ export interface StudyListItem {
   triage_started_at: string | null;
   triage_completed_at: string | null;
   clinics: { name: string } | null;
+  ai_draft_json?: any | null;
 }
 
 export function useStudiesData(stateFilter: string) {
@@ -36,7 +37,7 @@ export function useStudiesData(stateFilter: string) {
       // Show user's real studies (RLS handles ownership), exclude sample studies
       let query = supabase
         .from("studies")
-        .select("id, created_at, state, sla, sla_selected_at, meta, reference, source_content_sha256, original_format, indication, sample, tokens_deducted, triage_status, triage_progress, triage_started_at, triage_completed_at, clinics(name)")
+        .select("id, created_at, state, sla, sla_selected_at, meta, reference, source_content_sha256, original_format, indication, sample, tokens_deducted, triage_status, triage_progress, triage_started_at, triage_completed_at, ai_draft_json, clinics(name)")
         .or(`sample.is.null,sample.eq.false`)
         .order("created_at", { ascending: false })
         .limit(100);
