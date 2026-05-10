@@ -2,9 +2,10 @@ import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Upload, FileText, Coins, ArrowRight, Plus,
-  CheckCircle2, Clock, Loader2, Sparkles,
+  CheckCircle2, Clock, Loader2,
   HelpCircle, Brain, Shield, BarChart3, Eye,
-  Download, ChevronRight, Activity, AlertTriangle,
+  ChevronRight, Activity, AlertTriangle,
+  ShieldCheck, AlertCircle as AbnormalIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -377,34 +378,58 @@ export default function PilotDashboard() {
             <div className="space-y-1">
               {completedReports.slice(0, 4).map((study) => {
                 const meta = study.meta as any;
+                const report = study.ai_draft_json;
+                const cls = report?.classification ?? report?.triage?.classification ?? null;
+                const conf = report?.triage_confidence ?? report?.triage?.confidence ?? null;
+                const isNormal = cls === "normal";
+                const isAbnormal = cls === "abnormal";
                 return (
                   <div
                     key={study.id}
                     onClick={() => navigate(`/app/studies/${study.id}`)}
-                    className="flex items-center justify-between p-2.5 rounded-xl hover:bg-muted/50 transition-colors cursor-pointer group"
+                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-muted/50 transition-colors cursor-pointer group"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                      </div>
-                      <div className="min-w-0">
+                    <div className={cn(
+                      "h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
+                      isNormal ? "bg-emerald-500/10" :
+                      isAbnormal ? "bg-red-500/10" : "bg-emerald-500/10"
+                    )}>
+                      {isNormal
+                        ? <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                        : isAbnormal
+                        ? <AbnormalIcon className="h-4 w-4 text-red-500" />
+                        : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
                         <p className="text-sm font-medium truncate">
                           {meta?.patient_name || "Patient"}
                         </p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {dayjs(
-                            study.triage_completed_at || study.created_at
-                          ).format("MMM D, h:mm A")}
-                          {study.sla !== "pending" && (
-                            <>
-                              <span className="mx-1">·</span>
-                              {study.sla}
-                            </>
-                          )}
-                        </p>
+                        {cls && (
+                          <Badge className={cn(
+                            "text-[9px] px-1.5 py-0 shrink-0",
+                            isNormal
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "bg-red-500/10 text-red-600 border-red-500/20"
+                          )}>
+                            {isNormal ? "Normal" : "Abnormal"}
+                            {typeof conf === "number" && conf > 0 && (
+                              <span className="ml-1 opacity-60">{Math.round(conf * 100)}%</span>
+                            )}
+                          </Badge>
+                        )}
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {dayjs(study.triage_completed_at || study.created_at).format("MMM D, h:mm A")}
+                        {study.sla !== "pending" && (
+                          <>
+                            <span className="mx-1">·</span>
+                            {study.sla}
+                          </>
+                        )}
+                      </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
                   </div>
                 );
               })}

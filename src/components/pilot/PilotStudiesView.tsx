@@ -8,8 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileText, CheckCircle2, Clock,
-  Loader2, Download, Brain,
-  AlertTriangle, Activity,
+  Loader2, Download, Brain, ChevronRight,
+  AlertTriangle, Activity, ShieldCheck, AlertCircle as AbnormalIcon,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
@@ -18,6 +18,15 @@ import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+
+function getTriageResult(study: PilotStudy): { classification: string; confidence: number } | null {
+  const report = study.ai_draft_json;
+  if (!report) return null;
+  const c = report.classification ?? report.triage_classification ?? null;
+  const conf = report.triage_confidence ?? report.confidence ?? null;
+  if (!c) return null;
+  return { classification: String(c), confidence: typeof conf === "number" ? conf : 0 };
+}
 
 export default function PilotStudiesView() {
   const navigate = useNavigate();
@@ -313,52 +322,77 @@ export default function PilotStudiesView() {
             const meta = study.meta as any;
             const src = formatStudySourceLine(meta, study.original_format ?? null);
             const isSigned = study.state === "signed";
+            const triageResult = getTriageResult(study);
+            const isNormal = triageResult?.classification === "normal";
+            const isAbnormal = triageResult?.classification === "abnormal";
             return (
               <Card
                 key={study.id}
-                className="hover:bg-muted/30 transition-colors cursor-pointer group"
+                className="hover:bg-muted/30 transition-all cursor-pointer group border-border/60"
                 onClick={() => navigate(`/app/studies/${study.id}`)}
               >
                 <CardContent className="p-3.5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={cn(
-                        "h-9 w-9 rounded-lg flex items-center justify-center shrink-0",
-                        isSigned ? "bg-emerald-500/10" : "bg-primary/10"
-                      )}>
-                        {isSigned
-                          ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                          : <FileText className="h-4 w-4 text-primary" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <p className="font-medium text-sm truncate">
-                            {meta?.patient_name || "Patient"}
-                          </p>
-                          {isSigned && (
-                            <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 shrink-0">Signed</Badge>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-muted-foreground">
-                          {dayjs(
-                            study.triage_completed_at || study.created_at
-                          ).format("MMM D, h:mm A")}
-                          <span className="mx-1">·</span>
-                          {study.sla}
-                        </p>
-                        {src && (
-                          <p className="text-[11px] text-muted-foreground/90 truncate" title={src}>{src}</p>
-                        )}
-                      </div>
+                  <div className="flex items-center gap-3">
+                    {/* Classification icon */}
+                    <div className={cn(
+                      "h-10 w-10 rounded-xl flex items-center justify-center shrink-0",
+                      isNormal ? "bg-emerald-500/10" :
+                      isAbnormal ? "bg-red-500/10" :
+                      isSigned ? "bg-emerald-500/10" : "bg-primary/10"
+                    )}>
+                      {isNormal
+                        ? <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                        : isAbnormal
+                        ? <AbnormalIcon className="h-5 w-5 text-red-500" />
+                        : isSigned
+                        ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        : <FileText className="h-4 w-4 text-primary" />}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 shrink-0"
-                      onClick={(e) => { e.stopPropagation(); handleDownload(study); }}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
+
+                    {/* Main content */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="font-medium text-sm truncate">
+                          {meta?.patient_name || "Patient"}
+                        </p>
+                        {triageResult ? (
+                          <Badge className={cn(
+                            "text-[10px] shrink-0 font-semibold",
+                            isNormal
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "bg-red-500/10 text-red-600 border-red-500/20"
+                          )}>
+                            {isNormal ? "Normal" : "Abnormal"}
+                            {triageResult.confidence > 0 && (
+                              <span className="ml-1 opacity-70">{Math.round(triageResult.confidence * 100)}%</span>
+                            )}
+                          </Badge>
+                        ) : isSigned ? (
+                          <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 shrink-0">Signed</Badge>
+                        ) : null}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {dayjs(study.triage_completed_at || study.created_at).format("MMM D, h:mm A")}
+                        <span className="mx-1">·</span>
+                        {study.sla}
+                      </p>
+                      {src && (
+                        <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5" title={src}>{src}</p>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-60 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); handleDownload(study); }}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

@@ -67,30 +67,32 @@ export interface WebGLEEGViewerProps {
 
 const THEME_COLORS = {
   dark: {
-    background: 0x0a0a0a,
-    grid: 0x1a1a1a,
-    gridStrong: 0x262626,
+    background: 0x0c0c0e,
+    grid: 0x1c1c20,
+    gridStrong: 0x2a2a30,
+    zeroLine: 0x303038,
     text: "#e5e5e5",
     textMuted: "#737373",
     cursor: "#22d3ee",
-    labelBg: "rgba(10,10,10,0.88)",
-    labelPanelBg: "rgba(14,14,14,1)",
-    labelPanelBorder: "rgba(38,38,38,1)",
+    labelBg: "rgba(12,12,14,0.92)",
+    labelPanelBg: "rgba(16,16,20,1)",
+    labelPanelBorder: "rgba(42,42,48,1)",
     artifactBgRed: "rgba(239, 68, 68, 0.18)",
     artifactBorderRed: "rgba(239, 68, 68, 0.55)",
     highlightBg: "rgba(59, 130, 246, 0.15)",
     highlightBorder: "rgba(59, 130, 246, 0.6)",
   },
   light: {
-    background: 0xffffff,
-    grid: 0xebebeb,
-    gridStrong: 0xd5d5d5,
+    background: 0xfafafa,
+    grid: 0xe2e4e8,
+    gridStrong: 0xc8ccd4,
+    zeroLine: 0xd8dce4,
     text: "#1a1a1a",
     textMuted: "#6b7280",
-    cursor: "#6366f1",
-    labelBg: "rgba(247,247,247,1)",
-    labelPanelBg: "rgba(245,245,245,1)",
-    labelPanelBorder: "rgba(209,213,219,1)",
+    cursor: "#4f46e5",
+    labelBg: "rgba(248,248,250,1)",
+    labelPanelBg: "rgba(244,245,248,1)",
+    labelPanelBorder: "rgba(200,204,212,1)",
     artifactBgRed: "rgba(220, 38, 38, 0.12)",
     artifactBorderRed: "rgba(220, 38, 38, 0.45)",
     highlightBg: "rgba(37, 99, 235, 0.10)",
@@ -254,7 +256,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     channelColors = [],
     showArtifactsAsRed = true,
     suppressArtifacts = false,
-    labelColumnWidth = 72,
+    labelColumnWidth = 80,
     hfFilter = 0,
     lfFilter = 0,
     notchFilter = 0,
@@ -275,7 +277,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   const cursorLineRef = useRef<THREE.Line | null>(null);
 
   // Dimensions snapshot — written by draw, read by updateCursor
-  const dimsRef = useRef({ w: 0, h: 0, labelW: 72, signalW: 0, signalH: 0 });
+  const dimsRef = useRef({ w: 0, h: 0, labelW: 80, signalW: 0, signalH: 0 });
 
   // Time axis
   const TIME_AXIS_H = 20;
@@ -516,8 +518,13 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     };
 
     // ── Artifact overlays ────────────────────────────────────────────────────────
-    // Global artifacts (channel=null): single full-height band — thin 3px stripe + faint fill + chip.
-    // Per-channel: thin stripe + subtle fill on that lane only. No 30× stacking.
+    // Adaptive fill opacity: when most of the window is flagged as artifact,
+    // drop the fill to near-invisible so waveforms remain readable.
+    const globalArtCoverage = artifactIntervals
+      .filter(a => a.channel == null)
+      .reduce((acc, a) => acc + Math.max(0, Math.min(a.end_sec, timeWindow) - Math.max(a.start_sec, 0)), 0) / Math.max(timeWindow, 1);
+    const artFillAlpha = globalArtCoverage > 0.7 ? 0.025 : globalArtCoverage > 0.4 ? 0.04 : 0.06;
+
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
       const s1 = clamp(a.end_sec, 0, timeWindow);
@@ -538,7 +545,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${top}px`,
           `width:${bw}px`, `height:${laneH}px`,
-          `background:linear-gradient(to bottom,${br} 0,${br} 3px,${faintFill(bg, 0.10)} 3px)`,
+          `background:linear-gradient(to bottom,${br} 0,${br} 2px,${faintFill(bg, artFillAlpha * 1.5)} 2px)`,
           "pointer-events:none", "box-sizing:border-box",
         ].join(";");
         artifactRef.current?.appendChild(el);
@@ -547,7 +554,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${PAD}px`,
           `width:${bw}px`, `height:${signalH - PAD * 2}px`,
-          `background:linear-gradient(to bottom,${br} 0,${br} 3px,${faintFill(bg, 0.05)} 3px)`,
+          `background:linear-gradient(to bottom,${br} 0,${br} 2px,${faintFill(bg, artFillAlpha)} 2px)`,
           "pointer-events:none", "box-sizing:border-box", "overflow:visible",
         ].join(";");
         if (bw >= 24) el.appendChild(makeChip(abbrev(lbl), br));
@@ -630,8 +637,9 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     });
     gridRef.current = [];
 
-    const gridMat = new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.55 });
-    const gridStrongMat = new THREE.LineBasicMaterial({ color: colors.gridStrong, transparent: true, opacity: 0.8 });
+    const gridMat = new THREE.LineBasicMaterial({ color: colors.grid, transparent: true, opacity: 0.6 });
+    const gridStrongMat = new THREE.LineBasicMaterial({ color: colors.gridStrong, transparent: true, opacity: 0.85 });
+    const zeroLineMat = new THREE.LineBasicMaterial({ color: (colors as any).zeroLine ?? colors.gridStrong, transparent: true, opacity: 0.45 });
 
     const interval = timeWindow <= 10 ? 1 : timeWindow <= 30 ? 5 : 10;
     for (let i = 0; i <= timeWindow; i += interval) {
@@ -643,9 +651,16 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     }
     for (let i = 0; i <= nCh; i++) {
       const y = PAD + i * laneH;
-      // Horizontal dividers span from label column edge to right
       const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(labelW, y, 0), new THREE.Vector3(w, y, 0)]);
       const line = new THREE.Line(geom, gridMat);
+      scene.add(line);
+      gridRef.current.push(line);
+    }
+    // Per-channel zero-lines (baseline guide — subtle, helps readers track amplitude)
+    for (let i = 0; i < nCh; i++) {
+      const midY = PAD + i * laneH + laneH / 2;
+      const geom = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(labelW, midY, 0), new THREE.Vector3(w, midY, 0)]);
+      const line = new THREE.Line(geom, zeroLineMat);
       scene.add(line);
       gridRef.current.push(line);
     }
@@ -801,7 +816,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         geom.setPositions(pos);
         const mat = new LineMaterial({
           color: colorHex,
-          linewidth: 1.0,
+          linewidth: 1.4,
           worldUnits: false,
           resolution: new THREE.Vector2(w, h),
         });
@@ -814,32 +829,50 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       // label — inside the dedicated label panel column
       if (labelsRef.current && labelW > 0) {
         const qualityColor = quality === "flat" ? "#ef4444" : quality === "noisy" ? "#f59e0b" : colors.text;
+        const accentHex = `#${colorHex.toString(16).padStart(6, "0")}`;
+
         const el = document.createElement("div");
-        // Quality dot + label text
-        el.innerHTML = `<span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${
-          quality === "flat" ? "#ef4444" : quality === "noisy" ? "#f59e0b" : "#22c55e"
-        };margin-right:3px;flex-shrink:0;"></span>${label}`;
         el.style.cssText = [
-          "position:absolute",
-          "left:0",
-          `width:${labelW - 1}px`,
-          `top:${laneTop}px`,
-          `height:${laneH}px`,
-          "display:flex",
-          "align-items:center",
-          "justify-content:flex-end",
+          "position:absolute", "left:0", `width:${labelW - 1}px`,
+          `top:${laneTop}px`, `height:${laneH}px`,
+          "display:flex", "flex-direction:column", "align-items:flex-end",
+          "justify-content:center",
           "font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace",
-          "font-size:10px",
-          "font-weight:400",
-          `color:${qualityColor}`,
           `padding-right:6px`,
-          `border-right:2px solid #${colorHex.toString(16).padStart(6, "0")}`,
-          "pointer-events:none",
-          "box-sizing:border-box",
-          "z-index:4",
-          "white-space:nowrap",
-          "overflow:hidden",
+          `border-right:2px solid ${accentHex}`,
+          "pointer-events:none", "box-sizing:border-box", "z-index:4",
         ].join(";");
+
+        // Channel name row
+        const nameRow = document.createElement("div");
+        nameRow.style.cssText = [
+          "display:flex", "align-items:center", "gap:3px",
+          "font-size:10.5px", "font-weight:500", `color:${qualityColor}`,
+          "white-space:nowrap", "overflow:hidden",
+        ].join(";");
+        nameRow.innerHTML = `<span style="display:inline-block;width:4px;height:4px;border-radius:50%;background:${
+          quality === "flat" ? "#ef4444" : quality === "noisy" ? "#f59e0b" : accentHex
+        };flex-shrink:0;"></span>${label}`;
+        el.appendChild(nameRow);
+
+        // µV scale bar (first channel only, or if lane is tall enough)
+        if (di === 0 && laneH >= 28) {
+          const scaleUv = 100; // target reference amplitude in µV
+          const scalePx = Math.min(laneHalf * 0.6, scaleUv * 1e-6 * gain);
+          if (scalePx >= 4) {
+            const scaleEl = document.createElement("div");
+            scaleEl.style.cssText = [
+              "display:flex", "align-items:center", "gap:2px",
+              "margin-top:2px",
+            ].join(";");
+            scaleEl.innerHTML = [
+              `<span style="display:inline-block;width:1px;height:${Math.round(scalePx)}px;background:${colors.textMuted};flex-shrink:0;"></span>`,
+              `<span style="font-size:8px;color:${colors.textMuted};white-space:nowrap;">100µV</span>`,
+            ].join("");
+            el.appendChild(scaleEl);
+          }
+        }
+
         labelsRef.current.appendChild(el);
       }
     });

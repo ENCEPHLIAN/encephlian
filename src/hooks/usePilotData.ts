@@ -20,10 +20,11 @@ export interface PilotStudy {
   triage_completed_at: string | null;
   refund_requested: boolean | null;
   tokens_deducted: number | null;
+  ai_draft_json?: any | null;
 }
 
 const STUDY_COLUMNS =
-  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, sla_selected_at";
+  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, sla_selected_at, ai_draft_json";
 
 /** If PostgREST/schema lags, fall back without optional columns so pilot never goes blank. */
 const STUDY_COLUMNS_FALLBACK =
