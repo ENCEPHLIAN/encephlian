@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Upload, FileText, CheckCircle2, Clock,
   Loader2, Download, Brain, ChevronRight,
-  AlertTriangle, Activity, ShieldCheck, AlertCircle as AbnormalIcon,
+  AlertTriangle, Activity, ShieldCheck, AlertCircle as AbnormalIcon, Coins, Plus,
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
@@ -84,37 +84,109 @@ export default function PilotStudiesView() {
 
   /* ─── Download report ─── */
   const handleDownload = async (study: PilotStudy) => {
-    try {
-      const { data: report } = await supabase
-        .from("reports")
-        .select("pdf_path, id")
-        .eq("study_id", study.id)
-        .single();
-
-      if (!report?.pdf_path) {
-        toast.info("Generating report...");
-        if (report?.id) {
-          await supabase.functions.invoke("generate_report_pdf", {
-            body: { reportId: report.id },
-          });
-        }
-        return;
-      }
-
-      const { data, error } = await supabase.storage
-        .from("eeg-reports")
-        .download(report.pdf_path);
-      if (error) throw error;
-
-      const url = URL.createObjectURL(data);
+    const triggerDownload = (blob: Blob, name: string) => {
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `triage-report-${study.id.slice(0, 8)}.pdf`;
+      a.download = name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      toast.success("Download started");
+    };
+
+    try {
+      // 1. Check for a signed report PDF first
+      const { data: report } = await supabase
+        .from("reports")
+        .select("pdf_path, id")
+        .eq("study_id", study.id)
+        .maybeSingle();
+
+      if (report?.pdf_path) {
+        const { data, error } = await supabase.storage.from("eeg-reports").download(report.pdf_path);
+        if (!error && data) {
+          triggerDownload(data, `triage-report-${study.id.slice(0, 8)}.pdf`);
+          toast.success("Download started");
+          return;
+        }
+      }
+
+      // 2. Try server-side PDF generation if report row has no pdf_path
+      if (report?.id) {
+        toast.info("Generating PDF...");
+        await supabase.functions.invoke("generate_report_pdf", { body: { reportId: report.id } });
+        const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).single();
+        if (fresh?.pdf_path) {
+          const { data, error } = await supabase.storage.from("eeg-reports").download(fresh.pdf_path);
+          if (!error && data) {
+            triggerDownload(data, `triage-report-${study.id.slice(0, 8)}.pdf`);
+            toast.success("Download started");
+            return;
+          }
+        }
+      }
+
+      // 3. Fallback: generate HTML report from ai_draft_json
+      const raw = study.ai_draft_json as any;
+      if (raw) {
+        const meta = study.meta as any;
+        const patientName = meta?.patient_name || "Unknown Patient";
+        const patientId = meta?.patient_id ? ` · ${meta.patient_id}` : "";
+        const reportDate = dayjs(study.triage_completed_at || study.created_at).format("MMMM D, YYYY");
+        const score = raw.score || {};
+        const bg = score.background_activity || {};
+        const cls = raw.classification ?? raw.triage?.classification ?? score.classification;
+        const conf = raw.triage_confidence ?? raw.triage?.confidence;
+        const clsLine = cls && cls !== "unknown"
+          ? `${cls.charAt(0).toUpperCase() + cls.slice(1)}${typeof conf === "number" ? ` (confidence: ${Math.round(conf * 100)}%)` : ""}`
+          : null;
+
+        const bgLines = [
+          bg.dominant_rhythm && `Dominant rhythm: ${bg.dominant_rhythm}`,
+          bg.amplitude && `Amplitude: ${bg.amplitude}`,
+          bg.generalized_slowing?.present && `Generalised slowing: ${bg.generalized_slowing?.grade || "present"}`,
+          bg.symmetry && `Symmetry: ${bg.symmetry}`,
+        ].filter(Boolean).join("\n") || score.recording_conditions || "";
+
+        const sections = [
+          { h: "Classification", t: clsLine },
+          { h: "Background Activity", t: bgLines },
+          { h: "Interictal Findings", t: score.interictal_findings?.ieds_note },
+          { h: "Ictal Findings", t: score.ictal_findings?.note },
+          { h: "Impression", t: score.impression || raw.triage?.summary },
+          { h: "Recommended Action", t: score.recommended_action || raw.triage?.action },
+        ].filter((s): s is { h: string; t: string } => !!s.t);
+
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Triage Report — ${patientName}</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #111; line-height: 1.7; }
+  h1 { font-size: 1.4rem; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 4px; }
+  .meta { color: #555; font-size: 0.85rem; margin-bottom: 1.5rem; }
+  h2 { font-size: 0.95rem; font-weight: 700; margin-top: 1.4rem; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  p { white-space: pre-wrap; margin: 0; font-size: 0.95rem; }
+  .footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.75rem; color: #999; }
+  @media print { body { margin: 20mm; } }
+</style></head><body>
+<h1>ENCEPHLIAN™ AI Triage Report</h1>
+<div class="meta">
+  <strong>Patient:</strong> ${patientName}${patientId}<br>
+  <strong>Date:</strong> ${reportDate}<br>
+  <strong>SLA:</strong> ${study.sla}<br>
+  <strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}
+</div>
+${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
+<div class="footer">Generated by ENCEPHLIAN™ · AI triage report · For physician review only</div>
+</body></html>`;
+
+        const blob = new Blob([html], { type: "text/html" });
+        triggerDownload(blob, `triage-report-${study.id.slice(0, 8)}.html`);
+        toast.success("Report downloaded", { description: "Open the .html file and print to PDF" });
+        return;
+      }
+
+      toast.error("Report not yet available — analysis may still be running");
     } catch {
       toast.error("Download failed");
     }
@@ -206,6 +278,25 @@ export default function PilotStudiesView() {
           )}
         </CardContent>
       </Card>
+
+      {/* Zero-token prompt when studies are waiting */}
+      {tokenBalance === 0 && pendingStudies.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+              <Coins className="h-5 w-5 text-destructive" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">No tokens — {pendingStudies.length} {pendingStudies.length === 1 ? "study" : "studies"} waiting</p>
+              <p className="text-xs text-muted-foreground">Add tokens to start AI triage. Standard · 1 token, Priority · 2 tokens.</p>
+            </div>
+            <Button size="sm" className="rounded-full shrink-0 gap-1.5" onClick={() => navigate("/app/wallet")}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Tokens
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pending SLA Selection */}
       {pendingStudies.length > 0 && (

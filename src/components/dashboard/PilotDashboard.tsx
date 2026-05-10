@@ -6,6 +6,7 @@ import {
   HelpCircle, Brain, Shield, BarChart3, Eye,
   ChevronRight, Activity, AlertTriangle,
   ShieldCheck, AlertCircle as AbnormalIcon,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import dayjs from "dayjs";
+import { supabase } from "@/integrations/supabase/client";
 import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import RefundDialog from "@/components/dashboard/RefundDialog";
@@ -86,6 +88,54 @@ export default function PilotDashboard() {
       },
     });
   }, [navigate]);
+
+  const handleDownload = useCallback(async (study: PilotStudy) => {
+    const triggerDownload = (blob: Blob, name: string) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    };
+    try {
+      const { data: report } = await supabase
+        .from("reports").select("pdf_path, id").eq("study_id", study.id).maybeSingle();
+      if (report?.pdf_path) {
+        const { data, error } = await supabase.storage.from("eeg-reports").download(report.pdf_path);
+        if (!error && data) { triggerDownload(data, `report-${study.id.slice(0, 8)}.pdf`); toast.success("Download started"); return; }
+      }
+      if (report?.id) {
+        await supabase.functions.invoke("generate_report_pdf", { body: { reportId: report.id } });
+        const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).single();
+        if (fresh?.pdf_path) {
+          const { data, error } = await supabase.storage.from("eeg-reports").download(fresh.pdf_path);
+          if (!error && data) { triggerDownload(data, `report-${study.id.slice(0, 8)}.pdf`); toast.success("Download started"); return; }
+        }
+      }
+      // Fallback: generate HTML from ai_draft_json
+      const raw = study.ai_draft_json as any;
+      if (raw) {
+        const meta = study.meta as any;
+        const cls = raw.classification ?? raw.triage?.classification;
+        const score = raw.score || {};
+        const impression = score.impression || raw.triage?.summary || "";
+        const action = score.recommended_action || raw.triage?.action || "";
+        const bg = score.background_activity || {};
+        const bgText = [bg.dominant_rhythm && `Dominant rhythm: ${bg.dominant_rhythm}`, bg.amplitude && `Amplitude: ${bg.amplitude}`].filter(Boolean).join("\n");
+        const sections = [
+          { h: "Classification", t: cls ? cls.charAt(0).toUpperCase() + cls.slice(1) : null },
+          { h: "Background Activity", t: bgText || null },
+          { h: "Impression", t: impression || null },
+          { h: "Recommended Action", t: action || null },
+        ].filter((s): s is { h: string; t: string } => !!s.t);
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Triage Report</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;line-height:1.7}h1{font-size:1.4rem;border-bottom:2px solid #111;padding-bottom:8px}h2{font-size:.95rem;font-weight:700;margin-top:1.4rem;text-transform:uppercase;letter-spacing:.04em}.meta{color:#555;font-size:.85rem;margin-bottom:1.5rem}p{white-space:pre-wrap;margin:0;font-size:.95rem}.footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.75rem;color:#999}@media print{body{margin:20mm}}</style></head><body><h1>ENCEPHLIAN™ Triage Report</h1><div class="meta"><strong>Patient:</strong> ${meta?.patient_name || "Unknown"}<br><strong>Date:</strong> ${dayjs(study.triage_completed_at || study.created_at).format("MMMM D, YYYY")}<br><strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}</div>${sections.map(s => `<h2>${s.h}</h2><p>${s.t}</p>`).join("")}<div class="footer">ENCEPHLIAN™ · AI triage · For physician review only</div></body></html>`;
+        triggerDownload(new Blob([html], { type: "text/html" }), `report-${study.id.slice(0, 8)}.html`);
+        toast.success("Report downloaded", { description: "Open the .html file and print to PDF" });
+        return;
+      }
+      toast.error("Report not available yet");
+    } catch { toast.error("Download failed"); }
+  }, []);
 
   const firstName = profile?.full_name?.split(" ")[0] || "Doctor";
   const isNewUser = !isLoading && studies.length === 0;
@@ -298,6 +348,25 @@ export default function PilotDashboard() {
         </Card>
       )}
 
+      {/* ─── Zero-token prompt when studies are waiting ─── */}
+      {hasPending && tokenBalance === 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center shrink-0">
+              <Coins className="h-5 w-5 text-destructive" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold">No tokens — {pendingTriageStudies.length} {pendingTriageStudies.length === 1 ? "study" : "studies"} waiting</p>
+              <p className="text-xs text-muted-foreground">Standard triage · 1 token &nbsp;·&nbsp; Priority · 2 tokens</p>
+            </div>
+            <Button size="sm" className="rounded-full shrink-0 gap-1.5" onClick={() => navigate("/app/wallet")}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Tokens
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ─── Pending Triage — 1-tap action ─── */}
       {hasPending && (
         <Card className="border-amber-500/20 bg-amber-500/5">
@@ -429,7 +498,18 @@ export default function PilotDashboard() {
                         )}
                       </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); void handleDownload(study); }}
+                        title="Download report"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                    </div>
                   </div>
                 );
               })}
