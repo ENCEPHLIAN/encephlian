@@ -533,52 +533,50 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .eq("id", studyId);
       onProgress(100, "File saved — choose triage on Studies");
     } else {
+      // Mark sla_selected_at now — SLA was chosen in the wizard, no token deduction for internal
       await supabase
         .from("studies")
-        .update({ state: "uploaded", uploaded_file_path: blobName })
+        .update({
+          state: "uploaded",
+          uploaded_file_path: blobName,
+          sla_selected_at: new Date().toISOString(),
+          triage_status: "processing",
+          triage_progress: 5,
+          triage_started_at: new Date().toISOString(),
+        })
         .eq("id", studyId);
+
+      // Fire-and-forget: C-Plane canonicalises + I-Plane runs inference async.
+      // Do NOT await — the wizard completes immediately and the study page
+      // shows live progress via Supabase realtime + polling.
+      const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
 
       fetch(`${cplaneBase}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ study_id: studyId }),
-      }).catch((err) => console.warn("C-Plane trigger failed:", err));
+      }).catch((err) => console.warn("[upload] C-Plane trigger failed:", err));
 
-      const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
       if (iplaneBase && !isProprietaryFormat) {
-        onProgress(88, `Running MIND® analysis...`);
-        try {
-          const controller = new AbortController();
-          activeIPlaneControllerRef.current = controller;
-          const timer = setTimeout(() => controller.abort(), 300_000);
-          const form = new FormData();
-          form.append("file", targetFile, targetFile.name);
-          form.append("study_id", studyId);
-          const iRes = await fetch(`${iplaneBase}/mind/run-edf`, {
-            method: "POST",
-            body: form,
-            signal: controller.signal,
-          });
-          clearTimeout(timer);
-          activeIPlaneControllerRef.current = null;
-          if (iRes.ok) {
-            const report = await iRes.json();
-            onProgress(97, `Saving analysis...`);
+        const form = new FormData();
+        form.append("file", targetFile, targetFile.name);
+        form.append("study_id", studyId);
+        fetch(`${iplaneBase}/mind/run-edf`, { method: "POST", body: form })
+          .then(async (res) => {
+            if (!res.ok) return;
+            const report = await res.json();
             await supabase.from("studies").update({
               state: "ai_draft",
               triage_status: "completed",
               triage_progress: 100,
+              triage_completed_at: new Date().toISOString(),
               ai_draft_json: report,
             }).eq("id", studyId);
-          }
-        } catch (e: any) {
-          activeIPlaneControllerRef.current = null;
-          if (e?.name !== "AbortError") {
-            console.warn("[upload] I-Plane analysis failed:", e);
-          }
-        }
+          })
+          .catch((err) => console.warn("[upload] I-Plane analysis failed:", err));
       }
-      onProgress(100, "Done");
+
+      onProgress(100, "Analysis running — view progress on the study page");
     }
 
     return { studyId };

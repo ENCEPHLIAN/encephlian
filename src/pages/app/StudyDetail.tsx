@@ -50,6 +50,7 @@ import { StudyFlowProgress } from "@/components/study/StudyFlowProgress";
 import { studyTriageIsPaid } from "@/shared/tokenEconomy";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import type { PilotStudy } from "@/hooks/usePilotData";
+import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
 
 dayjs.extend(relativeTime);
 
@@ -103,6 +104,7 @@ export default function StudyDetail() {
   const [downloading, setDownloading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
+  const [slaModalOpen, setSlaModalOpen] = useState(false);
 
   const { data: wallet } = useQuery({
     queryKey: ["wallet-balance"],
@@ -110,7 +112,7 @@ export default function StudyDetail() {
       const { data } = await supabase.from("wallets").select("tokens").maybeSingle();
       return data || { tokens: 0 };
     },
-    enabled: isPilot,
+    enabled: isAuthenticated,
     staleTime: 30_000,
   });
   const tokenBalance = wallet?.tokens ?? 0;
@@ -153,18 +155,13 @@ export default function StudyDetail() {
     },
     enabled: !!id,
     retry: 1,
-    // Auto-poll while pipeline is running — triage can be "processing" while state stays "uploaded"
+    // Poll only while pipeline is actively running — awaiting_sla/pending change only on user action
     refetchInterval: (query) => {
       const row = query.state.data as { state?: string; triage_status?: string } | undefined;
       if (!row) return false;
-      if (row.triage_status === "processing") return 3_000;
+      if (row.triage_status === "processing") return 5_000;
       const state = row.state;
-      return state === "processing" ||
-        state === "uploaded" ||
-        state === "pending" ||
-        state === "awaiting_sla"
-        ? 5_000
-        : false;
+      return state === "processing" || state === "uploaded" ? 8_000 : false;
     },
   });
 
@@ -224,17 +221,16 @@ export default function StudyDetail() {
     enabled: !!id && !!IPLANE_BASE && !isLoading,
     staleTime: 30_000,
     retry: false,
-    // Poll while report not yet available and pipeline may still be writing I-Plane blob
+    // Poll while pipeline is writing I-Plane blob; stop once report arrives
     refetchInterval: (query) => {
       if (query.state.data) return false;
       const row = queryClient.getQueryData(["study-detail", id]) as
         | { state?: string; triage_status?: string }
         | undefined;
       if (!row) return false;
-      if (row.triage_status === "processing") return 4_000;
+      if (row.triage_status === "processing") return 8_000;
       const state = row.state;
-      if (state === "uploaded" || state === "processing" || state === "ai_draft") return 6_000;
-      if (row.triage_status === "completed" && (state === "completed" || state === "complete")) return 5_000;
+      if (state === "uploaded" || state === "processing" || state === "ai_draft") return 10_000;
       return false;
     },
   });
@@ -260,9 +256,10 @@ export default function StudyDetail() {
     setRunningTriage(true);
     try {
       toast({ title: "Starting MIND® analysis...", description: "Triggering pipeline" });
-      const { error } = await supabase.functions.invoke("generate_ai_report", {
-        body: { study_id: id },
-      });
+      // Pass sla for internal so the edge function can set sla_selected_at if missing
+      const body: Record<string, string> = { study_id: id };
+      if (!isPilot && study?.sla && study.sla !== "pending") body.sla = study.sla;
+      const { error } = await supabase.functions.invoke("generate_ai_report", { body });
       if (error) throw error;
       toast({ title: "Pipeline started", description: "MIND® is processing. Results appear in 1–3 minutes." });
       refetch();
@@ -397,11 +394,11 @@ export default function StudyDetail() {
   const canGenerateReport = !hasReport && !isProcessing &&
     (study.state === "uploaded" || study.state === "parsed");
   const triagePaid = studyTriageIsPaid(study);
-  // Gate only applies to pilot (token-gated). Internal users trigger analysis directly — no payment gate.
+  // Pilot users must pay (tokens) before analysis runs. Internal users are never gated.
   const gateTriageActions = isPilot && !triagePaid && study.state !== "signed";
   const lastPipelineError = pipelineEvents.find((e: any) => e.status === "error");
   const canReview =
-    triagePaid &&
+    (!isPilot || triagePaid) &&
     (study.triage_status === "completed" ||
       study.state === "ai_draft" ||
       study.state === "in_review" ||
@@ -493,24 +490,19 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run MIND® Analysis — only after SLA / token gate */}
+              {/* Run MIND® Analysis — opens SLA modal when not yet paid */}
               {IPLANE_BASE && study.state !== "signed" && (
                 <Button
-                  onClick={handleRunAITriage}
-                  disabled={runningTriage || gateTriageActions}
+                  onClick={gateTriageActions ? () => setSlaModalOpen(true) : handleRunAITriage}
+                  disabled={runningTriage}
                   className="bg-primary"
-                  title={
-                    gateTriageActions
-                      ? "Select Standard or Priority on the Studies list first (tokens apply there)."
-                      : undefined
-                  }
                 >
                   {runningTriage ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
                     <Brain className="h-4 w-4 mr-2" />
                   )}
-                  Run MIND® Analysis
+                  {gateTriageActions ? "Select Analysis Priority" : "Run MIND® Analysis"}
                 </Button>
               )}
               
@@ -519,7 +511,7 @@ export default function StudyDetail() {
                   onClick={handleGenerateAIReport}
                   disabled={generating || gateTriageActions}
                   variant="outline"
-                  title={gateTriageActions ? "Start triage from the Studies list before running tools here." : undefined}
+                  title={gateTriageActions ? "Select analysis priority first." : undefined}
                 >
                   {generating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -544,7 +536,7 @@ export default function StudyDetail() {
                   variant="outline"
                   onClick={handleDownloadReport}
                   disabled={downloading || gateTriageActions}
-                  title={gateTriageActions ? "Available after triage has been started from Studies." : undefined}
+                  title={gateTriageActions ? "Available after analysis priority is selected and processing completes." : undefined}
                 >
                   {downloading ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -650,7 +642,7 @@ export default function StudyDetail() {
       {gateTriageActions && (
         <Alert className="border-amber-500/40 bg-amber-500/5">
           <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-amber-900 dark:text-amber-100">Triage not started</AlertTitle>
+          <AlertTitle className="text-amber-900 dark:text-amber-100">Analysis not started</AlertTitle>
           <AlertDescription className="text-sm">
             {isPilot ? (
               <div className="flex flex-col gap-3 mt-1">
@@ -666,7 +658,17 @@ export default function StudyDetail() {
                 />
               </div>
             ) : (
-              "From Studies or the queue, choose Standard (1 token) or Priority (2 tokens) for this recording. Tokens are charged at that step only. Until then, use Open Viewer for the raw file; analysis tools stay off so billing stays unambiguous."
+              <div className="flex flex-col gap-3 mt-1">
+                <span>Select Standard (12–24 h) or Priority (30–90 min) to start MIND® analysis.</span>
+                <Button
+                  size="sm"
+                  className="self-start"
+                  onClick={() => setSlaModalOpen(true)}
+                >
+                  <Brain className="h-3.5 w-3.5 mr-1.5" />
+                  Select Analysis Priority
+                </Button>
+              </div>
             )}
           </AlertDescription>
         </Alert>
@@ -1082,9 +1084,13 @@ export default function StudyDetail() {
                       : " Upload an EDF file and wait for the pipeline to complete."}
                   </p>
                   {IPLANE_BASE && (
-                    <Button onClick={handleRunAITriage} disabled={runningTriage || gateTriageActions} size="sm">
+                    <Button
+                      onClick={gateTriageActions ? () => setSlaModalOpen(true) : handleRunAITriage}
+                      disabled={runningTriage}
+                      size="sm"
+                    >
                       {runningTriage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
-                      Run MIND® Analysis
+                      {gateTriageActions ? "Select Analysis Priority" : "Run MIND® Analysis"}
                     </Button>
                   )}
                 </div>
@@ -1134,6 +1140,20 @@ export default function StudyDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {study && (
+        <SlaSelectionModal
+          open={slaModalOpen}
+          onOpenChange={setSlaModalOpen}
+          study={study as any}
+          tokenBalance={tokenBalance}
+          isPilot={isPilot}
+          onInsufficientTokens={() => {
+            setSlaModalOpen(false);
+            navigate("/app/wallet");
+          }}
+        />
+      )}
     </div>
   );
 }

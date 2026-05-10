@@ -1,5 +1,6 @@
-import { useMemo, memo } from "react";
+import { useMemo, memo, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -273,12 +274,47 @@ function LanesSkeleton() {
 
 /* ── Main component ─────────────────────────────── */
 
+type SlaFilter = "ALL" | "STAT" | "24H" | "48H" | "ROUTINE";
+
+const SLA_FILTERS: { id: SlaFilter; label: string }[] = [
+  { id: "ALL",     label: "All" },
+  { id: "STAT",    label: "STAT" },
+  { id: "24H",     label: "24H" },
+  { id: "48H",     label: "48H" },
+  { id: "ROUTINE", label: "Routine" },
+];
+
 export default function Lanes() {
   const navigate = useNavigate();
+  const [slaFilter, setSlaFilter] = useState<SlaFilter>("ALL");
   const { studies, isLoading, isError, error, refetch } = useStudiesData("all");
 
+  // Realtime: refetch whenever any study changes state or triage_status
+  useEffect(() => {
+    const ch = supabase
+      .channel("lanes-rt")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "studies" },
+        () => { refetch(); }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "studies" },
+        () => { refetch(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [refetch]);
+
+  const filteredStudies = useMemo(() => {
+    if (!studies) return [];
+    if (slaFilter === "ALL") return studies;
+    return studies.filter(s => s.sla === slaFilter);
+  }, [studies, slaFilter]);
+
   const stageStudies = useMemo(() => {
-    if (!studies) return {};
+    if (!filteredStudies) return {};
 
     const sortByUrgency = (a: Study, b: Study) => {
       const aP = (SLA_CONFIG[a.sla as SLAKey] || SLA_CONFIG.ROUTINE).priority;
@@ -288,28 +324,27 @@ export default function Lanes() {
     };
 
     return {
-      uploaded: studies
+      uploaded: filteredStudies
         .filter(s => (s.state === "uploaded" || s.state === "awaiting_sla") && !s.triage_status)
         .sort(sortByUrgency),
-      processing: studies
+      processing: filteredStudies
         .filter(s => s.triage_status === "processing")
         .sort(sortByUrgency),
-      ai_draft: studies
+      ai_draft: filteredStudies
         .filter(s => s.state === "ai_draft" || (s.triage_status === "completed" && s.state !== "signed" && s.state !== "in_review"))
         .sort(sortByUrgency),
-      in_review: studies
+      in_review: filteredStudies
         .filter(s => s.state === "in_review")
         .sort(sortByUrgency),
-      signed: studies
+      signed: filteredStudies
         .filter(s => s.state === "signed")
         .slice(0, 20),
     };
-  }, [studies]);
+  }, [filteredStudies]);
 
   const overdueCount = useMemo(() => {
-    if (!studies) return 0;
-    return studies.filter(s => s.state !== "signed" && getTimeInfo(s).overdue).length;
-  }, [studies]);
+    return filteredStudies.filter(s => s.state !== "signed" && getTimeInfo(s).overdue).length;
+  }, [filteredStudies]);
 
   const activeCount = useMemo(() => {
     if (!stageStudies) return 0;
@@ -367,6 +402,41 @@ export default function Lanes() {
           <Upload className="h-3.5 w-3.5 mr-1.5" />
           Upload Study
         </Button>
+      </div>
+
+      {/* SLA Filter Pills */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {SLA_FILTERS.map((f) => {
+          const count = f.id === "ALL"
+            ? (studies?.length ?? 0)
+            : (studies?.filter(s => s.sla === f.id).length ?? 0);
+          const isActive = slaFilter === f.id;
+          return (
+            <button
+              key={f.id}
+              onClick={() => setSlaFilter(f.id)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all border",
+                isActive
+                  ? f.id === "STAT"
+                    ? "bg-destructive text-destructive-foreground border-destructive"
+                    : "bg-primary text-primary-foreground border-primary"
+                  : "bg-muted/50 text-muted-foreground border-border hover:border-primary/50 hover:text-foreground"
+              )}
+            >
+              {f.id === "STAT" && isActive && <Zap className="h-3 w-3" />}
+              {f.label}
+              {count > 0 && (
+                <span className={cn(
+                  "rounded-full px-1 text-[10px] font-bold tabular-nums",
+                  isActive ? "bg-white/20" : "bg-muted"
+                )}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Summary stats bar */}

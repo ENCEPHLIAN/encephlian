@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle, EyeOff } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
@@ -703,7 +703,7 @@ export default function EEGViewer() {
   // ── Render: no study selected ────────────────────────────────────────────────
   if (!studyId) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
           <WifiOff className="h-7 w-7 text-muted-foreground/60" />
         </div>
@@ -723,7 +723,7 @@ export default function EEGViewer() {
   if (fatalError) {
     const isNotFound = fatalError.includes("404") || fatalError.includes("No blobs") || fatalError.includes("not yet available");
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
         <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
           <WifiOff className="h-7 w-7 text-muted-foreground/60" />
         </div>
@@ -759,7 +759,7 @@ export default function EEGViewer() {
   // ── Render: loading (study meta only — plot area handles signal fetch) ────────
   if (loadingMeta || !meta) {
     return (
-      <div className="h-full flex flex-col items-center justify-center gap-3 text-muted-foreground">
+      <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
         <span className="text-xs">Loading study…</span>
       </div>
@@ -771,7 +771,7 @@ export default function EEGViewer() {
 
   // ── Render: main ──────────────────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-background" tabIndex={-1}>
+    <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-background" tabIndex={-1}>
 
       {/* Always-visible escape hatch (avoids trap on loading / errors) */}
       <div className="flex flex-shrink-0 items-center gap-2 border-b bg-background px-2 py-1.5">
@@ -955,9 +955,12 @@ export default function EEGViewer() {
               </button>
             )}
             {artifactCount > 0 && showArtifacts && (
-              <button onClick={e => { e.stopPropagation(); setSuppressArts(v => !v); }}
-                className={`px-1.5 py-px rounded text-[10px] transition-colors ${suppressArts ? "bg-background/80 text-foreground border border-border" : "text-muted-foreground/40"}`}>
-                dim
+              <button
+                onClick={e => { e.stopPropagation(); setSuppressArts(v => !v); }}
+                title={suppressArts ? "Show artifacts" : "Mute artifact overlays"}
+                className={`flex items-center px-1.5 py-px rounded text-[10px] transition-colors ${suppressArts ? "bg-background/80 text-foreground border border-border" : "text-muted-foreground/40"}`}
+              >
+                <EyeOff className="h-2.5 w-2.5" />
               </button>
             )}
           </div>

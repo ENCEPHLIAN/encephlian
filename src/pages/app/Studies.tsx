@@ -300,23 +300,10 @@ function InternalStudiesView() {
         console.warn(`[${studyId}] No SAS URL — pipeline may fail without source_url`);
       }
 
-      // Step 3: Trigger real C-Plane pipeline (async, does not wait for completion)
-      toast({ title: "Pipeline started — MIND® processing..." });
-      const { data: pipeData, error: pipelineError } = await supabase.functions.invoke("generate_ai_report", {
-        body: { study_id: studyId },
+      toast({
+        title: "Upload complete",
+        description: "Select Standard or Priority analysis to start MIND® processing.",
       });
-      if (pipelineError) {
-        const msg = await formatEdgeFunctionError(pipelineError, pipeData);
-        console.error("Pipeline trigger error:", pipelineError, pipeData);
-        toast({
-          title: "Study created",
-          description: `Pipeline trigger failed: ${msg}. Open the study and retry from the detail page.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({ title: "Upload complete", description: "MIND® is processing your EEG. Results appear in 1–3 minutes." });
-      }
-
       navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
       console.error("Upload error:", error);

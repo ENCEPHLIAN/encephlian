@@ -10,10 +10,10 @@ type StudyRow = {
 
 const INTERNAL_STEPS = [
   { key: "upload", label: "Upload", detail: "File received" },
-  { key: "sla", label: "SLA & tokens", detail: "Standard (1) or Priority (2) — wallet charged here" },
+  { key: "sla", label: "Analysis priority", detail: "Standard (12–24 h) or Priority (30–90 min)" },
   { key: "triage", label: "Triage pipeline", detail: "C-Plane + MIND® analysis" },
   { key: "draft", label: "Draft ready", detail: "ESF / SCORE available for review" },
-  { key: "signed", label: "Signed", detail: "Final report — no extra token charge" },
+  { key: "signed", label: "Signed", detail: "Final report" },
 ] as const;
 
 const PILOT_STEPS = [
@@ -29,9 +29,9 @@ function stepIndex(study: StudyRow): number {
   if (st === "signed") return 4;
   if (["ai_draft", "in_review", "complete", "completed"].includes(st)) return 3;
   if (st === "processing" || study.triage_status === "processing") return 2;
-  if (st === "awaiting_sla" || st === "uploaded") return 1;
-  /* parsed / preprocessed / failed recovery: treat as pipeline in motion */
-  return 2;
+  if (st === "uploaded") return 2; // file on blob, pipeline firing
+  if (st === "awaiting_sla") return 1; // file uploaded, SLA not yet chosen
+  return 2; // fallback for legacy states
 }
 
 export function StudyFlowProgress({ study, isPilot }: { study: StudyRow; isPilot: boolean }) {

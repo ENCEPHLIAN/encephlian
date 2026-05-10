@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import { toast } from "sonner";
 import dayjs from "dayjs";
 
 /* ─── Types ────────────────────────────────────────────── */
@@ -132,15 +131,18 @@ const SEVEN_DAYS_AGO = () => dayjs().subtract(7, "day").toISOString();
 /* ─── Hook ──────────────────────────────────────────────── */
 
 export function useNotifications() {
-  const { profile, isAuthenticated } = useUserSession();
-  const userId = (profile as any)?.id as string | undefined;
+  const { userId, isAuthenticated } = useUserSession();
 
   const [readIds, setReadIds] = useState<Set<string>>(new Set());
-  // Live notifications injected by realtime (not in DB queries)
   const [liveNotifs, setLiveNotifs] = useState<AppNotification[]>([]);
+  // Banner queue: live critical alerts shown as top-of-screen banners
+  const [bannerQueue, setBannerQueue] = useState<AppNotification[]>([]);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  // Track which bell-ring trigger IDs we've already fired so we don't repeat
   const ringFiredRef = useRef<Set<string>>(new Set());
+
+  const dismissBanner = useCallback((id: string) => {
+    setBannerQueue((prev) => prev.filter((n) => n.id !== id));
+  }, []);
 
   useEffect(() => {
     if (userId) setReadIds(getReadSet(userId));
@@ -238,14 +240,7 @@ export function useNotifications() {
             if (!ringFiredRef.current.has(notif.id)) {
               ringFiredRef.current.add(notif.id);
               setLiveNotifs((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
-              toast.success(notif.title, {
-                description: notif.body,
-                duration: 6000,
-                action: notif.href ? {
-                  label: "View report",
-                  onClick: () => window.location.assign(notif.href!),
-                } : undefined,
-              });
+              setBannerQueue((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
             }
           }
 
@@ -269,7 +264,7 @@ export function useNotifications() {
           if (!ringFiredRef.current.has(notif.id)) {
             ringFiredRef.current.add(notif.id);
             setLiveNotifs((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
-            toast.error(notif.title, { description: notif.body, duration: 8000 });
+            setBannerQueue((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
           }
         }
       )
@@ -283,7 +278,6 @@ export function useNotifications() {
           if (!ringFiredRef.current.has(notif.id)) {
             ringFiredRef.current.add(notif.id);
             setLiveNotifs((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
-            toast.success(notif.title, { description: notif.body });
           }
         }
       )
@@ -393,5 +387,7 @@ export function useNotifications() {
     markAsRead,
     markAllRead,
     dismiss,
+    bannerQueue,
+    dismissBanner,
   };
 }

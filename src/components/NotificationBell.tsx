@@ -239,7 +239,8 @@ export function NotificationBell() {
   const { isPilot } = useSku();
 
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<FilterTab>("all");
+  // Pilot sees only reports and alerts, not billing
+  const [tab, setTab] = useState<FilterTab>(isPilot ? "report" : "all");
   const [ringing, setRinging] = useState(false);
   const prevUnreadRef = useRef(unreadCount);
 
@@ -275,9 +276,6 @@ export function NotificationBell() {
   };
 
   const timeGroups = groupByTime(filtered);
-
-  // Pilot gets no notification bell (they have a simpler dashboard)
-  if (isPilot) return null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

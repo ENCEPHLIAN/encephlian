@@ -117,6 +117,61 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         }));
       }
 
+      // EEG uploads live in Azure — query study_files table (DB records, not Supabase storage)
+      if (bucket === "eeg-uploads") {
+        const { data, error } = await supabase
+          .from("study_files")
+          .select("id, study_id, path, kind, size_bytes, created_at, studies(meta)")
+          .order("created_at", { ascending: false })
+          .limit(200);
+
+        if (error) throw error;
+
+        return (data || []).map((f: any) => {
+          const meta = f.studies?.meta as any;
+          const patientLabel = meta?.patient_name || meta?.patient_id || f.study_id?.slice(0, 8) || "Unknown";
+          const fileName = f.path?.split("/").pop() || f.path || f.id;
+          return {
+            id: f.id,
+            name: fileName,
+            study_id: f.study_id,
+            kind: f.kind,
+            size_bytes: f.size_bytes,
+            created_at: f.created_at,
+            patientLabel,
+            metadata: { size: f.size_bytes },
+          };
+        });
+      }
+
+      // Reports: query reports table for signed PDFs
+      if (bucket === "eeg-reports") {
+        const { data, error } = await supabase
+          .from("reports")
+          .select("id, study_id, status, signed_at, created_at, pdf_path, studies(meta, sla)")
+          .order("created_at", { ascending: false })
+          .limit(100);
+
+        if (error) throw error;
+
+        return (data || []).map((r: any) => {
+          const meta = r.studies?.meta as any;
+          const patientLabel = meta?.patient_name || meta?.patient_id || r.study_id?.slice(0, 8) || "Unknown";
+          const fileName = r.pdf_path?.split("/").pop() || `report_${r.study_id?.slice(0, 8)}.pdf`;
+          return {
+            id: r.id,
+            name: fileName,
+            study_id: r.study_id,
+            status: r.status,
+            signed_at: r.signed_at,
+            pdf_path: r.pdf_path,
+            created_at: r.signed_at || r.created_at,
+            patientLabel,
+            metadata: { size: null, mimetype: "application/pdf" },
+          };
+        });
+      }
+
       const userPath = path ? `${userId}/${path}` : userId;
 
       const { data, error } = await supabase.storage

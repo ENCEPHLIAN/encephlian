@@ -170,7 +170,7 @@ serve(async (req) => {
               <p>The triage analysis for <strong>${patientId}</strong> has been completed.</p>
               <p>You can now view the report and analysis results in your dashboard.</p>
               <div style="margin: 24px 0;">
-                <a href="${supabaseUrl.replace('.supabase.co', '')}/app/studies/${study_id}" 
+                <a href="https://www.encephlian.cloud/app/studies/${study_id}"
                    style="background: #0ea5e9; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
                   View Report
                 </a>

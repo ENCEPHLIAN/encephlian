@@ -41,7 +41,7 @@ serve(async (req) => {
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
 
-    const { study_id } = await req.json();
+    const { study_id, sla: requestedSla } = await req.json();
     if (!study_id) return new Response(
       JSON.stringify({ error: "study_id is required" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
@@ -52,7 +52,7 @@ serve(async (req) => {
     // Verify study exists and user has access
     const { data: study, error: studyError } = await supabase
       .from("studies")
-      .select("id, owner, clinic_id, state")
+      .select("id, owner, clinic_id, state, tokens_deducted, sla_selected_at")
       .eq("id", study_id)
       .single();
 
@@ -71,6 +71,44 @@ serve(async (req) => {
       if (!membership) return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // Check clinic SKU
+    const { data: clinic } = await supabase
+      .from("clinics")
+      .select("sku")
+      .eq("id", study.clinic_id)
+      .single();
+    const isInternal = clinic?.sku === "internal";
+
+    // Internal users select SLA priority but pay no tokens.
+    // If sla param is provided, record the selection atomically here (no deduction).
+    if (isInternal && requestedSla && !study.sla_selected_at) {
+      const validSlas = ["TAT", "STAT", "24H", "48H", "ROUTINE"];
+      if (validSlas.includes(requestedSla)) {
+        await supabase.from("studies")
+          .update({ sla: requestedSla, sla_selected_at: new Date().toISOString() })
+          .eq("id", study_id);
+        study.sla_selected_at = new Date().toISOString();
+      }
+    }
+
+    // Gate: pipeline requires an SLA selection (tokens for pilot, free for internal)
+    const hasSlа = study.sla_selected_at != null;
+    const hasPaidTokens = (study.tokens_deducted ?? 0) > 0;
+    if (!hasSlа && !hasPaidTokens) {
+      await insertPipelineEvent(supabase, {
+        study_id,
+        step: "edge.generate_ai_report.gate_rejected",
+        status: "error",
+        source: "supabase_edge",
+        correlation_id: correlationId,
+        detail: { user_id: user.id, state: study.state, sku: clinic?.sku },
+      });
+      return new Response(
+        JSON.stringify({ error: "Select analysis priority before starting the pipeline." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 

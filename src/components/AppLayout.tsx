@@ -24,6 +24,7 @@ import logo from "@/assets/logo.png";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import { QuickTipsDialog } from "@/components/QuickTipsDialog";
 import { NotificationBell } from "@/components/NotificationBell";
+import { LiveAlertBanner } from "@/components/LiveAlertBanner";
 import { useUserSession } from "@/contexts/UserSessionContext";
 import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
@@ -390,6 +391,8 @@ export default function AppLayout() {
           </div>
         </div>
       </header>
+
+        <LiveAlertBanner />
 
         {/* BODY: sidebar fixed; main content scrolls */}
         <div className="flex flex-1 relative">

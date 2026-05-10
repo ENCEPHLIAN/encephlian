@@ -354,34 +354,58 @@ const StudyCard = memo(function StudyCard({
 
 const StorageFileRow = memo(function StorageFileRow({
   file,
+  bucket,
   onPreview,
   onDownload,
   onDelete,
   onRename,
+  onViewStudy,
 }: {
   file: any;
+  bucket: string;
   onPreview: () => void;
   onDownload: () => void;
   onDelete: () => void;
   onRename: () => void;
+  onViewStudy?: () => void;
 }) {
   const isFolder = !file.name?.includes(".");
   const size = file.metadata?.size ?? file.size_bytes ?? null;
+  const isDbRecord = bucket === "eeg-uploads" || bucket === "eeg-reports";
+
+  const icon =
+    bucket === "eeg-reports" ? (
+      <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
+    ) : bucket === "eeg-uploads" ? (
+      <Activity className="h-5 w-5 text-blue-500 flex-shrink-0" />
+    ) : isFolder ? (
+      <FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />
+    ) : (
+      <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+    );
 
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors group">
-      {isFolder ? (
-        <FolderOpen className="h-5 w-5 text-blue-500 flex-shrink-0" />
-      ) : (
-        <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-      )}
+      {icon}
 
-      <div className="flex-1 min-w-0 cursor-pointer" onClick={onPreview}>
-        <p className="font-medium text-sm truncate">{file.name}</p>
-        <p className="text-xs text-muted-foreground">
-          {formatBytes(size)}
+      <div className="flex-1 min-w-0 cursor-pointer" onClick={onViewStudy || onPreview}>
+        <p className="font-medium text-sm truncate">{file.patientLabel || file.name}</p>
+        <p className="text-xs text-muted-foreground truncate">
+          {file.name}
+          {file.kind && <span className="ml-1 font-mono uppercase opacity-60">{file.kind}</span>}
+          {size && ` · ${formatBytes(size)}`}
           {(file.updated_at || file.created_at) &&
             ` · ${dayjs(file.updated_at || file.created_at).fromNow()}`}
+          {bucket === "eeg-reports" && file.status && (
+            <Badge className={cn(
+              "ml-2 text-[9px]",
+              file.status === "signed"
+                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                : "bg-muted text-muted-foreground border-border"
+            )}>
+              {file.status}
+            </Badge>
+          )}
         </p>
       </div>
 
@@ -392,27 +416,39 @@ const StorageFileRow = memo(function StorageFileRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {!isFolder && (
+          {onViewStudy && (
+            <DropdownMenuItem onClick={onViewStudy}>
+              <Eye className="h-4 w-4 mr-2" />
+              View Study
+            </DropdownMenuItem>
+          )}
+          {!isFolder && !isDbRecord && (
             <DropdownMenuItem onClick={onPreview}>
               <Eye className="h-4 w-4 mr-2" />
               Preview
             </DropdownMenuItem>
           )}
-          {!isFolder && (
+          {!isFolder && !isDbRecord && (
             <DropdownMenuItem onClick={onDownload}>
               <Download className="h-4 w-4 mr-2" />
               Download
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={onRename}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </DropdownMenuItem>
+          {!isDbRecord && (
+            <DropdownMenuItem onClick={onRename}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Rename
+            </DropdownMenuItem>
+          )}
+          {!isDbRecord && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -559,8 +595,8 @@ export default function Files() {
   const isLoading = selectedBucket === "study-files" ? studiesLoading : storageLoading;
   const isError = selectedBucket === "study-files" ? studiesError : storageError;
   const activeCount = selectedBucket === "study-files" ? filteredStudies.length : total;
-  const canCreateFolder = !["study-files", "notes"].includes(selectedBucket);
-  const canUpload = !["study-files", "notes"].includes(selectedBucket);
+  const canCreateFolder = !["study-files", "notes", "eeg-uploads", "eeg-reports"].includes(selectedBucket);
+  const canUpload = !["study-files", "notes", "eeg-uploads", "eeg-reports"].includes(selectedBucket);
 
   return (
     <div className="h-[calc(100vh-10rem)] flex flex-col gap-2">
@@ -746,11 +782,33 @@ export default function Files() {
               /* Storage bucket view */
               activeCount === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-                  <FolderOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  {selectedBucket === "eeg-uploads" ? (
+                    <Activity className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  ) : selectedBucket === "eeg-reports" ? (
+                    <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  ) : (
+                    <FolderOpen className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                  )}
                   <p className="font-medium">
-                    {searchQuery ? "No files match your search" : "Empty folder"}
+                    {searchQuery
+                      ? "No files match your search"
+                      : selectedBucket === "eeg-uploads"
+                      ? "No EEG uploads yet"
+                      : selectedBucket === "eeg-reports"
+                      ? "No signed reports yet"
+                      : "Empty folder"}
                   </p>
-                  {!searchQuery && canUpload && (
+                  {!searchQuery && selectedBucket === "eeg-uploads" && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Upload an EEG recording from the Studies page to get started.
+                    </p>
+                  )}
+                  {!searchQuery && selectedBucket === "eeg-reports" && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Reports appear here once a study is signed.
+                    </p>
+                  )}
+                  {!searchQuery && canUpload && !["eeg-uploads", "eeg-reports"].includes(selectedBucket) && (
                     <p className="text-sm text-muted-foreground mt-1">
                       Click Upload to add files here.
                     </p>
@@ -776,10 +834,12 @@ export default function Files() {
                     <StorageFileRow
                       key={file.id || file.name}
                       file={file}
+                      bucket={selectedBucket}
                       onPreview={() => handlePreview(file.name)}
                       onDownload={() => handleDownload(file.name)}
                       onDelete={() => setDeleteFileTarget(file.name)}
                       onRename={() => setRenameTarget(file.name)}
+                      onViewStudy={file.study_id ? () => navigate(`/app/studies/${file.study_id}`) : undefined}
                     />
                   ))}
                 </div>

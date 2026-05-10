@@ -1,33 +1,28 @@
 import { useState, useCallback, memo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, Activity, Upload, Coins, TrendingUp, Clock, CheckCircle2, AlertCircle, RefreshCw, WifiOff } from "lucide-react";
+import { Loader2, Activity, Upload, TrendingUp, Clock, CheckCircle2, AlertCircle, RefreshCw, WifiOff, Layers, ArrowRight } from "lucide-react";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
-import GlobalTriageProgressBar from "@/components/dashboard/GlobalTriageProgressBar";
 import RecentReportsSection from "@/components/dashboard/RecentReportsSection";
 import RefundDialog from "@/components/dashboard/RefundDialog";
-import TokenBalanceHeader from "@/components/dashboard/TokenBalanceHeader";
 import { CalendarWidget } from "@/components/CalendarWidget";
 import dayjs from "dayjs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
-import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { getStudyHandle } from "@/lib/studyDisplay";
 
-// Memoized components to prevent unnecessary re-renders
 const MemoizedKPICard = memo(KPICard);
 const MemoizedPendingTriageSection = memo(PendingTriageSection);
 const MemoizedRecentReportsSection = memo(RecentReportsSection);
-const MemoizedGlobalTriageProgressBar = memo(GlobalTriageProgressBar);
 const MemoizedUrgentQueue = memo(UrgentQueue);
 const MemoizedCalendarWidget = memo(CalendarWidget);
 
@@ -47,7 +42,6 @@ export default function Dashboard() {
     isError,
     error: dataError,
     tokenBalance,
-    previousBalance,
     refetchStudies,
   } = useDashboardData();
 
@@ -88,8 +82,6 @@ export default function Dashboard() {
     return <PilotDashboard />;
   }
 
-  const hasProcessingStudies = processingStudies.length > 0;
-
   if (isError) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -129,25 +121,14 @@ export default function Dashboard() {
   }
 
   return (
-    <div className={`space-y-6 animate-fade-in ${hasProcessingStudies ? "pt-24" : ""}`}>
-      {/* Global Progress Bar for Processing Studies */}
-      {hasProcessingStudies && (
-        <MemoizedGlobalTriageProgressBar studies={processingStudies} />
-      )}
-
-      {/* Header with Token Balance */}
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {dayjs().format("dddd, MMMM D, YYYY")}
           </p>
-        </div>
-        <div className="flex items-center gap-4">
-          <TokenBalanceHeader 
-            balance={tokenBalance} 
-            previousBalance={previousBalance}
-          />
         </div>
       </div>
 
@@ -160,79 +141,56 @@ export default function Dashboard() {
       )}
 
       {/* Quick Actions */}
-      <Card className="openai-card border-2">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-xl">Quick Actions</CardTitle>
-          <CardDescription className="text-sm">Your most common tasks</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="lg"
-                  className="quick-action-btn h-20 flex-col gap-2 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/lanes")}
-                >
-                  <Activity className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">Triage Queue</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>View STAT/TAT triage lanes</TooltipContent>
-            </Tooltip>
+      <div className="grid grid-cols-3 gap-3">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="lg"
+              className="quick-action-btn h-16 flex-col gap-1.5 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => navigate("/app/lanes")}
+            >
+              <Layers className="h-4 w-4 shrink-0" />
+              <span className="text-sm">Triage Lanes</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>View STAT/TAT triage lanes</TooltipContent>
+        </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/studies")}
-                >
-                  <Upload className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">Upload Study</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Upload new EEG study</TooltipContent>
-            </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="lg"
+              variant="outline"
+              className="quick-action-btn h-16 flex-col gap-1.5 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => navigate("/app/studies")}
+            >
+              <Upload className="h-4 w-4 shrink-0" />
+              <span className="text-sm">Upload Study</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Upload new EEG study</TooltipContent>
+        </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/reports")}
-                >
-                  <TrendingUp className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">View Reports</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>See completed reports</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="quick-action-btn h-20 flex-col gap-2 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-                  onClick={() => navigate("/app/wallet")}
-                >
-                  <Coins className="h-5 w-5 shrink-0" />
-                  <span className="text-sm">Buy Tokens</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Purchase analysis tokens</TooltipContent>
-            </Tooltip>
-          </div>
-        </CardContent>
-      </Card>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="lg"
+              variant="outline"
+              className="quick-action-btn h-16 flex-col gap-1.5 quick-outline transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              onClick={() => navigate("/app/reports")}
+            >
+              <TrendingUp className="h-4 w-4 shrink-0" />
+              <span className="text-sm">Reports</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>See completed reports</TooltipContent>
+        </Tooltip>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MemoizedKPICard
-          label="Pending Studies"
+          label="Pending"
           value={metrics?.pendingCount || 0}
           change={`${metrics?.statCases || 0} STAT urgent`}
           trend={metrics?.pendingCount && metrics.pendingCount > 5 ? "up" : "neutral"}
@@ -242,56 +200,23 @@ export default function Dashboard() {
         <MemoizedKPICard
           label="Completed Today"
           value={metrics?.completedToday || 0}
-          change="Daily progress"
+          change={`${metrics?.completedWeek || 0} this week`}
           trend={metrics?.completedToday && metrics.completedToday >= 3 ? "up" : "neutral"}
           color="kpi-green"
         />
-        <MemoizedKPICard 
-          label="This Week" 
-          value={metrics?.completedWeek || 0} 
-          change="Studies analyzed" 
-          trend={metrics?.completedWeek && metrics.completedWeek >= 10 ? "up" : "neutral"} 
-          color="kpi-cyan" 
+        <MemoizedKPICard
+          label="Processing"
+          value={metrics?.processingCount || 0}
+          change="Active analyses"
+          trend={metrics?.processingCount && metrics.processingCount > 0 ? "up" : "neutral"}
+          color="kpi-blue"
         />
         <MemoizedKPICard
-          label="Token Balance"
-          value={tokenBalance}
-          change={`${metrics?.tokensUsedMonth || 0} used this month`}
-          trend={tokenBalance < 5 ? "down" : "neutral"}
-          color="kpi-indigo"
-          onClick={() => navigate("/app/wallet")}
-        />
-      </div>
-
-      {/* Secondary metrics row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MemoizedKPICard 
-          label="Avg Turnaround" 
-          value={metrics?.avgTurnaround || "--"} 
-          change="Time to report" 
-          trend="up" 
-          color="kpi-blue" 
-        />
-        <MemoizedKPICard
-          label="This Month"
-          value={metrics?.completedMonth || 0}
-          change="Monthly total"
+          label="Avg Turnaround"
+          value={metrics?.avgTurnaround || "--"}
+          change="Time to report"
           trend="up"
-          color="kpi-neutral"
-        />
-        <MemoizedKPICard 
-          label="Total Studies" 
-          value={metrics?.totalStudies || 0} 
-          change={`${metrics?.completedTotal || 0} completed`}
-          trend="neutral" 
-          color="kpi-cyan" 
-        />
-        <MemoizedKPICard 
-          label="Processing Now" 
-          value={metrics?.processingCount || 0} 
-          change="Active analyses" 
-          trend={metrics?.processingCount && metrics.processingCount > 0 ? "up" : "neutral"} 
-          color="kpi-blue" 
+          color="kpi-cyan"
         />
       </div>
 
@@ -303,126 +228,85 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Analytics & Recent Studies Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="openai-card">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                Performance Summary
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-1">
-                <div className="text-3xl font-bold">{metrics?.totalStudies || 0}</div>
-                <div className="text-sm text-muted-foreground">Total Studies</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-3xl font-bold">{metrics?.avgTurnaround || "--"}</div>
-                <div className="text-sm text-muted-foreground">Avg. Review Time</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-3xl font-bold text-emerald-600">
-                  {metrics?.totalStudies ? Math.round((metrics.completedTotal / metrics.totalStudies) * 100) : 0}%
-                </div>
-                <div className="text-sm text-muted-foreground">Completion Rate</div>
-              </div>
-              <div className="space-y-1">
-                <div className="text-3xl font-bold">{tokenBalance}</div>
-                <div className="text-sm text-muted-foreground">Available Tokens</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Recent Studies */}
+      <Card className="openai-card">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock className="h-4 w-4 text-primary" />
+              Recent Studies
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies")} className="gap-1 text-xs">
+              View All <ArrowRight className="h-3 w-3" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {studies && studies.length > 0 ? (
+            <div className="divide-y divide-border/40">
+              {studies.slice(0, 6).map((study) => {
+                const meta = study.meta as any;
+                const isCompleted = study.triage_status === "completed" || study.state === "signed";
+                const isProcessing = study.triage_status === "processing";
+                const patientAge = meta?.patient_age;
+                const patientGender = meta?.patient_gender;
+                const ageGenderStr = [
+                  patientAge ? `${patientAge}y` : null,
+                  patientGender ? patientGender.charAt(0).toUpperCase() : null,
+                ].filter(Boolean).join("/");
+                const handle = getStudyHandle(study);
+                const statusColor = isCompleted ? "text-emerald-500" : isProcessing ? "text-blue-500" : "text-amber-500";
 
-        <Card className="openai-card">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary" />
-                Recent Studies
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => navigate("/app/studies")}>
-                View All
+                return (
+                  <div
+                    key={study.id}
+                    className="flex items-center gap-3 py-2.5 hover:bg-muted/40 transition-colors cursor-pointer rounded-lg px-2 -mx-2 group"
+                    onClick={() => navigate(`/app/studies/${study.id}`)}
+                  >
+                    <div className={cn("mt-0.5 shrink-0", statusColor)}>
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : isProcessing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate leading-snug">
+                        {meta?.patient_name || "Unknown Patient"}
+                        {ageGenderStr && (
+                          <span className="text-muted-foreground font-normal text-xs ml-1.5">({ageGenderStr})</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground font-mono truncate">
+                        {handle} · {dayjs(study.created_at).format("MMM D, h:mm A")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        variant={isCompleted ? "default" : isProcessing ? "secondary" : "outline"}
+                        className="text-[10px] px-1.5 py-0 font-mono"
+                      >
+                        {study.sla}
+                      </Badge>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-10 text-muted-foreground">
+              <Activity className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <p className="text-sm">No studies yet</p>
+              <Button variant="link" size="sm" onClick={() => navigate("/app/studies")}>
+                Upload your first study
               </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-48">
-              {studies && studies.length > 0 ? (
-                <div className="space-y-3">
-                  {studies.slice(0, 5).map((study) => {
-                    const meta = study.meta as any;
-                    const isCompleted = study.triage_status === "completed" || study.state === "signed";
-                    const isProcessing = study.triage_status === "processing";
-                    
-                    const patientAge = meta?.patient_age;
-                    const patientGender = meta?.patient_gender;
-                    const ageGenderStr = [
-                      patientAge ? `${patientAge}y` : null,
-                      patientGender ? patientGender.charAt(0).toUpperCase() : null
-                    ].filter(Boolean).join("/");
-                    const fileLine = formatStudySourceLine(meta, study.original_format ?? null);
-                    const handle = getStudyHandle(study);
-
-                    return (
-                      <div 
-                        key={study.id} 
-                        className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer border"
-                        onClick={() => navigate(`/app/studies/${study.id}`)}
-                      >
-                        <div className="flex items-center gap-3">
-                          {isCompleted ? (
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                          ) : isProcessing ? (
-                            <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />
-                          ) : (
-                            <AlertCircle className="h-5 w-5 text-amber-500" />
-                          )}
-                          <div>
-                            <p className="font-medium text-sm">
-                              {meta?.patient_name || "Unknown Patient"}
-                              {ageGenderStr && (
-                                <span className="text-muted-foreground font-normal ml-1.5">
-                                  ({ageGenderStr})
-                                </span>
-                              )}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              <span className="font-mono text-[11px]">{handle}</span>
-                              <span className="mx-1">·</span>
-                              {dayjs(study.created_at).format("MMM D, h:mm A")}
-                            </p>
-                            {fileLine && (
-                              <p className="text-[11px] text-muted-foreground/90 truncate max-w-[200px] sm:max-w-[280px]" title={fileLine}>
-                                {fileLine}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <Badge variant={isCompleted ? "default" : isProcessing ? "secondary" : "outline"}>
-                          {study.sla}
-                        </Badge>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Activity className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>No studies yet</p>
-                  <Button variant="link" size="sm" onClick={() => navigate("/app/studies")}>
-                    Upload your first study
-                  </Button>
-                </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
 
       <MemoizedCalendarWidget />
 
