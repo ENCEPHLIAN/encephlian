@@ -176,6 +176,26 @@ export default function EEGViewer() {
     };
   }, [searchParams]);
 
+  // ── Study context (patient name etc. from Supabase) for header display ───────
+  const [studyCtx, setStudyCtx] = useState<{ patientName?: string; handle?: string } | null>(null);
+  useEffect(() => {
+    if (!studyId) return;
+    let alive = true;
+    supabase
+      .from("studies")
+      .select("meta, study_key")
+      .or(`id.eq.${studyId},study_key.eq.${studyId}`)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!alive || !data) return;
+        const patientName = (data.meta as any)?.patient_name;
+        const handle = data.study_key ? data.study_key.slice(0, 10) : studyId.slice(0, 8);
+        setStudyCtx({ patientName, handle });
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [studyId]);
+
   // ── Core state ───────────────────────────────────────────────────────────────
   const [meta, setMeta]           = useState<Meta | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
@@ -759,8 +779,10 @@ export default function EEGViewer() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back
         </Button>
-        <span className="min-w-0 flex-1 truncate text-center text-[10px] font-mono text-muted-foreground" title={studyId}>
-          {studyId}
+        <span className="min-w-0 flex-1 truncate text-center text-xs text-muted-foreground" title={studyId}>
+          {studyCtx?.patientName
+            ? <><span className="font-medium text-foreground">{studyCtx.patientName}</span><span className="font-mono opacity-50 ml-2">{studyCtx.handle}</span></>
+            : <span className="font-mono text-[10px]">{studyId.slice(0, 12)}…</span>}
         </span>
         <span className="w-[72px] shrink-0" aria-hidden />
       </div>
@@ -1066,7 +1088,7 @@ export default function EEGViewer() {
               hfFilter={hfFilter}
               lfFilter={lfFilter}
               notchFilter={notchFilter}
-              labelColumnWidth={72}
+              labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
           ) : (
