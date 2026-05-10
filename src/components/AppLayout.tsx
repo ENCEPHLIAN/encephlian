@@ -13,7 +13,7 @@ import {
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
-import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, CreditCard, HelpCircle, Menu, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote, Braces } from "lucide-react";
+import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, CreditCard, HelpCircle, Menu, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -36,7 +36,6 @@ const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: a
   { id: "studies", name: "Studies", href: "/app/studies", icon: Activity },
   { id: "lanes", name: "Lanes", href: "/app/lanes", icon: Layers },
   { id: "reports", name: "Reports", href: "/app/reports", icon: FileText },
-  { id: "viewer", name: "EEG Viewer", href: "/app/viewer", icon: Braces },
 ];
 
 const resourceNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [

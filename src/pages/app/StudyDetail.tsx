@@ -577,6 +577,56 @@ export default function StudyDetail() {
 
       <StudyFlowProgress study={study} isPilot={isPilot} />
 
+      {/* Signal Analysis Pipeline — architecture indicator */}
+      {(study.ai_draft_json || study.triage_status === "completed") && (
+        <Card className="border-border/60">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-start gap-3">
+              <Brain className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Signal Analysis Pipeline
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {/* Raw MIND path */}
+                  <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
+                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium">Raw MIND® Analysis</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {(() => {
+                          const r = study.ai_draft_json as any;
+                          const cls = r?.classification ?? r?.triage?.classification;
+                          const conf = r?.triage_confidence ?? r?.triage?.confidence;
+                          if (!cls || cls === "unknown") return "Unclassified";
+                          return `${cls.charAt(0).toUpperCase() + cls.slice(1)}${typeof conf === "number" ? ` · ${Math.round(conf * 100)}% confidence` : ""}`;
+                        })()}
+                      </p>
+                    </div>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  </div>
+
+                  {/* REVE-enhanced path */}
+                  <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/10 px-3 py-2 opacity-60">
+                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium">REVE-Enhanced Analysis</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Equipment-specific denoising · Coming soon
+                      </p>
+                    </div>
+                    <Clock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground/60 mt-2">
+                  REVE runs on top of mathematical pre-cleaning (notch, bandpass, ICA). Both paths are compared — disagreement surfaces as a review flag.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {lastPipelineError && (
         <Alert className="border-destructive/40 bg-destructive/5">
           <AlertCircle className="h-4 w-4 text-destructive" />

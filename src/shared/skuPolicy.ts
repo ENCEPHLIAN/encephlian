@@ -55,7 +55,7 @@ export type NavItemId =
 
 /** Pilot: dead-simple clinical path only — internal gets full nav + experiments. */
 const PILOT_NAV: NavItemId[] = ['dashboard', 'studies', 'wallet'];
-const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'viewer', 'files', 'notes', 'wallet', 'support'];
+const FULL_NAV: NavItemId[] = ['dashboard', 'studies', 'lanes', 'reports', 'files', 'notes', 'wallet', 'support'];
 
 export function getVisibleNavItems(sku: SkuTier): NavItemId[] {
   switch (sku) {
