@@ -21,6 +21,7 @@ export interface Study {
   tokens_deducted?: number;
   duration_min?: number;
   sample?: boolean;
+  ai_draft_json?: any | null;
 }
 
 export function useDashboardData() {
@@ -35,7 +36,7 @@ export function useDashboardData() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
-        .select("id, sla, state, created_at, meta, reference, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min, sample")
+        .select("id, sla, state, created_at, meta, reference, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, duration_min, sample, ai_draft_json")
         .or(`sample.is.null,sample.eq.false`)
         .order("created_at", { ascending: false })
         .limit(100);
