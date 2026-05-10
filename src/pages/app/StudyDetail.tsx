@@ -37,7 +37,7 @@ import relativeTime from "dayjs/plugin/relativeTime";
 import TriageReportView from "@/components/report/TriageReportView";
 import MindReportView from "@/components/report/MindReportView";
 import ErrorPage from "@/components/ErrorPage";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useRef, Component, type ReactNode } from "react";
 import { useSku } from "@/hooks/useSku";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -94,10 +94,10 @@ const TRIAGE_STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 export default function StudyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const { isAuthenticated } = useUserSession();
   const studyRtRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  
+  const prevStateRef = useRef<string | null>(null);
+
   const { can, capabilities, isPilot } = useSku();
   const { setActiveStudyLabel } = useStudyBreadcrumb();
   const queryClient = useQueryClient();
@@ -250,28 +250,59 @@ export default function StudyDetail() {
     };
   }, [study, setActiveStudyLabel]);
 
+  // Pipeline state-change notifications
+  useEffect(() => {
+    if (!study) return;
+    const prev = prevStateRef.current;
+    prevStateRef.current = study.state;
+    if (!prev || prev === study.state) return;
+
+    if (study.state === "ai_draft" && prev !== "ai_draft") {
+      toast.success("Analysis complete", {
+        description: "MIND® has processed the recording. Ready for physician review.",
+        action: {
+          label: "Review & Sign →",
+          onClick: () => navigate(`/app/studies/${id}/review`),
+        },
+        duration: 10_000,
+      });
+    }
+    if (study.state === "signed" && prev !== "signed") {
+      toast.success("Report signed", {
+        description: "The signed report is now finalized.",
+        duration: 5_000,
+      });
+    }
+    if (study.state === "failed" && prev !== "failed") {
+      toast.error("Pipeline error", {
+        description: "Processing failed. Check the pipeline log below and retry.",
+        duration: 8_000,
+      });
+    }
+  }, [study?.state, id, navigate]);
+
   // Re-trigger the full C-Plane → I-Plane pipeline via edge function
   const handleRunAITriage = async () => {
     if (!id) return;
     setRunningTriage(true);
+    const body: Record<string, string> = { study_id: id };
+    if (!isPilot && study?.sla && study.sla !== "pending") body.sla = study.sla;
+
     try {
-      toast({ title: "Starting MIND® analysis...", description: "Triggering pipeline" });
-      // Pass sla for internal so the edge function can set sla_selected_at if missing
-      const body: Record<string, string> = { study_id: id };
-      if (!isPilot && study?.sla && study.sla !== "pending") body.sla = study.sla;
-      const { error } = await supabase.functions.invoke("generate_ai_report", { body });
-      if (error) throw error;
-      toast({ title: "Pipeline started", description: "MIND® is processing. Results appear in 1–3 minutes." });
-      refetch();
-      refetchMind();
-      queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
-    } catch (error) {
-      console.error("Triage error:", error);
-      toast({
-        title: "Analysis failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
+      await toast.promise(
+        (async () => {
+          const { error } = await supabase.functions.invoke("generate_ai_report", { body });
+          if (error) throw error;
+          void refetch();
+          void refetchMind();
+          void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
+        })(),
+        {
+          loading: "Starting MIND® analysis…",
+          success: "Pipeline started — results appear in 1–3 minutes",
+          error: (err: Error) => err?.message || "Analysis failed to start",
+        }
+      );
     } finally {
       setRunningTriage(false);
     }
@@ -280,24 +311,21 @@ export default function StudyDetail() {
   const handleGenerateAIReport = async () => {
     setGenerating(true);
     try {
-      toast({ title: "Generating AI report...", description: "This may take a minute" });
-      
-      const { data, error } = await supabase.functions.invoke("generate_ai_report", {
-        body: { study_id: id }
-      });
-      
-      if (error) throw error;
-      
-      toast({ title: "AI Report generated!", description: "Report is ready for review" });
-      refetch();
-      queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
-    } catch (error) {
-      console.error("AI generation error:", error);
-      toast({
-        title: "Generation failed",
-        description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
-      });
+      await toast.promise(
+        (async () => {
+          const { error } = await supabase.functions.invoke("generate_ai_report", {
+            body: { study_id: id },
+          });
+          if (error) throw error;
+          void refetch();
+          void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
+        })(),
+        {
+          loading: "Generating AI report…",
+          success: "AI report generated — ready for review",
+          error: (err: Error) => err?.message || "Generation failed",
+        }
+      );
     } finally {
       setGenerating(false);
     }
@@ -305,14 +333,15 @@ export default function StudyDetail() {
 
   const handleDownloadReport = async () => {
     setDownloading(true);
+    const tid = toast.loading("Preparing report…");
     try {
       let report = study?.reports?.[0] as any;
 
-      // RLS on the joined query can block — try a direct fetch by study_id
+      // RLS on the join may block — try a direct fetch by study_id
       if (!report) {
         const { data } = await supabase
           .from("reports")
-          .select("id, pdf_path, content, signed_at, created_at, status")
+          .select("id, pdf_path, content, signed_at, created_at, status, profiles:interpreter(full_name, credentials)")
           .eq("study_id", id!)
           .maybeSingle();
         if (data) report = data;
@@ -322,7 +351,6 @@ export default function StudyDetail() {
 
       // Try server-side PDF generation if we have a report but no pdf_path
       if (report && !pdfPath) {
-        toast({ title: "Generating PDF...", description: "Please wait" });
         const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: report.id },
         });
@@ -333,11 +361,51 @@ export default function StudyDetail() {
         }
       }
 
-      // Download from storage if we have a path
+      // Download from storage if server-side PDF exists
       if (pdfPath) {
         const { data, error } = await supabase.storage.from("eeg-reports").download(pdfPath);
-        if (error) throw error;
-        const url = URL.createObjectURL(data);
+        if (!error && data) {
+          const url = URL.createObjectURL(data);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `report-${study.id.slice(0, 8)}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast.dismiss(tid);
+          toast.success("Report downloaded");
+          return;
+        }
+      }
+
+      // Client-side PDF via @react-pdf/renderer
+      const content = (report?.content as any) ?? (study?.ai_draft_json as any);
+      if (content) {
+        const aiDraft = study?.ai_draft_json as any;
+        const meta = study.meta as any;
+
+        const [{ pdf: renderPDF }, { ReportDocument }] = await Promise.all([
+          import("@react-pdf/renderer"),
+          import("@/components/report/ReportPDF"),
+        ]);
+
+        const blob = await renderPDF(
+          ReportDocument({
+            patientName: meta?.patient_name || "Unknown Patient",
+            patientId: meta?.patient_id,
+            studyDate: dayjs(study.created_at).format("MMMM D, YYYY"),
+            signedDate: dayjs(report?.signed_at || report?.created_at || new Date()).format("MMMM D, YYYY"),
+            studyId: study.id,
+            content,
+            interpreterName: (report?.profiles as any)?.full_name,
+            interpreterCredentials: (report?.profiles as any)?.credentials,
+            aiClassification: aiDraft?.triage?.classification ?? aiDraft?.classification,
+            aiConfidence: aiDraft?.triage?.confidence ?? aiDraft?.triage_confidence,
+          }) as any
+        ).toBlob();
+
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
         a.download = `report-${study.id.slice(0, 8)}.pdf`;
@@ -345,61 +413,18 @@ export default function StudyDetail() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast({ title: "Download started" });
+        toast.dismiss(tid);
+        toast.success("Report downloaded as PDF");
         return;
       }
 
-      // Fallback: generate a printable HTML report from report.content or ai_draft_json
-      const content = (report?.content as any) ?? (study?.ai_draft_json as any);
-      if (content) {
-        const patientName = (study.meta as any)?.patient_name || "Unknown Patient";
-        const signedDate = dayjs(report.signed_at || report.created_at).format("MMMM D, YYYY");
-        const sections = [
-          { heading: "Background Activity", text: content.background_activity },
-          { heading: "Sleep Architecture", text: content.sleep_architecture },
-          { heading: "Abnormalities", text: content.abnormalities },
-          { heading: "Impression", text: content.impression },
-          { heading: "Clinical Correlates", text: content.clinical_correlates },
-        ].filter(s => s.text);
-
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>EEG Report — ${patientName}</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #111; line-height: 1.6; }
-  h1 { font-size: 1.5rem; border-bottom: 2px solid #111; padding-bottom: 8px; }
-  h2 { font-size: 1rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 4px; }
-  .meta { color: #555; font-size: 0.9rem; margin-top: 4px; }
-  p { white-space: pre-wrap; margin: 0; }
-  @media print { body { margin: 20mm; } }
-</style></head><body>
-<h1>EEG Interpretation Report</h1>
-<div class="meta"><strong>Patient:</strong> ${patientName}</div>
-<div class="meta"><strong>Date signed:</strong> ${signedDate}</div>
-<div class="meta"><strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}</div>
-${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
-<p style="margin-top:2rem;font-size:0.75rem;color:#999;">Generated by ENCEPHLIAN™ — for physician review only</p>
-</body></html>`;
-
-        const blob = new Blob([html], { type: "text/html" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `report-${study.id.slice(0, 8)}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast({ title: "Report downloaded", description: "Open the .html file to print as PDF" });
-        return;
-      }
-
-      toast({ title: "Report content unavailable", variant: "destructive" });
+      toast.dismiss(tid);
+      toast.error("Report content unavailable");
     } catch (error) {
       console.error("Download error:", error);
-      toast({
-        title: "Download failed",
+      toast.dismiss(tid);
+      toast.error("Download failed", {
         description: error instanceof Error ? error.message : "Unknown error",
-        variant: "destructive",
       });
     } finally {
       setDownloading(false);

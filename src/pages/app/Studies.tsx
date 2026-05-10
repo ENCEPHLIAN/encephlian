@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Search, FileText, Eye, Download, Upload, Lock, Unlock, Loader2 as Spinner } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { useStudiesData, useFilteredStudies } from "@/hooks/useStudiesData";
 import { useSku } from "@/hooks/useSku";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
@@ -218,7 +218,6 @@ export default function Studies() {
 
 function InternalStudiesView() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
@@ -235,7 +234,7 @@ function InternalStudiesView() {
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      toast({ title: "Session expired", description: "Please sign in again.", variant: "destructive" });
+      toast.error("Session expired", { description: "Please sign in again." });
       navigate("/login", { replace: true });
       return;
     }
@@ -243,16 +242,14 @@ function InternalStudiesView() {
     const file = files[0];
     const lowerName = file.name.toLowerCase();
     if (!lowerName.endsWith('.edf') && !lowerName.endsWith('.bdf')) {
-      toast({ title: "Invalid file type", description: "Only .edf and .bdf files are supported", variant: "destructive" });
+      toast.error("Invalid file type", { description: "Only .edf and .bdf files are supported" });
       return;
     }
 
+    const uploadTid = toast.loading(`Preparing upload — ${file.name}`);
     try {
-      toast({ title: "Fingerprinting file…", description: "Same recording opens your existing study." });
       const contentSha256 = await sha256HexFromFile(file);
 
-      // Step 1: Create study + get Azure Blob SAS token from edge function
-      toast({ title: "Creating study..." });
       const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
         body: { fileName: file.name, contentSha256 },
       });
@@ -272,17 +269,17 @@ function InternalStudiesView() {
       };
 
       if (duplicate) {
-        toast({
-          title: "Same recording",
+        toast.dismiss(uploadTid);
+        toast.info("Same recording detected", {
           description: message || "Opening your existing study.",
+          action: { label: "View →", onClick: () => navigate(`/app/studies/${studyId}`) },
         });
         navigate(`/app/studies/${studyId}`);
         return;
       }
 
       if (sasUrl) {
-        // Step 2: Upload directly to Azure Blob via SAS URL (bypasses Supabase Storage)
-        toast({ title: `Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB to Azure...` });
+        toast.loading(`Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB…`, { id: uploadTid });
         const uploadRes = await fetch(sasUrl, {
           method: "PUT",
           body: file,
@@ -296,22 +293,25 @@ function InternalStudiesView() {
           throw new Error(`Azure upload failed: ${uploadRes.status} — ${errText}`);
         }
       } else {
-        // Fallback: SAS not available, C-Plane will read from Supabase storage if configured
         console.warn(`[${studyId}] No SAS URL — pipeline may fail without source_url`);
       }
 
-      toast({
-        title: "Upload complete",
+      toast.dismiss(uploadTid);
+      toast.success("Upload complete", {
         description: "Select Standard or Priority analysis to start MIND® processing.",
+        action: { label: "Select priority →", onClick: () => navigate(`/app/studies/${studyId}`) },
+        duration: 6000,
       });
       navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
       console.error("Upload error:", error);
-      toast({ title: "Upload failed", description: error?.message || "Failed to upload EEG", variant: "destructive" });
+      toast.dismiss(uploadTid);
+      toast.error("Upload failed", { description: error?.message || "Failed to upload EEG" });
     }
   };
 
   const handleDownloadReport = async (study: any) => {
+    const tid = toast.loading("Preparing report…");
     try {
       // Fetch report with content for fallback
       const { data: report } = await supabase
@@ -324,7 +324,6 @@ function InternalStudiesView() {
 
       // Try server-side PDF generation if no path
       if (report && !pdfPath) {
-        toast({ title: "Generating PDF...", description: "Please wait" });
         const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: report.id },
         });
@@ -346,60 +345,55 @@ function InternalStudiesView() {
           a.click();
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
-          toast({ title: "Download started" });
+          toast.dismiss(tid);
+          toast.success("Report downloaded");
           return;
         }
       }
 
-      // Fallback: generate HTML from report.content or ai_draft_json
+      // Client-side PDF via @react-pdf/renderer
       const content = (report?.content as any) ?? (study?.ai_draft_json as any);
       if (content) {
         const meta = study.meta as any;
-        const patientName = meta?.patient_name || "Unknown Patient";
-        const signedDate = dayjs(report?.signed_at || report?.created_at || new Date().toISOString()).format("MMMM D, YYYY");
-        const sections = [
-          { heading: "Background Activity", text: content.background_activity },
-          { heading: "Sleep Architecture", text: content.sleep_architecture },
-          { heading: "Abnormalities", text: content.abnormalities },
-          { heading: "Impression", text: content.impression },
-          { heading: "Clinical Correlates", text: content.clinical_correlates },
-        ].filter(s => s.text);
+        const aiDraft = study?.ai_draft_json as any;
 
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>EEG Report — ${patientName}</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #111; line-height: 1.6; }
-  h1 { font-size: 1.5rem; border-bottom: 2px solid #111; padding-bottom: 8px; }
-  h2 { font-size: 1rem; font-weight: 700; margin-top: 1.5rem; margin-bottom: 4px; }
-  .meta { color: #555; font-size: 0.9rem; margin-top: 4px; }
-  p { white-space: pre-wrap; margin: 0; }
-  @media print { body { margin: 20mm; } }
-</style></head><body>
-<h1>EEG Interpretation Report</h1>
-<div class="meta"><strong>Patient:</strong> ${patientName}</div>
-<div class="meta"><strong>Date signed:</strong> ${signedDate}</div>
-<div class="meta"><strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}</div>
-${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
-<p style="margin-top:2rem;font-size:0.75rem;color:#999;">Generated by ENCEPHLIAN™ — for physician review only</p>
-</body></html>`;
+        const [{ pdf: renderPDF }, { ReportDocument }] = await Promise.all([
+          import("@react-pdf/renderer"),
+          import("@/components/report/ReportPDF"),
+        ]);
 
-        const blob = new Blob([html], { type: "text/html" });
+        const blob = await renderPDF(
+          ReportDocument({
+            patientName: meta?.patient_name || "Unknown Patient",
+            patientId: meta?.patient_id,
+            studyDate: dayjs(study.created_at).format("MMMM D, YYYY"),
+            signedDate: dayjs(report?.signed_at || report?.created_at || new Date()).format("MMMM D, YYYY"),
+            studyId: study.id,
+            content,
+            aiClassification: aiDraft?.triage?.classification ?? aiDraft?.classification,
+            aiConfidence: aiDraft?.triage?.confidence ?? aiDraft?.triage_confidence,
+          }) as any
+        ).toBlob();
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `report-${study.id.slice(0, 8)}.html`;
+        a.download = `report-${study.id.slice(0, 8)}.pdf`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast({ title: "Report downloaded", description: "Open the .html file to print as PDF" });
+        toast.dismiss(tid);
+        toast.success("Report downloaded as PDF");
         return;
       }
 
-      toast({ title: "Report content unavailable", variant: "destructive" });
+      toast.dismiss(tid);
+      toast.error("Report content unavailable");
     } catch (error) {
       console.error("Download error:", error);
-      toast({ title: "Download failed", variant: "destructive" });
+      toast.dismiss(tid);
+      toast.error("Download failed");
     }
   };
 

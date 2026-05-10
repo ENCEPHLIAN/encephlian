@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, ArrowLeft, FileSignature, PenLine, ShieldCheck, Brain, Waves } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -25,7 +25,6 @@ import { studyTriageIsPaid, triageTokensForSla } from "@/shared/tokenEconomy";
 export default function StudyReview() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const queryClient = useQueryClient();
   const rtRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const [editedDraft, setEditedDraft] = useState<any>(null);
@@ -152,17 +151,15 @@ export default function StudyReview() {
 
   const handleSign = async () => {
     if (!paidTriage) {
-      toast({
-        title: "Triage not started",
+      toast.error("Triage not started", {
         description: "Choose Standard or Priority on this study first — tokens apply only at that step.",
-        variant: "destructive",
       });
       return;
     }
 
     setSigning(true);
     try {
-      const { data, error } = await supabase.rpc("consume_credit_and_sign", {
+      const { error } = await supabase.rpc("consume_credit_and_sign", {
         p_user_id: (await supabase.auth.getUser()).data.user?.id,
         p_study_id: id,
         p_cost: 0,
@@ -171,22 +168,21 @@ export default function StudyReview() {
 
       if (error) throw error;
 
-      void data;
-      toast({
-        title: "Report signed",
-        description:
-          tokensAlreadyCharged > 0
-            ? `No further token charge — ${tokensAlreadyCharged} token(s) were already used when triage started.`
-            : "Report is finalized.",
-      });
-
       invalidateStudyCaches();
+      toast.success("Report signed", {
+        description: tokensAlreadyCharged > 0
+          ? `No further charge — ${tokensAlreadyCharged} token(s) used at triage.`
+          : "Report is finalized and ready to download.",
+        action: {
+          label: "Download PDF",
+          onClick: () => navigate(`/app/studies/${id}`),
+        },
+        duration: 8_000,
+      });
       navigate(`/app/studies/${id}`);
     } catch (error: any) {
-      toast({
-        title: "Could not sign report",
+      toast.error("Could not sign report", {
         description: error.message,
-        variant: "destructive",
       });
     } finally {
       setSigning(false);

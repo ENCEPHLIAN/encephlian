@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { LayoutDashboard, FileText, Wallet, User, LogOut, Activity, Settings, Search, X, CreditCard, HelpCircle, Menu, PanelLeftClose, PanelLeft, Layers, FolderOpen, StickyNote } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useIsMobile } from "@/hooks/use-mobile";
 import CommandPalette from "@/components/CommandPalette";
@@ -203,7 +203,6 @@ function AppSidebarMobile({ open, onOpenChange }: { open: boolean; onOpenChange:
 
 export default function AppLayout() {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const isMobile = useIsMobile();
   
   const { profile, clinicContext, signOut } = useUserSession();
@@ -221,10 +220,7 @@ export default function AppLayout() {
 
   const handleSignOut = async () => {
     await signOut();
-    toast({
-      title: "Signed out",
-      description: "You have been successfully signed out.",
-    });
+    toast.success("Signed out successfully");
   };
 
   return (

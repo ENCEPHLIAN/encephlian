@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Zap, CheckCircle, Coins, ArrowRight, Clock, Receipt } from "lucide-react";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import dayjs from "dayjs";
 import {
@@ -17,7 +17,7 @@ import {
 import { openPilotSubscriptionCheckout, openRazorpayTokenCheckout } from "@/lib/razorpayCheckout";
 
 export function PilotWalletCard() {
-  const { toast } = useToast();
+
   const [purchasing, setPurchasing] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -100,16 +100,9 @@ export function PilotWalletCard() {
           onPaid: async (response) => {
             try {
               const credited = await verifyAndFinish(response, tokens, priceInr);
-              toast({
-                title: "Payment successful",
-                description: `${credited} tokens added to your wallet.`,
-              });
+              toast.success("Payment successful", { description: `${credited} tokens added to your wallet.`, duration: 6000 });
             } catch (e: unknown) {
-              toast({
-                variant: "destructive",
-                title: "Verification failed",
-                description: e instanceof Error ? e.message : "Unknown error",
-              });
+              toast.error("Verification failed", { description: e instanceof Error ? e.message : "Unknown error" });
             }
           },
           onDismiss: () => setPurchasing(null),
@@ -117,9 +110,7 @@ export function PilotWalletCard() {
       );
       setPurchasing(null);
     } catch (err: unknown) {
-      toast({
-        variant: "destructive",
-        title: "Checkout error",
+      toast.error("Checkout error", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
       setPurchasing(null);
@@ -166,20 +157,16 @@ export function PilotWalletCard() {
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
             await queryClient.invalidateQueries({ queryKey: ["wallet-transactions-recent"] });
             await queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
-            toast({
-              title: "Plan active",
-              description:
-                credited > 0
-                  ? `${credited} bonus tokens added to your wallet.`
-                  : "Payment confirmed (already credited).",
+            toast.success("Plan active", {
+              description: credited > 0
+                ? `${credited} bonus tokens added to your wallet.`
+                : "Payment confirmed (already credited).",
+              duration: 6000,
             });
           } catch (e: unknown) {
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
-            toast({
-              variant: "destructive",
-              title: "Could not confirm from this browser",
-              description:
-                (e instanceof Error ? e.message : "Unknown error") +
+            toast.error("Could not confirm from this browser", {
+              description: (e instanceof Error ? e.message : "Unknown error") +
                 " If checkout succeeded, your balance may still update in a few seconds — check the wallet.",
             });
           }
@@ -188,9 +175,7 @@ export function PilotWalletCard() {
       });
       setPurchasing(null);
     } catch (err: unknown) {
-      toast({
-        variant: "destructive",
-        title: "Could not start checkout",
+      toast.error("Could not start checkout", {
         description: err instanceof Error ? err.message : "Unknown error",
       });
       setPurchasing(null);

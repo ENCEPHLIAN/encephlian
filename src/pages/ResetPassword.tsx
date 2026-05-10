@@ -4,14 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import logo from "@/assets/logo.png";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
-  const { toast } = useToast();
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -40,12 +40,12 @@ export default function ResetPassword() {
     e.preventDefault();
 
     if (password.length < 8) {
-      toast({ title: "Password too short", description: "Minimum 8 characters required.", variant: "destructive" });
+      toast.error("Password too short", { description: "Minimum 8 characters required." });
       return;
     }
 
     if (password !== confirmPassword) {
-      toast({ title: "Passwords don't match", variant: "destructive" });
+      toast.error("Passwords don't match");
       return;
     }
 
@@ -55,11 +55,11 @@ export default function ResetPassword() {
       if (error) throw error;
 
       setDone(true);
-      toast({ title: "Password updated", description: "You can now sign in with your new password." });
+      toast.success("Password updated", { description: "You can now sign in with your new password." });
 
       setTimeout(() => navigate("/login", { replace: true }), 2000);
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast.error("Error", { description: error.message });
     } finally {
       setIsLoading(false);
     }

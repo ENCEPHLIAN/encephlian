@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { z } from "zod";
@@ -17,7 +17,7 @@ type Mode = "signin" | "forgot";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { toast } = useToast();
+
   const { isLoading: sessionLoading, isAuthenticated, isAdmin } = useUserSession();
   
   const [showForm, setShowForm] = useState(false);
@@ -66,17 +66,10 @@ export default function Login() {
       });
       if (error) throw error;
 
-      toast({
-        title: "Welcome back!",
-        description: "You have successfully signed in.",
-      });
+      toast.success("Welcome back!");
       // Redirect happens via useEffect when context updates
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "An error occurred. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Sign in failed", { description: error.message || "An error occurred. Please try again." });
       setIsLoading(false);
     }
   };
@@ -97,16 +90,9 @@ export default function Login() {
       if (error) throw error;
 
       setResetSent(true);
-      toast({
-        title: "Reset email sent",
-        description: "Check your inbox for the password reset link.",
-      });
+      toast.success("Reset email sent", { description: "Check your inbox for the password reset link." });
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "An error occurred. Please try again.",
-        variant: "destructive",
-      });
+      toast.error("Error", { description: error.message || "An error occurred. Please try again." });
     } finally {
       setIsLoading(false);
     }

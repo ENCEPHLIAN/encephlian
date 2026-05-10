@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check } from "lucide-react";
@@ -12,7 +12,7 @@ import { loadRazorpayScript } from "@/lib/razorpayCheckout";
 
 export function TokenPurchase() {
   const [loadingPackage, setLoadingPackage] = useState<number | null>(null);
-  const { toast } = useToast();
+
   const queryClient = useQueryClient();
 
   const handlePurchase = async (packageTokens: number, packagePrice: number) => {
@@ -68,9 +68,9 @@ export function TokenPurchase() {
               throw new Error(String((verifyData as { error?: string }).error || "Verification failed"));
             }
 
-            toast({
-              title: "Payment successful! 🎉",
-              description: `${(verifyData as { tokens_credited?: number })?.tokens_credited ?? packageTokens} tokens credited`,
+            toast.success("Payment successful", {
+              description: `${(verifyData as { tokens_credited?: number })?.tokens_credited ?? packageTokens} tokens credited to your wallet`,
+              duration: 6000,
             });
 
             // Fire-and-forget receipt email via edge function (uses RESEND_API_KEY)
@@ -93,11 +93,7 @@ export function TokenPurchase() {
             queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
             queryClient.invalidateQueries({ queryKey: ["payments"] });
           } catch (error: any) {
-            toast({
-              title: "Payment verification failed",
-              description: error.message,
-              variant: "destructive",
-            });
+            toast.error("Payment verification failed", { description: error.message });
           } finally {
             setLoadingPackage(null);
           }
@@ -119,11 +115,7 @@ export function TokenPurchase() {
       const razorpay = new (window as any).Razorpay(options);
       razorpay.open();
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Checkout error", { description: error.message });
       setLoadingPackage(null);
     }
   };

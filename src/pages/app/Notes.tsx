@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { Plus, Pin, Download, Trash2, Search, Loader2, StickyNote } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import dayjs from "dayjs";
@@ -27,7 +27,7 @@ export default function Notes() {
   const [searchQuery, setSearchQuery] = useState("");
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
-  const { toast } = useToast();
+
   const queryClient = useQueryClient();
   
 
@@ -62,7 +62,7 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
       setIsCreating(false);
-      toast({ title: "Note created successfully" });
+      toast.success("Note created");
     },
   });
 
@@ -80,7 +80,7 @@ export default function Notes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
-      toast({ title: "Note updated successfully" });
+      toast.success("Note updated");
     },
   });
 
@@ -92,7 +92,7 @@ export default function Notes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
       setSelectedNote(null);
-      toast({ title: "Note deleted successfully" });
+      toast.success("Note deleted");
     },
   });
 
@@ -110,7 +110,7 @@ export default function Notes() {
 
   const handleSave = () => {
     if (!editTitle.trim()) {
-      toast({ title: "Title is required", variant: "destructive" });
+      toast.error("Title is required");
       return;
     }
 

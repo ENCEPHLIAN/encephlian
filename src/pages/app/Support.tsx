@@ -6,12 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { BookOpen, Mail, FileQuestion } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Support() {
   const navigate = useNavigate();
-  const { toast } = useToast();
+
 
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -19,11 +19,7 @@ export default function Support() {
 
   const handleSubmitTicket = async () => {
     if (!subject.trim() || !message.trim()) {
-      toast({
-        title: "Missing details",
-        description: "Please add a subject and description before submitting.",
-        variant: "destructive",
-      });
+      toast.error("Missing details", { description: "Please add a subject and description before submitting." });
       return;
     }
 
@@ -42,19 +38,12 @@ export default function Support() {
         throw error;
       }
 
-      toast({
-        title: "Ticket submitted",
-        description: "We’ve received your request and will respond via email.",
-      });
+      toast.success("Ticket submitted", { description: "We’ve received your request and will respond via email." });
 
       setSubject("");
       setMessage("");
     } catch (err: any) {
-      toast({
-        title: "Unable to submit ticket",
-        description: err.message ?? "Please try again in a few minutes.",
-        variant: "destructive",
-      });
+      toast.error("Unable to submit ticket", { description: err.message ?? "Please try again in a few minutes." });
     } finally {
       setIsSubmitting(false);
     }
