@@ -546,35 +546,14 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         })
         .eq("id", studyId);
 
-      // Fire-and-forget: C-Plane canonicalises + I-Plane runs inference async.
+      // Fire-and-forget: C-Plane canonicalises the EDF and internally calls I-Plane.
       // Do NOT await — the wizard completes immediately and the study page
       // shows live progress via Supabase realtime + polling.
-      const iplaneBase = import.meta.env.VITE_IPLANE_BASE as string | undefined;
-
       fetch(`${cplaneBase}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ study_id: studyId }),
       }).catch((err) => console.warn("[upload] C-Plane trigger failed:", err));
-
-      if (iplaneBase && !isProprietaryFormat) {
-        const form = new FormData();
-        form.append("file", targetFile, targetFile.name);
-        form.append("study_id", studyId);
-        fetch(`${iplaneBase}/mind/run-edf`, { method: "POST", body: form })
-          .then(async (res) => {
-            if (!res.ok) return;
-            const report = await res.json();
-            await supabase.from("studies").update({
-              state: "ai_draft",
-              triage_status: "completed",
-              triage_progress: 100,
-              triage_completed_at: new Date().toISOString(),
-              ai_draft_json: report,
-            }).eq("id", studyId);
-          })
-          .catch((err) => console.warn("[upload] I-Plane analysis failed:", err));
-      }
 
       onProgress(100, "Analysis running — view progress on the study page");
     }

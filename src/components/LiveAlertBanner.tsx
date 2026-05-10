@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, AlertCircle, X, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useNotifications, AppNotification } from "@/hooks/useNotifications";
+import { type AppNotification } from "@/hooks/useNotifications";
+import { useNotificationContext } from "@/contexts/NotificationContext";
 
 /* ─── Single banner ─────────────────────────────────────── */
 
@@ -60,7 +61,7 @@ function Banner({
 /* ─── Main component ─────────────────────────────────────── */
 
 export function LiveAlertBanner() {
-  const { bannerQueue, dismissBanner } = useNotifications();
+  const { bannerQueue, dismissBanner } = useNotificationContext();
 
   if (bannerQueue.length === 0) return null;
 

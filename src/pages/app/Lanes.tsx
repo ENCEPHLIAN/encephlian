@@ -325,7 +325,7 @@ export default function Lanes() {
 
     return {
       uploaded: filteredStudies
-        .filter(s => (s.state === "uploaded" || s.state === "awaiting_sla") && !s.triage_status)
+        .filter(s => (s.state === "uploaded" || s.state === "awaiting_sla") && (s.triage_status == null || s.triage_status === "pending"))
         .sort(sortByUrgency),
       processing: filteredStudies
         .filter(s => s.triage_status === "processing")

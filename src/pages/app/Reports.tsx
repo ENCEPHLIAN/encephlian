@@ -29,7 +29,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { Loader2, FileText, Download, Eye, Search, Filter, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Loader2, FileText, Download, Eye, Search, Filter, CheckCircle2, Clock, XCircle, Brain, ArrowRight } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
 
@@ -139,7 +139,24 @@ export default function Reports() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
 
-  const { data: reports, isLoading, refetch } = useQuery({
+  // Studies with AI analysis complete — awaiting physician sign-off
+  const { data: pendingReviewStudies = [] } = useQuery({
+    queryKey: ["reports-pending-review"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("studies")
+        .select("id, sla, state, triage_status, triage_completed_at, updated_at, meta, ai_draft_json, clinics(name)")
+        .in("state", ["ai_draft", "in_review"])
+        .not("ai_draft_json", "is", null)
+        .order("triage_completed_at", { ascending: false })
+        .limit(50);
+      return data ?? [];
+    },
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+
+  const { data: reports, isLoading } = useQuery({
     queryKey: ["reports-list"],
     queryFn: async () => {
       // Show only real user reports (exclude sample)
@@ -222,14 +239,14 @@ export default function Reports() {
 
   // Stats
   const stats = useMemo(() => {
-    if (!reports) return { total: 0, signed: 0, pending: 0, draft: 0 };
+    if (!reports) return { total: 0, signed: 0, awaitingReview: 0, draft: 0 };
     return {
-      total: reports.length,
+      total: reports.length + pendingReviewStudies.length,
       signed: reports.filter(r => r.status === "signed").length,
-      pending: reports.filter(r => r.status === "pending_review").length,
-      draft: reports.filter(r => r.status === "draft").length,
+      awaitingReview: pendingReviewStudies.length,
+      draft: reports.filter(r => r.status === "draft" || r.status === "pending_review").length,
     };
-  }, [reports]);
+  }, [reports, pendingReviewStudies]);
 
   if (isLoading) {
     return (
@@ -269,8 +286,8 @@ export default function Reports() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <div className="text-2xl font-bold text-amber-600">{stats.pending}</div>
-            <p className="text-xs text-muted-foreground">Pending Review</p>
+            <div className="text-2xl font-bold text-amber-600">{stats.awaitingReview}</div>
+            <p className="text-xs text-muted-foreground">Awaiting Review</p>
           </CardContent>
         </Card>
         <Card>
@@ -280,6 +297,51 @@ export default function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pending Review — studies with AI analysis ready for physician sign-off */}
+      {pendingReviewStudies.length > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Brain className="h-4 w-4 text-amber-600" />
+              Ready for Review
+              <Badge variant="secondary" className="text-xs">{pendingReviewStudies.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border/40">
+              {pendingReviewStudies.map((study: any) => {
+                const meta = study.meta as any;
+                const cls = study.ai_draft_json?.classification ?? study.ai_draft_json?.triage?.classification;
+                return (
+                  <div
+                    key={study.id}
+                    className="flex items-center gap-3 py-2.5 cursor-pointer hover:bg-muted/40 rounded-lg px-2 -mx-2 group transition-colors"
+                    onClick={() => navigate(`/app/studies/${study.id}/review`)}
+                  >
+                    <Brain className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{meta?.patient_name || "Unknown Patient"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {study.clinics?.name || "—"} · {dayjs(study.triage_completed_at || study.updated_at).format("MMM D, h:mm A")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {cls && cls !== "unknown" && (
+                        <Badge className={cls === "abnormal" ? "bg-destructive text-white text-[10px]" : "bg-emerald-500 text-white text-[10px]"}>
+                          {cls.toUpperCase()}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px]">{study.sla}</Badge>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
@@ -322,7 +384,9 @@ export default function Reports() {
               <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
               <p className="text-muted-foreground">
                 {filteredReports.length === 0 && !search && statusFilter === "all"
-                  ? "No reports generated yet"
+                  ? pendingReviewStudies.length > 0
+                    ? "No signed reports yet — review analyses above to sign and publish"
+                    : "No reports yet — upload studies and sign analyses to generate reports"
                   : "No reports match your filters"}
               </p>
             </div>

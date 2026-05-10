@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { useNotifications, AppNotification, NotifType, NotifCategory } from "@/hooks/useNotifications";
+import { type AppNotification, type NotifType, type NotifCategory } from "@/hooks/useNotifications";
+import { useNotificationContext } from "@/contexts/NotificationContext";
 import { useSku } from "@/hooks/useSku";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -235,7 +236,7 @@ function TabBar({
 /* ─── Main component ─────────────────────────────────────── */
 
 export function NotificationBell() {
-  const { notifications, unreadCount, readIds, markAsRead, markAllRead, dismiss } = useNotifications();
+  const { notifications, unreadCount, readIds, markAsRead, markAllRead, dismiss } = useNotificationContext();
   const { isPilot } = useSku();
 
   const [open, setOpen] = useState(false);

@@ -30,6 +30,7 @@ import { useSku } from "@/hooks/useSku";
 import { SkuBadge } from "@/components/sku/SkuBadge";
 import { NavItemId } from "@/shared/skuPolicy";
 import { StudyBreadcrumbProvider } from "@/contexts/StudyBreadcrumbContext";
+import { NotificationProvider } from "@/contexts/NotificationContext";
 
 // --------------- NAV DATA ---------------
 const mainNavigation: Array<{ id: NavItemId; name: string; href: string; icon: any }> = [
@@ -228,6 +229,7 @@ export default function AppLayout() {
 
   return (
     <TooltipProvider>
+      <NotificationProvider>
       <div className="min-h-screen flex flex-col bg-background text-foreground">
         {/* APP BAR (STICKY, FROSTED) */}
         <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
@@ -422,6 +424,7 @@ export default function AppLayout() {
 
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       </div>
+      </NotificationProvider>
     </TooltipProvider>
   );
 }
