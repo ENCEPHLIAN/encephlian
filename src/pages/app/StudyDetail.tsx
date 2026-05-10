@@ -306,16 +306,22 @@ export default function StudyDetail() {
   const handleDownloadReport = async () => {
     setDownloading(true);
     try {
-      const report = study?.reports?.[0];
+      let report = study?.reports?.[0] as any;
+
+      // RLS on the joined query can block — try a direct fetch by study_id
       if (!report) {
-        toast({ title: "No report found", variant: "destructive" });
-        return;
+        const { data } = await supabase
+          .from("reports")
+          .select("id, pdf_path, content, signed_at, created_at, status")
+          .eq("study_id", id!)
+          .maybeSingle();
+        if (data) report = data;
       }
 
-      let pdfPath = report.pdf_path;
+      let pdfPath = report?.pdf_path ?? null;
 
-      // Try server-side PDF generation if no pdf_path
-      if (!pdfPath) {
+      // Try server-side PDF generation if we have a report but no pdf_path
+      if (report && !pdfPath) {
         toast({ title: "Generating PDF...", description: "Please wait" });
         const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: report.id },
@@ -343,8 +349,8 @@ export default function StudyDetail() {
         return;
       }
 
-      // Fallback: generate a printable HTML report from report.content
-      const content = report.content as any;
+      // Fallback: generate a printable HTML report from report.content or ai_draft_json
+      const content = (report?.content as any) ?? (study?.ai_draft_json as any);
       if (content) {
         const patientName = (study.meta as any)?.patient_name || "Unknown Patient";
         const signedDate = dayjs(report.signed_at || report.created_at).format("MMMM D, YYYY");
@@ -431,7 +437,7 @@ ${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
   const triageConfig = TRIAGE_STATUS_CONFIG[study.triage_status || "pending"] || TRIAGE_STATUS_CONFIG.pending;
   const report = study.reports?.[0];
   const canonicalRecord = study.canonical_eeg_records?.[0];
-  const hasReport = !!report;
+  const hasReport = !!report || study.state === "signed";
   const isSigned = study.state === "signed" || report?.status === "signed";
   const isProcessing = study.triage_status === "processing";
   const canGenerateReport = !hasReport && !isProcessing &&
@@ -906,7 +912,7 @@ ${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
 
         {/* Report Tab */}
         <TabsContent value="report" className="space-y-4">
-          {hasReport ? (
+          {hasReport && report ? (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -962,7 +968,7 @@ ${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
                           <p className="text-sm whitespace-pre-wrap">{content.background_activity}</p>
                         </div>
                       )}
-                      
+
                       {content?.impression && (
                         <>
                           <Separator />
@@ -995,6 +1001,27 @@ ${sections.map(s => `<h2>${s.heading}</h2><p>${s.text || ""}</p>`).join("\n")}
                     </>
                   );
                 })()}
+              </CardContent>
+            </Card>
+          ) : hasReport ? (
+            /* Study is signed but the reports join was blocked by RLS — show download-only view */
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
+                <CheckCircle2 className="h-12 w-12 text-emerald-500" />
+                <div className="text-center">
+                  <p className="text-lg font-medium">Report signed</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    The signed report is ready. Click download to retrieve it.
+                  </p>
+                </div>
+                <Button onClick={handleDownloadReport} disabled={downloading}>
+                  {downloading ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Download Report
+                </Button>
               </CardContent>
             </Card>
           ) : (

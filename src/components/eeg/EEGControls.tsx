@@ -194,7 +194,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[130px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             {MONTAGE_OPTIONS.map(o => (
               <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
             ))}
@@ -211,7 +211,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[52px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             {SPEED_OPTIONS.map(o => (
               <SelectItem key={o.mmSec} value={String(o.mmSec)} className="text-xs">{o.mmSec}</SelectItem>
             ))}
@@ -240,7 +240,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[60px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             {AMP_OPTIONS.map(o => (
               <SelectItem key={o.uvmm} value={String(o.uvmm)} className="text-xs">{o.label}</SelectItem>
             ))}
@@ -258,7 +258,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[56px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             {HF_OPTIONS.map(v => (
               <SelectItem key={v} value={String(v)} className="text-xs">{v}</SelectItem>
             ))}
@@ -276,7 +276,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[68px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             {LF_OPTIONS.map(v => (
               <SelectItem key={v} value={String(v)} className="text-xs">
                 {v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : v.toFixed(1)}
@@ -296,7 +296,7 @@ export function EEGControls({
           <SelectTrigger className="h-6 w-[48px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[80]">
             <SelectItem value="0"   className="text-xs">Off</SelectItem>
             <SelectItem value="50"  className="text-xs">50</SelectItem>
             <SelectItem value="60"  className="text-xs">60</SelectItem>
