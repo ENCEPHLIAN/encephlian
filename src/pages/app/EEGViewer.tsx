@@ -206,7 +206,6 @@ export default function EEGViewer() {
   const [speed, setSpeed]         = useState(1);
   const [amplitude, setAmplitude] = useState(1.0);
   const [showArtifacts, setShowArtifacts]   = useState(true);
-  const [showSegments, setShowSegments]     = useState(true);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   // Clinical display controls
   const [hfFilter, setHfFilter]             = useState(70);
@@ -446,7 +445,11 @@ export default function EEGViewer() {
     if (!studyId) return;
     fetchJson<any>(`/studies/${studyId}/artifacts?root=.`,        { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setArtifacts(r.ok ? (r.data?.artifacts ?? []) : [])).catch(() => setArtifacts([]));
     fetchJson<any>(`/studies/${studyId}/annotations?root=.`,      { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setAnnotations(r.ok ? (r.data?.annotations ?? []) : [])).catch(() => setAnnotations([]));
-    fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY }).then(r => setSegments(r.ok ? (r.data?.segments ?? []) : [])).catch(() => setSegments([]));
+    // Only keep clinically meaningful segments — artifact classifications belong to the artifact overlay
+    const ARTIFACT_SEGMENT_LABELS = new Set(["eye_movement","muscle","electrode","electrode_noise","artifact","noisy_channel"]);
+    fetchJson<any>(`/studies/${studyId}/segments?root=/app/data`, { timeoutMs: 20000, requireKey: FETCH_REQUIRE_KEY })
+      .then(r => setSegments(r.ok ? (r.data?.segments ?? []).filter((s: any) => !ARTIFACT_SEGMENT_LABELS.has(s.label?.toLowerCase())) : []))
+      .catch(() => setSegments([]));
   }, [studyId]);
 
   // ── Effects: auto-seek from ?t= (segment deep links) ──────────────────────────
@@ -910,8 +913,8 @@ export default function EEGViewer() {
                 }} />
             );
           })}
-          {/* Segment bands — bottom 2px strip, color-coded by label */}
-          {showSegments && segments.map((s, i) => {
+          {/* Segment bands — bottom 2px strip, color-coded by label (always visible) */}
+          {segments.map((s, i) => {
             const c = getSegmentColor(s.label);
             return (
               <div key={`s${i}`} className="absolute bottom-0 h-[3px] pointer-events-none"
@@ -936,33 +939,24 @@ export default function EEGViewer() {
           </span>
         </div>
 
-        {/* Overlay chips — float bottom-left, block seek clicks */}
-        {(artifactCount > 0 || annotationCount > 0 || segments.length > 0) && (
-          <div className="absolute bottom-0.5 left-1 z-10 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-            {artifactCount > 0 && (
-              <button onClick={() => setShowArtifacts(v => !v)}
-                className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] transition-colors ${showArtifacts ? "bg-background/80 border border-border/60 text-foreground" : "text-muted-foreground/40"}`}>
-                {Object.entries(artifactTypeCounts).map(([type, count]) => {
-                  const ac = artifactColor(type);
-                  return <span key={type} className="flex items-center gap-0.5">
+        {/* Minimap legend — artifact toggle only (segments are always shown; no second button) */}
+        {artifactCount > 0 && (
+          <div className="absolute bottom-0.5 left-1 z-10" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowArtifacts(v => !v)}
+              title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
+              className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] transition-colors ${showArtifacts ? "bg-background/80 border border-border/60 text-foreground" : "text-muted-foreground/35"}`}
+            >
+              {Object.entries(artifactTypeCounts).map(([type, count]) => {
+                const ac = artifactColor(type);
+                return (
+                  <span key={type} className="flex items-center gap-0.5">
                     <span className="h-1.5 w-1.5 rounded-full" style={{ background: ac.border }} />
                     <span style={{ color: ac.border }}>{count}</span>
-                  </span>;
-                })}
-              </button>
-            )}
-            {annotationCount > 0 && (
-              <div className="flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] bg-blue-500/10 text-blue-500 border border-blue-500/20">
-                {annotationCount}
-              </div>
-            )}
-            {segments.length > 0 && (
-              <button onClick={e => { e.stopPropagation(); setShowSegments(v => !v); }}
-                className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] transition-colors ${showSegments ? "bg-background/80 text-primary border border-primary/25" : "text-muted-foreground/40"}`}>
-                <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                {segments.length}
-              </button>
-            )}
+                  </span>
+                );
+              })}
+            </button>
           </div>
         )}
 

@@ -897,20 +897,20 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           }}>
             {/* Vertical arm (upward, armYPx tall = refUv µV) */}
             <div style={{ position:"absolute", left:0, top:-armYPx, width:1, height:armYPx, background:rulerStroke }} />
-            {/* Horizontal arm (rightward, armXPx wide = 1 second) */}
-            <div style={{ position:"absolute", left:0, top:-1, width:armXPx, height:1, background:rulerStroke }} />
+            {/* Horizontal arm (LEFTWARD — mirrored L, armXPx wide = 1 second) */}
+            <div style={{ position:"absolute", left:-armXPx, top:-1, width:armXPx, height:1, background:rulerStroke }} />
 
             {/* Y-arm: tip tick (top) */}
             <div style={{ position:"absolute", left:-3, top:-armYPx, width:7, height:1, background:rulerStroke }} />
             {/* Y-arm: mid tick (refUv/2) */}
             <div style={{ position:"absolute", left:-3, top:-Math.round(armYPx/2), width:5, height:1, background:rulerStroke }} />
 
-            {/* X-arm: tip tick (1s) */}
-            <div style={{ position:"absolute", left:armXPx-1, top:-4, width:1, height:7, background:rulerStroke }} />
+            {/* X-arm: tip tick (1s — leftmost end) */}
+            <div style={{ position:"absolute", left:-armXPx, top:-4, width:1, height:7, background:rulerStroke }} />
             {/* X-arm: mid tick (0.5s) */}
-            <div style={{ position:"absolute", left:Math.round(armXPx/2), top:-3, width:1, height:5, background:rulerStroke }} />
+            <div style={{ position:"absolute", left:-Math.round(armXPx/2), top:-3, width:1, height:5, background:rulerStroke }} />
 
-            {/* Y label: top — refUv */}
+            {/* Y label: top — refUv (right of vertical arm) */}
             <div style={{ position:"absolute", left:5, top:-armYPx-1, fontSize:9, fontFamily:"ui-monospace,monospace", fontWeight:600, color:rulerLabel, whiteSpace:"nowrap", lineHeight:"11px", userSelect:"none" }}>
               {refUv}µV
             </div>
@@ -919,12 +919,12 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
               {Math.round(refUv/2)}µV
             </div>
 
-            {/* X label: tip — 1s */}
-            <div style={{ position:"absolute", left:armXPx+3, top:-11, fontSize:9, fontFamily:"ui-monospace,monospace", fontWeight:600, color:rulerLabel, whiteSpace:"nowrap", lineHeight:"11px", userSelect:"none" }}>
+            {/* X label: tip — 1s (right-aligned at left tip) */}
+            <div style={{ position:"absolute", left:-armXPx, top:-11, transform:"translateX(-100%)", paddingRight:3, fontSize:9, fontFamily:"ui-monospace,monospace", fontWeight:600, color:rulerLabel, whiteSpace:"nowrap", lineHeight:"11px", userSelect:"none" }}>
               1s
             </div>
-            {/* X label: mid — 0.5s */}
-            <div style={{ position:"absolute", left:Math.round(armXPx/2)+2, top:-11, fontSize:8, fontFamily:"ui-monospace,monospace", color:rulerLabel, whiteSpace:"nowrap", lineHeight:"10px", userSelect:"none", opacity:0.7 }}>
+            {/* X label: mid — 0.5s (centered over mid tick) */}
+            <div style={{ position:"absolute", left:-Math.round(armXPx/2), top:-11, transform:"translateX(-50%)", fontSize:8, fontFamily:"ui-monospace,monospace", color:rulerLabel, whiteSpace:"nowrap", lineHeight:"10px", userSelect:"none", opacity:0.7 }}>
               0.5s
             </div>
 
