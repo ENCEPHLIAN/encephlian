@@ -500,12 +500,11 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     };
 
     // ── Artifact overlays ────────────────────────────────────────────────────────
-    // Global coverage determines fill opacity — if most of window is artifact,
-    // use near-invisible fill so waveforms stay readable.
+    // Adaptive fill: high coverage → lighter fill so waveforms stay readable.
     const globalArtCoverage = artifactIntervals
       .filter(a => a.channel == null)
       .reduce((acc, a) => acc + Math.max(0, Math.min(a.end_sec, timeWindow) - Math.max(a.start_sec, 0)), 0) / Math.max(timeWindow, 1);
-    const artFillAlpha = globalArtCoverage > 0.7 ? 0.02 : globalArtCoverage > 0.4 ? 0.035 : 0.055;
+    const artFillAlpha = globalArtCoverage > 0.7 ? 0.08 : globalArtCoverage > 0.4 ? 0.12 : 0.16;
 
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
@@ -521,25 +520,27 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
       const el = document.createElement("div");
       if (a.channel == null) {
-        // Global artifact — full signal height, left-accent + subtle fill
+        // Global artifact — full signal height band with visible left accent
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${PAD}px`,
           `width:${bw}px`, `height:${signalH - PAD * 2}px`,
           `border-left:2px solid ${br}`,
+          `border-top:1px solid ${faintFill(br, 0.4)}`,
           `background:${faintFill(bg, artFillAlpha)}`,
           "pointer-events:none", "box-sizing:border-box", "overflow:visible",
         ].join(";");
-        if (bw >= 30) el.appendChild(makeChip(abbrev(lbl), br));
+        if (bw >= 20) el.appendChild(makeChip(abbrev(lbl), br));
       } else {
-        // Per-channel artifact — render only in the specific channel's lane
-        const chIdx = a.channel;
-        if (chIdx < 0 || chIdx >= nCh) continue;
-        const yTop = PAD + chIdx * laneH;
+        // Per-channel artifact — render in the correct visual lane
+        // channels[] maps visual-lane-index → original-channel-index
+        const laneIdx = channels.indexOf(a.channel);
+        if (laneIdx < 0) continue; // channel not currently visible
+        const yTop = PAD + laneIdx * laneH;
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${yTop + 1}px`,
-          `width:${bw}px`, `height:${Math.max(2, laneH - 2)}px`,
+          `width:${bw}px`, `height:${Math.max(3, laneH - 2)}px`,
           `border-left:2px solid ${br}`,
-          `background:${faintFill(bg, Math.min(0.12, artFillAlpha * 2))}`,
+          `background:${faintFill(bg, artFillAlpha * 1.4)}`,
           "pointer-events:none", "box-sizing:border-box",
         ].join(";");
       }
