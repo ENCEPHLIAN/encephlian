@@ -290,6 +290,7 @@ export default function EEGViewer() {
 
   const gotoSegment = useCallback((seg: Segment) => {
     seekTo(seg.t_start_s);
+    setSidebarOpen(false); // collapse sidebar so waveform gets full width
     const p = new URLSearchParams(searchParams);
     p.set("t", String(seg.t_start_s));
     p.set("t_end", String(seg.t_end_s));
@@ -298,7 +299,7 @@ export default function EEGViewer() {
     if (seg.channel_index != null) p.set("ch", String(seg.channel_index)); else p.delete("ch");
     if (seg.score != null) p.set("score", String(seg.score)); else p.delete("score");
     setSearchParams(p, { replace: true });
-  }, [seekTo, searchParams, setSearchParams]);
+  }, [seekTo, searchParams, setSearchParams, setSidebarOpen]);
 
   const clearFocus = useCallback(() => {
     const p = new URLSearchParams(searchParams);
@@ -1066,6 +1067,7 @@ export default function EEGViewer() {
               theme={theme ?? "dark"}
               markers={winMarkers}
               artifactIntervals={winArtifacts}
+              uvPerMm={scaleToUVMM(amplitude)}
               hfFilter={hfFilter}
               lfFilter={lfFilter}
               notchFilter={notchFilter}

@@ -699,21 +699,7 @@ export default function StudyDetail() {
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                   </div>
 
-                  {/* REVE-enhanced path */}
-                  <div className="flex items-center gap-2 rounded-md border border-border/40 bg-muted/10 px-3 py-2 opacity-60">
-                    <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium">REVE-Enhanced Analysis</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Equipment-specific denoising · Coming soon
-                      </p>
-                    </div>
-                    <Clock className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground/60 mt-2">
-                  REVE runs on top of mathematical pre-cleaning (notch, bandpass, ICA). Both paths are compared — disagreement surfaces as a review flag.
-                </p>
               </div>
             </div>
           </CardContent>
@@ -812,7 +798,7 @@ export default function StudyDetail() {
                   No pipeline events yet. They appear after you upload and processing starts.
                 </p>
               ) : (
-                <ScrollArea className="h-[320px] pr-4">
+                <ScrollArea className="h-[min(520px,60vh)] pr-4">
                   <div className="relative pl-6">
                     {/* Vertical timeline line */}
                     <div className="absolute left-[9px] top-2 bottom-2 w-px bg-border" />
