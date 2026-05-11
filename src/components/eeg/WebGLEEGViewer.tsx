@@ -24,6 +24,14 @@ interface Selection {
   endTime: number;
 }
 
+interface SegmentInterval {
+  start_sec: number;
+  end_sec: number;
+  label: string;
+  color?: string;      // fill rgba
+  borderColor?: string; // border rgba
+}
+
 export interface WebGLEEGViewerProps {
   signals: number[][] | null; // IMPORTANT: expected to be WINDOWED already (length ≈ timeWindow*fs)
   channelLabels: string[];
@@ -35,6 +43,7 @@ export interface WebGLEEGViewerProps {
   theme: string;
   markers?: Marker[];
   artifactIntervals?: ArtifactInterval[];
+  segmentIntervals?: SegmentInterval[];
   channelColors?: string[];
   labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
   hfFilter?: number;         // high-frequency cutoff Hz (lowpass) — 0 = off
@@ -222,6 +231,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers = [],
     artifactIntervals = [],
+    segmentIntervals = [],
     channelColors = [],
     labelColumnWidth = 80,
     hfFilter = 0,
@@ -504,7 +514,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const globalArtCoverage = artifactIntervals
       .filter(a => a.channel == null)
       .reduce((acc, a) => acc + Math.max(0, Math.min(a.end_sec, timeWindow) - Math.max(a.start_sec, 0)), 0) / Math.max(timeWindow, 1);
-    const artFillAlpha = globalArtCoverage > 0.7 ? 0.08 : globalArtCoverage > 0.4 ? 0.12 : 0.16;
+    const artFillAlpha = globalArtCoverage > 0.7 ? 0.06 : globalArtCoverage > 0.4 ? 0.09 : 0.12;
 
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
@@ -544,6 +554,34 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
           "pointer-events:none", "box-sizing:border-box",
         ].join(";");
       }
+      artifactRef.current?.appendChild(el);
+    }
+
+    // ── Segment overlays ─────────────────────────────────────────────────────
+    // Clinical events (seizures, spikes, sleep events) — full-height bordered box
+    for (const seg of segmentIntervals) {
+      const s0 = clamp(seg.start_sec, 0, timeWindow);
+      const s1 = clamp(seg.end_sec,   0, timeWindow);
+      if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
+
+      const x1 = labelW + (s0 / timeWindow) * signalW;
+      const x2 = labelW + (s1 / timeWindow) * signalW;
+      const bw = Math.max(3, x2 - x1);
+
+      const bg = seg.color        ?? "rgba(99,102,241,0.10)";
+      const br = seg.borderColor  ?? "rgba(99,102,241,0.55)";
+
+      const el = document.createElement("div");
+      el.style.cssText = [
+        "position:absolute",
+        `left:${x1}px`, `top:${PAD}px`,
+        `width:${bw}px`, `height:${signalH - PAD * 2}px`,
+        `border:1.5px solid ${br}`,
+        `border-radius:2px`,
+        `background:${faintFill(bg, 0.9)}`,
+        "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+      ].join(";");
+      if (bw >= 16) el.appendChild(makeChip(abbrev(seg.label), br));
       artifactRef.current?.appendChild(el);
     }
 
@@ -805,6 +843,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers,
     artifactIntervals,
+    segmentIntervals,
     channelColors,
     colors,
     labelColumnWidth,

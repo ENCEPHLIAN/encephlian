@@ -676,6 +676,21 @@ export default function EEGViewer() {
       .map((a, i) => ({ id: `ann-${i}`, timestamp_sec: a.start_sec - windowStart, marker_type: "event", label: a.label ?? "annotation" }));
   }, [annotations, windowStart, windowSec]);
 
+  const winSegments = useMemo(() => {
+    return segments
+      .filter(s => s.t_end_s > windowStart && s.t_start_s < windowStart + windowSec)
+      .map(s => {
+        const c = getSegmentColor(s.label);
+        return {
+          start_sec:   s.t_start_s - windowStart,
+          end_sec:     s.t_end_s   - windowStart,
+          label:       s.label,
+          color:       c.bg,
+          borderColor: c.border,
+        };
+      });
+  }, [segments, windowStart, windowSec]);
+
   // ── Overlay legend counts ─────────────────────────────────────────────────────
   const artifactCount  = artifacts.length;
   const annotationCount = annotations.length;
@@ -1078,6 +1093,7 @@ export default function EEGViewer() {
               theme={theme ?? "dark"}
               markers={winMarkers}
               artifactIntervals={winArtifacts}
+              segmentIntervals={winSegments}
               uvPerMm={scaleToUVMM(amplitude)}
               hfFilter={hfFilter}
               lfFilter={lfFilter}
