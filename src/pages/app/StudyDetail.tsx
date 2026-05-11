@@ -106,6 +106,7 @@ export default function StudyDetail() {
   const [generating, setGenerating] = useState(false);
   const [runningTriage, setRunningTriage] = useState(false);
   const [slaModalOpen, setSlaModalOpen] = useState(false);
+  const [localMeta, setLocalMeta] = useState<any>(null);
 
   const { data: wallet } = useQuery({
     queryKey: ["wallet-balance"],
@@ -250,6 +251,9 @@ export default function StudyDetail() {
       document.title = prevTitle;
     };
   }, [study, setActiveStudyLabel]);
+
+  // Keep localMeta in sync with the query result (realtime / refetch)
+  useEffect(() => { setLocalMeta(study?.meta ?? null); }, [study?.meta]);
 
   // Pipeline state-change notifications
   useEffect(() => {
@@ -453,9 +457,6 @@ export default function StudyDetail() {
     );
   }
 
-  const [localMeta, setLocalMeta] = useState<any>(study.meta);
-  // Sync when the study query refetches (realtime / manual)
-  useEffect(() => { setLocalMeta(study.meta); }, [study.meta]);
   const meta = localMeta as any;
 
   const isBlankName = (v: string | null | undefined) =>
