@@ -225,7 +225,7 @@ export function ReportDocument({
         <View style={styles.headerBar}>
           <View>
             <Text style={styles.brandText}>ENCEPHLIAN™</Text>
-            <Text style={styles.brandSub}>Neural Intelligence Platform</Text>
+            <Text style={styles.brandSub}>Clinical EEG Platform</Text>
           </View>
           <View>
             <Text style={styles.docTitle}>EEG Interpretation Report</Text>
@@ -262,7 +262,7 @@ export function ReportDocument({
         {/* ── AI classification chip ── */}
         {showAI && (
           <View style={styles.aiChip}>
-            <Text style={styles.aiLabel}>MIND® AI Classification</Text>
+            <Text style={styles.aiLabel}>Classification</Text>
             <Text style={styles.aiDot}>·</Text>
             <Text style={styles.aiValue}>{aiLabel}</Text>
             {typeof aiConfidence === "number" && aiConfidence >= 0.65 && (

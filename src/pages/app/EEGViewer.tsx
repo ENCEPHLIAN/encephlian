@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle, EyeOff } from "lucide-react";
+import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle } from "lucide-react";
 import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
 import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
 import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
@@ -39,11 +39,11 @@ type FocusedSeg = { label: string; t_start_s: number; t_end_s: number; channel_i
 
 // ── Artifact type color map ────────────────────────────────────────────────────
 const ARTIFACT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-  eye_movement:    { bg: "rgba(139,92,246,0.18)",  border: "rgba(139,92,246,0.60)", label: "Eye"      },
-  muscle:          { bg: "rgba(249,115,22,0.18)",  border: "rgba(249,115,22,0.60)", label: "Muscle"   },
-  electrode_noise: { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.60)",  label: "Noise"    },
-  electrode:       { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.60)",  label: "Noise"    },
-  artifact:        { bg: "rgba(239,68,68,0.18)",   border: "rgba(239,68,68,0.55)",  label: "Artifact" },
+  eye_movement:    { bg: "rgba(139,92,246,0.10)",  border: "rgba(139,92,246,0.38)", label: "Eye"      },
+  muscle:          { bg: "rgba(249,115,22,0.10)",  border: "rgba(249,115,22,0.38)", label: "Muscle"   },
+  electrode_noise: { bg: "rgba(234,179,8,0.10)",   border: "rgba(234,179,8,0.38)",  label: "Noise"    },
+  electrode:       { bg: "rgba(234,179,8,0.10)",   border: "rgba(234,179,8,0.38)",  label: "Noise"    },
+  artifact:        { bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.35)",  label: "Artifact" },
 };
 function artifactColor(t?: string) {
   return ARTIFACT_COLORS[t ?? "artifact"] ?? ARTIFACT_COLORS.artifact;
@@ -206,7 +206,6 @@ export default function EEGViewer() {
   const [speed, setSpeed]         = useState(1);
   const [amplitude, setAmplitude] = useState(1.0);
   const [showArtifacts, setShowArtifacts]   = useState(true);
-  const [suppressArts, setSuppressArts]     = useState(false);
   const [showSegments, setShowSegments]     = useState(true);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   // Clinical display controls
@@ -225,6 +224,7 @@ export default function EEGViewer() {
 
   const cache       = useRef<Map<string, number[][]>>(new Map());
   const reqId       = useRef(0);
+  const fetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didSeek     = useRef(false);
   /** Strip legacy ?viewT / ?viewW once per study (old links; no longer used) */
   const strippedLegacyViewParamsRef = useRef(false);
@@ -525,6 +525,7 @@ export default function EEGViewer() {
 
     const hit = cache.current.get(k);
     if (hit && hit.length === meta.n_channels) {
+      if (fetchDebounceRef.current) { clearTimeout(fetchDebounceRef.current); fetchDebounceRef.current = null; }
       setSignals(hit);
       setLoadingWin(false);
       return;
@@ -533,12 +534,13 @@ export default function EEGViewer() {
     setLoadingWin(true);
     const id = ++reqId.current;
 
-    // ── Raw EDF mode: serve chunks from in-memory reader ──────────
+    // ── Raw EDF mode: serve chunks from in-memory reader (no network, no debounce) ──
     if (edfReader.current) {
       try {
         const sig = edfReader.current.getChunk(startSamp, len);
         if (id === reqId.current) {
           cache.current.set(k, sig);
+          if (cache.current.size > 30) cache.current.delete(cache.current.keys().next().value!);
           setSignals(sig);
           setLoadingWin(false);
         }
@@ -548,37 +550,53 @@ export default function EEGViewer() {
       return;
     }
 
-    fetchChunk(studyId, startSamp, len)
-      .then(r => {
-        if (!r.ok) throw new Error((r as any).error);
-        const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
-        const nSamp = isFinite(hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"])) ? hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]) : len;
-        const f32   = new Float32Array(r.data);
-        if (f32.length !== nCh * nSamp) throw new Error(`Payload mismatch: got ${f32.length}, expected ${nCh * nSamp}`);
-        return reshapeAuto(f32, nCh, nSamp);
-      })
-      .then(sig => {
-        if (id !== reqId.current) return;
-        cache.current.set(k, sig);
-        setSignals(sig);
-      })
-      .catch(e => { if (id === reqId.current && !signals) setFatalError(String(e)); })
-      .finally(() => { if (id === reqId.current) setLoadingWin(false); });
+    // Debounce network fetch: 80 ms when seeking, immediate during playback
+    if (fetchDebounceRef.current) clearTimeout(fetchDebounceRef.current);
+    fetchDebounceRef.current = setTimeout(() => {
+      fetchDebounceRef.current = null;
 
-    // Prefetch next window during playback
-    if (playing) {
-      const nextWs = clamp(ws + windowSec / 2, 0, max);
-      const nk = keyFor(Math.floor(nextWs * fs), len);
-      if (!cache.current.has(nk)) {
-        fetchChunk(studyId, Math.floor(nextWs * fs), len)
-          .then(r => {
-            if (!r.ok) return;
-            const f32 = new Float32Array(r.data);
-            if (f32.length === meta.n_channels * len) cache.current.set(nk, reshapeAuto(f32, meta.n_channels, len));
-          })
-          .catch(() => {});
+      fetchChunk(studyId, startSamp, len)
+        .then(r => {
+          if (!r.ok) throw new Error((r as any).error);
+          const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
+          const nSamp = isFinite(hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"])) ? hdrNum(r.headers, ["x-eeg-length", "x-eeg-samples-per-channel"]) : len;
+          const f32   = new Float32Array(r.data);
+          if (f32.length !== nCh * nSamp) throw new Error(`Payload mismatch: got ${f32.length}, expected ${nCh * nSamp}`);
+          return reshapeAuto(f32, nCh, nSamp);
+        })
+        .then(sig => {
+          if (id !== reqId.current) return;
+          cache.current.set(k, sig);
+          if (cache.current.size > 30) cache.current.delete(cache.current.keys().next().value!);
+          setSignals(sig);
+        })
+        .catch(e => { if (id === reqId.current && !signals) setFatalError(String(e)); })
+        .finally(() => { if (id === reqId.current) setLoadingWin(false); });
+
+      // Prefetch next 2 windows during playback
+      if (playing) {
+        for (const offset of [windowSec / 2, windowSec]) {
+          const nextWs = clamp(ws + offset, 0, max);
+          const nk = keyFor(Math.floor(nextWs * fs), len);
+          if (!cache.current.has(nk)) {
+            fetchChunk(studyId, Math.floor(nextWs * fs), len)
+              .then(r => {
+                if (!r.ok) return;
+                const f32 = new Float32Array(r.data);
+                if (f32.length === meta.n_channels * len) {
+                  cache.current.set(nk, reshapeAuto(f32, meta.n_channels, len));
+                  if (cache.current.size > 30) cache.current.delete(cache.current.keys().next().value!);
+                }
+              })
+              .catch(() => {});
+          }
+        }
       }
-    }
+    }, playing ? 0 : 80);
+
+    return () => {
+      if (fetchDebounceRef.current) { clearTimeout(fetchDebounceRef.current); fetchDebounceRef.current = null; }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, studyId, windowStart, windowSec, playing]);
 
@@ -954,15 +972,6 @@ export default function EEGViewer() {
                 {segments.length}
               </button>
             )}
-            {artifactCount > 0 && showArtifacts && (
-              <button
-                onClick={e => { e.stopPropagation(); setSuppressArts(v => !v); }}
-                title={suppressArts ? "Show artifacts" : "Mute artifact overlays"}
-                className={`flex items-center px-1.5 py-px rounded text-[10px] transition-colors ${suppressArts ? "bg-background/80 text-foreground border border-border" : "text-muted-foreground/40"}`}
-              >
-                <EyeOff className="h-2.5 w-2.5" />
-              </button>
-            )}
           </div>
         )}
 
@@ -1086,8 +1095,6 @@ export default function EEGViewer() {
               artifactIntervals={winArtifacts}
               highlightInterval={winHighlight}
               segmentOverlays={winSegments}
-              showArtifactsAsRed={true}
-              suppressArtifacts={suppressArts}
               hfFilter={hfFilter}
               lfFilter={lfFilter}
               notchFilter={notchFilter}

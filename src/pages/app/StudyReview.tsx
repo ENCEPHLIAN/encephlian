@@ -259,14 +259,14 @@ export default function StudyReview() {
         </div>
       </div>
 
-      {/* ── AI triage summary bar ── */}
+      {/* ── Triage summary bar ── */}
       {meta?.triage_result && (
         <Card className="border-border/60">
           <CardContent className="py-3 px-4">
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary shrink-0" />
-                <span className="font-medium text-foreground">AI triage</span>
+                <span className="font-medium text-foreground">Triage result</span>
               </div>
               <Badge variant={meta.triage_result === "abnormal" ? "destructive" : "secondary"} className="capitalize">
                 {meta.triage_result}
@@ -299,7 +299,7 @@ export default function StudyReview() {
             <div className="min-w-0 flex-1">
               <CardTitle className="text-lg sm:text-xl leading-tight">IFCN SCORE report</CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                Edit the AI draft below, then sign once you agree. Patient:{" "}
+                Edit the draft below, then sign once you agree. Patient:{" "}
                 <span className="font-medium text-foreground">{meta?.patient_id || "—"}</span>
               </p>
             </div>

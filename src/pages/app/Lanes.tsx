@@ -34,8 +34,8 @@ type SLAKey = keyof typeof SLA_CONFIG;
 
 const TRIAGE_STAGES = [
   { id: "uploaded",   label: "Uploaded",   icon: Upload,       description: "Awaiting SLA selection" },
-  { id: "processing", label: "Processing", icon: Brain,        description: "AI analysis in progress" },
-  { id: "ai_draft",   label: "AI Draft",   icon: Eye,          description: "Ready for review" },
+  { id: "processing", label: "Processing", icon: Brain,        description: "Analysis in progress" },
+  { id: "ai_draft",   label: "Draft",      icon: Eye,          description: "Ready for review" },
   { id: "in_review",  label: "In Review",  icon: Clock,        description: "Under physician review" },
   { id: "signed",     label: "Signed",     icon: CheckCircle2, description: "Report finalized" },
 ] as const;

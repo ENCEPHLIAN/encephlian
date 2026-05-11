@@ -196,7 +196,7 @@ export function FilePreviewDialog({
 
             {fileType === "edf" && onGenerateReport && (
               <Button variant="default" size="sm" onClick={() => onGenerateReport(file.path)} className="h-8">
-                Generate AI Report
+                Generate Report
               </Button>
             )}
 

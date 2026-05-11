@@ -259,7 +259,7 @@ export default function StudyDetail() {
 
     if (study.state === "ai_draft" && prev !== "ai_draft") {
       toast.success("Analysis complete", {
-        description: "MIND® has processed the recording. Ready for physician review.",
+        description: "Recording has been processed. Ready for physician review.",
         action: {
           label: "Review & Sign →",
           onClick: () => navigate(`/app/studies/${id}/review`),
@@ -298,7 +298,7 @@ export default function StudyDetail() {
           void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
         })(),
         {
-          loading: "Starting MIND® analysis…",
+          loading: "Starting analysis…",
           success: "Pipeline started — results appear in 1–3 minutes",
           error: (err: Error) => err?.message || "Analysis failed to start",
         }
@@ -321,8 +321,8 @@ export default function StudyDetail() {
           void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
         })(),
         {
-          loading: "Generating AI report…",
-          success: "AI report generated — ready for review",
+          loading: "Generating report…",
+          success: "Report generated — ready for review",
           error: (err: Error) => err?.message || "Generation failed",
         }
       );
@@ -565,7 +565,7 @@ export default function StudyDetail() {
                 </Link>
               </Button>
               
-              {/* Run MIND® Analysis — opens SLA modal when not yet paid */}
+              {/* Run Analysis — opens SLA modal when not yet paid */}
               {IPLANE_BASE && study.state !== "signed" && (
                 <Button
                   onClick={gateTriageActions ? () => setSlaModalOpen(true) : handleRunAITriage}
@@ -577,7 +577,7 @@ export default function StudyDetail() {
                   ) : (
                     <Brain className="h-4 w-4 mr-2" />
                   )}
-                  {gateTriageActions ? "Select Analysis Priority" : "Run MIND® Analysis"}
+                  {gateTriageActions ? "Select Analysis Priority" : "Run Analysis"}
                 </Button>
               )}
               
@@ -593,7 +593,7 @@ export default function StudyDetail() {
                   ) : (
                     <Zap className="h-4 w-4 mr-2" />
                   )}
-                  Generate AI Report
+                  Generate Report
                 </Button>
               )}
               
@@ -632,7 +632,7 @@ export default function StudyDetail() {
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-2 text-blue-500">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  AI Triage in progress...
+                  Processing...
                 </span>
                 <span className="text-muted-foreground">{study.triage_progress || 0}%</span>
               </div>
@@ -659,7 +659,7 @@ export default function StudyDetail() {
                   <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
                     <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium">Raw MIND® Analysis</p>
+                      <p className="text-xs font-medium">Signal Analysis</p>
                       <p className="text-[10px] text-muted-foreground">
                         {(() => {
                           const r = study.ai_draft_json as any;
@@ -734,7 +734,7 @@ export default function StudyDetail() {
               </div>
             ) : (
               <div className="flex flex-col gap-3 mt-1">
-                <span>Select Standard (12–24 h) or Priority (30–90 min) to start MIND® analysis.</span>
+                <span>Select Standard (12–24 h) or Priority (30–90 min) to start analysis.</span>
                 <Button
                   size="sm"
                   className="self-start"
@@ -759,7 +759,7 @@ export default function StudyDetail() {
             </TabsTrigger>
           )}
           <TabsTrigger value="ai-analysis" disabled={gateTriageActions}>
-            MIND® {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            Analysis {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
           {!isPilot && (
             <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
@@ -1055,7 +1055,7 @@ export default function StudyDetail() {
                 <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
                 <p className="text-lg font-medium">No report yet</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Generate an AI report to get started
+                  Generate a report to get started
                 </p>
                 {canGenerateReport && (
                   <Button onClick={handleGenerateAIReport} disabled={generating || gateTriageActions}>
@@ -1064,7 +1064,7 @@ export default function StudyDetail() {
                     ) : (
                       <Zap className="h-4 w-4 mr-2" />
                     )}
-                    Generate AI Report
+                    Generate Report
                   </Button>
                 )}
               </CardContent>
@@ -1072,13 +1072,13 @@ export default function StudyDetail() {
           )}
         </TabsContent>
 
-        {/* AI Analysis Tab — MIND® Pipeline results */}
+        {/* Analysis Tab — Pipeline results */}
         <TabsContent value="ai-analysis">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <Brain className="h-4 w-4 text-primary" />
-                MIND® Analysis
+                Analysis
               </CardTitle>
               <p className="text-xs text-muted-foreground">
                 Triage · Clean · Seizure · SCORE — clinician interprets
@@ -1112,7 +1112,7 @@ export default function StudyDetail() {
                   },
                   heuristic_fallback: {
                     title: "Heuristic model (no ONNX)",
-                    body: "The MIND® ONNX model was not loaded. A simple spectral heuristic was used — not suitable for clinical use.",
+                    body: "The ONNX model was not loaded. A simple spectral heuristic was used — not suitable for clinical use.",
                   },
                 };
                 const msg = messages[qflag] ?? { title: "Quality issue", body: triage.quality_detail ?? "Results may not be reliable." };
@@ -1143,7 +1143,7 @@ export default function StudyDetail() {
 
               {gateTriageActions ? (
                 <div className="text-center py-10 space-y-2 text-muted-foreground text-sm">
-                  <p>MIND® opens after you start triage from Studies (token charge applies there).</p>
+                  <p>Analysis opens after you start triage from Studies (token charge applies there).</p>
                   <Button variant="outline" size="sm" asChild>
                     <Link to="/app/studies">Back to Studies</Link>
                   </Button>
@@ -1176,7 +1176,7 @@ export default function StudyDetail() {
                   <p className="text-sm text-muted-foreground">
                     No analysis yet.
                     {IPLANE_BASE
-                      ? " Click \"Run MIND® Analysis\" to start."
+                      ? " Click \"Run Analysis\" above to start."
                       : " Upload an EDF file and wait for the pipeline to complete."}
                   </p>
                   {IPLANE_BASE && (
@@ -1186,7 +1186,7 @@ export default function StudyDetail() {
                       size="sm"
                     >
                       {runningTriage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
-                      {gateTriageActions ? "Select Analysis Priority" : "Run MIND® Analysis"}
+                      {gateTriageActions ? "Select Analysis Priority" : "Run Analysis"}
                     </Button>
                   )}
                 </div>

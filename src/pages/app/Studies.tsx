@@ -298,7 +298,7 @@ function InternalStudiesView() {
 
       toast.dismiss(uploadTid);
       toast.success("Upload complete", {
-        description: "Select Standard or Priority analysis to start MIND® processing.",
+        description: "Select Standard or Priority to start processing.",
         action: { label: "Select priority →", onClick: () => navigate(`/app/studies/${studyId}`) },
         duration: 6000,
       });

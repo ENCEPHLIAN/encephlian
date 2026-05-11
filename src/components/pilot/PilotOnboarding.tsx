@@ -94,8 +94,8 @@ const WORKFLOW_STEPS = [
   },
   {
     icon: Brain,
-    title: "3. AI Analysis",
-    desc: "MIND® processes the EEG: artifact cleanup, signal analysis, and anomaly detection. Track progress in real-time on your dashboard.",
+    title: "3. Analysis",
+    desc: "The pipeline processes the EEG: artifact cleanup, signal analysis, and anomaly detection. Track progress in real-time on your dashboard.",
     time: "5-15 min",
   },
   {

@@ -11,7 +11,7 @@ type StudyRow = {
 const INTERNAL_STEPS = [
   { key: "upload", label: "Upload", detail: "File received" },
   { key: "sla", label: "Analysis priority", detail: "Standard (12–24 h) or Priority (30–90 min)" },
-  { key: "triage", label: "Triage pipeline", detail: "C-Plane + MIND® analysis" },
+  { key: "triage", label: "Triage pipeline", detail: "C-Plane processing and analysis" },
   { key: "draft", label: "Draft ready", detail: "ESF / SCORE available for review" },
   { key: "signed", label: "Signed", detail: "Final report" },
 ] as const;
@@ -79,7 +79,7 @@ export function StudyFlowProgress({ study, isPilot }: { study: StudyRow; isPilot
       </ol>
       {!isPilot && study.triage_status === "processing" && (
         <p className="text-xs text-muted-foreground mt-3">
-          Progress {study.triage_progress ?? 0}% — preprocessing, MIND® scoring, and report assembly run on the
+          Progress {study.triage_progress ?? 0}% — preprocessing, scoring, and report assembly run on the
           server; this page refreshes automatically.
         </p>
       )}

@@ -24,7 +24,7 @@ export default function TriageReportView({
     return (
       <div className="text-center py-12 text-muted-foreground">
         <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">No MIND®Triage data available</p>
+        <p className="text-sm">No Triage data available</p>
       </div>
     );
   }
@@ -57,7 +57,7 @@ export default function TriageReportView({
       <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-mono text-muted-foreground">
-            MIND®Triage v1.0 · ENCEPHLIAN_EEG_v1
+            Triage v1.0 · ENCEPHLIAN_EEG_v1
           </p>
           <Badge variant="outline" className="text-[9px] gap-1">
             <Shield className="h-2.5 w-2.5" />
@@ -256,7 +256,7 @@ export default function TriageReportView({
 
       {/* Version footer */}
       <p className="text-center text-[9px] text-muted-foreground font-mono">
-        {data.model_version || "MIND®Triage v1.0"} · Generated {data.generated_at ? new Date(data.generated_at).toLocaleString() : "—"}
+        {data.model_version || "Triage v1.0"} · Generated {data.generated_at ? new Date(data.generated_at).toLocaleString() : "—"}
       </p>
     </div>
   );

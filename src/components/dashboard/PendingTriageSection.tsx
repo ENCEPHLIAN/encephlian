@@ -39,7 +39,7 @@ export default function PendingTriageSection({ studies, onSelectSla }: PendingTr
                 : `${studies.length} EEG Sessions Awaiting Triage`}
             </CardTitle>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Select an SLA lane to start the AI triage process
+              Select a priority to start triage
             </p>
           </div>
         </div>

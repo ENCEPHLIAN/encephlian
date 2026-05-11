@@ -198,7 +198,7 @@ export default function SlaSelectionModal({
           queryClient.invalidateQueries({ queryKey: ["studies-list"] }),
           queryClient.invalidateQueries({ queryKey: ["study-detail", study.id] }),
         ]);
-        toast.success("MIND® analysis started", {
+        toast.success("Analysis started", {
           description: `${result.tokens_deducted} token${result.tokens_deducted !== 1 ? "s" : ""} deducted · ${result.new_balance} remaining`,
           duration: 5000,
           action: { label: "View study", onClick: () => window.location.assign(`/app/studies/${study.id}`) },
@@ -214,7 +214,7 @@ export default function SlaSelectionModal({
           queryClient.invalidateQueries({ queryKey: ["studies-list"] }),
           queryClient.invalidateQueries({ queryKey: ["study-detail", study.id] }),
         ]);
-        toast.success("MIND® analysis started", {
+        toast.success("Analysis started", {
           description: `${selected === "STAT" ? "Priority" : "Standard"} · pipeline running`,
           duration: 5000,
           action: { label: "View study", onClick: () => window.location.assign(`/app/studies/${study.id}`) },
@@ -375,7 +375,7 @@ export default function SlaSelectionModal({
             {/* What MIND analyses */}
             <div className="mt-auto">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
-                MIND® will analyze
+                Pipeline processes
               </p>
               <ul className="space-y-1">
                 {MIND_CAPABILITIES.map((cap) => (
@@ -393,7 +393,7 @@ export default function SlaSelectionModal({
             <div>
               <h2 className="font-semibold text-base flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-primary" />
-                Start MIND® Analysis
+                Start Analysis
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Choose turnaround priority.

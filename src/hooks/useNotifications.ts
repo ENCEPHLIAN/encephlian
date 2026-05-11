@@ -74,7 +74,7 @@ function buildTriageComplete(study: any): AppNotification {
     id: `triage_complete_${study.id}`,
     type: "triage_complete",
     category: "report",
-    title: "MIND® analysis complete",
+    title: "Analysis complete",
     body: `${name}${resultStr} — ready for review`,
     createdAt: study.triage_completed_at || study.updated_at || new Date().toISOString(),
     studyId: study.id,

@@ -117,7 +117,7 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
       <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-mono text-muted-foreground">
-            {report.pipeline_version ? `MIND® Pipeline v${report.pipeline_version}` : "MIND® Pipeline v1.0"}
+            {report.pipeline_version ? `Pipeline v${report.pipeline_version}` : "Pipeline v1.0"}
             {" · "}schema {report.schema_version || "mind.report.v1"}
           </p>
           <div className="flex items-center gap-2">
@@ -171,13 +171,13 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
         </details>
       )}
 
-      {/* MIND®Triage + SCORE clinical significance */}
+      {/* Triage + SCORE clinical significance */}
       <div className={`rounded-lg border-2 p-4 ${isAbnormal ? "border-destructive/40 bg-destructive/5" : "border-emerald-500/40 bg-emerald-500/5"}`}>
         <div className="flex items-center gap-3">
           <Brain className={`h-6 w-6 ${isAbnormal ? "text-destructive" : "text-emerald-500"}`} />
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold uppercase tracking-wide">MIND®Triage</p>
+              <p className="text-sm font-semibold uppercase tracking-wide">Triage</p>
               <Badge
                 className={isAbnormal
                   ? "bg-destructive text-destructive-foreground"
@@ -319,11 +319,11 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
         </div>
       )}
 
-      {/* MIND®Clean */}
+      {/* Artifact Detection */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <Activity className="h-3.5 w-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-medium">MIND®Clean — Artifact Detection</h3>
+          <h3 className="text-xs font-medium">Artifact Detection — Artifact Detection</h3>
           <Badge variant="outline" className="text-[9px] ml-auto">{clean.model || "mind_clean_v1"}</Badge>
         </div>
         <div className="grid grid-cols-3 gap-2">
@@ -428,11 +428,11 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
         )}
       </div>
 
-      {/* MIND®Seizure */}
+      {/* Seizure Detection */}
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
           <Zap className="h-3.5 w-3.5 text-muted-foreground" />
-          <h3 className="text-xs font-medium">MIND®Seizure</h3>
+          <h3 className="text-xs font-medium">Seizure Detection</h3>
           <Badge variant="outline" className="text-[9px] ml-auto">{seizure.model || "heuristic_v0.1"}</Badge>
         </div>
         {ictNote && (
@@ -495,12 +495,12 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
         </div>
       )}
 
-      {/* MIND®SCORE — Full narrative */}
+      {/* SCORE — Full narrative */}
       {score.summary && (
         <div className="rounded-lg border bg-muted/30 p-3 space-y-1.5">
           <div className="flex items-center gap-2">
             <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <h3 className="text-xs font-medium">MIND®SCORE — Full Report</h3>
+            <h3 className="text-xs font-medium">SCORE — Full Report</h3>
           </div>
           <p className="text-sm leading-relaxed">{score.summary}</p>
         </div>
@@ -510,7 +510,7 @@ export default function MindReportView({ report, studyId }: MindReportViewProps)
       <div className="flex items-start gap-2 p-2 rounded-lg bg-muted/30 border">
         <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-[10px] text-muted-foreground">
-          Quantitative inference from ONNX models (MIND®Triage AUC≈0.77, MIND®Clean AUC=0.726).
+          Quantitative inference from ONNX models (Triage AUC≈0.77, Artifact Detection AUC=0.726).
           Not a clinical interpretation. The reviewing physician determines significance.
           SCORE EEG format per Beniczky et al. 2013/2017.
         </p>

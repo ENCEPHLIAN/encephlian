@@ -55,8 +55,6 @@ export interface WebGLEEGViewerProps {
   highlightInterval?: HighlightInterval | null; // focused segment highlight (deprecated, use segmentOverlays)
   segmentOverlays?: SegmentOverlay[]; // colored segment overlays
   channelColors?: string[];
-  showArtifactsAsRed?: boolean;
-  suppressArtifacts?: boolean; // display-only (dims segments)
   labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
   hfFilter?: number;         // high-frequency cutoff Hz (lowpass) — 0 = off
   lfFilter?: number;         // low-frequency cutoff Hz (highpass) — 0 = off
@@ -204,7 +202,6 @@ function buildPolylinePositions(
   laneMidY: number,
   laneHalfHeight: number,
   gain: number,
-  suppressMask: Uint8Array | null,
   xOffset: number = 0,
 ): Float32Array {
   const pxCount = Math.max(2, Math.min(Math.round(signalAreaWidth), 2400));
@@ -221,16 +218,8 @@ function buildPolylinePositions(
     for (let i = s0; i < s1; i++) { sum += sig[i]; count++; }
     const v = count > 0 ? sum / count : 0;
 
-    // suppress: dim artifacts (display-only)
-    let sup = 1.0;
-    if (suppressMask) {
-      for (let i = s0; i < s1; i++) {
-        if (suppressMask[i] === 1) { sup = 0.25; break; }
-      }
-    }
-
     const x = xOffset + (px / (pxCount - 1)) * signalAreaWidth;
-    const y = laneMidY - clamp(v * gain * sup, -laneHalfHeight, laneHalfHeight);
+    const y = laneMidY - clamp(v * gain, -laneHalfHeight, laneHalfHeight);
 
     out[px * 3]     = x;
     out[px * 3 + 1] = y;
@@ -254,8 +243,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     highlightInterval = null,
     segmentOverlays = [],
     channelColors = [],
-    showArtifactsAsRed = true,
-    suppressArtifacts = false,
     labelColumnWidth = 80,
     hfFilter = 0,
     lfFilter = 0,
@@ -470,22 +457,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     const laneH = (signalH - PAD * 2) / nCh;
     const laneHalf = Math.max(4, laneH * 0.4);
 
-    // build a suppress mask from artifactIntervals if requested
-    // mask is per-sample per-channel, but we keep it cheap: only build if suppressArtifacts is on and artifacts exist
-    const buildMaskForChannel = (chIdx: number): Uint8Array | null => {
-      if (!suppressArtifacts || artifactIntervals.length === 0) return null;
-      const n = signals[chIdx]?.length ?? 0;
-      if (!n) return null;
-      const mask = new Uint8Array(n);
-      for (const a of artifactIntervals) {
-        if (a.channel != null && a.channel !== chIdx) continue;
-        const s0 = Math.floor(clamp(a.start_sec, 0, timeWindow) * sampleRate);
-        const s1 = Math.floor(clamp(a.end_sec, 0, timeWindow) * sampleRate);
-        for (let i = Math.max(0, s0); i < Math.min(n, s1); i++) mask[i] = 1;
-      }
-      return mask;
-    };
-
     // ── Overlay helpers ──────────────────────────────────────────────────────────
     // Reduce rgba opacity to `alpha` (handles both spaced and unspaced rgba)
     const faintFill = (css: string, alpha: number) =>
@@ -563,8 +534,11 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     }
 
     // ── Segment overlays ────────────────────────────────────────────────────────
-    // Global: full-height colored band with left accent + label chip.
-    // Per-channel: bordered box on the specific lane.
+    // Rendered as narrow top-strip indicators so they never clash with artifact fills.
+    // Global: 5px strip at the top of the signal area (7px if focused) + label chip.
+    // Per-channel: 3px strip at the top of the specific lane.
+    const SEG_STRIP_H = 5;
+    const SEG_STRIP_H_FOCUSED = 7;
     for (const seg of segmentOverlays) {
       const s0 = clamp(seg.start_sec, 0, timeWindow);
       const s1 = clamp(seg.end_sec, 0, timeWindow);
@@ -581,27 +555,23 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         const el = document.createElement("div");
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${top}px`,
-          `width:${bw}px`, `height:${laneH}px`,
-          `background:${seg.color}`,
-          `border:2px solid ${seg.borderColor}`,
-          "border-radius:2px", "pointer-events:none", "box-sizing:border-box",
-          seg.isFocused ? `z-index:10;box-shadow:0 0 8px ${seg.borderColor}` : "z-index:1",
+          `width:${bw}px`, "height:3px",
+          `background:${seg.borderColor}`,
+          "border-radius:1px", "pointer-events:none", "box-sizing:border-box",
+          seg.isFocused ? `z-index:10;box-shadow:0 0 4px ${seg.borderColor}` : "z-index:2",
         ].join(";");
         artifactRef.current?.appendChild(el);
       } else {
+        const stripH = seg.isFocused ? SEG_STRIP_H_FOCUSED : SEG_STRIP_H;
         const el = document.createElement("div");
         el.style.cssText = [
-          "position:absolute", `left:${x1}px`, `top:0`,
-          `width:${bw}px`, `height:${signalH}px`,
-          `background:${seg.isFocused ? faintFill(seg.color, 0.18) : seg.color}`,
-          `border-left:2px solid ${seg.borderColor}`,
-          `border-right:1px solid ${seg.borderColor}`,
-          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
-          seg.isFocused
-            ? `z-index:10;box-shadow:0 0 16px ${seg.borderColor}`
-            : "z-index:1",
+          "position:absolute", `left:${x1}px`, `top:${PAD}px`,
+          `width:${bw}px`, `height:${stripH}px`,
+          `background:${seg.borderColor}`,
+          "border-radius:1px", "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+          seg.isFocused ? `z-index:10;box-shadow:0 0 6px ${seg.borderColor}` : "z-index:2",
         ].join(";");
-        if (bw >= 16) el.appendChild(makeChip(abbrev(seg.label), seg.borderColor));
+        if (bw >= 20) el.appendChild(makeChip(abbrev(seg.label), seg.borderColor));
         artifactRef.current?.appendChild(el);
       }
     }
@@ -801,8 +771,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
-      const mask = buildMaskForChannel(chIdx);
-      const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, mask, labelW);
+      const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
 
       // create or update line — Line2 renders connected polyline at real pixel width
       const existing = lineStateRef.current.get(chIdx);
@@ -892,8 +861,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     highlightInterval,
     segmentOverlays,
     channelColors,
-    showArtifactsAsRed,
-    suppressArtifacts,
     colors,
     labelColumnWidth,
     hfFilter,
