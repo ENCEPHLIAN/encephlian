@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
@@ -24,23 +24,6 @@ interface Selection {
   endTime: number;
 }
 
-interface HighlightInterval {
-  start_sec: number; // window-relative seconds
-  end_sec: number;   // window-relative seconds
-  label?: string;
-  color?: string;    // CSS color for the overlay
-}
-
-interface SegmentOverlay {
-  start_sec: number; // window-relative seconds
-  end_sec: number;   // window-relative seconds
-  label: string;
-  color: string;     // CSS background color
-  borderColor: string; // CSS border color
-  isFocused?: boolean;
-  channel?: number;  // specific channel index, or undefined for all
-}
-
 export interface WebGLEEGViewerProps {
   signals: number[][] | null; // IMPORTANT: expected to be WINDOWED already (length ≈ timeWindow*fs)
   channelLabels: string[];
@@ -52,8 +35,6 @@ export interface WebGLEEGViewerProps {
   theme: string;
   markers?: Marker[];
   artifactIntervals?: ArtifactInterval[];
-  highlightInterval?: HighlightInterval | null; // focused segment highlight (deprecated, use segmentOverlays)
-  segmentOverlays?: SegmentOverlay[]; // colored segment overlays
   channelColors?: string[];
   labelColumnWidth?: number; // px width for channel label panel (0 = overlay labels, >0 = dedicated column)
   hfFilter?: number;         // high-frequency cutoff Hz (lowpass) — 0 = off
@@ -240,8 +221,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers = [],
     artifactIntervals = [],
-    highlightInterval = null,
-    segmentOverlays = [],
     channelColors = [],
     labelColumnWidth = 80,
     hfFilter = 0,
@@ -278,7 +257,34 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     new Map(),
   );
 
-  // simple selection not needed for MVP now; we keep click-to-seek
+  // ── Ruler state (null = hidden) ──────────────────────────────────────────────
+  // rulerPct: fraction within signal area [0,1]
+  const [rulerPct, setRulerPct] = useState<number | null>(null);
+  const [showLegend, setShowLegend] = useState(false);
+  const rulerDragRef = useRef<{ active: boolean; startClientX: number; startPct: number } | null>(null);
+
+  // Ruler drag handlers
+  const onRulerHandlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    rulerDragRef.current = { active: true, startClientX: e.clientX, startPct: rulerPct ?? 0 };
+  }, [rulerPct]);
+
+  const onRulerHandlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!rulerDragRef.current?.active || !containerRef.current) return;
+    const lw = Math.max(0, labelColumnWidth);
+    const signalW = Math.max(1, containerRef.current.clientWidth - lw);
+    const delta = e.clientX - rulerDragRef.current.startClientX;
+    const newPct = Math.max(0, Math.min(1, rulerDragRef.current.startPct + delta / signalW));
+    setRulerPct(newPct);
+  }, [labelColumnWidth]);
+
+  const onRulerHandlePointerUp = useCallback((e: React.PointerEvent) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    if (rulerDragRef.current) rulerDragRef.current.active = false;
+  }, []);
+
+  // click-to-seek (existing behavior)
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       if (!containerRef.current) return;
@@ -533,73 +539,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       }
     }
 
-    // ── Segment overlays ────────────────────────────────────────────────────────
-    // Rendered as narrow top-strip indicators so they never clash with artifact fills.
-    // Global: 5px strip at the top of the signal area (7px if focused) + label chip.
-    // Per-channel: 3px strip at the top of the specific lane.
-    const SEG_STRIP_H = 5;
-    const SEG_STRIP_H_FOCUSED = 7;
-    for (const seg of segmentOverlays) {
-      const s0 = clamp(seg.start_sec, 0, timeWindow);
-      const s1 = clamp(seg.end_sec, 0, timeWindow);
-      if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
-
-      const x1 = labelW + (s0 / timeWindow) * signalW;
-      const x2 = labelW + (s1 / timeWindow) * signalW;
-      const bw = Math.max(3, x2 - x1);
-
-      if (seg.channel != null) {
-        const di = channels.indexOf(seg.channel);
-        if (di < 0) continue;
-        const top = PAD + di * laneH;
-        const el = document.createElement("div");
-        el.style.cssText = [
-          "position:absolute", `left:${x1}px`, `top:${top}px`,
-          `width:${bw}px`, "height:3px",
-          `background:${seg.borderColor}`,
-          "border-radius:1px", "pointer-events:none", "box-sizing:border-box",
-          seg.isFocused ? `z-index:10;box-shadow:0 0 4px ${seg.borderColor}` : "z-index:2",
-        ].join(";");
-        artifactRef.current?.appendChild(el);
-      } else {
-        const stripH = seg.isFocused ? SEG_STRIP_H_FOCUSED : SEG_STRIP_H;
-        const el = document.createElement("div");
-        el.style.cssText = [
-          "position:absolute", `left:${x1}px`, `top:${PAD}px`,
-          `width:${bw}px`, `height:${stripH}px`,
-          `background:${seg.borderColor}`,
-          "border-radius:1px", "pointer-events:none", "box-sizing:border-box", "overflow:visible",
-          seg.isFocused ? `z-index:10;box-shadow:0 0 6px ${seg.borderColor}` : "z-index:2",
-        ].join(";");
-        if (bw >= 20) el.appendChild(makeChip(abbrev(seg.label), seg.borderColor));
-        artifactRef.current?.appendChild(el);
-      }
-    }
-
-    // Legacy focused segment highlight overlay (blue) - for backwards compatibility
-    if (highlightInterval && segmentOverlays.length === 0) {
-      const s0 = clamp(highlightInterval.start_sec, 0, timeWindow);
-      const s1 = clamp(highlightInterval.end_sec, 0, timeWindow);
-      if (s1 > 0 && s0 < timeWindow && s1 > s0) {
-        const x1 = labelW + (s0 / timeWindow) * signalW;
-        const x2 = labelW + (s1 / timeWindow) * signalW;
-        
-        const el = document.createElement("div");
-        el.style.cssText = [
-          "position:absolute",
-          `left:${x1}px`,
-          `top:0`,
-          `width:${Math.max(2, x2 - x1)}px`,
-          `height:100%`,
-          `background:${colors.highlightBg}`,
-          `border-left:2px solid ${colors.highlightBorder}`,
-          `border-right:2px solid ${colors.highlightBorder}`,
-          "pointer-events:none",
-          "box-sizing:border-box",
-        ].join(";");
-        artifactRef.current?.appendChild(el);
-      }
-    }
     gridRef.current.forEach((l) => {
       scene.remove(l);
       l.geometry.dispose();
@@ -858,8 +797,6 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     theme,
     markers,
     artifactIntervals,
-    highlightInterval,
-    segmentOverlays,
     channelColors,
     colors,
     labelColumnWidth,
@@ -902,13 +839,214 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     return () => cancelAnimationFrame(raf);
   }, [updateCursor]);
 
+  // ── Legend entries derived from artifact data ────────────────────────────────
+  const legendEntries = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const a of artifactIntervals) {
+      const lbl = (a as any).label ?? "Artifact";
+      const br = (a as any).borderColor ?? (theme === "dark" ? "rgba(239,68,68,0.55)" : "rgba(220,38,38,0.45)");
+      if (!seen.has(lbl)) seen.set(lbl, br);
+    }
+    if (seen.size === 0 && artifactIntervals.length > 0) {
+      seen.set("Artifact", theme === "dark" ? "rgba(239,68,68,0.55)" : "rgba(220,38,38,0.45)");
+    }
+    return [...seen.entries()].map(([label, color]) => ({ label, color }));
+  }, [artifactIntervals, theme]);
+
+  // ── Derived ruler display values ──────────────────────────────────────────────
+  const rulerTimeSec = rulerPct != null ? rulerPct * timeWindow : null;
+  // CSS-based ruler left: label width anchors the signal start, pct scales the remainder
+  const rulerLeftCss = rulerPct != null
+    ? `calc(${(labelColumnWidth * (1 - rulerPct)).toFixed(2)}px + ${(rulerPct * 100).toFixed(4)}%)`
+    : "0";
+
+  const isDark = theme === "dark";
+  const uiPanelBg = isDark ? "rgba(14,14,18,0.92)" : "rgba(248,248,250,0.95)";
+  const uiBorder = isDark ? "rgba(60,60,70,0.8)" : "rgba(180,185,195,0.9)";
+  const uiText = isDark ? "#d4d4d8" : "#27272a";
+  const rulerColor = isDark ? "#22d3ee" : "#4f46e5";
+
   return (
     <div
       ref={containerRef}
       className="w-full h-full relative cursor-crosshair"
-      style={{ borderRadius: 6, overflow: "hidden", background: theme === "dark" ? "#0a0a0a" : "#fafafa" }}
+      style={{ borderRadius: 6, overflow: "hidden", background: isDark ? "#0a0a0a" : "#fafafa" }}
       onMouseDown={onMouseDown}
-    />
+    >
+      {/* ── Ruler ──────────────────────────────────────────────────────────────── */}
+      {rulerPct != null && (
+        <div
+          style={{
+            position: "absolute",
+            left: rulerLeftCss,
+            top: 0,
+            bottom: 20,
+            width: 1,
+            background: rulerColor,
+            opacity: 0.75,
+            pointerEvents: "none",
+            zIndex: 15,
+            transform: "translateX(-0.5px)",
+          }}
+        >
+          {/* Handle — draggable */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: 14,
+              height: 14,
+              borderRadius: "50%",
+              background: rulerColor,
+              cursor: "ew-resize",
+              pointerEvents: "auto",
+              zIndex: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onPointerDown={onRulerHandlePointerDown}
+            onPointerMove={onRulerHandlePointerMove}
+            onPointerUp={onRulerHandlePointerUp}
+          />
+          {/* Time label */}
+          {rulerTimeSec != null && (
+            <div
+              style={{
+                position: "absolute",
+                top: 18,
+                left: 6,
+                background: uiPanelBg,
+                border: `1px solid ${uiBorder}`,
+                color: rulerColor,
+                fontSize: 10,
+                fontFamily: "ui-monospace, monospace",
+                fontWeight: 700,
+                padding: "1px 5px",
+                borderRadius: 3,
+                pointerEvents: "none",
+                whiteSpace: "nowrap",
+                lineHeight: "14px",
+              }}
+            >
+              {rulerTimeSec.toFixed(2)}s
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── UI controls (ruler toggle + legend toggle) ──────────────────────── */}
+      <div
+        style={{
+          position: "absolute",
+          top: 6,
+          right: 8,
+          display: "flex",
+          gap: 4,
+          zIndex: 20,
+          pointerEvents: "auto",
+        }}
+      >
+        {/* Ruler button */}
+        <button
+          title={rulerPct != null ? "Remove ruler" : "Place ruler"}
+          onClick={() => {
+            if (rulerPct != null) {
+              setRulerPct(null);
+            } else {
+              setRulerPct(0.5);
+            }
+          }}
+          style={{
+            background: rulerPct != null ? rulerColor : uiPanelBg,
+            border: `1px solid ${rulerPct != null ? rulerColor : uiBorder}`,
+            color: rulerPct != null ? (isDark ? "#000" : "#fff") : uiText,
+            borderRadius: 4,
+            fontSize: 10,
+            fontFamily: "ui-monospace, monospace",
+            fontWeight: 700,
+            padding: "2px 7px",
+            cursor: "pointer",
+            lineHeight: "14px",
+            letterSpacing: "0.04em",
+          }}
+        >
+          RULER
+        </button>
+        {/* Legend button */}
+        {legendEntries.length > 0 && (
+          <button
+            title={showLegend ? "Hide legend" : "Show legend"}
+            onClick={() => setShowLegend((v) => !v)}
+            style={{
+              background: showLegend ? uiBorder : uiPanelBg,
+              border: `1px solid ${uiBorder}`,
+              color: uiText,
+              borderRadius: 4,
+              fontSize: 10,
+              fontFamily: "ui-monospace, monospace",
+              fontWeight: 700,
+              padding: "2px 7px",
+              cursor: "pointer",
+              lineHeight: "14px",
+              letterSpacing: "0.04em",
+            }}
+          >
+            KEY
+          </button>
+        )}
+      </div>
+
+      {/* ── Legend panel ───────────────────────────────────────────────────────── */}
+      {showLegend && legendEntries.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            top: 30,
+            right: 8,
+            background: uiPanelBg,
+            border: `1px solid ${uiBorder}`,
+            borderRadius: 5,
+            padding: "6px 8px",
+            zIndex: 20,
+            pointerEvents: "none",
+            display: "flex",
+            flexDirection: "column",
+            gap: 3,
+          }}
+        >
+          {legendEntries.map(({ label, color }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <div
+                style={{
+                  width: 10,
+                  height: 10,
+                  borderRadius: 2,
+                  background: color,
+                  border: `1px solid ${color}`,
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 9,
+                  fontFamily: "ui-monospace, monospace",
+                  fontWeight: 700,
+                  color: uiText,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

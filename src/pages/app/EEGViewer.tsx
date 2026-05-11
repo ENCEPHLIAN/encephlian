@@ -672,33 +672,6 @@ export default function EEGViewer() {
       .map((a, i) => ({ id: `ann-${i}`, timestamp_sec: a.start_sec - windowStart, marker_type: "event", label: a.label ?? "annotation" }));
   }, [annotations, windowStart, windowSec]);
 
-  const winSegments = useMemo(() => {
-    if (!showSegments || !segments.length) return [];
-    const we = windowStart + windowSec;
-    return segments
-      .filter(s => s.t_end_s > windowStart && s.t_start_s < we)
-      .map(s => {
-        const color = getSegmentColor(s.label);
-        const focused = !!focusedSeg && s.t_start_s === focusedSeg.t_start_s && s.label === focusedSeg.label;
-        return {
-          start_sec: Math.max(0, s.t_start_s - windowStart),
-          end_sec:   Math.min(windowSec, s.t_end_s - windowStart),
-          label: s.label,
-          color:       focused ? "rgba(59,130,246,0.25)" : color.bg,
-          borderColor: focused ? "rgba(59,130,246,0.8)"  : color.border,
-          isFocused: focused,
-          channel: s.channel_index ?? undefined,
-        };
-      });
-  }, [segments, showSegments, windowStart, windowSec, focusedSeg]);
-
-  const winHighlight = useMemo(() => {
-    if (!focusedSeg || showSegments) return null;
-    const we = windowStart + windowSec;
-    if (focusedSeg.t_end_s <= windowStart || focusedSeg.t_start_s >= we) return null;
-    return { start_sec: Math.max(0, focusedSeg.t_start_s - windowStart), end_sec: Math.min(windowSec, focusedSeg.t_end_s - windowStart), label: focusedSeg.label };
-  }, [focusedSeg, showSegments, windowStart, windowSec]);
-
   // ── Overlay legend counts ─────────────────────────────────────────────────────
   const artifactCount  = artifacts.length;
   const annotationCount = annotations.length;
@@ -1093,8 +1066,6 @@ export default function EEGViewer() {
               theme={theme ?? "dark"}
               markers={winMarkers}
               artifactIntervals={winArtifacts}
-              highlightInterval={winHighlight}
-              segmentOverlays={winSegments}
               hfFilter={hfFilter}
               lfFilter={lfFilter}
               notchFilter={notchFilter}
