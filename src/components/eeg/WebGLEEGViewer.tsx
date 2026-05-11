@@ -576,9 +576,9 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
         "position:absolute",
         `left:${x1}px`, `top:${PAD}px`,
         `width:${bw}px`, `height:${signalH - PAD * 2}px`,
-        `border:1.5px solid ${br}`,
+        `border:1px solid ${faintFill(br, 0.45)}`,
         `border-radius:2px`,
-        `background:${faintFill(bg, 0.9)}`,
+        `background:${faintFill(bg, 0.08)}`,
         "pointer-events:none", "box-sizing:border-box", "overflow:visible",
       ].join(";");
       if (bw >= 16) el.appendChild(makeChip(abbrev(seg.label), br));
