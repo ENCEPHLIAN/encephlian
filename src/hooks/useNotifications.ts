@@ -63,7 +63,13 @@ function saveReadSet(userId: string, ids: Set<string>) {
 /* ─── Notification builders ─────────────────────────────── */
 
 function patientLabel(meta: any): string {
-  return meta?.patient_name || meta?.patient_id || "Unknown patient";
+  const name = meta?.patient_name;
+  if (name && name !== "Pending" && name !== "X") return name;
+  const pid = meta?.patient_id;
+  if (pid && !pid.startsWith("PT-") && pid !== "X") return pid;
+  const fname = meta?.original_filename;
+  if (fname) return fname.replace(/\.[^.]+$/, "");
+  return "Unknown patient";
 }
 
 function buildTriageComplete(study: any): AppNotification {

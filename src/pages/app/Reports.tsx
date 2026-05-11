@@ -32,6 +32,7 @@ import {
 import { Loader2, FileText, Download, Eye, Search, Filter, CheckCircle2, Clock, XCircle, Brain, ArrowRight } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
+import { getPatientLabel } from "@/lib/studyDisplay";
 
 type Report = {
   id: string;
@@ -91,7 +92,7 @@ const ReportRow = memo(function ReportRow({
       </TableCell>
       <TableCell>
         <div>
-          <span className="font-medium">{meta?.patient_name || "Unknown"}</span>
+          <span className="font-medium">{getPatientLabel(report.studies as any)}</span>
           {ageGenderStr && (
             <span className="text-xs text-muted-foreground ml-1">({ageGenderStr})</span>
           )}
@@ -188,7 +189,7 @@ export default function Reports() {
       if (search) {
         const searchLower = search.toLowerCase();
         const meta = report.studies?.meta as any;
-        const matchesPatient = meta?.patient_name?.toLowerCase().includes(searchLower);
+        const matchesPatient = getPatientLabel(report.studies as any).toLowerCase().includes(searchLower) || meta?.patient_name?.toLowerCase().includes(searchLower);
         const matchesPatientId = meta?.patient_id?.toLowerCase().includes(searchLower);
         const matchesReportId = report.id.toLowerCase().includes(searchLower);
         const matchesClinic = report.studies?.clinics?.name?.toLowerCase().includes(searchLower);
@@ -321,7 +322,7 @@ export default function Reports() {
                   >
                     <Brain className="h-4 w-4 text-amber-600 shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{meta?.patient_name || "Unknown Patient"}</p>
+                      <p className="text-sm font-medium truncate">{getPatientLabel(study)}</p>
                       <p className="text-xs text-muted-foreground">
                         {study.clinics?.name || "—"} · {dayjs(study.triage_completed_at || study.updated_at).format("MMM D, h:mm A")}
                       </p>

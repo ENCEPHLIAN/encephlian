@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import { toast } from "sonner";
+import { getPatientLabel } from "@/lib/studyDisplay";
 
 type Report = {
   id: string;
@@ -283,7 +284,7 @@ export default function ReportDetail() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Patient</p>
-              <p className="font-medium">{meta?.patient_name || "Unknown"}</p>
+              <p className="font-medium">{getPatientLabel(report.studies as any)}</p>
               <p className="text-xs text-muted-foreground">
                 {meta?.patient_id} • {meta?.patient_age}y/{meta?.patient_gender?.charAt(0)}
               </p>

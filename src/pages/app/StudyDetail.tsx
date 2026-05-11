@@ -51,6 +51,7 @@ import { studyTriageIsPaid } from "@/shared/tokenEconomy";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import type { PilotStudy } from "@/hooks/usePilotData";
 import SlaSelectionModal from "@/components/dashboard/SlaSelectionModal";
+import { PatientMetaEditor } from "@/components/study/PatientMetaEditor";
 
 dayjs.extend(relativeTime);
 
@@ -392,8 +393,8 @@ export default function StudyDetail() {
 
         const blob = await renderPDF(
           ReportDocument({
-            patientName: meta?.patient_name || "Unknown Patient",
-            patientId: meta?.patient_id,
+            patientName: patientName || "Unknown Patient",
+            patientId: patientId || undefined,
             studyDate: dayjs(study.created_at).format("MMMM D, YYYY"),
             signedDate: dayjs(report?.signed_at || report?.created_at || new Date()).format("MMMM D, YYYY"),
             studyId: study.id,
@@ -452,11 +453,24 @@ export default function StudyDetail() {
     );
   }
 
-  const meta = study.meta as any;
-  const patientName = meta?.patient_name || "Unknown Patient";
-  const patientId = meta?.patient_id || `ID-${study.id.slice(0, 6).toUpperCase()}`;
-  const patientAge = meta?.patient_age;
-  const patientGender = meta?.patient_gender;
+  const [localMeta, setLocalMeta] = useState<any>(study.meta);
+  // Sync when the study query refetches (realtime / manual)
+  useEffect(() => { setLocalMeta(study.meta); }, [study.meta]);
+  const meta = localMeta as any;
+
+  const isBlankName = (v: string | null | undefined) =>
+    !v || v === "Pending" || v === "X" || v.trim() === "";
+  const isBlankId = (v: string | null | undefined) =>
+    !v || v === "Pending" || v.startsWith("PT-") || v === "X" || v.trim() === "";
+
+  const patientName   = !isBlankName(meta?.patient_name)
+    ? meta.patient_name
+    : meta?.original_filename
+      ? meta.original_filename.replace(/\.[^.]+$/, "")
+      : null;
+  const patientId     = !isBlankId(meta?.patient_id) ? meta.patient_id : null;
+  const patientAge    = meta?.patient_age;
+  const patientGender = meta?.patient_gender ?? meta?.patient_sex;
   const sourceFileLine = formatStudySourceLine(meta, study.original_format ?? null);
   const stateConfig = STATE_CONFIG[study.state || "uploaded"] || STATE_CONFIG.uploaded;
   const triageConfig = TRIAGE_STATUS_CONFIG[study.triage_status || "pending"] || TRIAGE_STATUS_CONFIG.pending;
@@ -500,7 +514,9 @@ export default function StudyDetail() {
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div className="space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
-                <CardTitle className="text-2xl">{patientName}</CardTitle>
+                <CardTitle className="text-2xl">
+                  {patientName ?? <span className="font-normal text-lg text-muted-foreground italic">No patient name</span>}
+                </CardTitle>
                 <Badge variant="outline" className="font-mono text-xs font-normal shrink-0" title="Stable study reference">
                   {studyHandle}
                 </Badge>
@@ -543,11 +559,20 @@ export default function StudyDetail() {
                   </Badge>
                 )}
               </div>
-              <CardDescription className="flex items-center gap-2">
-                <User className="h-3.5 w-3.5" />
-                {patientId}
-                {patientAge && ` • ${patientAge}y`}
-                {patientGender && `/${patientGender.charAt(0).toUpperCase()}`}
+              <CardDescription className="flex items-center gap-2 flex-wrap">
+                <User className="h-3.5 w-3.5 shrink-0" />
+                {patientId
+                  ? <span className="font-mono">{patientId}</span>
+                  : <span className="italic text-muted-foreground/60">No patient ID</span>}
+                {patientAge && <span>• {patientAge}y</span>}
+                {patientGender && patientGender !== "X" && <span>/ {patientGender === "M" ? "Male" : patientGender === "F" ? "Female" : patientGender}</span>}
+                {meta?.indication && <span className="text-muted-foreground/80">• {meta.indication}</span>}
+                <PatientMetaEditor
+                  studyId={study.id}
+                  meta={meta ?? {}}
+                  onSaved={setLocalMeta}
+                  compact
+                />
               </CardDescription>
               {sourceFileLine && (
                 <p className="text-sm text-muted-foreground flex items-center gap-2 pt-0.5">

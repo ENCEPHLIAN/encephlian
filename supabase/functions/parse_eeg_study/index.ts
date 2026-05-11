@@ -226,10 +226,43 @@ serve(async (req) => {
       },
     });
 
+    // Merge patient fields from EDF header into studies.meta (only fill null/missing slots)
+    if (metadata.patient_id) {
+      try {
+        const rawPatient = metadata.patient_id.trim();
+        const parts = rawPatient.split(/\s+/);
+        const edfCode = parts[0] !== "X" ? parts[0] : null;
+        const edfSex  = parts[1] === "M" ? "M" : parts[1] === "F" ? "F" : null;
+        const edfDob  = parts[2] && parts[2] !== "X" ? parts[2] : null;
+        const edfName = parts.slice(3).join(" ").replace(/_/g, " ").trim() || null;
+
+        const { data: row } = await supabase.from("studies").select("meta").eq("id", study_id).single();
+        const cur = (row?.meta ?? {}) as Record<string, string | null>;
+
+        const patch: Record<string, string | null> = {};
+        const isEmpty = (v: string | null | undefined) => !v || v === "Pending" || v.startsWith("PT-") || v === "X";
+
+        if (edfName && isEmpty(cur.patient_name))  patch.patient_name = edfName;
+        if (edfCode && isEmpty(cur.patient_id))    patch.patient_id   = edfCode;
+        if (edfSex  && !cur.patient_sex)           patch.patient_sex  = edfSex;
+        if (edfDob  && !cur.patient_dob)           patch.patient_dob  = edfDob;
+
+        if (metadata.start_date && metadata.start_time && !cur.recording_date) {
+          patch.recording_date = `${metadata.start_date} ${metadata.start_time}`;
+        }
+
+        if (Object.keys(patch).length > 0) {
+          await supabase.from("studies").update({ meta: { ...cur, ...patch } }).eq("id", study_id);
+        }
+      } catch (metaErr) {
+        console.warn("[parse_eeg_study] meta merge non-fatal:", metaErr);
+      }
+    }
+
     // Update study state
     await supabase
       .from('studies')
-      .update({ 
+      .update({
         state: 'parsed',
         srate_hz: metadata.sampleRate,
         duration_min: Math.round(metadata.duration / 60),

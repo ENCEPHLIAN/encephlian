@@ -17,7 +17,8 @@ import { useSku } from "@/hooks/useSku";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { sha256HexFromFile } from "@/lib/fileSha256";
-import { getStudyHandle } from "@/lib/studyDisplay";
+import { getStudyHandle, getPatientLabel } from "@/lib/studyDisplay";
+import { extractEDFPatientMeta } from "@/lib/eeg/edf-patient";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -49,13 +50,15 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
   const meta = study.meta as any;
   const sourceLine = formatStudySourceLine(meta, study.original_format ?? null);
   const handle = getStudyHandle(study);
+  const displayName = getPatientLabel(study);
 
-  // Build anonymized patient demographics string
   const patientAge = meta?.patient_age;
-  const patientGender = meta?.patient_gender;
+  const patientGender = meta?.patient_gender ?? meta?.patient_sex;
+  const patientId = meta?.patient_id && !meta.patient_id.startsWith("PT-") && meta.patient_id !== "X"
+    ? meta.patient_id : null;
   const demographicsStr = [
     patientAge ? `${patientAge}y` : null,
-    patientGender ? patientGender.charAt(0).toUpperCase() : null
+    patientGender && patientGender !== "X" ? patientGender.charAt(0).toUpperCase() : null,
   ].filter(Boolean).join("/");
   
   return (
@@ -64,7 +67,7 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
         <div>
           <div className="font-medium text-sm flex flex-wrap items-center gap-x-2 gap-y-0.5">
             <span>
-              {meta?.patient_name || "Unknown"}
+              {displayName}
               {demographicsStr && (
                 <span className="text-muted-foreground font-normal ml-1.5 text-xs">
                   ({demographicsStr})
@@ -76,7 +79,7 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             </Badge>
           </div>
           <div className="text-xs text-muted-foreground">
-            {meta?.patient_id || "N/A"}
+            {patientId ?? <span className="italic opacity-50">No patient ID</span>}
             {study.sample && <Badge variant="outline" className="ml-1 text-[10px]">Sample</Badge>}
           </div>
           {sourceLine && (
@@ -248,10 +251,13 @@ function InternalStudiesView() {
 
     const uploadTid = toast.loading(`Preparing upload — ${file.name}`);
     try {
-      const contentSha256 = await sha256HexFromFile(file);
+      const [contentSha256, patientMeta] = await Promise.all([
+        sha256HexFromFile(file),
+        extractEDFPatientMeta(file),
+      ]);
 
       const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
-        body: { fileName: file.name, contentSha256 },
+        body: { fileName: file.name, contentSha256, patientMeta },
       });
       if (createError) {
         throw new Error(await formatEdgeFunctionError(createError, data));
@@ -364,8 +370,8 @@ function InternalStudiesView() {
 
         const blob = await renderPDF(
           ReportDocument({
-            patientName: meta?.patient_name || "Unknown Patient",
-            patientId: meta?.patient_id,
+            patientName: getPatientLabel(study) || "Unknown Patient",
+            patientId: meta?.patient_id?.startsWith("PT-") ? undefined : meta?.patient_id,
             studyDate: dayjs(study.created_at).format("MMMM D, YYYY"),
             signedDate: dayjs(report?.signed_at || report?.created_at || new Date()).format("MMMM D, YYYY"),
             studyId: study.id,

@@ -18,6 +18,7 @@ import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
+import { getPatientLabel } from "@/lib/studyDisplay";
 
 function getTriageResult(study: PilotStudy): { classification: string; confidence: number } | null {
   const report = study.ai_draft_json;
@@ -131,7 +132,7 @@ export default function PilotStudiesView() {
       const raw = study.ai_draft_json as any;
       if (raw) {
         const meta = study.meta as any;
-        const patientName = meta?.patient_name || "Unknown Patient";
+        const patientName = getPatientLabel(study);
         const patientId = meta?.patient_id ? ` · ${meta.patient_id}` : "";
         const reportDate = dayjs(study.triage_completed_at || study.created_at).format("MMMM D, YYYY");
         const score = raw.score || {};
@@ -324,7 +325,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">
-                          {meta?.patient_name || "Patient"}
+                          {getPatientLabel(study)}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
                           {dayjs(study.created_at).format("MMM D, h:mm A")}
@@ -379,7 +380,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                       </div>
                       <div className="min-w-0">
                         <p className="font-medium text-sm truncate">
-                          {meta?.patient_name || "Patient"}
+                          {getPatientLabel(study)}
                         </p>
                         <p className="text-[11px] text-muted-foreground">{label}</p>
                         {src && (
@@ -444,7 +445,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
                         <p className="font-medium text-sm truncate">
-                          {meta?.patient_name || "Patient"}
+                          {getPatientLabel(study)}
                         </p>
                         {triageResult ? (
                           <Badge className={cn(

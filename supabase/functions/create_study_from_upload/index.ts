@@ -45,6 +45,12 @@ serve(async (req) => {
     const body = await req.json() as {
       fileName?: string;
       contentSha256?: string;
+      patientMeta?: {
+        patient_name?: string;
+        patient_id?: string;
+        patient_sex?: string;
+        patient_dob?: string;
+      };
     };
     const fileName = body.fileName;
     if (!fileName) return new Response(
@@ -137,7 +143,13 @@ serve(async (req) => {
         sla: "TAT",
         reference,
         source_content_sha256: contentSha256,
-        meta: { patient_name: "Pending", patient_id: `PT-${Date.now()}`, original_filename: fileName },
+        meta: {
+          patient_name:   body.patientMeta?.patient_name   ?? null,
+          patient_id:     body.patientMeta?.patient_id     ?? null,
+          patient_sex:    body.patientMeta?.patient_sex    ?? null,
+          patient_dob:    body.patientMeta?.patient_dob    ?? null,
+          original_filename: fileName,
+        },
         original_format: fileType,
       })
       .select().single();

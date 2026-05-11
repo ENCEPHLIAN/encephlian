@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMemo } from "react";
 import { toast } from "sonner";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { getPatientLabel } from "@/lib/studyDisplay";
 
 export interface StudyFile {
   id: string;
@@ -128,8 +129,7 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         if (error) throw error;
 
         return (data || []).map((f: any) => {
-          const meta = f.studies?.meta as any;
-          const patientLabel = meta?.patient_name || meta?.patient_id || f.study_id?.slice(0, 8) || "Unknown";
+          const patientLabel = getPatientLabel(f.studies ?? { id: f.study_id ?? "" });
           const fileName = f.path?.split("/").pop() || f.path || f.id;
           return {
             id: f.id,
@@ -155,8 +155,7 @@ export function useStorageFiles(bucket: string, path: string, enabled: boolean =
         if (error) throw error;
 
         return (data || []).map((r: any) => {
-          const meta = r.studies?.meta as any;
-          const patientLabel = meta?.patient_name || meta?.patient_id || r.study_id?.slice(0, 8) || "Unknown";
+          const patientLabel = getPatientLabel(r.studies ?? { id: r.study_id ?? "" });
           const fileName = r.pdf_path?.split("/").pop() || `report_${r.study_id?.slice(0, 8)}.pdf`;
           return {
             id: r.id,

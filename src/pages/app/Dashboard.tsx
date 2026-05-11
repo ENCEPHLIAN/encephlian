@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDashboardData, Study } from "@/hooks/useDashboardData";
 import { useSku } from "@/hooks/useSku";
 import PilotDashboard from "@/components/dashboard/PilotDashboard";
-import { getStudyHandle } from "@/lib/studyDisplay";
+import { getStudyHandle, getPatientLabel } from "@/lib/studyDisplay";
 
 const MemoizedKPICard = memo(KPICard);
 const MemoizedPendingTriageSection = memo(PendingTriageSection);
@@ -274,7 +274,7 @@ export default function Dashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium truncate leading-snug">
-                        {meta?.patient_name || "Unknown Patient"}
+                        {getPatientLabel(study)}
                         {ageGenderStr && (
                           <span className="text-muted-foreground font-normal text-xs ml-1.5">({ageGenderStr})</span>
                         )}
