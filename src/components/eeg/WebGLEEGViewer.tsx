@@ -500,12 +500,12 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
     };
 
     // ── Artifact overlays ────────────────────────────────────────────────────────
-    // Adaptive fill opacity: when most of the window is flagged as artifact,
-    // drop the fill to near-invisible so waveforms remain readable.
+    // Global coverage determines fill opacity — if most of window is artifact,
+    // use near-invisible fill so waveforms stay readable.
     const globalArtCoverage = artifactIntervals
       .filter(a => a.channel == null)
       .reduce((acc, a) => acc + Math.max(0, Math.min(a.end_sec, timeWindow) - Math.max(a.start_sec, 0)), 0) / Math.max(timeWindow, 1);
-    const artFillAlpha = globalArtCoverage > 0.7 ? 0.025 : globalArtCoverage > 0.4 ? 0.04 : 0.06;
+    const artFillAlpha = globalArtCoverage > 0.7 ? 0.02 : globalArtCoverage > 0.4 ? 0.035 : 0.055;
 
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
@@ -519,17 +519,30 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
       const br = (a as any).borderColor ?? colors.artifactBorderRed;
       const lbl = (a as any).label ?? "Artifact";
 
-      // Only draw global (channel==null) artifacts — per-channel bands on the same interval
-      // create a visual double when both are present in the data.
-      if (a.channel != null) continue;
       const el = document.createElement("div");
-      el.style.cssText = [
-        "position:absolute", `left:${x1}px`, `top:${PAD}px`,
-        `width:${bw}px`, `height:${signalH - PAD * 2}px`,
-        `background:linear-gradient(to bottom,${br} 0,${br} 2px,${faintFill(bg, artFillAlpha)} 2px)`,
-        "pointer-events:none", "box-sizing:border-box", "overflow:visible",
-      ].join(";");
-      if (bw >= 24) el.appendChild(makeChip(abbrev(lbl), br));
+      if (a.channel == null) {
+        // Global artifact — full signal height, left-accent + subtle fill
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:${PAD}px`,
+          `width:${bw}px`, `height:${signalH - PAD * 2}px`,
+          `border-left:2px solid ${br}`,
+          `background:${faintFill(bg, artFillAlpha)}`,
+          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+        ].join(";");
+        if (bw >= 30) el.appendChild(makeChip(abbrev(lbl), br));
+      } else {
+        // Per-channel artifact — render only in the specific channel's lane
+        const chIdx = a.channel;
+        if (chIdx < 0 || chIdx >= nCh) continue;
+        const yTop = PAD + chIdx * laneH;
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:${yTop + 1}px`,
+          `width:${bw}px`, `height:${Math.max(2, laneH - 2)}px`,
+          `border-left:2px solid ${br}`,
+          `background:${faintFill(bg, Math.min(0.12, artFillAlpha * 2))}`,
+          "pointer-events:none", "box-sizing:border-box",
+        ].join(";");
+      }
       artifactRef.current?.appendChild(el);
     }
 
@@ -835,10 +848,13 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
 
   // ── L-ruler dimensions ───────────────────────────────────────────────────────
   // Vertical arm = reference µV, horizontal arm = 1 second.
-  // Pick a ref amplitude that yields a visible arm (~40-90px).
   const PX_PER_MM = 96 / 25.4; // 3.779 px/mm at 96 DPI
   const refUv = uvPerMm <= 15 ? 100 : uvPerMm <= 50 ? 200 : 500;
   const armYPx = Math.max(20, Math.round((refUv / Math.max(uvPerMm, 0.1)) * PX_PER_MM));
+  // Horizontal arm = 1 second in pixels (signal area width / timeWindow)
+  const containerW = containerRef.current?.clientWidth ?? 800;
+  const sigW = Math.max(1, containerW - Math.max(0, labelColumnWidth));
+  const armXPx = Math.max(40, Math.round(sigW / timeWindow));
 
   const isDark = theme === "dark";
   const rulerStroke = isDark ? "rgba(180,185,200,0.75)" : "rgba(80,85,100,0.70)";
@@ -870,7 +886,7 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
             overflow: "hidden",
           }}
         >
-          {/* Anchor point — everything positioned relative to (rx%, ry%) */}
+          {/* Anchor point — corner of the L, positioned at (rx%, ry%) */}
           <div style={{
             position: "absolute",
             left: `${(rulerPos.x * 100).toFixed(4)}%`,
@@ -879,87 +895,42 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
             height: 0,
             overflow: "visible",
           }}>
-            {/* Vertical arm (upward) */}
-            <div style={{
-              position: "absolute",
-              left: 0,
-              top: -armYPx,
-              width: 1,
-              height: armYPx,
-              background: rulerStroke,
-            }} />
-            {/* Horizontal arm (rightward) — 1 second wide using parent-relative calc */}
-            <div style={{
-              position: "absolute",
-              left: 0,
-              top: -1,
-              width: `calc(100% / ${timeWindow})`,
-              height: 1,
-              background: rulerStroke,
-            }} />
-            {/* Tip tick at top of vertical arm */}
-            <div style={{
-              position: "absolute",
-              left: -3,
-              top: -armYPx,
-              width: 7,
-              height: 1,
-              background: rulerStroke,
-            }} />
-            {/* Tip tick at right end of horizontal arm */}
-            <div style={{
-              position: "absolute",
-              left: `calc(100% / ${timeWindow})`,
-              top: -4,
-              width: 1,
-              height: 7,
-              background: rulerStroke,
-              transform: "translateX(-1px)",
-            }} />
-            {/* Amplitude label (top of vertical arm) */}
-            <div style={{
-              position: "absolute",
-              left: 4,
-              top: -armYPx - 1,
-              fontSize: 9,
-              fontFamily: "ui-monospace, monospace",
-              fontWeight: 600,
-              color: rulerLabel,
-              whiteSpace: "nowrap",
-              lineHeight: "11px",
-              userSelect: "none",
-            }}>
+            {/* Vertical arm (upward, armYPx tall = refUv µV) */}
+            <div style={{ position:"absolute", left:0, top:-armYPx, width:1, height:armYPx, background:rulerStroke }} />
+            {/* Horizontal arm (rightward, armXPx wide = 1 second) */}
+            <div style={{ position:"absolute", left:0, top:-1, width:armXPx, height:1, background:rulerStroke }} />
+
+            {/* Y-arm: tip tick (top) */}
+            <div style={{ position:"absolute", left:-3, top:-armYPx, width:7, height:1, background:rulerStroke }} />
+            {/* Y-arm: mid tick (refUv/2) */}
+            <div style={{ position:"absolute", left:-3, top:-Math.round(armYPx/2), width:5, height:1, background:rulerStroke }} />
+
+            {/* X-arm: tip tick (1s) */}
+            <div style={{ position:"absolute", left:armXPx-1, top:-4, width:1, height:7, background:rulerStroke }} />
+            {/* X-arm: mid tick (0.5s) */}
+            <div style={{ position:"absolute", left:Math.round(armXPx/2), top:-3, width:1, height:5, background:rulerStroke }} />
+
+            {/* Y label: top — refUv */}
+            <div style={{ position:"absolute", left:5, top:-armYPx-1, fontSize:9, fontFamily:"ui-monospace,monospace", fontWeight:600, color:rulerLabel, whiteSpace:"nowrap", lineHeight:"11px", userSelect:"none" }}>
               {refUv}µV
             </div>
-            {/* Time label (right end of horizontal arm) */}
-            <div style={{
-              position: "absolute",
-              left: `calc(100% / ${timeWindow} + 3px)`,
-              top: -11,
-              fontSize: 9,
-              fontFamily: "ui-monospace, monospace",
-              fontWeight: 600,
-              color: rulerLabel,
-              whiteSpace: "nowrap",
-              lineHeight: "11px",
-              userSelect: "none",
-            }}>
+            {/* Y label: mid — refUv/2 */}
+            <div style={{ position:"absolute", left:5, top:-Math.round(armYPx/2)-5, fontSize:8, fontFamily:"ui-monospace,monospace", color:rulerLabel, whiteSpace:"nowrap", lineHeight:"10px", userSelect:"none", opacity:0.7 }}>
+              {Math.round(refUv/2)}µV
+            </div>
+
+            {/* X label: tip — 1s */}
+            <div style={{ position:"absolute", left:armXPx+3, top:-11, fontSize:9, fontFamily:"ui-monospace,monospace", fontWeight:600, color:rulerLabel, whiteSpace:"nowrap", lineHeight:"11px", userSelect:"none" }}>
               1s
             </div>
-            {/* Corner handle — the draggable grip */}
+            {/* X label: mid — 0.5s */}
+            <div style={{ position:"absolute", left:Math.round(armXPx/2)+2, top:-11, fontSize:8, fontFamily:"ui-monospace,monospace", color:rulerLabel, whiteSpace:"nowrap", lineHeight:"10px", userSelect:"none", opacity:0.7 }}>
+              0.5s
+            </div>
+
+            {/* Corner handle — draggable grip */}
             <div
-              style={{
-                position: "absolute",
-                left: -5,
-                top: -5,
-                width: 10,
-                height: 10,
-                borderRadius: 2,
-                background: rulerHandle,
-                cursor: "move",
-                pointerEvents: "auto",
-                zIndex: 16,
-              }}
+              style={{ position:"absolute", left:-5, top:-5, width:10, height:10, borderRadius:2, background:rulerHandle, cursor:"move", pointerEvents:"auto", zIndex:16 }}
               onPointerDown={onRulerHandlePointerDown}
               onPointerMove={onRulerHandlePointerMove}
               onPointerUp={onRulerHandlePointerUp}

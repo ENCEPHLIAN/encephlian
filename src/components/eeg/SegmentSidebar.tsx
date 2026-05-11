@@ -1,8 +1,6 @@
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronRight, List } from "lucide-react";
+import { List, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Segment {
@@ -13,43 +11,65 @@ export interface Segment {
   score?: number | null;
 }
 
-// Label to color mapping
+// ── Color palette ─────────────────────────────────────────────────────────────
 export const SEGMENT_LABEL_COLORS: Record<string, { bg: string; border: string; badge: string }> = {
-  seizure:       { bg: "rgba(239, 68, 68, 0.2)",   border: "rgba(239, 68, 68, 0.7)",   badge: "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30" },
-  spike:         { bg: "rgba(249, 115, 22, 0.2)",  border: "rgba(249, 115, 22, 0.7)",  badge: "bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30" },
-  // Clean v2 artifact classes
-  eye_movement:  { bg: "rgba(139, 92, 246, 0.2)",  border: "rgba(139, 92, 246, 0.7)",  badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
-  muscle:        { bg: "rgba(249, 115, 22, 0.15)", border: "rgba(249, 115, 22, 0.6)",  badge: "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/30" },
-  electrode:     { bg: "rgba(234, 179, 8, 0.18)",  border: "rgba(234, 179, 8, 0.65)",  badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
-  artifact:      { bg: "rgba(234, 179, 8, 0.2)",   border: "rgba(234, 179, 8, 0.7)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
-  noisy_channel: { bg: "rgba(234, 179, 8, 0.15)",  border: "rgba(234, 179, 8, 0.6)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
-  sleep_spindle: { bg: "rgba(168, 85, 247, 0.2)", border: "rgba(168, 85, 247, 0.7)", badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
-  k_complex: { bg: "rgba(139, 92, 246, 0.2)", border: "rgba(139, 92, 246, 0.7)", badge: "bg-violet-500/20 text-violet-700 dark:text-violet-400 border-violet-500/30" },
-  slow_wave: { bg: "rgba(99, 102, 241, 0.2)", border: "rgba(99, 102, 241, 0.7)", badge: "bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border-indigo-500/30" },
-  normal: { bg: "rgba(34, 197, 94, 0.15)", border: "rgba(34, 197, 94, 0.6)", badge: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30" },
-  alpha: { bg: "rgba(34, 197, 94, 0.2)", border: "rgba(34, 197, 94, 0.7)", badge: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30" },
-  beta: { bg: "rgba(6, 182, 212, 0.2)", border: "rgba(6, 182, 212, 0.7)", badge: "bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border-cyan-500/30" },
-  theta: { bg: "rgba(20, 184, 166, 0.2)", border: "rgba(20, 184, 166, 0.7)", badge: "bg-teal-500/20 text-teal-700 dark:text-teal-400 border-teal-500/30" },
-  delta: { bg: "rgba(59, 130, 246, 0.2)", border: "rgba(59, 130, 246, 0.7)", badge: "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30" },
+  seizure:       { bg: "rgba(239,68,68,0.18)",   border: "rgba(239,68,68,0.75)",   badge: "bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/30" },
+  spike:         { bg: "rgba(249,115,22,0.18)",  border: "rgba(249,115,22,0.75)",  badge: "bg-orange-500/20 text-orange-700 dark:text-orange-400 border-orange-500/30" },
+  eye_movement:  { bg: "rgba(139,92,246,0.18)",  border: "rgba(139,92,246,0.75)",  badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
+  muscle:        { bg: "rgba(249,115,22,0.12)",  border: "rgba(249,115,22,0.6)",   badge: "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/30" },
+  electrode:     { bg: "rgba(234,179,8,0.15)",   border: "rgba(234,179,8,0.65)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  electrode_noise: { bg: "rgba(234,179,8,0.15)", border: "rgba(234,179,8,0.65)",   badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  artifact:      { bg: "rgba(234,179,8,0.18)",   border: "rgba(234,179,8,0.7)",    badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  noisy_channel: { bg: "rgba(234,179,8,0.12)",   border: "rgba(234,179,8,0.6)",    badge: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/30" },
+  sleep_spindle: { bg: "rgba(168,85,247,0.18)",  border: "rgba(168,85,247,0.7)",   badge: "bg-purple-500/20 text-purple-700 dark:text-purple-400 border-purple-500/30" },
+  k_complex:     { bg: "rgba(139,92,246,0.18)",  border: "rgba(139,92,246,0.7)",   badge: "bg-violet-500/20 text-violet-700 dark:text-violet-400 border-violet-500/30" },
+  slow_wave:     { bg: "rgba(99,102,241,0.18)",  border: "rgba(99,102,241,0.7)",   badge: "bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border-indigo-500/30" },
+  normal:        { bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.6)",    badge: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30" },
+  alpha:         { bg: "rgba(34,197,94,0.15)",   border: "rgba(34,197,94,0.65)",   badge: "bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/30" },
+  beta:          { bg: "rgba(6,182,212,0.18)",   border: "rgba(6,182,212,0.7)",    badge: "bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border-cyan-500/30" },
+  theta:         { bg: "rgba(20,184,166,0.18)",  border: "rgba(20,184,166,0.7)",   badge: "bg-teal-500/20 text-teal-700 dark:text-teal-400 border-teal-500/30" },
+  delta:         { bg: "rgba(59,130,246,0.18)",  border: "rgba(59,130,246,0.7)",   badge: "bg-blue-500/20 text-blue-700 dark:text-blue-400 border-blue-500/30" },
 };
 
-const DEFAULT_COLOR = { bg: "rgba(148, 163, 184, 0.15)", border: "rgba(148, 163, 184, 0.5)", badge: "bg-slate-500/20 text-slate-700 dark:text-slate-400 border-slate-500/30" };
+const DEFAULT_COLOR = {
+  bg: "rgba(148,163,184,0.12)",
+  border: "rgba(148,163,184,0.5)",
+  badge: "bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30",
+};
 
 export function getSegmentColor(label: string) {
-  const lowerLabel = label.toLowerCase();
-  // Check for exact match first
-  if (SEGMENT_LABEL_COLORS[lowerLabel]) {
-    return SEGMENT_LABEL_COLORS[lowerLabel];
-  }
-  // Check for partial matches
-  for (const [key, color] of Object.entries(SEGMENT_LABEL_COLORS)) {
-    if (lowerLabel.includes(key) || key.includes(lowerLabel)) {
-      return color;
-    }
+  const lc = label.toLowerCase();
+  if (SEGMENT_LABEL_COLORS[lc]) return SEGMENT_LABEL_COLORS[lc];
+  for (const [k, v] of Object.entries(SEGMENT_LABEL_COLORS)) {
+    if (lc.includes(k) || k.includes(lc)) return v;
   }
   return DEFAULT_COLOR;
 }
 
+// Label display abbreviations
+const LABEL_SHORT: Record<string, string> = {
+  seizure: "Seiz", spike: "Spike", eye_movement: "Eye", muscle: "Musc",
+  electrode: "Elec", electrode_noise: "Noise", artifact: "Art", noisy_channel: "Noisy",
+  sleep_spindle: "Spin", k_complex: "K-Cx", slow_wave: "SlwW", normal: "Norm",
+  alpha: "Alpha", beta: "Beta", theta: "Theta", delta: "Delta",
+};
+
+function shortLabel(label: string): string {
+  return LABEL_SHORT[label.toLowerCase()] ?? (label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, " "));
+}
+
+function fmtSec(s: number): string {
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(1);
+  return m > 0 ? `${m}:${sec.padStart(4, "0")}` : `${sec}s`;
+}
+
+function fmtDur(start: number, end: number): string {
+  const d = end - start;
+  return d < 1 ? `${(d * 1000).toFixed(0)}ms` : `${d.toFixed(1)}s`;
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
 interface SegmentSidebarProps {
   segments: Segment[];
   currentSegmentIndex: number;
@@ -58,6 +78,7 @@ interface SegmentSidebarProps {
   onSegmentClick: (segment: Segment, index: number) => void;
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export function SegmentSidebar({
   segments,
   currentSegmentIndex,
@@ -65,138 +86,145 @@ export function SegmentSidebar({
   onToggle,
   onSegmentClick,
 }: SegmentSidebarProps) {
-  // Group segments by label for summary
+
+  // Type breakdown for header
   const labelCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const seg of segments) {
-      counts[seg.label] = (counts[seg.label] || 0) + 1;
-    }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const c: Record<string, number> = {};
+    for (const s of segments) c[s.label] = (c[s.label] || 0) + 1;
+    return Object.entries(c).sort((a, b) => b[1] - a[1]);
   }, [segments]);
 
-  // Collapsed: do not reserve flex width — parent is `relative` so waveforms use full width.
+  // Collapsed: floating badge button
   if (!isOpen) {
     return (
-      <Button
+      <button
         type="button"
-        variant="secondary"
-        size="icon"
         onClick={onToggle}
-        title={`Segments (${segments.length})`}
-        className="absolute right-2 top-1/2 z-20 h-9 w-9 -translate-y-1/2 rounded-md border border-border/60 bg-background/95 shadow-md backdrop-blur-sm"
+        title={`${segments.length} segments`}
+        className={cn(
+          "absolute right-2 top-1/2 z-20 -translate-y-1/2",
+          "flex flex-col items-center justify-center gap-0.5",
+          "h-10 w-7 rounded-md",
+          "border border-border/50 bg-background/95 shadow-sm backdrop-blur-sm",
+          "text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors",
+        )}
       >
-        <List className="h-4 w-4" />
+        <List className="h-3.5 w-3.5" />
         {segments.length > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-medium text-primary-foreground">
+          <span className="text-[9px] font-mono font-medium tabular-nums">
             {segments.length > 99 ? "99+" : segments.length}
           </span>
         )}
-      </Button>
+      </button>
     );
   }
 
   return (
-    <div className="w-64 h-full flex flex-col border-l bg-background">
+    <div className="w-56 h-full flex flex-col border-l border-border/60 bg-background/98">
+
       {/* Header */}
-      <div className="p-2 border-b flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <List className="h-4 w-4 text-muted-foreground" />
-          <span className="font-medium text-sm">Segments</span>
-          <Badge variant="secondary" className="text-xs">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40">
+        <div className="flex items-center gap-1.5">
+          <List className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium">Segments</span>
+          <span className="text-[10px] font-mono text-muted-foreground bg-muted/60 px-1 rounded">
             {segments.length}
-          </Badge>
+          </span>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
+        <button
           onClick={onToggle}
-          className="h-6 w-6 p-0"
+          className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
         >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+          <X className="h-3 w-3" />
+        </button>
       </div>
 
-      {/* Label summary */}
+      {/* Type breakdown — compact dot+count row */}
       {labelCounts.length > 0 && (
-        <div className="p-2 border-b flex flex-wrap gap-1">
-          {labelCounts.slice(0, 5).map(([label, count]) => {
-            const color = getSegmentColor(label);
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 px-2.5 py-1.5 border-b border-border/30">
+          {labelCounts.slice(0, 6).map(([label, count]) => {
+            const c = getSegmentColor(label);
             return (
-              <Badge
-                key={label}
-                variant="outline"
-                className={cn("text-xs", color.badge)}
-              >
-                {label}: {count}
-              </Badge>
+              <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: c.border }} />
+                <span className="font-mono">{shortLabel(label)}</span>
+                <span className="font-medium">{count}</span>
+              </span>
             );
           })}
-          {labelCounts.length > 5 && (
-            <Badge variant="outline" className="text-xs">
-              +{labelCounts.length - 5} more
-            </Badge>
-          )}
         </div>
       )}
 
       {/* Segment list */}
-      <ScrollArea className="flex-1">
-        <div className="p-1">
-          {segments.map((seg, idx) => {
-            const color = getSegmentColor(seg.label);
-            const isCurrent = idx === currentSegmentIndex;
-            
-            return (
-              <button
-                key={idx}
-                onClick={() => onSegmentClick(seg, idx)}
-                className={cn(
-                  "w-full text-left p-2 rounded-md mb-1 transition-colors",
-                  "hover:bg-muted/50",
-                  isCurrent && "bg-primary/10 ring-1 ring-primary/30"
-                )}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: color.border }}
-                  />
-                  <Badge
-                    variant="outline"
-                    className={cn("text-xs", color.badge)}
-                  >
-                    {seg.label}
-                  </Badge>
-                  {isCurrent && (
-                    <span className="text-xs text-primary ml-auto">▸</span>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground font-mono pl-4">
-                  {seg.t_start_s.toFixed(2)}s – {seg.t_end_s.toFixed(2)}s
-                </div>
-                {(seg.channel_index != null || seg.score != null) && (
-                  <div className="text-xs text-muted-foreground pl-4 flex gap-2">
-                    {seg.channel_index != null && <span>Ch: {seg.channel_index}</span>}
-                    {seg.score != null && <span>Score: {seg.score.toFixed(2)}</span>}
-                  </div>
-                )}
-              </button>
-            );
-          })}
-          
-          {segments.length === 0 && (
-            <div className="p-4 text-center text-sm text-muted-foreground">
-              No segments loaded
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="py-1">
+          {segments.length === 0 ? (
+            <div className="px-3 py-6 text-center text-xs text-muted-foreground/60">
+              No segments
             </div>
+          ) : (
+            segments.map((seg, idx) => {
+              const c = getSegmentColor(seg.label);
+              const isCurrent = idx === currentSegmentIndex;
+              const dur = fmtDur(seg.t_start_s, seg.t_end_s);
+
+              return (
+                <button
+                  key={idx}
+                  onClick={() => onSegmentClick(seg, idx)}
+                  className={cn(
+                    "w-full text-left flex items-stretch gap-0 transition-colors",
+                    "hover:bg-muted/40",
+                    isCurrent && "bg-primary/8",
+                  )}
+                >
+                  {/* Left color accent bar */}
+                  <div
+                    className="w-0.5 shrink-0 my-0.5 rounded-r"
+                    style={{ background: isCurrent ? c.border : "transparent" }}
+                  />
+                  <div className={cn(
+                    "flex-1 px-2 py-1.5",
+                    isCurrent && "border-l-0",
+                  )}>
+                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                      <span
+                        className="text-[11px] font-medium leading-none"
+                        style={{ color: c.border }}
+                      >
+                        {shortLabel(seg.label)}
+                      </span>
+                      <span className="text-[9px] font-mono text-muted-foreground/50 shrink-0">
+                        {dur}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/60">
+                      <span>{fmtSec(seg.t_start_s)}</span>
+                      {seg.score != null && (
+                        <span className="text-muted-foreground/40">·</span>
+                      )}
+                      {seg.score != null && (
+                        <span>{(seg.score * 100).toFixed(0)}%</span>
+                      )}
+                      {seg.channel_index != null && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span>ch{seg.channel_index}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
           )}
         </div>
       </ScrollArea>
 
-      {/* Keyboard hints */}
-      <div className="p-2 border-t text-xs text-muted-foreground text-center">
-        <kbd className="px-1 py-0.5 bg-muted rounded">P</kbd> prev
-        {" • "}
-        <kbd className="px-1 py-0.5 bg-muted rounded">N</kbd> next
+      {/* Footer: keyboard hints */}
+      <div className="flex items-center justify-center gap-2 px-2 py-1.5 border-t border-border/30 text-[10px] text-muted-foreground/50">
+        <span><kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">P</kbd> prev</span>
+        <span><kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">N</kbd> next</span>
       </div>
     </div>
   );

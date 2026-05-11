@@ -1,8 +1,8 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pause, Play, ChevronUp, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // ── Clinical speed options ────────────────────────────────────────────────────
-// Speed (mm/sec) ↔ time window (seconds) — based on standard EEG paper speeds
 export const SPEED_OPTIONS = [
   { mmSec: 6,   windowSec: 60 },
   { mmSec: 8,   windowSec: 45 },
@@ -16,21 +16,20 @@ export const SPEED_OPTIONS = [
 ] as const;
 
 // ── Amplitude options ─────────────────────────────────────────────────────────
-// μV/mm ↔ amplitude multiplier (10 μV/mm = 1.0x baseline)
 export const AMP_OPTIONS = [
-  { uvmm: 2,    label: "2.0",    scale: 5.0    },
-  { uvmm: 3,    label: "3.0",    scale: 3.333  },
-  { uvmm: 5,    label: "5.0",    scale: 2.0    },
-  { uvmm: 7,    label: "7.0",    scale: 1.429  },
-  { uvmm: 10,   label: "10.0",   scale: 1.0    },
-  { uvmm: 15,   label: "15.0",   scale: 0.667  },
-  { uvmm: 20,   label: "20.0",   scale: 0.5    },
-  { uvmm: 30,   label: "30.0",   scale: 0.333  },
-  { uvmm: 70,   label: "70.0",   scale: 0.143  },
-  { uvmm: 100,  label: "100.0",  scale: 0.1    },
-  { uvmm: 200,  label: "200.0",  scale: 0.05   },
-  { uvmm: 300,  label: "300.0",  scale: 0.033  },
-  { uvmm: 1000, label: "1000.0", scale: 0.01   },
+  { uvmm: 2,    label: "2",    scale: 5.0    },
+  { uvmm: 3,    label: "3",    scale: 3.333  },
+  { uvmm: 5,    label: "5",    scale: 2.0    },
+  { uvmm: 7,    label: "7",    scale: 1.429  },
+  { uvmm: 10,   label: "10",   scale: 1.0    },
+  { uvmm: 15,   label: "15",   scale: 0.667  },
+  { uvmm: 20,   label: "20",   scale: 0.5    },
+  { uvmm: 30,   label: "30",   scale: 0.333  },
+  { uvmm: 70,   label: "70",   scale: 0.143  },
+  { uvmm: 100,  label: "100",  scale: 0.1    },
+  { uvmm: 200,  label: "200",  scale: 0.05   },
+  { uvmm: 300,  label: "300",  scale: 0.033  },
+  { uvmm: 1000, label: "1000", scale: 0.01   },
 ] as const;
 
 // ── Filter options ────────────────────────────────────────────────────────────
@@ -39,16 +38,16 @@ export const LF_OPTIONS = [0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.6, 5.0] as
 
 // ── Montage options ───────────────────────────────────────────────────────────
 const MONTAGE_OPTIONS = [
-  { value: "referential",        label: "Referential (input)" },
-  { value: "average-reference",  label: "Average reference"   },
-  { value: "bipolar-longitudinal", label: "Bipolar longitudinal" },
-  { value: "bipolar-transverse", label: "Bipolar transverse"  },
-  { value: "laplacian",          label: "Laplacian"           },
+  { value: "referential",          label: "Ref (input)" },
+  { value: "average-reference",    label: "Avg ref"     },
+  { value: "bipolar-longitudinal", label: "Bipolar lon" },
+  { value: "bipolar-transverse",   label: "Bipolar tr"  },
+  { value: "laplacian",            label: "Laplacian"   },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export function windowSecToMmSec(windowSec: number): number {
-  let best = SPEED_OPTIONS[5]; // 30 mm/s default
+  let best = SPEED_OPTIONS[5];
   let bestDiff = Math.abs(windowSec - best.windowSec);
   for (const o of SPEED_OPTIONS) {
     const d = Math.abs(windowSec - o.windowSec);
@@ -63,7 +62,7 @@ export function mmSecToWindowSec(mmSec: number): number {
 
 export function scaleToUVMM(scale: number): number {
   const target = 10 / Math.max(0.001, scale);
-  let best = AMP_OPTIONS[4]; // 10 μV/mm
+  let best = AMP_OPTIONS[4];
   let bestDiff = Math.abs(target - best.uvmm);
   for (const o of AMP_OPTIONS) {
     const d = Math.abs(target - o.uvmm);
@@ -93,31 +92,119 @@ export interface EEGControlsProps {
   onSkipBackward: () => void;
   onSkipForward: () => void;
   onExport: () => void;
-  // Clinical filter controls
   hfFilter?: number;
   onHFFilterChange?: (hz: number) => void;
   lfFilter?: number;
   onLFFilterChange?: (hz: number) => void;
   notchFilter?: 0 | 50 | 60;
   onNotchFilterChange?: (hz: 0 | 50 | 60) => void;
-  // Montage
   montage?: string;
   onMontageChange?: (m: string) => void;
-  // Channel info
   visibleChannelCount?: number;
 }
 
-// ── Toolbar separator ─────────────────────────────────────────────────────────
+// ── Internal sub-components ───────────────────────────────────────────────────
+
 function Sep() {
-  return <div className="h-4 w-px bg-border/70 shrink-0 mx-0.5" />;
+  return <div className="h-3.5 w-px bg-border/50 shrink-0 mx-1" />;
 }
 
-// ── Labeled toolbar control ───────────────────────────────────────────────────
-function CtrlLabel({ children }: { children: React.ReactNode }) {
+function CtrlGroup({ children }: { children: React.ReactNode }) {
+  return <div className="flex items-center gap-px shrink-0">{children}</div>;
+}
+
+function IconBtn({ onClick, title, children }: { onClick: () => void; title: string; children: React.ReactNode }) {
   return (
-    <span className="text-[10px] font-medium text-muted-foreground/80 select-none whitespace-nowrap">
+    <button
+      className="flex items-center justify-center h-6 w-6 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
+      onClick={onClick}
+      title={title}
+    >
       {children}
-    </span>
+    </button>
+  );
+}
+
+/** Stepper: label + current value + ▲▼ buttons. Clicking value cycles through options. */
+function Stepper<T extends { label?: string; mmSec?: number; uvmm?: number }>({
+  label,
+  unit,
+  options,
+  currentIndex,
+  onStep,
+  valueDisplay,
+}: {
+  label: string;
+  unit: string;
+  options: readonly T[];
+  currentIndex: number;
+  onStep: (delta: 1 | -1) => void;
+  valueDisplay: string;
+}) {
+  return (
+    <div className="flex items-center gap-px shrink-0">
+      <span className="text-[10px] text-muted-foreground/60 pr-0.5 select-none">{label}</span>
+      <button
+        className="h-6 w-3.5 flex items-center justify-center rounded-l hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        onClick={() => onStep(-1)}
+        disabled={currentIndex <= 0}
+        title={`Decrease ${label}`}
+      >
+        <ChevronDown className="h-2.5 w-2.5" />
+      </button>
+      <span className="text-[11px] font-mono font-medium text-foreground px-1 min-w-[28px] text-center tabular-nums select-none">
+        {valueDisplay}
+      </span>
+      <button
+        className="h-6 w-3.5 flex items-center justify-center rounded-r hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+        onClick={() => onStep(1)}
+        disabled={currentIndex >= options.length - 1}
+        title={`Increase ${label}`}
+      >
+        <ChevronUp className="h-2.5 w-2.5" />
+      </button>
+      <span className="text-[10px] text-muted-foreground/60 pl-0.5 select-none">{unit}</span>
+    </div>
+  );
+}
+
+function FilterSelect<T extends number>({
+  label,
+  unit,
+  value,
+  options,
+  onChange,
+  displayFn,
+}: {
+  label: string;
+  unit: string;
+  value: T;
+  options: readonly T[];
+  onChange: (v: T) => void;
+  displayFn?: (v: T) => string;
+}) {
+  const fmt = displayFn ?? String;
+  return (
+    <div className="flex items-center gap-0.5 shrink-0">
+      <span className="text-[10px] text-muted-foreground/60 select-none">{label}</span>
+      <Select value={String(value)} onValueChange={v => onChange(Number(v) as T)}>
+        <SelectTrigger className={cn(
+          "h-6 text-[11px] font-mono border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded-sm",
+          "hover:bg-muted transition-colors text-foreground",
+          label === "HF" || label === "LF" ? "w-[44px]" : "w-[36px]",
+        )}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="z-[100]">
+          {options.map(o => (
+            <SelectItem key={o} value={String(o)} className="text-xs font-mono">
+              {fmt(o)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <span className="text-[10px] text-muted-foreground/60 select-none">{unit}</span>
+    </div>
   );
 }
 
@@ -147,54 +234,62 @@ export function EEGControls({
   const mmSec = windowSecToMmSec(timeWindow);
   const uvmm  = scaleToUVMM(amplitudeScale);
 
+  const speedIdx = SPEED_OPTIONS.findIndex(o => o.mmSec === mmSec);
+  const ampIdx   = AMP_OPTIONS.findIndex(o => o.uvmm === uvmm);
+
+  const stepSpeed = (delta: 1 | -1) => {
+    const next = SPEED_OPTIONS[speedIdx + delta];
+    if (next) onTimeWindowChange(next.windowSec);
+  };
+
+  const stepAmp = (delta: 1 | -1) => {
+    const next = AMP_OPTIONS[ampIdx + delta];
+    if (next) onAmplitudeScaleChange(10 / next.uvmm);
+  };
+
   return (
-    <div className="flex items-center h-8 px-1 border-b bg-background flex-shrink-0 overflow-x-auto gap-px">
+    <div className="flex items-center h-8 px-1.5 border-b bg-background/95 flex-shrink-0 overflow-x-auto gap-0.5">
 
-      {/* Navigation: prev page / play / next page */}
-      <button
-        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
-        onClick={onSkipBackward}
-        title="Previous page (←)"
-      >
-        <ChevronLeft className="h-3.5 w-3.5" />
-      </button>
+      {/* Transport */}
+      <CtrlGroup>
+        <IconBtn onClick={onSkipBackward} title="Previous page (←)">
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </IconBtn>
+        <button
+          className={cn(
+            "flex items-center justify-center h-6 w-6 rounded transition-colors shrink-0",
+            isPlaying
+              ? "bg-primary/10 text-primary hover:bg-primary/20"
+              : "hover:bg-muted text-muted-foreground hover:text-foreground"
+          )}
+          onClick={onPlayPause}
+          title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+        >
+          {isPlaying
+            ? <Pause className="h-3.5 w-3.5 fill-current" />
+            : <Play  className="h-3.5 w-3.5 fill-current" />
+          }
+        </button>
+        <IconBtn onClick={onSkipForward} title="Next page (→)">
+          <ChevronRight className="h-3.5 w-3.5" />
+        </IconBtn>
+      </CtrlGroup>
 
-      <button
-        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
-        onClick={onPlayPause}
-        title={isPlaying ? "Pause (Space)" : "Play (Space)"}
-      >
-        {isPlaying
-          ? <Pause className="h-3.5 w-3.5 fill-current" />
-          : <Play  className="h-3.5 w-3.5 fill-current" />
-        }
-      </button>
-
-      <button
-        className="flex items-center justify-center h-6 w-6 rounded hover:bg-accent transition-colors shrink-0"
-        onClick={onSkipForward}
-        title="Next page (→)"
-      >
-        <ChevronRight className="h-3.5 w-3.5" />
-      </button>
-
-      <Sep />
-
-      {/* Time readout */}
-      <span className="text-[11px] font-mono text-muted-foreground tabular-nums whitespace-nowrap px-1 shrink-0">
-        {fmtTime(currentTime)}&thinsp;/&thinsp;{fmtTime(duration)}
+      {/* Time */}
+      <span className="text-[11px] font-mono text-muted-foreground tabular-nums whitespace-nowrap px-1.5 shrink-0">
+        {fmtTime(currentTime)}&thinsp;<span className="text-muted-foreground/40">/</span>&thinsp;{fmtTime(duration)}
       </span>
 
       <Sep />
 
       {/* Montage */}
       <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>Montage</CtrlLabel>
+        <span className="text-[10px] text-muted-foreground/60 select-none">Mnt</span>
         <Select value={montage} onValueChange={onMontageChange ?? (() => {})}>
-          <SelectTrigger className="h-6 w-[130px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
+          <SelectTrigger className="h-6 w-[84px] text-[11px] border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded-sm hover:bg-muted transition-colors">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="z-[80]">
+          <SelectContent className="z-[100]">
             {MONTAGE_OPTIONS.map(o => (
               <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>
             ))}
@@ -204,106 +299,66 @@ export function EEGControls({
 
       <Sep />
 
-      {/* Speed */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>Speed</CtrlLabel>
-        <Select value={String(mmSec)} onValueChange={v => onTimeWindowChange(mmSecToWindowSec(Number(v)))}>
-          <SelectTrigger className="h-6 w-[52px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="z-[80]">
-            {SPEED_OPTIONS.map(o => (
-              <SelectItem key={o.mmSec} value={String(o.mmSec)} className="text-xs">{o.mmSec}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <CtrlLabel>mm/s</CtrlLabel>
-      </div>
+      {/* Speed stepper */}
+      <Stepper
+        label="Spd"
+        unit="mm/s"
+        options={SPEED_OPTIONS}
+        currentIndex={speedIdx}
+        onStep={stepSpeed}
+        valueDisplay={String(mmSec)}
+      />
 
       <Sep />
 
-      {/* Channel count (read-only for now) */}
+      {/* Channel count (info only) */}
       {visibleChannelCount != null && (
         <>
-          <div className="flex items-center gap-0.5 shrink-0">
-            <CtrlLabel>Chs</CtrlLabel>
-            <span className="text-[11px] font-medium px-2 tabular-nums">{visibleChannelCount}</span>
-          </div>
+          <span className="text-[10px] text-muted-foreground/60 select-none">
+            {visibleChannelCount}<span className="text-muted-foreground/40">ch</span>
+          </span>
           <Sep />
         </>
       )}
 
-      {/* Amplitude */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>Amp</CtrlLabel>
-        <Select value={String(uvmm)} onValueChange={v => onAmplitudeScaleChange(10 / Number(v))}>
-          <SelectTrigger className="h-6 w-[60px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="z-[80]">
-            {AMP_OPTIONS.map(o => (
-              <SelectItem key={o.uvmm} value={String(o.uvmm)} className="text-xs">{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <CtrlLabel>μV/mm</CtrlLabel>
-      </div>
+      {/* Amplitude stepper */}
+      <Stepper
+        label="Amp"
+        unit="µV/mm"
+        options={AMP_OPTIONS}
+        currentIndex={ampIdx}
+        onStep={stepAmp}
+        valueDisplay={String(uvmm)}
+      />
 
       <Sep />
 
-      {/* High-frequency filter */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>HF</CtrlLabel>
-        <Select value={String(hfFilter)} onValueChange={v => onHFFilterChange?.(Number(v))}>
-          <SelectTrigger className="h-6 w-[56px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="z-[80]">
-            {HF_OPTIONS.map(v => (
-              <SelectItem key={v} value={String(v)} className="text-xs">{v}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <CtrlLabel>Hz</CtrlLabel>
-      </div>
-
-      <Sep />
-
-      {/* Low-frequency filter */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>LF</CtrlLabel>
-        <Select value={String(lfFilter)} onValueChange={v => onLFFilterChange?.(Number(v))}>
-          <SelectTrigger className="h-6 w-[68px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="z-[80]">
-            {LF_OPTIONS.map(v => (
-              <SelectItem key={v} value={String(v)} className="text-xs">
-                {v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : v.toFixed(1)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <CtrlLabel>Hz</CtrlLabel>
-      </div>
-
-      <Sep />
-
-      {/* Notch filter */}
-      <div className="flex items-center gap-0.5 shrink-0">
-        <CtrlLabel>Notch</CtrlLabel>
-        <Select value={String(notchFilter)} onValueChange={v => onNotchFilterChange?.(Number(v) as 0 | 50 | 60)}>
-          <SelectTrigger className="h-6 w-[48px] text-[11px] border border-border/40 shadow-none bg-transparent px-1.5 focus:ring-0 rounded-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="z-[80]">
-            <SelectItem value="0"   className="text-xs">Off</SelectItem>
-            <SelectItem value="50"  className="text-xs">50</SelectItem>
-            <SelectItem value="60"  className="text-xs">60</SelectItem>
-          </SelectContent>
-        </Select>
-        <CtrlLabel>Hz</CtrlLabel>
-      </div>
+      {/* Filters */}
+      <CtrlGroup>
+        <FilterSelect
+          label="HF"
+          unit="Hz"
+          value={hfFilter as typeof HF_OPTIONS[number]}
+          options={HF_OPTIONS}
+          onChange={v => onHFFilterChange?.(v)}
+        />
+        <FilterSelect
+          label="LF"
+          unit="Hz"
+          value={lfFilter as typeof LF_OPTIONS[number]}
+          options={LF_OPTIONS}
+          onChange={v => onLFFilterChange?.(v)}
+          displayFn={v => v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : String(v)}
+        />
+        <FilterSelect
+          label="N"
+          unit="Hz"
+          value={notchFilter}
+          options={[0, 50, 60] as const}
+          onChange={v => onNotchFilterChange?.(v as 0 | 50 | 60)}
+          displayFn={v => v === 0 ? "—" : String(v)}
+        />
+      </CtrlGroup>
 
     </div>
   );

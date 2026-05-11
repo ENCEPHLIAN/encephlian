@@ -897,22 +897,39 @@ export default function EEGViewer() {
             seekTo(((e.clientX - r.left) / r.width) * duration);
           }}
         >
-          {showArtifacts && artifacts.map((a, i) => (
-            <div key={`a${i}`} className="absolute top-0 bottom-0 bg-red-500/20 pointer-events-none"
-              style={{ left: `${(a.start_sec / duration) * 100}%`, width: `${Math.max(0.15, ((a.end_sec - a.start_sec) / duration) * 100)}%` }} />
-          ))}
-          {segments.map((s, i) => {
-            const c = getSegmentColor(s.label);
+          {/* Artifact bands — top 2px strip, color-coded by type */}
+          {showArtifacts && artifacts.map((a, i) => {
+            const ac = artifactColor((a as any).label ?? "artifact");
             return (
-              <div key={`s${i}`} className="absolute top-1.5 bottom-1.5 pointer-events-none opacity-80 rounded-sm"
-                style={{ left: `${(s.t_start_s / duration) * 100}%`, width: `${Math.max(0.15, ((s.t_end_s - s.t_start_s) / duration) * 100)}%`, background: c.border }} />
+              <div key={`a${i}`} className="absolute top-0 h-[3px] pointer-events-none"
+                style={{
+                  left: `${(a.start_sec / duration) * 100}%`,
+                  width: `${Math.max(0.2, ((a.end_sec - a.start_sec) / duration) * 100)}%`,
+                  background: ac.border,
+                  opacity: 0.7,
+                }} />
             );
           })}
+          {/* Segment bands — bottom 2px strip, color-coded by label */}
+          {showSegments && segments.map((s, i) => {
+            const c = getSegmentColor(s.label);
+            return (
+              <div key={`s${i}`} className="absolute bottom-0 h-[3px] pointer-events-none"
+                style={{
+                  left: `${(s.t_start_s / duration) * 100}%`,
+                  width: `${Math.max(0.2, ((s.t_end_s - s.t_start_s) / duration) * 100)}%`,
+                  background: c.border,
+                  opacity: 0.8,
+                }} />
+            );
+          })}
+          {/* Annotation markers — vertical hairlines */}
           {annotations.map((a, i) => (
-            <div key={`n${i}`} className="absolute top-0 bottom-0 w-px bg-blue-400/40 pointer-events-none"
+            <div key={`n${i}`} className="absolute top-0 bottom-0 w-px bg-blue-400/35 pointer-events-none"
               style={{ left: `${(a.start_sec / duration) * 100}%` }} />
           ))}
-          <div className="absolute top-0 bottom-0 border-x border-primary/50 bg-primary/8 pointer-events-none"
+          {/* Current viewport */}
+          <div className="absolute top-0 bottom-0 border-x border-primary/40 bg-primary/6 pointer-events-none"
             style={{ left: `${(windowStart / duration) * 100}%`, width: `${Math.max(0.5, (windowSec / duration) * 100)}%` }} />
           <span className="absolute right-1 top-0.5 text-[9px] text-muted-foreground/40 font-mono pointer-events-none">
             {fmtTime(duration)}

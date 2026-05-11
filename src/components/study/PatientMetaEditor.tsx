@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { Pencil, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PatientMeta {
   patient_name?: string | null;
@@ -31,21 +31,36 @@ function isPlaceholderId(v: string | null | undefined): boolean {
   return v === "Pending" || v.startsWith("PT-") || v === "X";
 }
 
+const SEX_OPTIONS = [
+  { value: "M", label: "Male" },
+  { value: "F", label: "Female" },
+  { value: "X", label: "Other" },
+];
+
 export function PatientMetaEditor({ studyId, meta, onSaved, compact = false }: Props) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  const initialName = isPlaceholderId(meta.patient_name) ? "" : (meta.patient_name ?? "");
-  const initialId   = isPlaceholderId(meta.patient_id)   ? "" : (meta.patient_id   ?? "");
-
   const [form, setForm] = useState({
-    patient_name:   initialName,
-    patient_id:     initialId,
-    patient_age:    String(meta.patient_age    ?? ""),
-    patient_gender: meta.patient_gender ?? meta.patient_sex ?? "",
-    patient_dob:    meta.patient_dob    ?? "",
-    indication:     meta.indication     ?? "",
+    patient_name: "",
+    patient_id: "",
+    patient_age: "",
+    patient_gender: "",
+    patient_dob: "",
+    indication: "",
   });
+
+  // Reset form each time dialog opens so stale state doesn't persist
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      patient_name:   isPlaceholderId(meta.patient_name) ? "" : (meta.patient_name ?? ""),
+      patient_id:     isPlaceholderId(meta.patient_id)   ? "" : (meta.patient_id   ?? ""),
+      patient_age:    String(meta.patient_age ?? ""),
+      patient_gender: meta.patient_gender ?? meta.patient_sex ?? "",
+      patient_dob:    meta.patient_dob ?? "",
+      indication:     meta.indication ?? "",
+    });
+  }, [open, meta]);
 
   const field = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -83,7 +98,7 @@ export function PatientMetaEditor({ studyId, meta, onSaved, compact = false }: P
         onClick={() => setOpen(true)}
         title="Edit patient details"
       >
-        <Pencil className={compact ? "h-3 w-3" : "h-3 w-3"} />
+        <Pencil className="h-3 w-3" />
         {!compact && "Edit"}
       </Button>
 
@@ -133,19 +148,25 @@ export function PatientMetaEditor({ studyId, meta, onSaved, compact = false }: P
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Sex</Label>
-                <Select
-                  value={form.patient_gender}
-                  onValueChange={v => setForm(f => ({ ...f, patient_gender: v }))}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="—" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="M">Male</SelectItem>
-                    <SelectItem value="F">Female</SelectItem>
-                    <SelectItem value="X">Other / Unknown</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Inline button group — avoids Radix portal/dialog z-index conflicts */}
+                <div className="flex h-8 rounded-md border border-input overflow-hidden">
+                  {SEX_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, patient_gender: f.patient_gender === opt.value ? "" : opt.value }))}
+                      className={cn(
+                        "flex-1 text-xs font-medium transition-colors",
+                        "border-r border-input last:border-r-0",
+                        form.patient_gender === opt.value
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pm-dob" className="text-xs">Date of birth</Label>
