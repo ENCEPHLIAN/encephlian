@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { TimelineMarker } from "@/lib/ai/mockAnomalyData";
-import { CHANNEL_COLORS } from "@/lib/eeg/channel-groups";
+import { CHANNEL_COLORS } from "@/lib/signal/channel-groups";
 
 interface AnomalyTimelineProps {
   markers: TimelineMarker[];

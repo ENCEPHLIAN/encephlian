@@ -70,7 +70,7 @@ function fmtDur(start: number, end: number): string {
 }
 
 // ── Props ─────────────────────────────────────────────────────────────────────
-interface SegmentSidebarProps {
+interface AnnotationPanelProps {
   segments: Segment[];
   currentSegmentIndex: number;
   isOpen: boolean;
@@ -79,13 +79,13 @@ interface SegmentSidebarProps {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export function SegmentSidebar({
+export function AnnotationPanel({
   segments,
   currentSegmentIndex,
   isOpen,
   onToggle,
   onSegmentClick,
-}: SegmentSidebarProps) {
+}: AnnotationPanelProps) {
 
   // Type breakdown for header
   const labelCounts = useMemo(() => {

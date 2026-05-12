@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { Line2 } from "three/addons/lines/Line2.js";
 import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { getChannelColor, ChannelGroup } from "@/lib/eeg/channel-groups";
+import { getChannelColor, ChannelGroup } from "@/lib/signal/channel-groups";
 
 interface Marker {
   id?: string;
@@ -32,7 +32,7 @@ interface SegmentInterval {
   borderColor?: string; // border rgba
 }
 
-export interface WebGLEEGViewerProps {
+export interface SignalCanvasProps {
   signals: number[][] | null; // IMPORTANT: expected to be WINDOWED already (length ≈ timeWindow*fs)
   channelLabels: string[];
   sampleRate: number;
@@ -219,7 +219,7 @@ function buildPolylinePositions(
   return out;
 }
 
-function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
+function SignalCanvasComponent(props: SignalCanvasProps) {
   const {
     signals,
     channelLabels,
@@ -1008,4 +1008,4 @@ function WebGLEEGViewerComponent(props: WebGLEEGViewerProps) {
   );
 }
 
-export const WebGLEEGViewer = memo(WebGLEEGViewerComponent);
+export const SignalCanvas = memo(SignalCanvasComponent);

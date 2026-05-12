@@ -33,7 +33,7 @@ export interface WindowDataForViewer {
   length: number;
 }
 
-interface EegMiniViewerProps {
+interface MiniViewerProps {
   meta?: CanonicalMeta | null;
   windowData: WindowDataForViewer | null;
 }
@@ -51,7 +51,7 @@ function getCssHsl(varName: string, fallback: string) {
   }
 }
 
-export default function EegMiniViewer({ meta, windowData }: EegMiniViewerProps) {
+export default function MiniViewer({ meta, windowData }: MiniViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 

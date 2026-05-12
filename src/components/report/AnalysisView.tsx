@@ -1,5 +1,5 @@
 /**
- * MindReportView — renders the blob-native MIND® report produced by
+ * AnalysisView — renders the blob-native MIND® report produced by
  * I-Plane's POST /mind/run/{study_id} endpoint.
  *
  * Report schema (mind.report.v1):
@@ -21,7 +21,7 @@ import {
   CheckCircle2, Info, ExternalLink, Waves, FileText,
 } from "lucide-react";
 
-interface MindReportViewProps {
+interface AnalysisViewProps {
   report: any;
   studyId?: string;
 }
@@ -33,7 +33,7 @@ const SIGNIFICANCE_COLOR: Record<string, string> = {
   markedly_abnormal:    "bg-destructive text-destructive-foreground",
 };
 
-export default function MindReportView({ report, studyId }: MindReportViewProps) {
+export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
   const navigate = useNavigate();
 
   if (!report) return null;

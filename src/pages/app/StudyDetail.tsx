@@ -34,8 +34,8 @@ import {
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import TriageReportView from "@/components/report/TriageReportView";
-import MindReportView from "@/components/report/MindReportView";
+import MetricsView from "@/components/report/MetricsView";
+import AnalysisView from "@/components/report/AnalysisView";
 import ErrorPage from "@/components/ErrorPage";
 import { toast } from "@/components/ui/sonner";
 import { useState, useEffect, useRef, Component, type ReactNode } from "react";
@@ -1167,15 +1167,15 @@ export default function StudyDetail() {
                 </div>
               ) : mindReport?.schema_version === "mind.report.v1" ? (
                 <ReportErrorBoundary>
-                  <MindReportView report={mindReport} studyId={study.id} />
+                  <AnalysisView report={mindReport} studyId={study.id} />
                 </ReportErrorBoundary>
               ) : study.ai_draft_json && (study.ai_draft_json as any).schema_version === "mind.report.v1" ? (
                 <ReportErrorBoundary>
-                  <MindReportView report={study.ai_draft_json} studyId={study.id} />
+                  <AnalysisView report={study.ai_draft_json} studyId={study.id} />
                 </ReportErrorBoundary>
               ) : study.ai_draft_json ? (
-                // Legacy format (old TriageReportView schema)
-                <TriageReportView
+                // Legacy format (old MetricsView schema)
+                <MetricsView
                   data={study.ai_draft_json}
                   studyId={study.id}
                   patientAge={patientAge?.toString()}

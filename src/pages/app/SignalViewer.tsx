@@ -4,15 +4,15 @@ import { useSearchParams, useParams, useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCircle } from "lucide-react";
-import { WebGLEEGViewer } from "@/components/eeg/WebGLEEGViewer";
-import { EEGControls, windowSecToMmSec, scaleToUVMM } from "@/components/eeg/EEGControls";
-import { SegmentSidebar, getSegmentColor } from "@/components/eeg/SegmentSidebar";
+import { SignalCanvas } from "@/components/viewer/SignalCanvas";
+import { ViewerControls, windowSecToMmSec, scaleToUVMM } from "@/components/viewer/ViewerControls";
+import { AnnotationPanel, getSegmentColor } from "@/components/viewer/AnnotationPanel";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 import { supabase } from "@/integrations/supabase/client";
-import { EdfChunkReader } from "@/lib/eeg/edf-reader";
-import { applyMontage } from "@/lib/eeg/montage-transforms";
+import { EdfChunkReader } from "@/lib/signal/signal-reader";
+import { applyMontage } from "@/lib/signal/channel-transforms";
 import { toast } from "sonner";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -703,7 +703,7 @@ export default function EEGViewer() {
     return m;
   }, [artifacts]);
 
-  // Dispatch window resize after sidebar toggle so WebGLEEGViewer's ResizeObserver
+  // Dispatch window resize after sidebar toggle so SignalCanvas's ResizeObserver
   // sees the updated container width after the flex layout settles.
   useEffect(() => {
     const id = requestAnimationFrame(() => window.dispatchEvent(new Event("resize")));
@@ -873,7 +873,7 @@ export default function EEGViewer() {
       )}
 
       {/* ── Clinical toolbar ── */}
-      <EEGControls
+      <ViewerControls
         isPlaying={playing}
         onPlayPause={() => setPlaying(p => !p)}
         currentTime={globalTime}
@@ -1082,7 +1082,7 @@ export default function EEGViewer() {
       <div className="relative flex-1 flex overflow-hidden min-h-0">
         <div className="flex-1 min-w-0 min-h-0" onWheel={handleWheelScroll} style={{ touchAction: "none" }}>
           {plotSignalsReady ? (
-            <WebGLEEGViewer
+            <SignalCanvas
               signals={displaySignals}
               channelLabels={displayLabels}
               sampleRate={meta.sampling_rate_hz}
@@ -1110,7 +1110,7 @@ export default function EEGViewer() {
         </div>
 
         {segments.length > 0 && (
-          <SegmentSidebar
+          <AnnotationPanel
             segments={segments}
             currentSegmentIndex={segIdx}
             isOpen={sidebarOpen}

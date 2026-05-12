@@ -74,7 +74,7 @@ function fmtTime(s: number): string {
 }
 
 // ── Interface ─────────────────────────────────────────────────────────────────
-export interface EEGControlsProps {
+export interface ViewerControlsProps {
   isPlaying: boolean;
   currentTime: number;
   duration: number;
@@ -196,8 +196,8 @@ function FilterCtrl<T extends number>({
   );
 }
 
-// ── EEGControls ───────────────────────────────────────────────────────────────
-export function EEGControls({
+// ── ViewerControls ───────────────────────────────────────────────────────────────
+export function ViewerControls({
   isPlaying,
   currentTime,
   duration,
@@ -217,7 +217,7 @@ export function EEGControls({
   montage = "referential",
   onMontageChange,
   visibleChannelCount,
-}: EEGControlsProps) {
+}: ViewerControlsProps) {
 
   const mmSec    = windowSecToMmSec(timeWindow);
   const uvmm     = scaleToUVMM(amplitudeScale);

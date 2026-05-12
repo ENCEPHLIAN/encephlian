@@ -3,10 +3,10 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChannelGroup, CHANNEL_COLORS, groupChannels } from "@/lib/eeg/channel-groups";
-import { filterStandardChannels } from "@/lib/eeg/standard-channels";
+import { ChannelGroup, CHANNEL_COLORS, groupChannels } from "@/lib/signal/channel-groups";
+import { filterStandardChannels } from "@/lib/signal/standard-channels";
 
-interface ChannelGroupListProps {
+interface TrackGroupListProps {
   channelLabels: string[];
   visibleGroups: Set<ChannelGroup>;
   onToggleGroup: (group: ChannelGroup) => void;
@@ -14,13 +14,13 @@ interface ChannelGroupListProps {
   onDeselectAll: () => void;
 }
 
-export function ChannelGroupList({
+export function TrackGroupList({
   channelLabels,
   visibleGroups,
   onToggleGroup,
   onSelectAll,
   onDeselectAll,
-}: ChannelGroupListProps) {
+}: TrackGroupListProps) {
   // Filter to only standard 10-20 channels
   const standardChannelIndices = filterStandardChannels(channelLabels);
   const standardLabels = standardChannelIndices.map(i => channelLabels[i]);

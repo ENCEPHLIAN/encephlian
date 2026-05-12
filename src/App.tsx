@@ -22,7 +22,7 @@ const Dashboard    = lazy(() => import("./pages/app/Dashboard"));
 const Studies      = lazy(() => import("./pages/app/Studies"));
 const StudyDetail  = lazy(() => import("./pages/app/StudyDetail"));
 const StudyReview  = lazy(() => import("./pages/app/StudyReview"));
-const EEGViewer    = lazy(() => import("./pages/app/EEGViewer"));
+const SignalViewer = lazy(() => import("./pages/app/SignalViewer"));
 const Lanes        = lazy(() => import("./pages/app/Lanes"));
 const Reports      = lazy(() => import("./pages/app/Reports"));
 const ReportDetail = lazy(() => import("./pages/app/ReportDetail"));
@@ -50,7 +50,7 @@ const AdminCleanup     = lazy(() => import("./pages/admin/AdminCleanup"));
 const AdminRestore     = lazy(() => import("./pages/admin/AdminRestore"));
 const AdminAuditLogs   = lazy(() => import("./pages/admin/AdminAuditLogs"));
 const AdminSettings    = lazy(() => import("./pages/admin/AdminSettings"));
-const AdminEegPush     = lazy(() => import("./pages/admin/AdminEegPush"));
+const AdminDataPush    = lazy(() => import("./pages/admin/AdminDataPush"));
 const AdminReadApi     = lazy(() => import("./admin/index"));
 const AdminReportV0    = lazy(() => import("./pages/admin/AdminReportV0"));
 const AdminInfra       = lazy(() => import("./pages/admin/AdminInfra"));
@@ -115,7 +115,7 @@ function App() {
                     <Route path="restore" element={<Suspense fallback={<PageLoader />}><AdminRestore /></Suspense>} />
                     <Route path="audit" element={<Suspense fallback={<PageLoader />}><AdminAuditLogs /></Suspense>} />
                     <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
-                    <Route path="eeg-push" element={<Suspense fallback={<PageLoader />}><AdminEegPush /></Suspense>} />
+                    <Route path="data-push" element={<Suspense fallback={<PageLoader />}><AdminDataPush /></Suspense>} />
                     <Route path="read-api" element={<Suspense fallback={<PageLoader />}><AdminReadApi /></Suspense>} />
                     <Route path="report-v0" element={<Suspense fallback={<PageLoader />}><AdminReportV0 /></Suspense>} />
                     <Route path="infra" element={<Suspense fallback={<PageLoader />}><AdminInfra /></Suspense>} />
@@ -132,11 +132,11 @@ function App() {
                     <Route path="studies" element={<Suspense fallback={<PageLoader />}><Studies /></Suspense>} />
                     <Route path="studies/:id" element={<Suspense fallback={<PageLoader />}><StudyDetail /></Suspense>} />
                     <Route path="studies/:id/review" element={<Suspense fallback={<PageLoader />}><StudyReview /></Suspense>} />
-                    <Route path="studies/:id/viewer" element={<Suspense fallback={<PageLoader />}><EEGViewer /></Suspense>} />
+                    <Route path="studies/:id/viewer" element={<Suspense fallback={<PageLoader />}><SignalViewer /></Suspense>} />
                     <Route path="lanes" element={<Suspense fallback={<PageLoader />}><Lanes /></Suspense>} />
                     <Route path="reports" element={<Suspense fallback={<PageLoader />}><Reports /></Suspense>} />
                     <Route path="reports/:id" element={<Suspense fallback={<PageLoader />}><ReportDetail /></Suspense>} />
-                    <Route path="viewer" element={<Suspense fallback={<PageLoader />}><EEGViewer /></Suspense>} />
+                    <Route path="viewer" element={<Suspense fallback={<PageLoader />}><SignalViewer /></Suspense>} />
                     <Route path="eeg-viewer" element={<LegacyEegViewerRedirect />} />
                     <Route path="report-v0" element={<Suspense fallback={<PageLoader />}><AdminReportV0 /></Suspense>} />
                     <Route path="notes" element={<Suspense fallback={<PageLoader />}><Notes /></Suspense>} />

@@ -14,7 +14,7 @@ import {
 import { Loader2, Clock, Zap } from "lucide-react";
 import { toast } from "sonner";
 import type { PilotStudy } from "@/hooks/usePilotData";
-import { selectSlaAndStartPipeline } from "@/lib/triagePipeline";
+import { selectSlaAndStartPipeline } from "@/lib/analysisPipeline";
 
 type Props = {
   study: PilotStudy;

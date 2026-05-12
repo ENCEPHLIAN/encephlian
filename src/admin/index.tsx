@@ -16,7 +16,7 @@
 //   3. Base URL + API key inputs sat at the top of the page, in front of the
 //      actual work. Moved to an Advanced accordion; config is already in
 //      env vars for prod.
-//   4. EegMiniViewer was stacked above EEGViewer rendering the same data
+//   4. MiniViewer was stacked above EEGViewer rendering the same data
 //      twice. Dropped; EEGViewer carries spacing + downsample controls.
 //
 // /chunk.bin contract (verified live from apps/read_api/main.py):
@@ -31,7 +31,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
-import EEGViewer from "./EEGViewer";
+import SignalViewer from "./SignalViewer";
 import {
   AlertCircle,
   CheckCircle2,
@@ -804,7 +804,7 @@ export default function AdminReadApi() {
             <CardTitle className="text-sm">Waveforms</CardTitle>
           </CardHeader>
           <CardContent>
-            <EEGViewer
+            <SignalViewer
               signals={signals}
               channelNames={channelNames}
               samplingRate={samplingRate}

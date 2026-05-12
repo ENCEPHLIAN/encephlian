@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-interface TriageReportViewProps {
+interface MetricsViewProps {
   data: any;
   studyId: string;
   patientAge?: string;
@@ -15,9 +15,9 @@ interface TriageReportViewProps {
   studyDate?: string;
 }
 
-export default function TriageReportView({
+export default function MetricsView({
   data, studyId, patientAge, patientGender, studyDate,
-}: TriageReportViewProps) {
+}: MetricsViewProps) {
   const navigate = useNavigate();
 
   if (!data) {

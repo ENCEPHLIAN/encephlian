@@ -18,7 +18,7 @@ import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { sha256HexFromFile } from "@/lib/fileSha256";
 import { getStudyHandle, getPatientLabel } from "@/lib/studyDisplay";
-import { extractEDFPatientMeta } from "@/lib/eeg/edf-patient";
+import { extractEDFPatientMeta } from "@/lib/signal/signal-patient";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 

@@ -15,7 +15,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { selectSlaAndStartPipeline } from "@/lib/triagePipeline";
+import { selectSlaAndStartPipeline } from "@/lib/analysisPipeline";
 import { triageTokensForSla } from "@/shared/tokenEconomy";
 import { supabase } from "@/integrations/supabase/client";
 import dayjs from "dayjs";
