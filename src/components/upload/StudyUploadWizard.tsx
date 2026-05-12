@@ -56,9 +56,9 @@ interface SlaOption {
   icon?: typeof Zap;
 }
 
-const EDF_BDF_EXTENSIONS = [".edf", ".bdf"];
-const PROPRIETARY_EXTENSIONS = [".e", ".nk", ".eeg", ".21e", ".cnt"];
-const ALL_ACCEPTED_EXTENSIONS = [...EDF_BDF_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
+const NATIVE_EXTENSIONS = [".edf", ".bdf", ".e"];   // fully processed by pipeline
+const PROPRIETARY_EXTENSIONS = [".nk", ".eeg", ".21e", ".cnt"]; // need vendor EDF export
+const ALL_ACCEPTED_EXTENSIONS = [...NATIVE_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
 
 const INTERNAL_SLA_OPTIONS: SlaOption[] = [
   {
@@ -297,7 +297,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     setIsProprietaryFormat(isProprietary);
     setFile(selectedFile);
 
-    if (!isProprietary && EDF_BDF_EXTENSIONS.includes(ext)) {
+    if (!isProprietary && [".edf", ".bdf"].includes(ext)) {
       const meta = await extractEdfHeader(selectedFile);
       if (meta) {
         setEdfMeta(meta);
@@ -605,7 +605,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
           why: duplicate
             ? "This file matches a study you already uploaded — opening it."
             : isProprietaryFormat
-              ? "Proprietary format — export as EDF for analysis."
+              ? "Format requires EDF export — stored for reference."
               : isPilot
                 ? "File stored — select Standard or Priority to start analysis."
                 : "Analysis pipeline started.",
