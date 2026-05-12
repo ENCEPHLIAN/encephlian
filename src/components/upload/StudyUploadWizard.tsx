@@ -482,7 +482,8 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       }
       try {
         onProgress(8, attempt > 1 ? `Retrying upload...` : `Preparing upload...`);
-        const sasRes = await fetch(`${cplaneBase}/upload-token/${studyId}`, { method: "POST" });
+        const fileExt = targetFile.name.toLowerCase().slice(targetFile.name.lastIndexOf("."));
+        const sasRes = await fetch(`${cplaneBase}/upload-token/${studyId}?ext=${encodeURIComponent(fileExt)}`, { method: "POST" });
         if (!sasRes.ok) throw new Error(`Failed to get upload token: ${sasRes.status}`);
         const { sas_url: sasUrl, blob_name: bn } = await sasRes.json();
         blobName = bn;
