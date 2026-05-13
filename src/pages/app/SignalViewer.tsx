@@ -254,6 +254,13 @@ export default function EEGViewer() {
   const globalTime = windowStart + cursor;
   const duration   = useMemo(() => (meta ? meta.n_samples / meta.sampling_rate_hz : 0), [meta]);
 
+  // Raw layer requires a browser-parseable format. EDF/BDF are supported by EdfChunkReader.
+  // Proprietary formats (e, nk, eeg, cnt, 21e) contain binary data that cannot be parsed client-side.
+  const rawLayerParseable = useMemo(() => {
+    const fmt = ((canonicalMetaRef.current as any)?.source_format ?? "").toLowerCase();
+    return !fmt || fmt === "edf" || fmt === "bdf";
+  }, [canonicalPresent]); // re-derive when canonical meta arrives
+
   const segIdx = useMemo(() => {
     if (!focusedSeg || !segments.length) return -1;
     return segments.findIndex(s => s.t_start_s === focusedSeg.t_start_s && s.label === focusedSeg.label);
@@ -928,7 +935,7 @@ export default function EEGViewer() {
       <div className="relative h-8 border-t bg-muted/10 flex-shrink-0 select-none overflow-hidden">
         {/* Seekable map — leave right rail for layer toggle */}
         <div
-          className="absolute inset-y-0 left-0 right-[4.75rem] cursor-crosshair"
+          className="absolute inset-y-0 left-0 right-[6.5rem] cursor-crosshair"
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
             seekTo(((e.clientX - r.left) / r.width) * duration);
@@ -973,13 +980,28 @@ export default function EEGViewer() {
           </span>
         </div>
 
-        {/* Minimap legend — artifact toggle only (segments are always shown; no second button) */}
-        {artifactCount > 0 && (
-          <div className="absolute bottom-0.5 left-1 z-10" onClick={e => e.stopPropagation()}>
+        {/* Minimap legend — chips always visible; clicking them toggles the bands */}
+        <div className="absolute bottom-0.5 left-1 z-10 flex items-center gap-1" onClick={e => e.stopPropagation()}>
+          {/* Segment chips — always shown (segments never hidden) */}
+          {segments.length > 0 && (() => {
+            const counts: Record<string, number> = {};
+            for (const s of segments) counts[s.label] = (counts[s.label] ?? 0) + 1;
+            return Object.entries(counts).map(([label, count]) => {
+              const c = getSegmentColor(label);
+              return (
+                <span key={label} className="flex items-center gap-0.5 text-[10px]">
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.border }} />
+                  <span style={{ color: c.border }}>{count}</span>
+                </span>
+              );
+            });
+          })()}
+          {/* Artifact chips — always shown; clicking toggles artifact band visibility */}
+          {artifactCount > 0 && (
             <button
               onClick={() => setShowArtifacts(v => !v)}
               title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
-              className={`flex items-center gap-0.5 px-1.5 py-px rounded text-[10px] transition-colors ${showArtifacts ? "bg-background/80 border border-border/60 text-foreground" : "text-muted-foreground/35"}`}
+              className={`flex items-center gap-0.5 text-[10px] transition-opacity ${showArtifacts ? "opacity-100" : "opacity-35"}`}
             >
               {Object.entries(artifactTypeCounts).map(([type, count]) => {
                 const ac = artifactColor(type);
@@ -991,8 +1013,8 @@ export default function EEGViewer() {
                 );
               })}
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Signal layer toggle: Raw | Pre-norm | Normalized */}
         <div
@@ -1003,8 +1025,10 @@ export default function EEGViewer() {
             {/* Raw — original file bytes, no processing */}
             <button
               type="button"
-              disabled={loadingRaw}
-              title="Raw source file — original signal as recorded, no filtering, no resampling, no reference"
+              disabled={loadingRaw || !rawLayerParseable}
+              title={!rawLayerParseable
+                ? `Raw view unavailable — ${((canonicalMetaRef.current as any)?.source_format ?? "this format")} is a proprietary binary. The file is stored immutably; use the µV layer for clinical review.`
+                : "Raw source file — original signal as recorded, no filtering, no resampling, no reference"}
               onClick={async (e) => {
                 e.stopPropagation();
                 if (signalLayer === "raw") return;
@@ -1046,7 +1070,7 @@ export default function EEGViewer() {
                   toast.error("Could not load raw file", { description: e2 instanceof Error ? e2.message : String(e2) });
                 } finally { setLoadingRaw(false); }
               }}
-              className={`flex items-center px-1.5 transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
             </button>
@@ -1078,7 +1102,13 @@ export default function EEGViewer() {
                   setMeta(m); setSignals(null);
                   signalLayerRef.current = "prenorm"; setSignalLayer("prenorm");
                 } catch (err) {
-                  toast.error("Pre-norm view not available", { description: err instanceof Error ? err.message : String(err) });
+                  const msg = err instanceof Error ? err.message : String(err);
+                  const isOld = msg.includes("404") || msg.includes("not found");
+                  toast.error("µV view not available", {
+                    description: isOld
+                      ? "This study was processed before µV storage was added. Re-upload or re-process to enable."
+                      : msg,
+                  });
                 } finally { setLoadingPrenorm(false); }
               }}
               className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "prenorm" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
