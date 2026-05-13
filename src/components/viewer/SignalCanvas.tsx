@@ -107,12 +107,6 @@ function parseColorToHex(color: string): number {
   return 0x808080;
 }
 
-function parseRgbaToHex(css: string): number {
-  const m = css.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-  if (!m) return 0x808080;
-  return (parseInt(m[1]) << 16) | (parseInt(m[2]) << 8) | parseInt(m[3]);
-}
-
 function normalizeChanLabel(s: string) {
   return s
     .replace(/^EEG\s+/i, "")
@@ -185,48 +179,6 @@ function applyBiquad(sig: number[], b0: number, b1: number, b2: number, a1: numb
     w1 = b1 * x - a1 * y + w2;
     w2 = b2 * x - a2 * y;
     out[i] = y;
-  }
-  return out;
-}
-
-interface ColorInterval {
-  start_sec: number;
-  end_sec: number;
-  /** 0xRRGGBB highlight color */
-  hex: number;
-}
-
-/**
- * Per-vertex RGB color array for Line2 vertex coloring.
- * Vertices inside any interval get the interval's highlight color; others get baseHex.
- */
-function buildPolylineColors(
-  pxCount: number,
-  signalAreaWidth: number,
-  xOffset: number,
-  timeWindow: number,
-  intervals: ColorInterval[],
-  baseHex: number,
-): Float32Array {
-  const out = new Float32Array(pxCount * 3);
-  const br = (baseHex >> 16 & 0xff) / 255;
-  const bg = (baseHex >> 8 & 0xff) / 255;
-  const bb = (baseHex & 0xff) / 255;
-
-  for (let px = 0; px < pxCount; px++) {
-    const t = ((xOffset === 0 ? px : px) / Math.max(1, pxCount - 1)) * timeWindow;
-    let r = br, g = bg, b = bb;
-    for (const iv of intervals) {
-      if (t >= iv.start_sec && t <= iv.end_sec) {
-        r = (iv.hex >> 16 & 0xff) / 255;
-        g = (iv.hex >> 8  & 0xff) / 255;
-        b = (iv.hex       & 0xff) / 255;
-        break;
-      }
-    }
-    out[px * 3]     = r;
-    out[px * 3 + 1] = g;
-    out[px * 3 + 2] = b;
   }
   return out;
 }
@@ -316,9 +268,6 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
   const lineStateRef = useRef<Map<number, { line: Line2; geom: LineGeometry; pos: Float32Array }>>(
     new Map(),
   );
-
-  // ── Container width state — updated by ResizeObserver for accurate ruler ────
-  const [containerWidth, setContainerWidth] = useState(800);
 
   // ── Ruler state (null = hidden) ──────────────────────────────────────────────
   // pos: {x, y} fractions of signal area [0,1] × [0,1]. anchor = bottom-left of L.
@@ -433,7 +382,6 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
       cam2.top = 0;
       cam2.bottom = hh;
       cam2.updateProjectionMatrix();
-      setContainerWidth(ww);
       requestAnimationFrame(() => drawRef.current?.());
     };
 
@@ -472,11 +420,6 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
       sceneRef.current = null;
       cameraRef.current = null;
     };
-  }, []);
-
-  // Seed containerWidth from actual DOM on first paint (ResizeObserver fires after)
-  useEffect(() => {
-    if (containerRef.current) setContainerWidth(containerRef.current.clientWidth);
   }, []);
 
   // theme background
@@ -536,6 +479,10 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
     const laneHalf = Math.max(4, laneH * 0.4);
 
     // ── Overlay helpers ──────────────────────────────────────────────────────────
+    // Reduce rgba opacity to `alpha` (handles both spaced and unspaced rgba)
+    const faintFill = (css: string, alpha: number) =>
+      css.replace(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*[\d.]+\s*\)/,
+        (_, r, g, b) => `rgba(${r},${g},${b},${alpha})`);
 
     const LABEL_ABBREV: Record<string, string> = {
       eye_movement: "Eye", muscle: "Muscle", electrode: "Electrode", electrode_noise: "Noise",
@@ -562,87 +509,80 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
       return chip;
     };
 
-    // ── Artifact + segment boundary markers ─────────────────────────────────────
-    // Waveform coloring (vertex colors on Line2) replaces full-height bands.
-    // Here we only draw lightweight boundary ticks + chip labels at event edges.
-
-    const ARTIFACT_DARK = 0xef4444;   // red-500
-    const ARTIFACT_LIGHT = 0xdc2626;  // red-600
-
-    // Collect per-channel ColorInterval lists used later during waveform drawing.
-    // Key = channel index (-1 = global, applies to all channels).
-    const chColorIntervals = new Map<number, ColorInterval[]>();
-    const ensureIntervals = (ch: number) => {
-      if (!chColorIntervals.has(ch)) chColorIntervals.set(ch, []);
-      return chColorIntervals.get(ch)!;
-    };
-
-    // Helper: draw a boundary marker (vertical tick + optional chip) at a given x.
-    const drawBoundaryTick = (
-      x: number, yTop: number, height: number,
-      color: string, label: string | null, isStart: boolean,
-    ) => {
-      // Thin vertical accent line at boundary
-      const tick = document.createElement("div");
-      tick.style.cssText = [
-        "position:absolute",
-        `left:${x - 1}px`, `top:${yTop}px`,
-        "width:2px", `height:${height}px`,
-        `background:${color}`,
-        "pointer-events:none", "opacity:0.55",
-      ].join(";");
-      artifactRef.current?.appendChild(tick);
-
-      // Chip label only at start boundary, only if visible
-      if (isStart && label) {
-        const chip = makeChip(abbrev(label), color);
-        chip.style.left = `${x + 3}px`;
-        chip.style.top = `${yTop + 3}px`;
-        artifactRef.current?.appendChild(chip);
-      }
-    };
+    // ── Artifact overlays ────────────────────────────────────────────────────────
+    // Adaptive fill: high coverage → lighter fill so waveforms stay readable.
+    const globalArtCoverage = artifactIntervals
+      .filter(a => a.channel == null)
+      .reduce((acc, a) => acc + Math.max(0, Math.min(a.end_sec, timeWindow) - Math.max(a.start_sec, 0)), 0) / Math.max(timeWindow, 1);
+    const artFillAlpha = globalArtCoverage > 0.7 ? 0.06 : globalArtCoverage > 0.4 ? 0.09 : 0.12;
 
     for (const a of artifactIntervals) {
       const s0 = clamp(a.start_sec, 0, timeWindow);
       const s1 = clamp(a.end_sec, 0, timeWindow);
       if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
 
-      const br = (a as any).borderColor ?? colors.artifactBorderRed;
-      const lbl = (a as any).label ?? "Artifact";
-      const artHex = theme === "dark" ? ARTIFACT_DARK : ARTIFACT_LIGHT;
       const x1 = labelW + (s0 / timeWindow) * signalW;
       const x2 = labelW + (s1 / timeWindow) * signalW;
+      const bw = Math.max(2, x2 - x1);
+      const bg = (a as any).color ?? colors.artifactBgRed;
+      const br = (a as any).borderColor ?? colors.artifactBorderRed;
+      const lbl = (a as any).label ?? "Artifact";
 
+      const el = document.createElement("div");
       if (a.channel == null) {
-        // Global — boundary ticks span full signal height
-        if (x1 > labelW) drawBoundaryTick(x1, PAD, signalH - PAD * 2, br, lbl, true);
-        if (x2 < labelW + signalW) drawBoundaryTick(x2, PAD, signalH - PAD * 2, br, null, false);
-        // Queue vertex color for every visible channel
-        ensureIntervals(-1).push({ start_sec: a.start_sec, end_sec: a.end_sec, hex: artHex });
+        // Global artifact — full signal height band with visible left accent
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:${PAD}px`,
+          `width:${bw}px`, `height:${signalH - PAD * 2}px`,
+          `border-left:2px solid ${br}`,
+          `border-top:1px solid ${faintFill(br, 0.4)}`,
+          `background:${faintFill(bg, artFillAlpha)}`,
+          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+        ].join(";");
+        if (bw >= 20) el.appendChild(makeChip(abbrev(lbl), br));
       } else {
+        // Per-channel artifact — render in the correct visual lane
+        // channels[] maps visual-lane-index → original-channel-index
         const laneIdx = channels.indexOf(a.channel);
-        if (laneIdx < 0) continue;
+        if (laneIdx < 0) continue; // channel not currently visible
         const yTop = PAD + laneIdx * laneH;
-        if (x1 > labelW) drawBoundaryTick(x1, yTop, laneH, br, lbl, true);
-        if (x2 < labelW + signalW) drawBoundaryTick(x2, yTop, laneH, br, null, false);
-        ensureIntervals(a.channel).push({ start_sec: a.start_sec, end_sec: a.end_sec, hex: artHex });
+        el.style.cssText = [
+          "position:absolute", `left:${x1}px`, `top:${yTop + 1}px`,
+          `width:${bw}px`, `height:${Math.max(3, laneH - 2)}px`,
+          `border-left:2px solid ${br}`,
+          `background:${faintFill(bg, artFillAlpha * 1.4)}`,
+          "pointer-events:none", "box-sizing:border-box",
+        ].join(";");
       }
+      artifactRef.current?.appendChild(el);
     }
 
+    // ── Segment overlays ─────────────────────────────────────────────────────
+    // Clinical events (seizures, spikes, sleep events) — full-height bordered box
     for (const seg of segmentIntervals) {
       const s0 = clamp(seg.start_sec, 0, timeWindow);
       const s1 = clamp(seg.end_sec,   0, timeWindow);
       if (s1 <= 0 || s0 >= timeWindow || s1 <= s0) continue;
 
-      const br = seg.borderColor ?? "rgba(99,102,241,0.7)";
-      const segHex = parseRgbaToHex(seg.borderColor ?? "rgba(99,102,241,0.7)");
       const x1 = labelW + (s0 / timeWindow) * signalW;
       const x2 = labelW + (s1 / timeWindow) * signalW;
+      const bw = Math.max(3, x2 - x1);
 
-      // Full-height boundary ticks for segments (span all lanes)
-      if (x1 > labelW) drawBoundaryTick(x1, PAD, signalH - PAD * 2, br, seg.label, true);
-      if (x2 < labelW + signalW) drawBoundaryTick(x2, PAD, signalH - PAD * 2, br, null, false);
-      ensureIntervals(-1).push({ start_sec: seg.start_sec, end_sec: seg.end_sec, hex: segHex });
+      const bg = seg.color        ?? "rgba(99,102,241,0.10)";
+      const br = seg.borderColor  ?? "rgba(99,102,241,0.55)";
+
+      const el = document.createElement("div");
+      el.style.cssText = [
+        "position:absolute",
+        `left:${x1}px`, `top:${PAD}px`,
+        `width:${bw}px`, `height:${signalH - PAD * 2}px`,
+        `border:1px solid ${faintFill(br, 0.45)}`,
+        `border-radius:2px`,
+        `background:${faintFill(bg, 0.08)}`,
+        "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+      ].join(";");
+      if (bw >= 16) el.appendChild(makeChip(abbrev(seg.label), br));
+      artifactRef.current?.appendChild(el);
     }
 
     gridRef.current.forEach((l) => {
@@ -818,28 +758,18 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
 
       const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
 
-      // Combine global (-1) and per-channel color intervals for this channel
-      const ivGlobal = chColorIntervals.get(-1) ?? [];
-      const ivChannel = chColorIntervals.get(chIdx) ?? [];
-      const ivAll: ColorInterval[] = [...ivGlobal, ...ivChannel];
-
-      const pxCount = Math.max(2, Math.min(Math.round(signalW), 2400));
-      const vtxColors = buildPolylineColors(pxCount, signalW, labelW, timeWindow, ivAll, colorHex);
-
-      // create or update line — Line2 with vertex colors per pixel column
+      // create or update line — Line2 renders connected polyline at real pixel width
       const existing = lineStateRef.current.get(chIdx);
       if (existing) {
         existing.pos = pos;
         existing.geom.setPositions(pos);
-        existing.geom.setColors(vtxColors);
+        (existing.line.material as LineMaterial).color.setHex(colorHex);
         (existing.line.material as LineMaterial).resolution.set(w, h);
       } else {
         const geom = new LineGeometry();
         geom.setPositions(pos);
-        geom.setColors(vtxColors);
         const mat = new LineMaterial({
-          color: 0xffffff,  // white multiplier — vertex colors carry the actual hue
-          vertexColors: true,
+          color: colorHex,
           linewidth: 1.4,
           worldUnits: false,
           resolution: new THREE.Vector2(w, h),
@@ -957,13 +887,13 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
   }, [updateCursor]);
 
   // ── L-ruler dimensions ───────────────────────────────────────────────────────
-  // containerWidth state is kept in sync by the ResizeObserver so armXPx always
-  // reflects the actual container width, even after a window resize.
+  // Vertical arm = reference µV, horizontal arm = 1 second.
   const PX_PER_MM = 96 / 25.4; // 3.779 px/mm at 96 DPI
   const refUv = uvPerMm <= 15 ? 100 : uvPerMm <= 50 ? 200 : 500;
   const armYPx = Math.max(20, Math.round((refUv / Math.max(uvPerMm, 0.1)) * PX_PER_MM));
-  // Horizontal arm = 1 second — use reactive containerWidth, not a stale ref read
-  const sigW = Math.max(1, containerWidth - Math.max(0, labelColumnWidth));
+  // Horizontal arm = 1 second in pixels (signal area width / timeWindow)
+  const containerW = containerRef.current?.clientWidth ?? 800;
+  const sigW = Math.max(1, containerW - Math.max(0, labelColumnWidth));
   const armXPx = Math.max(40, Math.round(sigW / timeWindow));
 
   const isDark = theme === "dark";
