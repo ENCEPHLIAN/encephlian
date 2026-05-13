@@ -211,6 +211,9 @@ export default function EEGViewer() {
   const [hfFilter, setHfFilter]             = useState(70);
   const [lfFilter, setLfFilter]             = useState(0.5);
   const [notchFilter, setNotchFilter]       = useState<0 | 50 | 60>(50);
+  const [denoise, setDenoise]               = useState(false);
+  // Snapshot of filters before denoise preset was applied — for restore on toggle-off
+  const preDenoiseFilters = useRef<{ hf: number; lf: number; notch: 0 | 50 | 60 } | null>(null);
   const [montage, setMontage]               = useState("referential");
 
   // ── Data ─────────────────────────────────────────────────────────────────────
@@ -900,6 +903,19 @@ export default function EEGViewer() {
         onLFFilterChange={setLfFilter}
         notchFilter={notchFilter}
         onNotchFilterChange={setNotchFilter}
+        denoise={denoise}
+        onDenoiseChange={(on) => {
+          if (on) {
+            preDenoiseFilters.current = { hf: hfFilter, lf: lfFilter, notch: notchFilter };
+            setHfFilter(35);
+            setLfFilter(1.0);
+            setNotchFilter(50);
+          } else {
+            const prev = preDenoiseFilters.current;
+            if (prev) { setHfFilter(prev.hf); setLfFilter(prev.lf); setNotchFilter(prev.notch); }
+          }
+          setDenoise(on);
+        }}
         montage={montage}
         onMontageChange={setMontage}
         visibleChannelCount={displayLabels.length || meta?.n_channels}

@@ -95,6 +95,8 @@ export interface ViewerControlsProps {
   onLFFilterChange?: (hz: number) => void;
   notchFilter?: 0 | 50 | 60;
   onNotchFilterChange?: (hz: 0 | 50 | 60) => void;
+  denoise?: boolean;
+  onDenoiseChange?: (on: boolean) => void;
   montage?: string;
   onMontageChange?: (m: string) => void;
   visibleChannelCount?: number;
@@ -214,6 +216,8 @@ export function ViewerControls({
   onLFFilterChange,
   notchFilter = 0,
   onNotchFilterChange,
+  denoise = false,
+  onDenoiseChange,
   montage = "referential",
   onMontageChange,
   visibleChannelCount,
@@ -361,6 +365,24 @@ export function ViewerControls({
         tooltip="Notch (band-reject) filter — removes powerline interference at 50 Hz (Europe/Asia) or 60 Hz (Americas). Disable if analysing signals near the powerline frequency."
         highlight={notchFilter !== 0}
       />
+
+      <Sep />
+
+      {/* ── Denoise preset ──────────────────────────────────────────────── */}
+      <button
+        onClick={() => onDenoiseChange?.(!denoise)}
+        title={denoise
+          ? "Denoise ON — LF 1 Hz · HF 35 Hz · Notch 50 Hz. Click to restore previous filters."
+          : "Denoise — apply aggressive bandpass (1–35 Hz) + 50 Hz notch to suppress EMG, power-line, and electrode noise."}
+        className={cn(
+          "h-6 px-2 rounded text-[11px] font-semibold font-mono transition-all select-none shrink-0 border",
+          denoise
+            ? "bg-violet-600 text-white border-violet-500 shadow-sm shadow-violet-500/30"
+            : "bg-transparent text-muted-foreground border-border hover:border-violet-400 hover:text-violet-400",
+        )}
+      >
+        Denoise
+      </button>
 
     </div>
   );
