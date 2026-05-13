@@ -89,9 +89,9 @@ function hdrNum(h: Record<string, string>, keys: string[]) {
   for (const k of keys) { const v = Number(h[k.toLowerCase()]); if (isFinite(v)) return v; }
   return NaN;
 }
-function fetchChunk(studyId: string, start: number, len: number) {
+function fetchChunk(studyId: string, start: number, len: number, layer: "normalized" | "prenorm" = "normalized") {
   return fetchBinary(
-    `/studies/${encodeURIComponent(studyId)}/chunk.bin?root=.&start=${start}&length=${len}`,
+    `/studies/${encodeURIComponent(studyId)}/chunk.bin?root=.&start=${start}&length=${len}&layer=${layer}`,
     { timeoutMs: 30000, requireKey: FETCH_REQUIRE_KEY },
   );
 }
@@ -238,13 +238,15 @@ export default function EEGViewer() {
   // Upgrade polling: once in raw mode, check if canonical becomes available
   const upgradeTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [esfPollAttempt, setEsfPollAttempt] = useState(0);
-  // Signal layer toggle: "esf" = canonical zarr (default), "raw" = raw EDF bytes
-  const [signalLayer, setSignalLayer] = useState<"esf" | "raw">("esf");
-  const signalLayerRef   = useRef<"esf" | "raw">("esf");
+  // Signal layer: "normalized" = z-scored ESF zarr, "prenorm" = µV ESF (notch+CAR, no z-score), "raw" = original file
+  const [signalLayer, setSignalLayer] = useState<"normalized" | "prenorm" | "raw">("normalized");
+  const signalLayerRef   = useRef<"normalized" | "prenorm" | "raw">("normalized");
   const rawEdfRef        = useRef<EdfChunkReader | null>(null);
   const rawMetaRef       = useRef<Meta | null>(null);
   const canonicalMetaRef = useRef<Meta | null>(null);
+  const prenormMetaRef   = useRef<Meta | null>(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
+  const [loadingPrenorm, setLoadingPrenorm] = useState(false);
   /** True once canonical (ESF/zarr) meta exists — drives ESF toggle (refs do not re-render). */
   const [canonicalPresent, setCanonicalPresent] = useState(false);
 
@@ -331,7 +333,7 @@ export default function EEGViewer() {
     let alive = true;
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
-    setSignalLayer("esf"); signalLayerRef.current = "esf";
+    setSignalLayer("normalized"); signalLayerRef.current = "normalized";
     setEsfPollAttempt(0);
     didSeek.current = false;
     strippedLegacyViewParamsRef.current = false;
@@ -414,12 +416,12 @@ export default function EEGViewer() {
                   canonicalMetaRef.current = newMeta;
                   setCanonicalPresent(true);
                   // Auto-upgrade only if user hasn't explicitly switched to raw
-                  if (signalLayerRef.current === "esf") {
+                  if (signalLayerRef.current === "normalized") {
                     edfReader.current = null;
                     cache.current.clear();
                     setRawEdfMode(false);
-                    setSignalLayer("esf");
-                    signalLayerRef.current = "esf";
+                    setSignalLayer("normalized");
+                    signalLayerRef.current = "normalized";
                     setMeta(newMeta);
                     toast.success("Enhanced signal view ready");
                   }
@@ -562,7 +564,7 @@ export default function EEGViewer() {
     fetchDebounceRef.current = setTimeout(() => {
       fetchDebounceRef.current = null;
 
-      fetchChunk(studyId, startSamp, len)
+      fetchChunk(studyId, startSamp, len, signalLayerRef.current === "prenorm" ? "prenorm" : "normalized")
         .then(r => {
           if (!r.ok) throw new Error((r as any).error);
           const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
@@ -816,7 +818,7 @@ export default function EEGViewer() {
       )}
 
       {/* ── ESF mode: show channel mapping quality if meta carries quality info ── */}
-      {!rawEdfMode && signalLayer === "esf" && meta && (() => {
+      {!rawEdfMode && (signalLayer === "normalized" || signalLayer === "prenorm") && meta && (() => {
         // C-Plane embeds "input_montage:X | mapped:Y/Z" in ESF notes field
         const notes: string = (meta as any).notes ?? "";
         const montageMatch = notes.match(/input_montage:(\w+)/);
@@ -916,6 +918,7 @@ export default function EEGViewer() {
           }
           setDenoise(on);
         }}
+        signalLayer={signalLayer}
         montage={montage}
         onMontageChange={setMontage}
         visibleChannelCount={displayLabels.length || meta?.n_channels}
@@ -991,42 +994,17 @@ export default function EEGViewer() {
           </div>
         )}
 
-        {/* ESF / Raw — top of minimap strip, right edge (does not add vertical space) */}
+        {/* Signal layer toggle: Raw | Pre-norm | Normalized */}
         <div
           className="absolute inset-y-0 right-0 z-20 flex items-stretch border-l border-border/50 bg-background/95 pl-0.5 backdrop-blur-sm"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex h-full items-stretch overflow-hidden rounded-sm border border-border/40 text-[10px] leading-none">
-            <button
-              type="button"
-              disabled={!canonicalPresent}
-              title={!canonicalPresent ? "Enhanced (ESF) view not available for this study yet" : "Canonical ESF view"}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (signalLayer === "esf") return;
-                reqId.current += 1;
-                edfReader.current = null;
-                cache.current.clear();
-                const canon = canonicalMetaRef.current;
-                if (!canon) {
-                  toast.message("ESF view not ready", { description: "Try again after processing completes." });
-                  return;
-                }
-                setSignals(null);
-                setMeta(canon);
-                signalLayerRef.current = "esf";
-                setSignalLayer("esf");
-              }}
-              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                signalLayer === "esf" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              ESF
-            </button>
+            {/* Raw — original file bytes, no processing */}
             <button
               type="button"
               disabled={loadingRaw}
-              title="Source EDF (all channels)"
+              title="Raw source file — original signal as recorded, no filtering, no resampling, no reference"
               onClick={async (e) => {
                 e.stopPropagation();
                 if (signalLayer === "raw") return;
@@ -1041,20 +1019,14 @@ export default function EEGViewer() {
                   const len = Math.max(1, Math.floor(windowSec * fs));
                   try {
                     const sig = rawEdfRef.current.getChunk(startSamp, len);
-                    setMeta(rawM);
-                    setSignals(sig);
-                    signalLayerRef.current = "raw";
-                    setSignalLayer("raw");
+                    setMeta(rawM); setSignals(sig);
+                    signalLayerRef.current = "raw"; setSignalLayer("raw");
                   } catch (err) {
-                    console.warn("[viewer] raw chunk:", err);
-                    toast.error("Could not read raw window", {
-                      description: err instanceof Error ? err.message : String(err),
-                    });
+                    toast.error("Could not read raw window", { description: err instanceof Error ? err.message : String(err) });
                   }
                   return;
                 }
-                setSignals(null);
-                setLoadingRaw(true);
+                setSignals(null); setLoadingRaw(true);
                 try {
                   const buf = await downloadRawEdfBuffer(studyId);
                   const reader = new EdfChunkReader(buf);
@@ -1064,31 +1036,74 @@ export default function EEGViewer() {
                     n_samples: reader.totalSamples,
                     channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
                   };
-                  rawEdfRef.current = reader;
-                  rawMetaRef.current = rawM;
-                  edfReader.current = reader;
+                  rawEdfRef.current = reader; rawMetaRef.current = rawM; edfReader.current = reader;
                   cache.current.clear();
                   const fs = rawM.sampling_rate_hz;
-                  const startSamp = Math.floor(windowStart * fs);
-                  const len = Math.max(1, Math.floor(windowSec * fs));
-                  const sig = reader.getChunk(startSamp, len);
-                  setMeta(rawM);
-                  setSignals(sig);
-                  signalLayerRef.current = "raw";
-                  setSignalLayer("raw");
+                  const sig = reader.getChunk(Math.floor(windowStart * fs), Math.max(1, Math.floor(windowSec * fs)));
+                  setMeta(rawM); setSignals(sig);
+                  signalLayerRef.current = "raw"; setSignalLayer("raw");
                 } catch (e2) {
-                  const msg = e2 instanceof Error ? e2.message : String(e2);
-                  console.warn("[viewer] raw EDF load failed:", e2);
-                  toast.error("Could not load raw file", { description: msg });
-                } finally {
-                  setLoadingRaw(false);
-                }
+                  toast.error("Could not load raw file", { description: e2 instanceof Error ? e2.message : String(e2) });
+                } finally { setLoadingRaw(false); }
               }}
-              className={`flex items-center px-1.5 transition-colors ${
-                signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`flex items-center px-1.5 transition-colors ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
+            </button>
+            {/* Pre-norm — 250 Hz, 50/60 Hz notch, CAR applied; z-score NOT applied (absolute µV) */}
+            <button
+              type="button"
+              disabled={!canonicalPresent || loadingPrenorm}
+              title={!canonicalPresent
+                ? "Pre-norm view not available — study not yet processed"
+                : "Pre-norm — 250 Hz resampled · notch filtered · common average reference · absolute µV (no z-score normalization)"}
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (signalLayer === "prenorm") return;
+                if (!canonicalPresent || !studyId) return;
+                reqId.current += 1;
+                edfReader.current = null;
+                cache.current.clear();
+                if (prenormMetaRef.current) {
+                  setMeta(prenormMetaRef.current); setSignals(null);
+                  signalLayerRef.current = "prenorm"; setSignalLayer("prenorm");
+                  return;
+                }
+                setLoadingPrenorm(true);
+                try {
+                  const r = await fetchJson<any>(`/studies/${studyId}/meta?root=.&layer=prenorm`, { timeoutMs: 15000, requireKey: FETCH_REQUIRE_KEY });
+                  if (!r.ok) throw new Error((r as any).error ?? "prenorm meta not found");
+                  const m = (r.data?.meta ?? r.data) as Meta;
+                  prenormMetaRef.current = m;
+                  setMeta(m); setSignals(null);
+                  signalLayerRef.current = "prenorm"; setSignalLayer("prenorm");
+                } catch (err) {
+                  toast.error("Pre-norm view not available", { description: err instanceof Error ? err.message : String(err) });
+                } finally { setLoadingPrenorm(false); }
+              }}
+              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "prenorm" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {loadingPrenorm ? <Loader2 className="h-3 w-3 animate-spin" /> : "µV"}
+            </button>
+            {/* Normalized — z-scored ESF canonical (what the model sees) */}
+            <button
+              type="button"
+              disabled={!canonicalPresent}
+              title={!canonicalPresent ? "Normalized view not available — study not yet processed" : "Normalized — 250 Hz · notch · CAR · robust z-score (what the model sees)"}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (signalLayer === "normalized") return;
+                reqId.current += 1;
+                edfReader.current = null;
+                cache.current.clear();
+                const canon = canonicalMetaRef.current;
+                if (!canon) { toast.message("ESF view not ready"); return; }
+                setSignals(null); setMeta(canon);
+                signalLayerRef.current = "normalized"; setSignalLayer("normalized");
+              }}
+              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "normalized" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              Norm
             </button>
           </div>
         </div>

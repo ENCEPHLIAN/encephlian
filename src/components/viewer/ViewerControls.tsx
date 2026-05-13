@@ -97,6 +97,8 @@ export interface ViewerControlsProps {
   onNotchFilterChange?: (hz: 0 | 50 | 60) => void;
   denoise?: boolean;
   onDenoiseChange?: (on: boolean) => void;
+  /** Which signal layer is active — filters already applied at conversion are disabled */
+  signalLayer?: "normalized" | "prenorm" | "raw";
   montage?: string;
   onMontageChange?: (m: string) => void;
   visibleChannelCount?: number;
@@ -218,10 +220,15 @@ export function ViewerControls({
   onNotchFilterChange,
   denoise = false,
   onDenoiseChange,
+  signalLayer = "raw",
   montage = "referential",
   onMontageChange,
   visibleChannelCount,
 }: ViewerControlsProps) {
+
+  // For ESF layers (prenorm + normalized), notch and LF are already applied at conversion.
+  // Showing them as editable would imply double-application — disable and inform instead.
+  const esfLayer = signalLayer === "normalized" || signalLayer === "prenorm";
 
   const mmSec    = windowSecToMmSec(timeWindow);
   const uvmm     = scaleToUVMM(amplitudeScale);
@@ -344,7 +351,9 @@ export function ViewerControls({
         options={HF_OPTIONS}
         onChange={v => onHFFilterChange?.(v)}
         displayFn={v => `${v}`}
-        tooltip="High-frequency filter (low-pass cutoff in Hz) — removes muscle and high-frequency noise above this frequency. 70 Hz is the clinical default for routine EEG."
+        tooltip={esfLayer
+          ? "High-frequency filter — applied client-side on top of ESF signals (additional low-pass on already-processed data)"
+          : "High-frequency filter (low-pass cutoff in Hz) — removes muscle and high-frequency noise above this frequency. 70 Hz is the clinical default for routine EEG."}
         highlight={hfFilter !== 70}
       />
       <FilterCtrl
@@ -353,36 +362,49 @@ export function ViewerControls({
         options={LF_OPTIONS}
         onChange={v => onLFFilterChange?.(v)}
         displayFn={v => v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : String(v)}
-        tooltip="Low-frequency filter (high-pass cutoff in Hz) — removes slow drift and DC offset below this frequency. 0.5 Hz is the clinical default."
+        tooltip={esfLayer
+          ? "Low-frequency filter — already applied at ESF conversion (common average reference removes slow drift). Changing this applies an additional filter client-side."
+          : "Low-frequency filter (high-pass cutoff in Hz) — removes slow drift and DC offset below this frequency. 0.5 Hz is the clinical default."}
         highlight={lfFilter !== 0.5}
       />
-      <FilterCtrl
-        label="Notch"
-        value={notchFilter}
-        options={[0, 50, 60] as const}
-        onChange={v => onNotchFilterChange?.(v as 0 | 50 | 60)}
-        displayFn={v => v === 0 ? "Off" : `${v} Hz`}
-        tooltip="Notch (band-reject) filter — removes powerline interference at 50 Hz (Europe/Asia) or 60 Hz (Americas). Disable if analysing signals near the powerline frequency."
-        highlight={notchFilter !== 0}
-      />
+      {esfLayer ? (
+        <span
+          className="text-[10px] text-muted-foreground/50 shrink-0 font-mono select-none"
+          title="Notch filter applied at ESF conversion (50 or 60 Hz per recording line frequency). No second filter applied here."
+        >
+          Notch ✓
+        </span>
+      ) : (
+        <FilterCtrl
+          label="Notch"
+          value={notchFilter}
+          options={[0, 50, 60] as const}
+          onChange={v => onNotchFilterChange?.(v as 0 | 50 | 60)}
+          displayFn={v => v === 0 ? "Off" : `${v} Hz`}
+          tooltip="Notch (band-reject) filter — removes powerline interference at 50 Hz (Europe/Asia) or 60 Hz (Americas). Disable if analysing signals near the powerline frequency."
+          highlight={notchFilter !== 0}
+        />
+      )}
 
       <Sep />
 
-      {/* ── Denoise preset ──────────────────────────────────────────────── */}
-      <button
-        onClick={() => onDenoiseChange?.(!denoise)}
-        title={denoise
-          ? "Denoise ON — LF 1 Hz · HF 35 Hz · Notch 50 Hz. Click to restore previous filters."
-          : "Denoise — apply aggressive bandpass (1–35 Hz) + 50 Hz notch to suppress EMG, power-line, and electrode noise."}
-        className={cn(
-          "h-6 px-2 rounded text-[11px] font-semibold font-mono transition-all select-none shrink-0 border",
-          denoise
-            ? "bg-violet-600 text-white border-violet-500 shadow-sm shadow-violet-500/30"
-            : "bg-transparent text-muted-foreground border-border hover:border-violet-400 hover:text-violet-400",
-        )}
-      >
-        Denoise
-      </button>
+      {/* ── Denoise preset — only meaningful on raw layer ───────────────── */}
+      {!esfLayer && (
+        <button
+          onClick={() => onDenoiseChange?.(!denoise)}
+          title={denoise
+            ? "Denoise ON — LF 1 Hz · HF 35 Hz · Notch 50 Hz. Click to restore previous filters."
+            : "Denoise — apply aggressive bandpass (1–35 Hz) + 50 Hz notch to suppress EMG, power-line, and electrode noise."}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-semibold font-mono transition-all select-none shrink-0 border",
+            denoise
+              ? "bg-violet-600 text-white border-violet-500 shadow-sm shadow-violet-500/30"
+              : "bg-transparent text-muted-foreground border-border hover:border-violet-400 hover:text-violet-400",
+          )}
+        >
+          Denoise
+        </button>
+      )}
 
     </div>
   );
