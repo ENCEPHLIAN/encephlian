@@ -254,12 +254,12 @@ export default function EEGViewer() {
   const globalTime = windowStart + cursor;
   const duration   = useMemo(() => (meta ? meta.n_samples / meta.sampling_rate_hz : 0), [meta]);
 
-  // Raw layer requires a browser-parseable format. EDF/BDF are supported by EdfChunkReader.
-  // Proprietary formats (e, nk, eeg, cnt, 21e) contain binary data that cannot be parsed client-side.
-  const rawLayerParseable = useMemo(() => {
+  // Raw zarr is served by Read API for all formats after processing.
+  // EdfChunkReader fallback only works for EDF/BDF and only before processing completes.
+  const rawEdfFallbackParseable = useMemo(() => {
     const fmt = ((canonicalMetaRef.current as any)?.source_format ?? "").toLowerCase();
     return !fmt || fmt === "edf" || fmt === "bdf";
-  }, [canonicalPresent]); // re-derive when canonical meta arrives
+  }, [canonicalPresent]);
 
   const segIdx = useMemo(() => {
     if (!focusedSeg || !segments.length) return -1;
@@ -1022,52 +1022,56 @@ export default function EEGViewer() {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex h-full items-stretch overflow-hidden rounded-sm border border-border/40 text-[10px] leading-none">
-            {/* Raw — original file bytes, no processing */}
+            {/* Raw — original signal, no processing. Served from Read API zarr for all formats.
+                EdfChunkReader used only as pre-processing fallback for EDF/BDF. */}
             <button
               type="button"
-              disabled={loadingRaw || !rawLayerParseable}
-              title={!rawLayerParseable
-                ? `Raw view unavailable — ${((canonicalMetaRef.current as any)?.source_format ?? "this format")} is a proprietary binary. The file is stored immutably; use the µV layer for clinical review.`
-                : "Raw source file — original signal as recorded, no filtering, no resampling, no reference"}
+              disabled={loadingRaw}
+              title="Raw — original recorded signal, no filtering, no resampling, no reference"
               onClick={async (e) => {
                 e.stopPropagation();
                 if (signalLayer === "raw") return;
                 if (!studyId) return;
                 reqId.current += 1;
-                if (rawEdfRef.current && rawMetaRef.current) {
-                  edfReader.current = rawEdfRef.current;
-                  cache.current.clear();
-                  const rawM = rawMetaRef.current;
-                  const fs = rawM.sampling_rate_hz;
-                  const startSamp = Math.floor(windowStart * fs);
-                  const len = Math.max(1, Math.floor(windowSec * fs));
-                  try {
-                    const sig = rawEdfRef.current.getChunk(startSamp, len);
-                    setMeta(rawM); setSignals(sig);
-                    signalLayerRef.current = "raw"; setSignalLayer("raw");
-                  } catch (err) {
-                    toast.error("Could not read raw window", { description: err instanceof Error ? err.message : String(err) });
-                  }
-                  return;
-                }
+                edfReader.current = null;
+                cache.current.clear();
                 setSignals(null); setLoadingRaw(true);
                 try {
-                  const buf = await downloadRawEdfBuffer(studyId);
-                  const reader = new EdfChunkReader(buf);
-                  const rawM: Meta = {
-                    n_channels: reader.nChannels,
-                    sampling_rate_hz: reader.sampleRate,
-                    n_samples: reader.totalSamples,
-                    channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
-                  };
-                  rawEdfRef.current = reader; rawMetaRef.current = rawM; edfReader.current = reader;
-                  cache.current.clear();
-                  const fs = rawM.sampling_rate_hz;
-                  const sig = reader.getChunk(Math.floor(windowStart * fs), Math.max(1, Math.floor(windowSec * fs)));
-                  setMeta(rawM); setSignals(sig);
+                  // Primary: Read API raw zarr — works for all formats (.e, EDF, BDF) after processing
+                  const r = await fetchJson<any>(
+                    `/studies/${studyId}/meta?root=.&layer=raw`,
+                    { timeoutMs: 15000, requireKey: FETCH_REQUIRE_KEY },
+                  );
+                  if (!r.ok) throw new Error((r as any).error ?? "raw layer not found");
+                  const rawM = (r.data?.meta ?? r.data) as Meta;
+                  rawMetaRef.current = rawM;
+                  setMeta(rawM);
                   signalLayerRef.current = "raw"; setSignalLayer("raw");
-                } catch (e2) {
-                  toast.error("Could not load raw file", { description: e2 instanceof Error ? e2.message : String(e2) });
+                } catch (_apiErr) {
+                  // Fallback: EdfChunkReader for EDF/BDF files not yet processed by C-plane
+                  if (!rawEdfFallbackParseable) {
+                    const fmt = ((canonicalMetaRef.current as any)?.source_format ?? "this format").toUpperCase();
+                    toast.error("Raw view not yet available", {
+                      description: `${fmt} files must be processed first. Processing may still be in progress.`,
+                    });
+                    setLoadingRaw(false);
+                    return;
+                  }
+                  try {
+                    const buf = await downloadRawEdfBuffer(studyId);
+                    const reader = new EdfChunkReader(buf);
+                    const rawM: Meta = {
+                      n_channels: reader.nChannels,
+                      sampling_rate_hz: reader.sampleRate,
+                      n_samples: reader.totalSamples,
+                      channel_map: reader.labels.map((l, i) => ({ index: i, canonical_id: l, unit: "uV" })),
+                    };
+                    rawEdfRef.current = reader; rawMetaRef.current = rawM; edfReader.current = reader;
+                    setMeta(rawM);
+                    signalLayerRef.current = "raw"; setSignalLayer("raw");
+                  } catch (e2) {
+                    toast.error("Could not load raw view", { description: e2 instanceof Error ? e2.message : String(e2) });
+                  }
                 } finally { setLoadingRaw(false); }
               }}
               className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
