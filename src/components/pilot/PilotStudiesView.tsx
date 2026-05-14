@@ -41,8 +41,27 @@ export default function PilotStudiesView() {
     pending: pendingStudies,
     processing: processingStudies,
     completed: completedStudies,
+    failed: failedStudies,
     refetchStudies,
   } = usePilotData();
+
+  const handleRetryStudy = useCallback(async (studyId: string) => {
+    const { error } = await supabase
+      .from("studies")
+      .update({
+        triage_status: "awaiting_sla",
+        state: "awaiting_sla",
+        triage_progress: 0,
+        refund_requested: false,
+      })
+      .eq("id", studyId);
+    if (error) {
+      toast.error("Retry failed", { description: error.message });
+      return;
+    }
+    toast.success("Study reset — select SLA to re-run");
+    refetchStudies();
+  }, [refetchStudies]);
 
   const handleInsufficientTokens = useCallback(() => {
     toast.error("Add tokens to continue", {
@@ -370,6 +389,14 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                 : progress < 70
                 ? "AI analysis..."
                 : "Generating report...";
+            // Time-to-result: typical pipeline = 8-15 min. Show estimate based on progress.
+            const startedAt = study.sla_selected_at || study.created_at;
+            const elapsedMin = startedAt ? dayjs().diff(dayjs(startedAt), "minute") : 0;
+            const isPriority = study.sla === "stat" || study.sla === "priority";
+            const expectedMin = isPriority ? 5 : 15;
+            const etaText = elapsedMin < expectedMin
+              ? `~${Math.max(1, expectedMin - elapsedMin)} min remaining`
+              : `Running ${elapsedMin} min — typically ${expectedMin} min`;
             return (
               <Card key={study.id} className="bg-primary/5 border-primary/20">
                 <CardContent className="p-3.5 space-y-2">
@@ -382,7 +409,9 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                         <p className="font-medium text-sm truncate">
                           {getPatientLabel(study)}
                         </p>
-                        <p className="text-[11px] text-muted-foreground">{label}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {label} <span className="text-muted-foreground/60">· {etaText}</span>
+                        </p>
                         {src && (
                           <p className="text-[11px] text-muted-foreground/90 truncate" title={src}>{src}</p>
                         )}
@@ -393,6 +422,56 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                     </span>
                   </div>
                   <Progress value={progress} className="h-1.5" />
+                </CardContent>
+              </Card>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Failed studies — must be visible so users can retry instead of losing the study */}
+      {failedStudies.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <span className="text-sm font-semibold">Failed</span>
+            <Badge variant="destructive" className="text-[10px] ml-auto tabular-nums">
+              {failedStudies.length}
+            </Badge>
+          </div>
+          {failedStudies.slice(0, 10).map((study) => {
+            const meta = study.meta as any;
+            const src = formatStudySourceLine(meta, study.original_format ?? null);
+            return (
+              <Card key={study.id} className="border-destructive/40 bg-destructive/5">
+                <CardContent className="p-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-destructive/15 flex items-center justify-center shrink-0">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">
+                        {getPatientLabel(study)}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {src} · Processing failed
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                        {dayjs(study.created_at).format("MMM D, HH:mm")} · Your tokens have been refunded
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRetryStudy(study.id);
+                      }}
+                    >
+                      Retry
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
