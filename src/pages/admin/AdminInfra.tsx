@@ -582,70 +582,122 @@ export default function AdminInfra() {
 
       {/* ── Per-Clinic Cost Reference ── */}
       <div className="rounded-lg border border-border/60 p-4 space-y-4">
-        <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Per-Clinic Cost Reference — Current Build</p>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Per-Clinic Cost Reference — Current Build</p>
+          <div className="flex gap-2 text-[10px] shrink-0">
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-blue-500/70" />Azure (credits)</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-sm bg-orange-500/70" />Platform (self-managed)</span>
+          </div>
+        </div>
         <p className="text-[11px] text-muted-foreground">
           Assumptions: 20-min EEG study, ~40 MB raw file. Blob/study: raw 40 MB + canonical 9 MB + derived 22 MB + features 1 MB ≈ 72 MB.
           Viewer egress: 3 sessions × 10 min × ~5.4 MB/min ≈ 162 MB/study. Azure Central India pricing. +30% buffer applied.
         </p>
         <div className="grid sm:grid-cols-2 gap-6">
           {/* Scenario A */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-xs font-semibold text-foreground">Scenario A — 25 studies / month (light clinic)</p>
-            <table className="w-full text-[11px]">
-              <thead><tr className="text-muted-foreground border-b border-border/40"><th className="text-left py-1">Line item</th><th className="text-right py-1">$/mo</th></tr></thead>
-              <tbody className="divide-y divide-border/20">
-                {[
-                  ["C-Plane Container App (0.5 vCPU, 1 GB)", "$8.20"],
-                  ["I-Plane Container App (1 vCPU, 2 GB, always-on)", "$18.00"],
-                  ["Read API Container App (0.5 vCPU, 1 GB)", "$8.00"],
-                  ["Azure Blob storage (1.8 GB × $0.018/GB)", "$0.03"],
-                  ["Blob egress — viewer + processing (5.8 GB × $0.087/GB)", "$0.50"],
-                  ["Azure Container Registry (Basic)", "$5.00"],
-                  ["Vercel Pro (frontend)", "$20.00"],
-                  ["Supabase Free tier", "$0.00"],
-                ].map(([label, cost]) => (
-                  <tr key={label}><td className="py-1 text-muted-foreground">{label}</td><td className="py-1 text-right tabular-nums">{cost}</td></tr>
-                ))}
-                <tr className="font-semibold text-foreground border-t border-border/60">
-                  <td className="py-1.5">Subtotal</td><td className="py-1.5 text-right tabular-nums">$59.73</td>
-                </tr>
-                <tr className="font-bold text-foreground">
-                  <td className="py-1">+30% buffer (DNS, network, misc)</td><td className="py-1 text-right tabular-nums text-yellow-400">~$78/mo</td>
-                </tr>
-              </tbody>
-            </table>
+
+            {/* Azure bucket */}
+            <div>
+              <p className="text-[10px] font-medium text-blue-400 uppercase tracking-wide mb-1">Azure — credits</p>
+              <table className="w-full text-[11px]">
+                <tbody className="divide-y divide-border/20">
+                  {[
+                    ["C-Plane Container App (0.5 vCPU, 1 GB)", "$8.20"],
+                    ["I-Plane Container App (1 vCPU, 2 GB, always-on)", "$18.00"],
+                    ["Read API Container App (0.5 vCPU, 1 GB)", "$8.00"],
+                    ["Blob storage (1.8 GB × $0.018/GB)", "$0.03"],
+                    ["Blob egress — viewer + processing (5.8 GB)", "$0.50"],
+                    ["Container Registry (Basic)", "$5.00"],
+                  ].map(([label, cost]) => (
+                    <tr key={label}><td className="py-0.5 text-muted-foreground">{label}</td><td className="py-0.5 text-right tabular-nums text-blue-300">{cost}</td></tr>
+                  ))}
+                  <tr className="font-semibold text-blue-200 border-t border-border/60">
+                    <td className="py-1">Azure subtotal</td><td className="py-1 text-right tabular-nums">$39.73</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Platform bucket */}
+            <div>
+              <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-1">Platform — self-managed</p>
+              <table className="w-full text-[11px]">
+                <tbody className="divide-y divide-border/20">
+                  {[
+                    ["Vercel Pro (frontend + edge functions)", "$20.00"],
+                    ["Supabase Free tier", "$0.00"],
+                  ].map(([label, cost]) => (
+                    <tr key={label}><td className="py-0.5 text-muted-foreground">{label}</td><td className="py-0.5 text-right tabular-nums text-orange-300">{cost}</td></tr>
+                  ))}
+                  <tr className="font-semibold text-orange-200 border-t border-border/60">
+                    <td className="py-1">Platform subtotal</td><td className="py-1 text-right tabular-nums">$20.00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-border/60 pt-2 flex justify-between items-center">
+              <span className="text-[11px] font-bold text-foreground">Total +30% buffer</span>
+              <span className="text-sm font-bold text-yellow-400">~$78/mo</span>
+            </div>
           </div>
+
           {/* Scenario B */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p className="text-xs font-semibold text-foreground">Scenario B — 300 studies / month (10/day busy clinic)</p>
-            <table className="w-full text-[11px]">
-              <thead><tr className="text-muted-foreground border-b border-border/40"><th className="text-left py-1">Line item</th><th className="text-right py-1">$/mo</th></tr></thead>
-              <tbody className="divide-y divide-border/20">
-                {[
-                  ["C-Plane (scales up, 7.5 hrs active/mo)", "$22.00"],
-                  ["I-Plane (always-on + burst)", "$22.00"],
-                  ["Read API (2 replicas under load)", "$16.00"],
-                  ["Azure Blob storage (21.3 GB × $0.018/GB)", "$0.38"],
-                  ["Blob egress — viewer + processing (58 GB × $0.087/GB)", "$5.05"],
-                  ["Azure Container Registry (Basic)", "$5.00"],
-                  ["Vercel Pro (frontend)", "$20.00"],
-                  ["Supabase Pro ($25/mo, 10 GB DB)", "$25.00"],
-                ].map(([label, cost]) => (
-                  <tr key={label}><td className="py-1 text-muted-foreground">{label}</td><td className="py-1 text-right tabular-nums">{cost}</td></tr>
-                ))}
-                <tr className="font-semibold text-foreground border-t border-border/60">
-                  <td className="py-1.5">Subtotal</td><td className="py-1.5 text-right tabular-nums">$115.43</td>
-                </tr>
-                <tr className="font-bold text-foreground">
-                  <td className="py-1">+30% buffer</td><td className="py-1 text-right tabular-nums text-yellow-400">~$150/mo</td>
-                </tr>
-              </tbody>
-            </table>
+
+            {/* Azure bucket */}
+            <div>
+              <p className="text-[10px] font-medium text-blue-400 uppercase tracking-wide mb-1">Azure — credits</p>
+              <table className="w-full text-[11px]">
+                <tbody className="divide-y divide-border/20">
+                  {[
+                    ["C-Plane (scales up, 7.5 hrs active/mo)", "$22.00"],
+                    ["I-Plane (always-on + burst)", "$22.00"],
+                    ["Read API (2 replicas under load)", "$16.00"],
+                    ["Blob storage (21.3 GB × $0.018/GB)", "$0.38"],
+                    ["Blob egress — viewer + processing (58 GB)", "$5.05"],
+                    ["Container Registry (Basic)", "$5.00"],
+                  ].map(([label, cost]) => (
+                    <tr key={label}><td className="py-0.5 text-muted-foreground">{label}</td><td className="py-0.5 text-right tabular-nums text-blue-300">{cost}</td></tr>
+                  ))}
+                  <tr className="font-semibold text-blue-200 border-t border-border/60">
+                    <td className="py-1">Azure subtotal</td><td className="py-1 text-right tabular-nums">$70.43</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Platform bucket */}
+            <div>
+              <p className="text-[10px] font-medium text-orange-400 uppercase tracking-wide mb-1">Platform — self-managed</p>
+              <table className="w-full text-[11px]">
+                <tbody className="divide-y divide-border/20">
+                  {[
+                    ["Vercel Pro (frontend + edge functions)", "$20.00"],
+                    ["Supabase Pro ($25/mo, 10 GB DB)", "$25.00"],
+                  ].map(([label, cost]) => (
+                    <tr key={label}><td className="py-0.5 text-muted-foreground">{label}</td><td className="py-0.5 text-right tabular-nums text-orange-300">{cost}</td></tr>
+                  ))}
+                  <tr className="font-semibold text-orange-200 border-t border-border/60">
+                    <td className="py-1">Platform subtotal</td><td className="py-1 text-right tabular-nums">$45.00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div className="border-t border-border/60 pt-2 flex justify-between items-center">
+              <span className="text-[11px] font-bold text-foreground">Total +30% buffer</span>
+              <span className="text-sm font-bold text-yellow-400">~$150/mo</span>
+            </div>
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground/60 border-t border-border/40 pt-3">
-          These are shared infrastructure costs, not per-clinic marginal costs. Adding a second clinic to Scenario A adds approximately
-          $0.60/study in blob + egress. Container Apps are already running — the incremental cost of additional clinics is almost entirely storage and egress.
+          Azure costs (blue) run on credits — scale freely. Platform costs (orange) are fixed cash commitments regardless of study volume —
+          Vercel Pro is fixed at $20/mo; Supabase upgrades to Pro (~$25/mo) only when DB exceeds 500 MB or auth MAU exceeds 50k.
+          Adding a second clinic to Scenario A adds ~$0.60/study in blob + egress (Azure credits only). Container Apps are shared — per-clinic marginal cost is almost entirely storage and egress.
           ARIA models (VIGIL, FORGE) add ~3s C-Plane CPU per study once deployed — negligible at these volumes.
         </p>
       </div>
