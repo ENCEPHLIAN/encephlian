@@ -287,7 +287,7 @@ export function ViewerControls({
         className="flex items-center gap-0.5 shrink-0"
         title="Montage — electrode reference scheme. Referential uses raw input; bipolar shows differences between adjacent electrodes."
       >
-        <span className="text-[10px] text-muted-foreground/60 font-medium select-none">Mnt</span>
+        <span className="text-[10px] text-muted-foreground/60 font-medium select-none">Montage</span>
         <Select
           value={signalLayer === "raw" ? "referential" : montage}
           onValueChange={signalLayer === "raw" ? undefined : (onMontageChange ?? (() => {}))}
@@ -326,7 +326,7 @@ export function ViewerControls({
 
       {/* ── Amplitude ───────────────────────────────────────────────────── */}
       <StepCtrl
-        label="Amp"
+        label="Amplitude"
         value={String(uvmm)}
         unit="µV/mm"
         onDec={() => stepAmp(-1)}

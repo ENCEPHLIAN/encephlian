@@ -1054,13 +1054,12 @@ export default function EEGViewer() {
               );
             });
           })()}
-          {/* Artifact chip — clicking toggles bands; always shown when artifacts exist */}
+          {/* Artifact chip — clicking toggles bands; always fully visible */}
           {artifactCount > 0 && (
             <button
               onClick={() => setShowArtifacts(v => !v)}
               title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
               className="flex items-center gap-0.5 text-[10px] pointer-events-auto"
-              style={{ opacity: showArtifacts ? 1 : 0.6 }}
             >
               {Object.entries(artifactTypeCounts).map(([type, count]) => {
                 const ac = artifactColor(type);

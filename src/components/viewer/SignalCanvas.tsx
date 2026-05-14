@@ -755,13 +755,11 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         if (lp) filteredSig = applyBiquad(filteredSig, lp[0], lp[1], lp[2], lp[3], lp[4]);
       }
 
-      // For µV layers (raw/prenorm): fixed gain tied to uvPerMm so ruler is accurate.
-      // For z-scored ESF: auto-scale to p95 so all channels fill their lane.
-      const PX_PER_MM_GAIN = 96 / 25.4;
-      const fixedGain = PX_PER_MM_GAIN / Math.max(uvPerMm, 0.1);
-      const auto = signalUnit === "uV"
-        ? fixedGain
-        : (laneHalf / Math.max(p95, 1e-6)) * 0.9;
+      // Auto-gain: scale to p95 so every channel fills its lane proportionally.
+      // This applies to all layers — raw, prenorm, and z-scored ESF.
+      // The L-ruler is a calibration reference; its µV label is most meaningful
+      // on raw/prenorm where data is in actual µV.
+      const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
