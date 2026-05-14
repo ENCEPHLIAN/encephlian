@@ -999,8 +999,8 @@ export default function EEGViewer() {
             seekTo(((e.clientX - r.left) / r.width) * duration);
           }}
         >
-          {/* Artifact bands — top 2px strip, color-coded by type */}
-          {showArtifacts && artifacts.map((a, i) => {
+          {/* Artifact bands in minimap — ALWAYS visible; this is a navigator not a toggle target */}
+          {artifacts.map((a, i) => {
             const ac = artifactColor((a as any).label ?? "artifact");
             return (
               <div key={`a${i}`} className="absolute top-0 h-[3px] pointer-events-none"

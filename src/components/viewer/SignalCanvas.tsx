@@ -478,7 +478,25 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
     const signalH = h - TIME_AXIS_H;
 
     const laneH = (signalH - PAD * 2) / nCh;
-    const laneHalf = Math.max(4, laneH * 0.4);
+    // Raw/prenorm (µV): use full half-lane so signals can extend to lane boundary
+    const laneHalf = Math.max(4, signalUnit === "uV" ? laneH * 0.48 : laneH * 0.4);
+
+    // For raw/prenorm: compute a single global p95 across all channels so relative
+    // amplitudes are preserved — a flat channel looks flat, high-amp looks large.
+    // This matches how a clinical EEG machine displays at fixed sensitivity.
+    let globalP95: number | null = null;
+    if (signalUnit === "uV" && signals && signals.length > 0) {
+      const allAbs: number[] = [];
+      for (const chIdx of channels) {
+        const sig = signals[chIdx];
+        if (!sig) continue;
+        for (let i = 0; i < sig.length; i++) allAbs.push(Math.abs(sig[i]));
+      }
+      if (allAbs.length > 0) {
+        allAbs.sort((a, b) => a - b);
+        globalP95 = allAbs[Math.min(allAbs.length - 1, Math.floor(allAbs.length * 0.95))] || 1e-6;
+      }
+    }
 
     // ── Overlay helpers ──────────────────────────────────────────────────────────
     // Reduce rgba opacity to `alpha` (handles both spaced and unspaced rgba)
@@ -755,11 +773,12 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         if (lp) filteredSig = applyBiquad(filteredSig, lp[0], lp[1], lp[2], lp[3], lp[4]);
       }
 
-      // Auto-gain: scale to p95 so every channel fills its lane proportionally.
-      // This applies to all layers — raw, prenorm, and z-scored ESF.
-      // The L-ruler is a calibration reference; its µV label is most meaningful
-      // on raw/prenorm where data is in actual µV.
-      const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
+      // Raw/prenorm: global gain so all channels share the same scale — flat channels
+      // look flat, high-amplitude channels extend toward lane boundaries, just like
+      // a clinical EEG machine at fixed sensitivity.
+      // ESF/z-scored: per-channel auto-gain so every trace fills its lane.
+      const effectiveP95 = globalP95 !== null ? globalP95 : p95;
+      const auto = (laneHalf / Math.max(effectiveP95, 1e-6)) * 0.9;
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
