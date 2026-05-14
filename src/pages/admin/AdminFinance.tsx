@@ -34,11 +34,16 @@ import {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+interface TopupPack {
+  tokens: number;
+  priceInr: number;
+  popular?: boolean;
+}
+
 interface TokenPricing {
   baseFeeInr: number;       // monthly subscription fee
-  baseTokens: number;       // study credits included in base fee
-  topupPriceInr: number;    // price per topup pack
-  topupTokens: number;      // tokens per topup pack
+  baseTokens: number;       // tokens included in base fee
+  packs: TopupPack[];       // available topup packs (tiered, volume discount)
 }
 
 // Study types — token consumption per study
@@ -85,8 +90,12 @@ interface Assumptions {
 const DEFAULT_PRICING: TokenPricing = {
   baseFeeInr: 3_000,
   baseTokens: 10,
-  topupPriceInr: 15_000,
-  topupTokens: 15,
+  packs: [
+    { tokens: 10,  priceInr: 1_500  },   // ₹150/token
+    { tokens: 25,  priceInr: 3_499, popular: true },  // ₹140/token
+    { tokens: 50,  priceInr: 6_499  },   // ₹130/token
+    { tokens: 100, priceInr: 11_999 },   // ₹120/token
+  ],
 };
 
 const DEFAULT_TIERS: ClinicTier[] = [
@@ -155,15 +164,45 @@ function calcTokensConsumed(studies: number, statPct: number): number {
   return tatStudies * 1 + statStudies * 2;
 }
 
+// Greedy pack selection: satisfy deficit at minimum cost.
+// Clinics rationally pick the cheapest pack(s) that cover their token need.
+// Uses largest-first packs to minimize total spend.
+function calcTopupCostInr(deficit: number, packs: TopupPack[]): { costInr: number; breakdown: { pack: TopupPack; qty: number }[] } {
+  if (deficit <= 0) return { costInr: 0, breakdown: [] };
+  // Sort packs largest → smallest to greedily cover deficit cheaply
+  const sorted = [...packs].sort((a, b) => b.tokens - a.tokens);
+  let remaining = deficit;
+  let costInr = 0;
+  const breakdown: { pack: TopupPack; qty: number }[] = [];
+  for (const pack of sorted) {
+    if (remaining <= 0) break;
+    const qty = Math.floor(remaining / pack.tokens);
+    if (qty > 0) {
+      remaining -= qty * pack.tokens;
+      costInr += qty * pack.priceInr;
+      breakdown.push({ pack, qty });
+    }
+  }
+  // Cover any remainder with smallest pack
+  if (remaining > 0) {
+    const smallest = sorted[sorted.length - 1];
+    costInr += smallest.priceInr;
+    const existing = breakdown.find(b => b.pack.tokens === smallest.tokens);
+    if (existing) existing.qty++;
+    else breakdown.push({ pack: smallest, qty: 1 });
+  }
+  return { costInr, breakdown };
+}
+
 function clinicMonthlyRevenueInr(
   studies: number,
   statPct: number,
   p: TokenPricing,
 ): number {
   const tokensConsumed = calcTokensConsumed(studies, statPct);
-  const excessTokens = Math.max(0, tokensConsumed - p.baseTokens);
-  const topupPacks = Math.ceil(excessTokens / p.topupTokens);
-  return p.baseFeeInr + topupPacks * p.topupPriceInr;
+  const deficit = Math.max(0, tokensConsumed - p.baseTokens);
+  const { costInr } = calcTopupCostInr(deficit, p.packs);
+  return p.baseFeeInr + costInr;
 }
 
 // Per-study effective token cost (for unit economics display)
@@ -363,12 +402,13 @@ export default function AdminFinance() {
   // Revenue per clinic per tier (for display)
   const revenueByTier = a.tiers.map(t => {
     const tokensConsumed = calcTokensConsumed(t.studiesPerMonth, t.statPct);
-    const topupPacks = Math.ceil(Math.max(0, tokensConsumed - a.pricing.baseTokens) / a.pricing.topupTokens);
-    const monthlyRevenueInr = clinicMonthlyRevenueInr(t.studiesPerMonth, t.statPct, a.pricing);
+    const deficit = Math.max(0, tokensConsumed - a.pricing.baseTokens);
+    const { costInr: topupCostInr, breakdown: topupBreakdown } = calcTopupCostInr(deficit, a.pricing.packs);
+    const monthlyRevenueInr = a.pricing.baseFeeInr + topupCostInr;
     const tatStudies  = Math.round(t.studiesPerMonth * (1 - t.statPct));
     const statStudies = t.studiesPerMonth - tatStudies;
     return {
-      ...t, tokensConsumed, topupPacks,
+      ...t, tokensConsumed, deficit, topupCostInr, topupBreakdown,
       monthlyRevenueInr,
       monthlyRevenueUsd: monthlyRevenueInr / a.usdInrRate,
       tatStudies, statStudies,
@@ -392,8 +432,6 @@ export default function AdminFinance() {
     creditActive: r.creditActive ? 1 : 0,
   }));
 
-  const updatePricing = useCallback((key: keyof TokenPricing, val: number) =>
-    setA(p => ({ ...p, pricing: { ...p.pricing, [key]: val } })), []);
 
   return (
     <div className="p-6 space-y-8 max-w-7xl">
@@ -435,11 +473,38 @@ export default function AdminFinance() {
 
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Token pricing</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <NumInput label="Platform fee (base)" value={a.pricing.baseFeeInr} onChange={v => updatePricing("baseFeeInr", v)} prefix="₹" suffix="/mo" />
-              <NumInput label="Tokens included in base" value={a.pricing.baseTokens} onChange={v => updatePricing("baseTokens", v)} suffix="tokens" />
-              <NumInput label="Topup pack price" value={a.pricing.topupPriceInr} onChange={v => updatePricing("topupPriceInr", v)} prefix="₹" />
-              <NumInput label="Tokens per topup pack" value={a.pricing.topupTokens} onChange={v => updatePricing("topupTokens", v)} suffix="tokens" />
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <NumInput label="Platform fee (base/mo)" value={a.pricing.baseFeeInr}
+                onChange={v => setA(p => ({ ...p, pricing: { ...p.pricing, baseFeeInr: v } }))} prefix="₹" suffix="/mo" />
+              <NumInput label="Tokens included in base" value={a.pricing.baseTokens}
+                onChange={v => setA(p => ({ ...p, pricing: { ...p.pricing, baseTokens: v } }))} suffix="tokens" />
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-1.5">Topup packs (tiered)</p>
+            <div className="rounded border border-border/40 overflow-hidden">
+              <table className="w-full text-[11px]">
+                <thead><tr className="text-muted-foreground border-b border-border/40 text-right bg-muted/20">
+                  <th className="text-left py-1.5 px-3">Pack</th>
+                  <th className="py-1.5 px-3">Price (₹)</th>
+                  <th className="py-1.5 px-3">₹/token</th>
+                  <th className="py-1.5 px-3 text-center">Tag</th>
+                </tr></thead>
+                <tbody className="divide-y divide-border/20">
+                  {a.pricing.packs.map((pack, i) => (
+                    <tr key={i} className={`text-right ${pack.popular ? "bg-primary/5" : ""}`}>
+                      <td className="py-1.5 px-3 text-left text-foreground">{pack.tokens} tokens</td>
+                      <td className="py-1.5 px-3">
+                        <input type="number" step={100} value={pack.priceInr}
+                          onChange={e => setA(p => ({ ...p, pricing: { ...p.pricing, packs: p.pricing.packs.map((pk, j) => j === i ? { ...pk, priceInr: Number(e.target.value) } : pk) } }))}
+                          className="bg-transparent w-24 text-right tabular-nums text-foreground outline-none" />
+                      </td>
+                      <td className="py-1.5 px-3 text-muted-foreground tabular-nums">{Math.round(pack.priceInr / pack.tokens)}</td>
+                      <td className="py-1.5 px-3 text-center">
+                        {pack.popular ? <span className="text-[9px] bg-primary/20 text-primary rounded px-1.5 py-0.5">Popular</span> : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
@@ -505,14 +570,19 @@ export default function AdminFinance() {
                   </div>
                   <div className="flex justify-between pt-0.5">
                     <span className="text-muted-foreground">Base fee</span>
-                    <span>{fmtInr(a.pricing.baseFeeInr)} ({a.pricing.baseTokens} incl.)</span>
+                    <span>{fmtInr(a.pricing.baseFeeInr)} <span className="text-muted-foreground">({a.pricing.baseTokens} tokens incl.)</span></span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Topup packs × {t.topupPacks}</span>
-                    <span className={t.topupPacks > 0 ? "text-emerald-400" : "text-muted-foreground"}>
-                      {t.topupPacks > 0 ? `+${fmtInr(t.topupPacks * a.pricing.topupPriceInr)}` : "none needed"}
-                    </span>
-                  </div>
+                  {t.topupBreakdown.length === 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Topup</span>
+                      <span className="text-muted-foreground">none needed</span>
+                    </div>
+                  ) : t.topupBreakdown.map(({ pack, qty }) => (
+                    <div key={pack.tokens} className="flex justify-between">
+                      <span className="text-muted-foreground">{qty}× {pack.tokens}-token pack{pack.popular ? " ⭐" : ""}</span>
+                      <span className="text-emerald-400 tabular-nums">+{fmtInr(qty * pack.priceInr)}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-between border-t border-border/40 pt-1 font-medium">
                     <span>Monthly revenue</span>
                     <span style={{ color: t.color }}>{fmtInr(t.monthlyRevenueInr)} <span className="text-muted-foreground font-normal">({fmtUsd(revenueUsd)})</span></span>
@@ -866,7 +936,7 @@ export default function AdminFinance() {
       {/* ── Methodology ── */}
       <div className="rounded-xl border border-border/60 p-5 text-[11px] text-muted-foreground space-y-1.5">
         <p className="font-medium text-foreground text-xs">Definitions &amp; Methodology</p>
-        <p><span className="text-foreground">Token model</span> — ₹{a.pricing.baseFeeInr.toLocaleString()} base gives {a.pricing.baseTokens} study tokens/month. Each additional {a.pricing.topupTokens} tokens = ₹{a.pricing.topupPriceInr.toLocaleString()} topup pack. Revenue per clinic scales with actual usage.</p>
+        <p><span className="text-foreground">Token model</span> — ₹{a.pricing.baseFeeInr.toLocaleString()} base fee gives {a.pricing.baseTokens} tokens/month. Additional tokens bought as packs: {a.pricing.packs.map(pk => `${pk.tokens}tkn=₹${pk.priceInr.toLocaleString()}`).join(", ")}. Greedy pack selection: largest pack first to minimise per-token cost. Revenue per clinic scales with actual study volume and TAT/STAT mix.</p>
         <p><span className="text-foreground">Study types</span> — TAT (Turnaround) = 1 token per study. STAT (Stat/priority) = 2 tokens per study. A clinic doing 20 TAT + 5 STAT consumes 20 + 10 = 30 tokens — not 25. STAT studies drive disproportionate token revenue. Adjustable per tier in Assumptions.</p>
         <p><span className="text-foreground">COGS (cash)</span> — Only Vercel + Supabase while Azure credits active (M1–M{a.creditMonths}). After credit cliff: full Azure compute + ACR added.</p>
         <p><span className="text-foreground">COGS (true)</span> — Full Azure variable COGS + ACR always. Use for long-run unit economics and pricing decisions.</p>
