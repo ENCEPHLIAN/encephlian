@@ -1056,7 +1056,8 @@ export default function EEGViewer() {
             <button
               onClick={() => setShowArtifacts(v => !v)}
               title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
-              className={`flex items-center gap-0.5 text-[10px] transition-opacity ${showArtifacts ? "opacity-100" : "opacity-35"}`}
+              className="flex items-center gap-0.5 text-[10px]"
+              style={{ opacity: showArtifacts ? 1 : 0.65 }}
             >
               {Object.entries(artifactTypeCounts).map(([type, count]) => {
                 const ac = artifactColor(type);
@@ -1215,9 +1216,9 @@ export default function EEGViewer() {
               artifactIntervals={winArtifacts}
               segmentIntervals={winSegments}
               uvPerMm={scaleToUVMM(amplitude)}
-              hfFilter={hfFilter}
-              lfFilter={lfFilter}
-              notchFilter={notchFilter}
+              hfFilter={signalLayer === "raw" ? 0 : hfFilter}
+              lfFilter={signalLayer === "raw" ? 0 : lfFilter}
+              notchFilter={signalLayer === "raw" ? 0 : notchFilter}
               labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
