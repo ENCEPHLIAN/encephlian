@@ -580,6 +580,76 @@ export default function AdminInfra() {
         </div>
       ) : null}
 
+      {/* ── Per-Clinic Cost Reference ── */}
+      <div className="rounded-lg border border-border/60 p-4 space-y-4">
+        <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Per-Clinic Cost Reference — Current Build</p>
+        <p className="text-[11px] text-muted-foreground">
+          Assumptions: 20-min EEG study, ~40 MB raw file. Blob/study: raw 40 MB + canonical 9 MB + derived 22 MB + features 1 MB ≈ 72 MB.
+          Viewer egress: 3 sessions × 10 min × ~5.4 MB/min ≈ 162 MB/study. Azure Central India pricing. +30% buffer applied.
+        </p>
+        <div className="grid sm:grid-cols-2 gap-6">
+          {/* Scenario A */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground">Scenario A — 25 studies / month (light clinic)</p>
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-muted-foreground border-b border-border/40"><th className="text-left py-1">Line item</th><th className="text-right py-1">$/mo</th></tr></thead>
+              <tbody className="divide-y divide-border/20">
+                {[
+                  ["C-Plane Container App (0.5 vCPU, 1 GB)", "$8.20"],
+                  ["I-Plane Container App (1 vCPU, 2 GB, always-on)", "$18.00"],
+                  ["Read API Container App (0.5 vCPU, 1 GB)", "$8.00"],
+                  ["Azure Blob storage (1.8 GB × $0.018/GB)", "$0.03"],
+                  ["Blob egress — viewer + processing (5.8 GB × $0.087/GB)", "$0.50"],
+                  ["Azure Container Registry (Basic)", "$5.00"],
+                  ["Vercel Pro (frontend)", "$20.00"],
+                  ["Supabase Free tier", "$0.00"],
+                ].map(([label, cost]) => (
+                  <tr key={label}><td className="py-1 text-muted-foreground">{label}</td><td className="py-1 text-right tabular-nums">{cost}</td></tr>
+                ))}
+                <tr className="font-semibold text-foreground border-t border-border/60">
+                  <td className="py-1.5">Subtotal</td><td className="py-1.5 text-right tabular-nums">$59.73</td>
+                </tr>
+                <tr className="font-bold text-foreground">
+                  <td className="py-1">+30% buffer (DNS, network, misc)</td><td className="py-1 text-right tabular-nums text-yellow-400">~$78/mo</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          {/* Scenario B */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground">Scenario B — 300 studies / month (10/day busy clinic)</p>
+            <table className="w-full text-[11px]">
+              <thead><tr className="text-muted-foreground border-b border-border/40"><th className="text-left py-1">Line item</th><th className="text-right py-1">$/mo</th></tr></thead>
+              <tbody className="divide-y divide-border/20">
+                {[
+                  ["C-Plane (scales up, 7.5 hrs active/mo)", "$22.00"],
+                  ["I-Plane (always-on + burst)", "$22.00"],
+                  ["Read API (2 replicas under load)", "$16.00"],
+                  ["Azure Blob storage (21.3 GB × $0.018/GB)", "$0.38"],
+                  ["Blob egress — viewer + processing (58 GB × $0.087/GB)", "$5.05"],
+                  ["Azure Container Registry (Basic)", "$5.00"],
+                  ["Vercel Pro (frontend)", "$20.00"],
+                  ["Supabase Pro ($25/mo, 10 GB DB)", "$25.00"],
+                ].map(([label, cost]) => (
+                  <tr key={label}><td className="py-1 text-muted-foreground">{label}</td><td className="py-1 text-right tabular-nums">{cost}</td></tr>
+                ))}
+                <tr className="font-semibold text-foreground border-t border-border/60">
+                  <td className="py-1.5">Subtotal</td><td className="py-1.5 text-right tabular-nums">$115.43</td>
+                </tr>
+                <tr className="font-bold text-foreground">
+                  <td className="py-1">+30% buffer</td><td className="py-1 text-right tabular-nums text-yellow-400">~$150/mo</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground/60 border-t border-border/40 pt-3">
+          These are shared infrastructure costs, not per-clinic marginal costs. Adding a second clinic to Scenario A adds approximately
+          $0.60/study in blob + egress. Container Apps are already running — the incremental cost of additional clinics is almost entirely storage and egress.
+          ARIA models (VIGIL, FORGE) add ~3s C-Plane CPU per study once deployed — negligible at these volumes.
+        </p>
+      </div>
+
       <div className="rounded-lg border border-border/60 p-4 text-xs text-muted-foreground space-y-2">
         <p className="font-medium text-foreground">What this page does NOT do</p>
         <p>
@@ -588,11 +658,6 @@ export default function AdminInfra() {
           <code className="font-mono">az</code> locally; this cockpit is for{" "}
           <em>read-only</em> observability of credit burn, deploy health, and
           payment flow.
-        </p>
-        <p>
-          Write operations (retrying a failed deploy, triggering a Cost Management
-          export, etc.) will land as explicit buttons behind an additional
-          2FA challenge. See TRACK.md → tranche I for the full roadmap.
         </p>
       </div>
     </div>
