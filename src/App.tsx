@@ -54,6 +54,7 @@ const AdminDataPush    = lazy(() => import("./pages/admin/AdminDataPush"));
 const AdminReadApi     = lazy(() => import("./admin/index"));
 const AdminReportV0    = lazy(() => import("./pages/admin/AdminReportV0"));
 const AdminInfra       = lazy(() => import("./pages/admin/AdminInfra"));
+const AdminFinance     = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminAccount     = lazy(() => import("./pages/admin/AdminAccount"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
@@ -119,6 +120,7 @@ function App() {
                     <Route path="read-api" element={<Suspense fallback={<PageLoader />}><AdminReadApi /></Suspense>} />
                     <Route path="report-v0" element={<Suspense fallback={<PageLoader />}><AdminReportV0 /></Suspense>} />
                     <Route path="infra" element={<Suspense fallback={<PageLoader />}><AdminInfra /></Suspense>} />
+                    <Route path="finance" element={<Suspense fallback={<PageLoader />}><AdminFinance /></Suspense>} />
                     <Route path="account" element={<Suspense fallback={<PageLoader />}><AdminAccount /></Suspense>} />
                     <Route path="docs" element={<Suspense fallback={<PageLoader />}><Documentation /></Suspense>} />
                   </Route>
