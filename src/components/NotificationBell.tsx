@@ -157,14 +157,42 @@ function NotifRow({
         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 leading-snug">
           {notif.body}
         </p>
-        <div className="flex items-center gap-2 mt-1.5">
+        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           <span className="text-[10px] text-muted-foreground/60">
             {dayjs(notif.createdAt).fromNow()}
           </span>
-          {notif.href && (
-            <span className="text-[10px] text-primary/70 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-              View <ArrowRight className="h-2.5 w-2.5" />
-            </span>
+          {/* Inline action CTAs — type-specific */}
+          {notif.type === "triage_complete" && notif.href && (
+            <button
+              className="text-[10px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded px-1.5 py-0.5 hover:bg-emerald-500/25 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onRead(notif.id); navigate(notif.href!); }}
+            >
+              Open Report →
+            </button>
+          )}
+          {notif.type === "pipeline_error" && notif.href && (
+            <button
+              className="text-[10px] bg-destructive/15 text-destructive border border-destructive/30 rounded px-1.5 py-0.5 hover:bg-destructive/25 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onRead(notif.id); navigate(notif.href!); }}
+            >
+              Retry →
+            </button>
+          )}
+          {notif.type === "token_low" && (
+            <button
+              className="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded px-1.5 py-0.5 hover:bg-amber-500/25 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onRead(notif.id); navigate("/app/wallet"); }}
+            >
+              Add Tokens →
+            </button>
+          )}
+          {notif.type === "sla_breach" && notif.href && (
+            <button
+              className="text-[10px] bg-red-500/15 text-red-400 border border-red-500/30 rounded px-1.5 py-0.5 hover:bg-red-500/25 transition-colors"
+              onClick={(e) => { e.stopPropagation(); onRead(notif.id); navigate(notif.href!); }}
+            >
+              View Study →
+            </button>
           )}
         </div>
       </div>

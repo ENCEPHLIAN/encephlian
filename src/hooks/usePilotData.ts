@@ -42,7 +42,12 @@ const STAGE_PROGRESS: Record<string, number> = {
   canonical_ready: 50,
   derived_ready: 80,
   complete: 100,
+  failed: -1,
+  error: -1,
 };
+
+// Studies stuck in processing longer than this are auto-marked failed
+const PROCESSING_TIMEOUT_MS = 25 * 60 * 1000; // 25 minutes
 
 export function usePilotData() {
   const { userId, isAuthenticated } = useUserSession();
@@ -221,13 +226,41 @@ export function usePilotData() {
               })
               .eq("id", study.id);
             if (!upErr) void refetchStudies();
-          } else if (newProgress !== (study.triage_progress ?? 5)) {
-            // Update progress percentage
+          } else if (status.stage === "failed" || status.stage === "error") {
+            // Pipeline reported failure — surface it immediately
             const { error: upErr } = await supabase
               .from("studies")
-              .update({ triage_progress: newProgress })
+              .update({ triage_status: "failed", state: "failed", triage_progress: 0 })
               .eq("id", study.id);
-            if (!upErr) void refetchStudies();
+            if (!upErr) {
+              void refetchStudies();
+              toast.error("Processing failed", {
+                description: `Study ${study.id.slice(0, 8).toUpperCase()} — pipeline error. Retry or contact support.`,
+              });
+            }
+          } else {
+            // Check for stuck study (no progress after PROCESSING_TIMEOUT_MS)
+            const startedAt = study.sla_selected_at
+              ? new Date(study.sla_selected_at).getTime()
+              : study.created_at
+              ? new Date(study.created_at).getTime()
+              : Date.now();
+            const elapsed = Date.now() - startedAt;
+            if (elapsed > PROCESSING_TIMEOUT_MS && (study.triage_progress ?? 0) < 80) {
+              await supabase
+                .from("studies")
+                .update({ triage_status: "failed", state: "failed", triage_progress: 0 })
+                .eq("id", study.id);
+              void refetchStudies();
+              return;
+            }
+            if (newProgress !== (study.triage_progress ?? 5)) {
+              const { error: upErr } = await supabase
+                .from("studies")
+                .update({ triage_progress: newProgress })
+                .eq("id", study.id);
+              if (!upErr) void refetchStudies();
+            }
           }
         } catch (err) {
           console.error("[pilot] C-Plane status poll failed", study.id, err);
@@ -248,7 +281,7 @@ export function usePilotData() {
         if ((s.tokens_deducted ?? 0) > 0) return false;
         if (s.state === "signed" || s.state === "failed") return false;
         if (s.triage_status === "processing" || s.state === "processing") return false;
-        if (s.triage_status === "completed") return false;
+        if (s.triage_status === "completed" || s.triage_status === "failed") return false;
         return (
           s.state === "awaiting_sla" ||
           s.sla === "pending" ||
@@ -267,6 +300,9 @@ export function usePilotData() {
           s.state === "complete" ||
           s.state === "completed" ||
           s.state === "in_review",
+      ),
+      failed: all.filter(
+        (s) => s.state === "failed" || s.triage_status === "failed",
       ),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -291,5 +327,5 @@ export function usePilotData() {
     refetchStudies,
     refetchWallet,
     optimisticStartTriage,
-  };
+  } as const;
 }

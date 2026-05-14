@@ -29,7 +29,10 @@ type Meta = {
   n_samples: number;
   channel_map: { index: number; canonical_id: string; unit: string }[];
   channel_names?: string[];
+  channel_ids?: string[];   // raw-layer meta uses this field (cplane writes channel_ids)
   channels?: { name: string }[];
+  source_format?: string;   // vendor format tag (.e, EDF, BDF, etc.)
+  layer?: string;
 };
 type Artifact   = { start_sec: number; end_sec: number; label?: string; artifact_type?: string; channel?: number };
 type Annotation = { start_sec: number; end_sec?: number; label?: string; channel?: number };
@@ -270,6 +273,7 @@ export default function EEGViewer() {
     if (!meta) return [];
     if (meta.channel_map?.length) return [...meta.channel_map].sort((a, b) => a.index - b.index).map(c => c.canonical_id);
     if (meta.channel_names?.length) return meta.channel_names;
+    if (meta.channel_ids?.length) return meta.channel_ids;  // raw zarr meta (cplane stores channel_ids)
     if (meta.channels?.length) return meta.channels.map(c => c.name);
     return [];
   }, [meta]);

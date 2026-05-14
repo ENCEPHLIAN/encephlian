@@ -76,6 +76,7 @@ export default function PilotDashboard() {
     pending: pendingTriageStudies,
     processing: processingStudies,
     completed: completedReports,
+    failed: failedStudies,
     refetchStudies,
   } = usePilotData();
 
@@ -165,6 +166,7 @@ export default function PilotDashboard() {
   const hasProcessing = processingStudies.length > 0;
   const hasPending = pendingTriageStudies.length > 0;
   const hasCompleted = completedReports.length > 0;
+  const hasFailed = (failedStudies?.length ?? 0) > 0;
   const totalActive = processingStudies.length + pendingTriageStudies.length;
 
   return (
@@ -514,6 +516,46 @@ export default function PilotDashboard() {
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ─── Failed Studies ─── */}
+      {hasFailed && (
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <AbnormalIcon className="h-4 w-4 text-red-400 shrink-0" />
+              <p className="text-sm font-semibold text-red-400">
+                {failedStudies!.length} {failedStudies!.length === 1 ? "study" : "studies"} failed
+              </p>
+              <span className="ml-auto text-[10px] text-muted-foreground">Pipeline error — tokens not charged</span>
+            </div>
+            {failedStudies!.slice(0, 3).map((study) => {
+              const meta = study.meta as any;
+              const name = meta?.patient_name || meta?.patient_id || "Unknown patient";
+              return (
+                <div key={study.id} className="flex items-center gap-3 rounded-lg border border-red-500/20 bg-background/50 p-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{name}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {study.original_format?.toUpperCase() || "EEG"} · {new Date(study.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 border-red-500/30 text-red-400 hover:bg-red-500/10 h-7 text-xs"
+                    onClick={() => navigate(`/app/studies/${study.id}`)}
+                  >
+                    Details
+                  </Button>
+                </div>
+              );
+            })}
+            {failedStudies!.length > 3 && (
+              <p className="text-xs text-muted-foreground text-center">+{failedStudies!.length - 3} more — check Studies page</p>
+            )}
           </CardContent>
         </Card>
       )}
