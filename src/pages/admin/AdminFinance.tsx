@@ -5,7 +5,11 @@
 //   • Platform access: ₹3,000/month → includes 10 study tokens (bonus)
 //   • Topup pack:      ₹15,000 → 15 additional study tokens (usage-based)
 //   Revenue per clinic = base_fee + (topup_packs × topup_price)
-//   where topup_packs = ceil(max(0, studies - base_tokens) / topup_tokens)
+//   where topup_packs = ceil(max(0, token_consumption - base_tokens) / topup_tokens)
+//
+// Study types (token consumption):
+//   • TAT  (Turnaround) = 1 token per study  — standard EEG
+//   • STAT (Stat/urgent) = 2 tokens per study — priority processing
 //
 // COGS model (two tracks):
 //   • Cash COGS   = only Vercel + Supabase while Azure credits active
@@ -37,10 +41,17 @@ interface TokenPricing {
   topupTokens: number;      // tokens per topup pack
 }
 
+// Study types — token consumption per study
+const STUDY_TYPES = [
+  { id: "tat",  name: "TAT",  label: "Turnaround",     tokensPerStudy: 1, color: "#60a5fa", description: "Standard EEG — 1 token" },
+  { id: "stat", name: "STAT", label: "Stat / Priority", tokensPerStudy: 2, color: "#f87171", description: "Priority processing — 2 tokens" },
+] as const;
+
 interface ClinicTier {
   id: string;
   name: string;
-  studiesPerMonth: number;  // average monthly usage
+  studiesPerMonth: number;  // total studies/month
+  statPct: number;          // fraction that are STAT (rest are TAT)
   azureVarUsd: number;      // Azure compute+storage+egress per clinic/month
   color: string;
   icon: string;
@@ -79,9 +90,9 @@ const DEFAULT_PRICING: TokenPricing = {
 };
 
 const DEFAULT_TIERS: ClinicTier[] = [
-  { id: "light",  name: "Light Clinic",  studiesPerMonth: 25,  azureVarUsd: 35, color: "#60a5fa", icon: "🏥" },
-  { id: "mid",    name: "Mid Clinic",    studiesPerMonth: 75,  azureVarUsd: 52, color: "#34d399", icon: "🏨" },
-  { id: "heavy",  name: "Heavy Clinic",  studiesPerMonth: 300, azureVarUsd: 65, color: "#a78bfa", icon: "🏦" },
+  { id: "light",  name: "Light Clinic",  studiesPerMonth: 25,  statPct: 0.10, azureVarUsd: 35, color: "#60a5fa", icon: "🏥" },
+  { id: "mid",    name: "Mid Clinic",    studiesPerMonth: 75,  statPct: 0.20, azureVarUsd: 52, color: "#34d399", icon: "🏨" },
+  { id: "heavy",  name: "Heavy Clinic",  studiesPerMonth: 300, statPct: 0.25, azureVarUsd: 65, color: "#a78bfa", icon: "🏦" },
 ];
 
 const SCENARIOS: GrowthScenario[] = [
@@ -137,13 +148,27 @@ const DEFAULT_ASSUMPTIONS: Assumptions = {
 // Revenue model
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Token consumption: TAT = 1 token/study, STAT = 2 tokens/study
+function calcTokensConsumed(studies: number, statPct: number): number {
+  const statStudies = Math.round(studies * statPct);
+  const tatStudies  = studies - statStudies;
+  return tatStudies * 1 + statStudies * 2;
+}
+
 function clinicMonthlyRevenueInr(
   studies: number,
+  statPct: number,
   p: TokenPricing,
 ): number {
-  const excessStudies = Math.max(0, studies - p.baseTokens);
-  const topupPacks = Math.ceil(excessStudies / p.topupTokens);
+  const tokensConsumed = calcTokensConsumed(studies, statPct);
+  const excessTokens = Math.max(0, tokensConsumed - p.baseTokens);
+  const topupPacks = Math.ceil(excessTokens / p.topupTokens);
   return p.baseFeeInr + topupPacks * p.topupPriceInr;
+}
+
+// Per-study effective token cost (for unit economics display)
+function effectiveTokensPerStudy(statPct: number): number {
+  return (1 - statPct) * 1 + statPct * 2;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -187,7 +212,7 @@ function buildProjection(
     // Revenue
     let mrrInr = 0;
     for (const [count, tier] of [[light, a.tiers[0]], [mid, a.tiers[1]], [heavy, a.tiers[2]]] as [number, ClinicTier][]) {
-      mrrInr += count * clinicMonthlyRevenueInr(tier.studiesPerMonth, a.pricing);
+      mrrInr += count * clinicMonthlyRevenueInr(tier.studiesPerMonth, tier.statPct, a.pricing);
     }
     const mrrUsd = mrrInr / a.usdInrRate;
 
@@ -336,12 +361,19 @@ export default function AdminFinance() {
   const y1row = rows[11], y2row = rows[23], y3row = rows[35];
 
   // Revenue per clinic per tier (for display)
-  const revenueByTier = a.tiers.map(t => ({
-    ...t,
-    monthlyRevenueInr: clinicMonthlyRevenueInr(t.studiesPerMonth, a.pricing),
-    monthlyRevenueUsd: clinicMonthlyRevenueInr(t.studiesPerMonth, a.pricing) / a.usdInrRate,
-    topupPacks: Math.ceil(Math.max(0, t.studiesPerMonth - a.pricing.baseTokens) / a.pricing.topupTokens),
-  }));
+  const revenueByTier = a.tiers.map(t => {
+    const tokensConsumed = calcTokensConsumed(t.studiesPerMonth, t.statPct);
+    const topupPacks = Math.ceil(Math.max(0, tokensConsumed - a.pricing.baseTokens) / a.pricing.topupTokens);
+    const monthlyRevenueInr = clinicMonthlyRevenueInr(t.studiesPerMonth, t.statPct, a.pricing);
+    const tatStudies  = Math.round(t.studiesPerMonth * (1 - t.statPct));
+    const statStudies = t.studiesPerMonth - tatStudies;
+    return {
+      ...t, tokensConsumed, topupPacks,
+      monthlyRevenueInr,
+      monthlyRevenueUsd: monthlyRevenueInr / a.usdInrRate,
+      tatStudies, statStudies,
+    };
+  });
 
   // Chart data — merge primary + comparison
   const chartData = view.map((r, i) => ({
@@ -419,6 +451,8 @@ export default function AdminFinance() {
                   <p className="text-[11px] font-medium" style={{ color: t.color }}>{t.icon} {t.name} — {t.studiesPerMonth} studies/mo</p>
                   <NumInput label="Studies/month" value={t.studiesPerMonth} step={5}
                     onChange={v => setA(p => ({ ...p, tiers: p.tiers.map((x, j) => j === i ? { ...x, studiesPerMonth: v } : x) }))} />
+                  <NumInput label="STAT study mix %" value={Math.round(t.statPct * 100)} step={5} suffix="% STAT"
+                    onChange={v => setA(p => ({ ...p, tiers: p.tiers.map((x, j) => j === i ? { ...x, statPct: Math.min(1, v / 100) } : x) }))} />
                   <NumInput label="Azure COGS (USD/mo)" value={t.azureVarUsd} step={0.5} prefix="$"
                     onChange={v => setA(p => ({ ...p, tiers: p.tiers.map((x, j) => j === i ? { ...x, azureVarUsd: v } : x) }))} />
                 </div>
@@ -456,9 +490,22 @@ export default function AdminFinance() {
                 </div>
 
                 <div className="space-y-1 text-[11px]">
+                  {/* Study type breakdown */}
                   <div className="flex justify-between">
+                    <span className="text-blue-300">TAT studies (1 token each)</span>
+                    <span className="tabular-nums">{t.tatStudies} × 1 = {t.tatStudies} tkn</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-red-300">STAT studies (2 tokens each)</span>
+                    <span className="tabular-nums">{t.statStudies} × 2 = {t.statStudies * 2} tkn</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground border-b border-border/30 pb-1">
+                    <span>Total tokens consumed</span>
+                    <span className="tabular-nums font-medium text-foreground">{t.tokensConsumed} tokens</span>
+                  </div>
+                  <div className="flex justify-between pt-0.5">
                     <span className="text-muted-foreground">Base fee</span>
-                    <span>{fmtInr(a.pricing.baseFeeInr)} ({a.pricing.baseTokens} tokens)</span>
+                    <span>{fmtInr(a.pricing.baseFeeInr)} ({a.pricing.baseTokens} incl.)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Topup packs × {t.topupPacks}</span>
@@ -820,6 +867,7 @@ export default function AdminFinance() {
       <div className="rounded-xl border border-border/60 p-5 text-[11px] text-muted-foreground space-y-1.5">
         <p className="font-medium text-foreground text-xs">Definitions &amp; Methodology</p>
         <p><span className="text-foreground">Token model</span> — ₹{a.pricing.baseFeeInr.toLocaleString()} base gives {a.pricing.baseTokens} study tokens/month. Each additional {a.pricing.topupTokens} tokens = ₹{a.pricing.topupPriceInr.toLocaleString()} topup pack. Revenue per clinic scales with actual usage.</p>
+        <p><span className="text-foreground">Study types</span> — TAT (Turnaround) = 1 token per study. STAT (Stat/priority) = 2 tokens per study. A clinic doing 20 TAT + 5 STAT consumes 20 + 10 = 30 tokens — not 25. STAT studies drive disproportionate token revenue. Adjustable per tier in Assumptions.</p>
         <p><span className="text-foreground">COGS (cash)</span> — Only Vercel + Supabase while Azure credits active (M1–M{a.creditMonths}). After credit cliff: full Azure compute + ACR added.</p>
         <p><span className="text-foreground">COGS (true)</span> — Full Azure variable COGS + ACR always. Use for long-run unit economics and pricing decisions.</p>
         <p><span className="text-foreground">EBITDA</span> — Revenue − COGS − OpEx. No D&A (no significant depreciable assets). Pre-tax, pre-interest. Suitable for early-stage SaaS modelling.</p>
