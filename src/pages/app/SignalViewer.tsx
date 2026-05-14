@@ -89,7 +89,7 @@ function hdrNum(h: Record<string, string>, keys: string[]) {
   for (const k of keys) { const v = Number(h[k.toLowerCase()]); if (isFinite(v)) return v; }
   return NaN;
 }
-function fetchChunk(studyId: string, start: number, len: number, layer: "normalized" | "prenorm" = "normalized") {
+function fetchChunk(studyId: string, start: number, len: number, layer: "normalized" | "prenorm" | "raw" = "normalized") {
   return fetchBinary(
     `/studies/${encodeURIComponent(studyId)}/chunk.bin?root=.&start=${start}&length=${len}&layer=${layer}`,
     { timeoutMs: 30000, requireKey: FETCH_REQUIRE_KEY },
@@ -369,9 +369,60 @@ export default function EEGViewer() {
         canonicalMetaRef.current = m;
         setCanonicalPresent(true);
       })
-      .catch(async () => {
+      .catch(async (canonErr) => {
         if (!alive) return;
-        // Canonical zarr not ready — fall back to raw EDF from Supabase storage
+        // Canonical zarr not ready. For EDF/BDF: parse raw bytes for immediate preview.
+        // For other formats (.e, etc.): just show processing state and poll — no parseable fallback.
+
+        // Determine format from Supabase study record to decide whether to attempt EDF parse
+        let isFallbackParseable = true;
+        try {
+          const { data: studyRow } = await supabase
+            .from("studies")
+            .select("original_format")
+            .eq("id", studyId)
+            .single();
+          const fmt = (studyRow?.original_format ?? "").toLowerCase();
+          // Only EDF/BDF can be parsed by EdfChunkReader; other formats need C-plane processing first
+          if (fmt && fmt !== "edf" && fmt !== "bdf") isFallbackParseable = false;
+        } catch { /* can't determine format — attempt EDF parse */ }
+
+        if (!isFallbackParseable) {
+          // Non-EDF/BDF format (e.g. .e): show processing state, poll for canonical
+          if (alive) setFatalError("not yet available — processing in progress");
+          let pollCount = 0;
+          const scheduleEsfCheck = () => {
+            const delay = pollCount < 12 ? 5000 : 30000;
+            upgradeTimerRef.current = setTimeout(async () => {
+              if (!alive) return;
+              pollCount++;
+              setEsfPollAttempt(pollCount);
+              const r2 = await tryCanonical().catch(() => ({ ok: false }));
+              if (!alive) return;
+              if (r2.ok) {
+                if (upgradeTimerRef.current) clearTimeout(upgradeTimerRef.current);
+                upgradeTimerRef.current = null;
+                const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
+                canonicalMetaRef.current = newMeta;
+                setCanonicalPresent(true);
+                setFatalError(null);
+                edfReader.current = null;
+                cache.current.clear();
+                setRawEdfMode(false);
+                setSignalLayer("normalized");
+                signalLayerRef.current = "normalized";
+                setMeta(newMeta);
+                toast.success("Analysis complete — waveform ready");
+                return;
+              }
+              if (alive) scheduleEsfCheck();
+            }, delay);
+          };
+          scheduleEsfCheck();
+          return;
+        }
+
+        // EDF/BDF: try raw bytes fallback
         try {
           const blob = await tryRawEdf();
           if (!alive) return;
@@ -492,10 +543,13 @@ export default function EEGViewer() {
     );
   }, [meta, searchParams, setSearchParams]);
 
-  // ── Effects: preload raw EDF in background when ESF is available (fast Raw) ──
+  // ── Effects: preload raw EDF in background (EDF/BDF only — .e and others use Read API zarr on demand) ──
   useEffect(() => {
     if (!studyId || rawEdfRef.current || rawEdfMode) return;
     if (!canonicalPresent) return;
+    // Only preload EdfChunkReader for EDF/BDF — other formats (e.g. .e) get Raw from Read API zarr
+    const fmt = ((canonicalMetaRef.current as any)?.source_format ?? "").toLowerCase();
+    if (fmt && fmt !== "edf" && fmt !== "bdf") return;
 
     let alive = true;
     const tid = setTimeout(() => {
@@ -571,7 +625,7 @@ export default function EEGViewer() {
     fetchDebounceRef.current = setTimeout(() => {
       fetchDebounceRef.current = null;
 
-      fetchChunk(studyId, startSamp, len, signalLayerRef.current === "prenorm" ? "prenorm" : "normalized")
+      fetchChunk(studyId, startSamp, len, signalLayerRef.current)
         .then(r => {
           if (!r.ok) throw new Error((r as any).error);
           const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
@@ -591,11 +645,12 @@ export default function EEGViewer() {
 
       // Prefetch next 2 windows during playback
       if (playing) {
+        const curLayer = signalLayerRef.current;
         for (const offset of [windowSec / 2, windowSec]) {
           const nextWs = clamp(ws + offset, 0, max);
           const nk = keyFor(Math.floor(nextWs * fs), len);
           if (!cache.current.has(nk)) {
-            fetchChunk(studyId, Math.floor(nextWs * fs), len)
+            fetchChunk(studyId, Math.floor(nextWs * fs), len, curLayer)
               .then(r => {
                 if (!r.ok) return;
                 const f32 = new Float32Array(r.data);
