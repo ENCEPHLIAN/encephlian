@@ -1209,6 +1209,7 @@ export default function EEGViewer() {
       <div className="relative flex-1 flex overflow-hidden min-h-0">
         <div className="flex-1 min-w-0 min-h-0" onWheel={handleWheelScroll} style={{ touchAction: "none" }}>
           {plotSignalsReady ? (
+            <>
             <SignalCanvas
               signals={displaySignals}
               channelLabels={displayLabels}
@@ -1229,6 +1230,25 @@ export default function EEGViewer() {
               labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
+            {/* Layer identity badge — overlaid bottom-left of canvas */}
+            <div className="absolute bottom-6 left-[88px] z-10 pointer-events-none">
+              {signalLayer === "raw" && (
+                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-orange-500/40 bg-orange-500/10 text-orange-400">
+                  ◉ RAW · {meta.n_channels}ch · {meta.sampling_rate_hz}Hz · unfiltered
+                </span>
+              )}
+              {signalLayer === "prenorm" && (
+                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-blue-500/40 bg-blue-500/10 text-blue-400">
+                  ◎ ESF µV · {meta.n_channels}ch · notch+CAR · absolute µV
+                </span>
+              )}
+              {signalLayer === "normalized" && (
+                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-purple-500/40 bg-purple-500/10 text-purple-400">
+                  ○ ESF NORM · {meta.n_channels}ch · z-scored · model input
+                </span>
+              )}
+            </div>
+            </>
           ) : (
             <div className="flex h-full w-full items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />

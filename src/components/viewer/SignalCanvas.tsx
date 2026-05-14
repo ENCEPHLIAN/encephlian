@@ -187,6 +187,11 @@ function applyBiquad(sig: number[], b0: number, b1: number, b2: number, a1: numb
 /**
  * Connected polyline — one averaged sample per pixel column.
  * Returns flat xyz array for Line2/LineGeometry.setPositions().
+ *
+ * maxDeviation: max pixel offset from laneMidY before clamping.
+ *   - For z-scored data: pass laneHalfHeight → bounded per-lane.
+ *   - For µV data: pass a large value (e.g. signalH * 1.5) → clinical overflow mode,
+ *     signals can extend into adjacent lanes like a real EEG machine.
  */
 function buildPolylinePositions(
   sig: number[],
@@ -195,6 +200,7 @@ function buildPolylinePositions(
   laneHalfHeight: number,
   gain: number,
   xOffset: number = 0,
+  maxDeviation: number = laneHalfHeight,
 ): Float32Array {
   const pxCount = Math.max(2, Math.min(Math.round(signalAreaWidth), 2400));
   const out = new Float32Array(pxCount * 3); // one vertex per column, xyz
@@ -211,7 +217,7 @@ function buildPolylinePositions(
     const v = count > 0 ? sum / count : 0;
 
     const x = xOffset + (px / (pxCount - 1)) * signalAreaWidth;
-    const y = laneMidY - clamp(v * gain, -laneHalfHeight, laneHalfHeight);
+    const y = laneMidY - clamp(v * gain, -maxDeviation, maxDeviation);
 
     out[px * 3]     = x;
     out[px * 3 + 1] = y;
@@ -478,25 +484,10 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
     const signalH = h - TIME_AXIS_H;
 
     const laneH = (signalH - PAD * 2) / nCh;
-    // Raw/prenorm (µV): use full half-lane so signals can extend to lane boundary
-    const laneHalf = Math.max(4, signalUnit === "uV" ? laneH * 0.48 : laneH * 0.4);
+    const laneHalf = Math.max(4, laneH * 0.4);
 
-    // For raw/prenorm: compute a single global p95 across all channels so relative
-    // amplitudes are preserved — a flat channel looks flat, high-amp looks large.
-    // This matches how a clinical EEG machine displays at fixed sensitivity.
-    let globalP95: number | null = null;
-    if (signalUnit === "uV" && signals && signals.length > 0) {
-      const allAbs: number[] = [];
-      for (const chIdx of channels) {
-        const sig = signals[chIdx];
-        if (!sig) continue;
-        for (let i = 0; i < sig.length; i++) allAbs.push(Math.abs(sig[i]));
-      }
-      if (allAbs.length > 0) {
-        allAbs.sort((a, b) => a - b);
-        globalP95 = allAbs[Math.min(allAbs.length - 1, Math.floor(allAbs.length * 0.95))] || 1e-6;
-      }
-    }
+    // z-score mode: per-channel p95 is computed inside the channel loop (below).
+    // µV mode: physical gain from uvPerMm — no p95 needed.
 
     // ── Overlay helpers ──────────────────────────────────────────────────────────
     // Reduce rgba opacity to `alpha` (handles both spaced and unspaced rgba)
@@ -773,15 +764,32 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         if (lp) filteredSig = applyBiquad(filteredSig, lp[0], lp[1], lp[2], lp[3], lp[4]);
       }
 
-      // Raw/prenorm: global gain so all channels share the same scale — flat channels
-      // look flat, high-amplitude channels extend toward lane boundaries, just like
-      // a clinical EEG machine at fixed sensitivity.
-      // ESF/z-scored: per-channel auto-gain so every trace fills its lane.
-      const effectiveP95 = globalP95 !== null ? globalP95 : p95;
-      const auto = (laneHalf / Math.max(effectiveP95, 1e-6)) * 0.9;
-      const gain = auto * Math.max(1e-6, amplitudeScale);
+      // µV layers (raw/prenorm): physical clinical calibration — gain = px/µV derived from
+      // the uvPerMm sensitivity setting (same as a real EEG machine at 10µV/mm default).
+      // Signals can overflow lane boundaries so high-amplitude events (eye blinks, seizures)
+      // extend into adjacent lanes — the authentic clinical look.
+      //
+      // z-scored layer: adaptive p95 per-channel so every trace fills its lane uniformly.
+      // Bounded to lane height so the model-input view stays interpretable.
+      const PX_PER_MM = 3.779528; // 96 DPI physical reference
+      let gain: number;
+      let maxDev: number;
+      if (signalUnit === "uV") {
+        // Physical gain: px/µV = (px/mm) / (µV/mm)
+        gain = PX_PER_MM / Math.max(0.1, uvPerMm);
+        // Allow signals to overflow up to 2× the full canvas height — GPU clips at viewport edge
+        maxDev = signalH * 1.5;
+      } else {
+        // z-score: per-channel adaptive gain so every trace fills its lane uniformly
+        const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
+        gain = auto * Math.max(1e-6, amplitudeScale);
+        maxDev = laneHalf;
+      }
 
-      const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
+      const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW, maxDev);
+
+      // µV layers: thicker line weight for clinical feel; z-score: thinner/precise
+      const lineW = signalUnit === "uV" ? 1.7 : 1.2;
 
       // create or update line — Line2 renders connected polyline at real pixel width
       const existing = lineStateRef.current.get(chIdx);
@@ -789,13 +797,14 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         existing.pos = pos;
         existing.geom.setPositions(pos);
         (existing.line.material as LineMaterial).color.setHex(colorHex);
+        (existing.line.material as LineMaterial).linewidth = lineW;
         (existing.line.material as LineMaterial).resolution.set(w, h);
       } else {
         const geom = new LineGeometry();
         geom.setPositions(pos);
         const mat = new LineMaterial({
           color: colorHex,
-          linewidth: 1.4,
+          linewidth: lineW,
           worldUnits: false,
           resolution: new THREE.Vector2(w, h),
         });
@@ -834,10 +843,11 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         };flex-shrink:0;"></span>${label}`;
         el.appendChild(nameRow);
 
-        // µV scale bar (first channel only, or if lane is tall enough)
-        if (di === 0 && laneH >= 28) {
-          const scaleUv = 100; // target reference amplitude in µV
-          const scalePx = Math.min(laneHalf * 0.6, scaleUv * 1e-6 * gain);
+        // µV scale bar — shows physical calibration mark (only in µV mode, first channel)
+        if (di === 0 && signalUnit === "uV" && laneH >= 18) {
+          // Pick a reference amplitude that renders at a useful pixel height
+          const refUvBar = uvPerMm <= 5 ? 50 : uvPerMm <= 15 ? 100 : 200;
+          const scalePx = Math.round(refUvBar * gain); // px = µV × (px/µV)
           if (scalePx >= 4) {
             const scaleEl = document.createElement("div");
             scaleEl.style.cssText = [
@@ -845,8 +855,8 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
               "margin-top:2px",
             ].join(";");
             scaleEl.innerHTML = [
-              `<span style="display:inline-block;width:1px;height:${Math.round(scalePx)}px;background:${colors.textMuted};flex-shrink:0;"></span>`,
-              `<span style="font-size:8px;color:${colors.textMuted};white-space:nowrap;">100µV</span>`,
+              `<span style="display:inline-block;width:1px;height:${Math.min(scalePx, laneH - 4)}px;background:${colors.textMuted};flex-shrink:0;"></span>`,
+              `<span style="font-size:8px;color:${colors.textMuted};white-space:nowrap;">${refUvBar}µV</span>`,
             ].join("");
             el.appendChild(scaleEl);
           }
