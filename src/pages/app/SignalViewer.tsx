@@ -276,9 +276,11 @@ export default function EEGViewer() {
 
   const { signals: displaySignals, labels: displayLabels } = useMemo(() => {
     if (!signals || !channelLabels.length) return { signals, labels: channelLabels };
+    // Raw layer: vendor channels shown as-is — no montage transformation
+    if (signalLayer === "raw") return { signals, labels: channelLabels };
     const result = applyMontage(signals, channelLabels, montage);
     return { signals: result.signals, labels: result.labels };
-  }, [signals, channelLabels, montage]);
+  }, [signals, channelLabels, montage, signalLayer]);
 
   const visibleChannels = useMemo(() => {
     const s = new Set<number>();

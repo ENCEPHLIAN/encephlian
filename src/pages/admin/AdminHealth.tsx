@@ -430,26 +430,35 @@ export default function AdminHealth() {
             {ip && <>
               <KV label="Version" value={ip.version || "—"} />
               <KV label="ONNX runtime" value={ip.onnxruntime_version || "—"} />
+              <KV label="Active triage" value={ip.active_triage_version || "—"} />
               <KV label="Supabase" value={ip.supabase} />
               <KV label="Azure storage" value={ip.azure_storage} />
+              {ip.triage_v3_model_info && <>
+                <Separator className="my-1" />
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">MIND®Triage v3 (ACTIVE)</p>
+                <KV label="File" value={ip.triage_v3_model_info.file} mono />
+                <KV label="Input" value={`${ip.triage_v3_model_info.feature_dim}-dim (ESF ${ip.triage_v3_model_info.esf_dim} + raw-amp ${ip.triage_v3_model_info.raw_amplitude_dim})`} />
+                <KV label="AUC" value={ip.triage_v3_model_info.auc ? `${(ip.triage_v3_model_info.auc * 100).toFixed(1)}%` : "—"} />
+                <KV label="Corpus" value={ip.triage_v3_model_info.training_corpus} />
+              </>}
               {ip.triage_model_info && Object.keys(ip.triage_model_info).length > 0 && <>
                 <Separator className="my-1" />
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">MIND®Triage</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">MIND®Triage v2 (fallback)</p>
                 <KV label="File" value={ip.triage_model_info.file} mono />
-                <KV label="Input shape" value={JSON.stringify(ip.triage_model_info.input_shape)} mono />
-                <KV label="Feature dim" value={ip.triage_model_info.feature_dim} />
-                <KV label="Classes" value={ip.triage_model_info.labels?.join(", ") || "2"} />
+                <KV label="Input" value={`${ip.triage_model_info.feature_dim}-dim ESF`} />
                 <KV label="Corpus" value={ip.triage_model_info.training_corpus} />
               </>}
               {ip.clean_model_info && Object.keys(ip.clean_model_info).length > 0 && <>
                 <Separator className="my-1" />
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">MIND®Clean</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">MIND®Clean v2</p>
                 <KV label="File" value={ip.clean_model_info.file} mono />
-                <KV label="Input shape" value={JSON.stringify(ip.clean_model_info.input_shape)} mono />
-                <KV label="Feature dim" value={ip.clean_model_info.feature_dim} />
-                <KV label="Window" value={`${ip.clean_model_info.window_sec}s`} />
+                <KV label="Input" value={`${ip.clean_model_info.feature_dim}-dim per ${ip.clean_model_info.window_sec}s window`} />
                 <KV label="Corpus" value={ip.clean_model_info.training_corpus} />
               </>}
+              <Separator className="my-1" />
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">ARIA (self-supervised)</p>
+              <KV label="VIGIL" value={ip.vigil_model === "loaded" ? "loaded" : "training (auto-deploy when done)"} />
+              <KV label="FORGE" value={ip.forge_model === "loaded" ? "loaded" : "queued after VIGIL"} />
             </>}
           </ServiceCard>
 
@@ -503,34 +512,47 @@ export default function AdminHealth() {
       {/* ── MIND® Model Registry ── */}
       <Section title="MIND® Model Registry" icon={Brain} defaultOpen>
         {ip ? (
-          <div className="grid sm:grid-cols-2 gap-3">
-            {/* Triage */}
-            <div className="rounded border border-border/50 p-3 space-y-1.5">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Triage v3 — ACTIVE */}
+            <div className="rounded border border-primary/30 bg-primary/5 p-3 space-y-1.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold">MIND®Triage v1</span>
-                <StatusPill status={ip.triage_model === "loaded" ? "healthy" : "down"} />
+                <span className="text-xs font-semibold">MIND®Triage v3</span>
+                <StatusPill status={ip.triage_v3_model === "loaded" ? "healthy" : "down"} />
               </div>
-              <KV label="File" value="mind_triage_v1.onnx" mono />
-              <KV label="Input" value="147-dim feature vector" />
-              <KV label="Spec" value="21ch × (5 spectral + 2 temporal)" />
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">ACTIVE</span>
+              <KV label="File" value="mind_triage_v3.onnx" mono />
+              <KV label="Input" value="241-dim (133 ESF + 108 raw-amplitude)" />
+              <KV label="Spec" value="dual-branch MLP — ESF spectral + vendor-raw amplitude" />
+              <KV label="AUC" value={ip.triage_v3_model_info?.auc ? `${(ip.triage_v3_model_info.auc * 100).toFixed(1)}% (TUAB holdout)` : "0.8568%"} />
               <KV label="Output" value="binary: normal / abnormal" />
               <KV label="Corpus" value="TUH EEG Abnormal v3.0.1" />
               <KV label="Scope" value="Full recording" />
-              <KV label="Frequency bands" value="δ θ α β γ (0.5–70 Hz)" />
             </div>
-            {/* Clean */}
+            {/* Clean v2 */}
             <div className="rounded border border-border/50 p-3 space-y-1.5">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-semibold">MIND®Clean v1</span>
+                <span className="text-xs font-semibold">MIND®Clean v2</span>
                 <StatusPill status={ip.clean_model === "loaded" ? "healthy" : "down"} />
               </div>
-              <KV label="File" value="mind_clean_v1.onnx" mono />
-              <KV label="Input" value="231-dim feature vector" />
-              <KV label="Spec" value="21ch × (5 spectral + 2 morphological)" />
-              <KV label="Output" value="artifact probability per window" />
-              <KV label="Corpus" value="TUH EEG Artifact v3.0.1" />
-              <KV label="Window" value="2s sliding, non-overlapping" />
-              <KV label="Threshold" value="prob > 0.5 → artifact" />
+              <KV label="File" value="mind_clean_v2.onnx" mono />
+              <KV label="Input" value="133-dim per 2s window" />
+              <KV label="Spec" value="19ch × (5 spectral + 2 temporal)" />
+              <KV label="Output" value="artifact type + probability per window" />
+              <KV label="Classes" value="clean, eye-movement, muscle, electrode, artifact" />
+              <KV label="Corpus" value="TUH EEG Artifact v3.0.1 + TUAB normal" />
+              <KV label="Window" value="2s, non-overlapping" />
+            </div>
+            {/* Triage v2 fallback */}
+            <div className="rounded border border-border/30 p-3 space-y-1.5 opacity-60">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-semibold">MIND®Triage v2</span>
+                <StatusPill status={ip.triage_model === "loaded" ? "healthy" : "down"} />
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/40 text-muted-foreground font-medium">FALLBACK</span>
+              <KV label="File" value="mind_triage_v2.onnx" mono />
+              <KV label="Input" value="133-dim ESF only" />
+              <KV label="AUC" value="72.6% (TUAB holdout)" />
+              <KV label="Used when" value="raw amplitude features unavailable" />
             </div>
           </div>
         ) : (
@@ -539,11 +561,72 @@ export default function AdminHealth() {
             <p className="text-xs text-muted-foreground">I-Plane not reachable — model registry unavailable</p>
           </div>
         )}
-        {/* Seizure / SCORE placeholder */}
+
+        {/* ARIA — self-supervised preprocessing models */}
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-4 mb-2">ARIA — Self-Supervised Preprocessing</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              name: "ARIA·VIGIL",
+              sub: "Signal Quality",
+              status: ip?.vigil_model === "loaded" ? "healthy" : "training",
+              note: ip?.vigil_model === "loaded"
+                ? "Per-window quality score + per-channel degradation class"
+                : "Training on TUAB (40 epochs, ~18hrs CPU). Auto-deploys on completion.",
+              spec: "1D CNN per-ch → attention → 16-class degradation",
+              corpus: "TUH EEG Abnormal v3.0.1 (1521 EDFs, self-supervised)"
+            },
+            {
+              name: "ARIA·FORGE",
+              sub: "Clinic Normalization",
+              status: ip?.forge_model === "loaded" ? "healthy" : "queued",
+              note: ip?.forge_model === "loaded"
+                ? "Per-recording clinic-invariant normalization parameters"
+                : "Queued — starts automatically when VIGIL completes.",
+              spec: "NT-Xent contrastive MLP across clinic sessions",
+              corpus: "TUH EEG v3.0.1 (69,672 EDFs, multi-clinic)"
+            },
+            {
+              name: "ARIA·VERTEX",
+              sub: "Foundation Model",
+              status: "planned",
+              note: "Masked EEG modeling pre-training. 8× H100, DGX Cloud.",
+              spec: "1D CNN encoder → cross-channel attn → temporal transformer",
+              corpus: "TUH EEG v3.0.1 (69,672 EDFs unlabeled)"
+            },
+            {
+              name: "ARIA·AUGUR",
+              sub: "Report Generation",
+              status: "planned",
+              note: "Maps VERTEX embeddings → IFCN SCORE field values.",
+              spec: "Rule-based + learned head over 512-dim VERTEX embeddings",
+              corpus: "VERTEX outputs + IFCN SCORE schema"
+            },
+          ].map(m => (
+            <div key={m.name} className={`rounded border p-3 space-y-1 ${m.status === "healthy" ? "border-green-500/30 bg-green-500/5" : m.status === "training" || m.status === "queued" ? "border-yellow-500/30 bg-yellow-500/5" : "border-dashed border-border/40"}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold">{m.name}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${
+                  m.status === "healthy" ? "bg-green-500/15 text-green-400 border-green-500/30" :
+                  m.status === "training" ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/30" :
+                  m.status === "queued" ? "bg-orange-500/15 text-orange-400 border-orange-500/30" :
+                  "bg-muted/30 text-muted-foreground border-border/40"
+                }`}>{m.status.toUpperCase()}</span>
+              </div>
+              <p className="text-[10px] font-medium text-muted-foreground">{m.sub}</p>
+              <p className="text-[11px] text-muted-foreground/70">{m.note}</p>
+              <KV label="Arch" value={m.spec} />
+              <KV label="Data" value={m.corpus} />
+            </div>
+          ))}
+        </div>
+
+        {/* Heuristic modules */}
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-4 mb-2">Heuristic Modules</p>
         <div className="grid sm:grid-cols-2 gap-3">
           {[
-            { name: "MIND®Seizure v0.1", status: "heuristic", note: "Z-score heuristic, min 6s event" },
-            { name: "MIND®SCORE v0.1", status: "heuristic", note: "Structured severity scoring from triage + clean outputs" },
+            { name: "MIND®Seizure v0.1", note: "Z-score spike detection, min 6s event, no learned model" },
+            { name: "MIND®SCORE v0.1",   note: "Structured severity scoring from Triage + Clean outputs" },
           ].map(m => (
             <div key={m.name} className="rounded border border-dashed border-border/40 p-3 space-y-1">
               <div className="flex items-center justify-between">
@@ -561,33 +644,36 @@ export default function AdminHealth() {
         <div className="grid sm:grid-cols-2 gap-4 text-xs">
           <div className="space-y-1.5">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Signal Processing</p>
-            <KV label="Output channels" value="19 (10-20 transverse)" />
-            <KV label="Output sample rate" value="250 Hz (resampled)" />
-            <KV label="Normalization" value="Robust z-score per channel" />
-            <KV label="Source formats" value="EDF, BDF" />
-            <KV label="Line noise notch" value="50 Hz / 60 Hz (auto-detect)" />
+            <KV label="Input formats" value="ANY vendor format — EDF, BDF, Natus .e, Nihon Kohden, local vendors" />
+            <KV label="Output channels" value="19 (10-20 transverse, robust z-score)" />
+            <KV label="Output sample rate" value="250 Hz (resampled from vendor rate)" />
+            <KV label="Line noise notch" value="50 Hz / 60 Hz (auto-detect from file header)" />
+            <KV label="Reference" value="Common Average Reference (CAR)" />
+            <KV label="Normalization" value="Robust z-score per channel (IQR-based)" />
           </div>
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Feature Extraction</p>
-            <KV label="Triage dim" value="147 = 21ch × 7 (5 PSD + kurtosis + entropy)" />
-            <KV label="Clean dim" value="231 = 21ch × 11 (5 PSD + kurtosis + RMS) × 2s window" />
-            <KV label="PSD method" value="Welch (nperseg=512 triage, 128 clean)" />
-            <KV label="Channels for features" value="min(21, esf_channels)" />
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Feature Extraction (Triage v3)</p>
+            <KV label="ESF features" value="133 = 19ch × 7 (5 PSD + kurtosis + entropy)" />
+            <KV label="Raw-amplitude features" value="108 = 19ch × (p5/p25/p75/p95/std/range)" />
+            <KV label="Combined input" value="241-dim (ESF + raw-amplitude)" />
+            <KV label="PSD method" value="Welch (nperseg=512)" />
+            <KV label="Frequency bands" value="δ(0.5–4) θ(4–8) α(8–13) β(13–30) γ(30–70 Hz)" />
           </div>
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Blob Layout</p>
-            <KV label="eeg-raw" value="{study_id}.edf — raw upload" mono />
-            <KV label="eeg-canonical" value="{study_id}/signals.zarr, meta.json" mono />
-            <KV label="eeg-derived" value="{study_id}/triage_features.npy, clean_windows.npy, derived_meta.json" mono />
-            <KV label="eeg-reports" value="{study_id}/report.json" mono />
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Blob Layout (3 layers)</p>
+            <KV label="eeg-raw" value="{id}.<ext> — original vendor file" mono />
+            <KV label="eeg-canonical" value="{id}/signals.zarr — 19ch 250Hz z-scored ESF" mono />
+            <KV label="eeg-derived/{id}/raw/" value="ALL vendor channels, original Hz, zero processing" mono />
+            <KV label="eeg-derived/{id}/prenorm/" value="19ch 250Hz, notched + CAR, µV (pre-z-score)" mono />
+            <KV label="eeg-derived/{id}/" value="triage_features.npy, raw_amplitude_features.npy, clean_windows.npy" mono />
+            <KV label="eeg-reports" value="{id}/report.json — MIND®SCORE output" mono />
           </div>
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Report Schema</p>
-            <KV label="Version" value="mind.report.v1" mono />
-            <KV label="Triage fields" value="classification, confidence, model, subtypes" />
-            <KV label="Clean fields" value="clean_percentage, artifact_windows, total_windows" />
-            <KV label="Seizure fields" value="events (onset_time, confidence)" />
-            <KV label="State on complete" value="complete (set by I-Plane via Supabase PATCH)" />
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer Layers</p>
+            <KV label="Raw" value="All vendor channels (27ch .e, 33ch TUH EDF, etc.) — immutable, no filters" />
+            <KV label="Pre-norm" value="19ch 250Hz µV — notched + CAR, no z-score — clinically calibrated" />
+            <KV label="Normalized" value="19ch 250Hz z-score — what models see" />
+            <KV label="Report Schema" value="mind.report.v1 — triage + clean + seizure + SCORE fields" />
           </div>
         </div>
       </Section>

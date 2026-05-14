@@ -288,8 +288,15 @@ export function ViewerControls({
         title="Montage — electrode reference scheme. Referential uses raw input; bipolar shows differences between adjacent electrodes."
       >
         <span className="text-[10px] text-muted-foreground/60 font-medium select-none">Mnt</span>
-        <Select value={montage} onValueChange={onMontageChange ?? (() => {})}>
-          <SelectTrigger className="h-6 w-[100px] text-[11px] border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded hover:bg-muted transition-colors text-foreground">
+        <Select
+          value={signalLayer === "raw" ? "referential" : montage}
+          onValueChange={signalLayer === "raw" ? undefined : (onMontageChange ?? (() => {}))}
+          disabled={signalLayer === "raw"}
+        >
+          <SelectTrigger
+            className="h-6 w-[100px] text-[11px] border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded hover:bg-muted transition-colors text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+            title={signalLayer === "raw" ? "Montage locked to referential on raw layer — vendor channels shown as-is" : undefined}
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="z-[100]">
