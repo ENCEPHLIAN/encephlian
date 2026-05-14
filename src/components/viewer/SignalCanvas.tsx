@@ -50,6 +50,7 @@ export interface SignalCanvasProps {
   lfFilter?: number;         // low-frequency cutoff Hz (highpass) — 0 = off
   notchFilter?: 0 | 50 | 60; // powerline notch — 0 = off
   uvPerMm?: number;           // amplitude calibration for ruler (µV per screen-mm)
+  signalUnit?: "uV" | "zscore"; // "uV" = fixed gain tied to uvPerMm; "zscore" = auto-gain
   onTimeClick?: (time: number) => void;
   onSelectionChange?: (selection: Selection | null) => void;
 }
@@ -238,6 +239,7 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
     lfFilter = 0,
     notchFilter = 0,
     uvPerMm = 10,
+    signalUnit = "zscore",
     onTimeClick,
   } = props;
 
@@ -753,7 +755,13 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         if (lp) filteredSig = applyBiquad(filteredSig, lp[0], lp[1], lp[2], lp[3], lp[4]);
       }
 
-      const auto = (laneHalf / Math.max(p95, 1e-6)) * 0.9;
+      // For µV layers (raw/prenorm): fixed gain tied to uvPerMm so ruler is accurate.
+      // For z-scored ESF: auto-scale to p95 so all channels fill their lane.
+      const PX_PER_MM_GAIN = 96 / 25.4;
+      const fixedGain = PX_PER_MM_GAIN / Math.max(uvPerMm, 0.1);
+      const auto = signalUnit === "uV"
+        ? fixedGain
+        : (laneHalf / Math.max(p95, 1e-6)) * 0.9;
       const gain = auto * Math.max(1e-6, amplitudeScale);
 
       const pos = buildPolylinePositions(filteredSig, signalW, laneMid, laneHalf, gain, labelW);
@@ -850,6 +858,8 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
     hfFilter,
     lfFilter,
     notchFilter,
+    uvPerMm,
+    signalUnit,
   ]);
 
   // Keep drawRef in sync so resize observer can call it

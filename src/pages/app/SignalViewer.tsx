@@ -986,11 +986,12 @@ export default function EEGViewer() {
         visibleChannelCount={displayLabels.length || meta?.n_channels}
       />
 
-      {/* ── Timeline (mini-map) + ESF/Raw overlaid on the right (same h-8, no extra row) ── */}
-      <div className="relative h-8 border-t bg-muted/10 flex-shrink-0 select-none overflow-hidden">
-        {/* Seekable map — leave right rail for layer toggle */}
+      {/* ── Timeline (mini-map) + chips + ESF/Raw toggle ── */}
+      {/* Outer wrapper is NOT overflow-hidden so chips never get clipped */}
+      <div className="relative h-8 border-t bg-muted/10 flex-shrink-0 select-none">
+        {/* Seekable map — fills left portion, leaves right rail for layer toggle */}
         <div
-          className="absolute inset-y-0 left-0 right-[6.5rem] cursor-crosshair"
+          className="absolute inset-y-0 left-0 right-[6.5rem] cursor-crosshair overflow-hidden"
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
             seekTo(((e.clientX - r.left) / r.width) * duration);
@@ -1035,9 +1036,9 @@ export default function EEGViewer() {
           </span>
         </div>
 
-        {/* Minimap legend — chips always visible; clicking them toggles the bands */}
-        <div className="absolute bottom-0.5 left-1 z-10 flex items-center gap-1" onClick={e => e.stopPropagation()}>
-          {/* Segment chips — always shown (segments never hidden) */}
+        {/* Chips — outside overflow-hidden, always on top, never clipped */}
+        <div className="absolute bottom-0.5 left-1 z-20 flex items-center gap-1 pointer-events-none">
+          {/* Segment chips */}
           {segments.length > 0 && (() => {
             const counts: Record<string, number> = {};
             for (const s of segments) counts[s.label] = (counts[s.label] ?? 0) + 1;
@@ -1051,13 +1052,13 @@ export default function EEGViewer() {
               );
             });
           })()}
-          {/* Artifact chips — always shown; clicking toggles artifact band visibility */}
+          {/* Artifact chip — clicking toggles bands; always shown when artifacts exist */}
           {artifactCount > 0 && (
             <button
               onClick={() => setShowArtifacts(v => !v)}
               title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
-              className="flex items-center gap-0.5 text-[10px]"
-              style={{ opacity: showArtifacts ? 1 : 0.65 }}
+              className="flex items-center gap-0.5 text-[10px] pointer-events-auto"
+              style={{ opacity: showArtifacts ? 1 : 0.6 }}
             >
               {Object.entries(artifactTypeCounts).map(([type, count]) => {
                 const ac = artifactColor(type);
@@ -1219,6 +1220,7 @@ export default function EEGViewer() {
               hfFilter={signalLayer === "raw" ? 0 : hfFilter}
               lfFilter={signalLayer === "raw" ? 0 : lfFilter}
               notchFilter={signalLayer === "raw" ? 0 : notchFilter}
+              signalUnit={signalLayer === "normalized" ? "zscore" : "uV"}
               labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
