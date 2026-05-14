@@ -14,6 +14,7 @@ import {
 import dayjs from "dayjs";
 import { toast } from "sonner";
 import { usePilotData, PilotStudy } from "@/hooks/usePilotData";
+import { analytics } from "@/lib/analytics";
 import { StudyUploadWizard } from "@/components/upload/StudyUploadWizard";
 import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import { cn } from "@/lib/utils";
@@ -59,6 +60,7 @@ export default function PilotStudiesView() {
       toast.error("Retry failed", { description: error.message });
       return;
     }
+    analytics.pipelineRetried(studyId);
     toast.success("Study reset — select SLA to re-run");
     refetchStudies();
   }, [refetchStudies]);

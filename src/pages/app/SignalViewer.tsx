@@ -9,6 +9,7 @@ import { ViewerControls, windowSecToMmSec, scaleToUVMM } from "@/components/view
 import { AnnotationPanel, getSegmentColor } from "@/components/viewer/AnnotationPanel";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
+import { analytics } from "@/lib/analytics";
 import { resolveReadApiBase } from "@/shared/readApiConfig";
 import { supabase } from "@/integrations/supabase/client";
 import { EdfChunkReader } from "@/lib/signal/signal-reader";
@@ -182,6 +183,10 @@ export default function EEGViewer() {
   // ── Study context (patient name etc. from Supabase) for header display ───────
   const [studyCtx, setStudyCtx] = useState<{ patientName?: string; handle?: string } | null>(null);
   useEffect(() => {
+    if (studyId) analytics.eegViewerOpened(studyId);
+  }, [studyId]);
+
+  useEffect(() => {
     if (!studyId) return;
     let alive = true;
     supabase
@@ -244,6 +249,13 @@ export default function EEGViewer() {
   // Signal layer: "normalized" = z-scored ESF zarr, "prenorm" = µV ESF (notch+CAR, no z-score), "raw" = original file
   const [signalLayer, setSignalLayer] = useState<"normalized" | "prenorm" | "raw">("normalized");
   const signalLayerRef   = useRef<"normalized" | "prenorm" | "raw">("normalized");
+  const prevLayerRef = useRef<"normalized" | "prenorm" | "raw">("normalized");
+  useEffect(() => {
+    if (prevLayerRef.current !== signalLayer) {
+      analytics.signalLayerChanged(prevLayerRef.current, signalLayer, studyId);
+      prevLayerRef.current = signalLayer;
+    }
+  }, [signalLayer, studyId]);
   const rawEdfRef        = useRef<EdfChunkReader | null>(null);
   const rawMetaRef       = useRef<Meta | null>(null);
   const canonicalMetaRef = useRef<Meta | null>(null);

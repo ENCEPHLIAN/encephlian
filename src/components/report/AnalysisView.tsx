@@ -516,10 +516,75 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
         </p>
       </div>
 
+      {/* ── Biomarkers (deterministic signal-processing detectors) ─────────── */}
+      <BiomarkersSection biomarkers={report.biomarkers} />
+
       <p className="text-center text-[9px] text-muted-foreground font-mono">
         Generated {report.generated_at ? new Date(report.generated_at).toLocaleString() : "—"}
         {" · "}study {report.study_id?.slice(0, 8)}
         {" · "}Deterministic · Idempotent
+      </p>
+    </div>
+  );
+}
+
+/* ─── Biomarkers section ─────────────────────────────────────────────── */
+
+function BiomarkersSection({ biomarkers }: { biomarkers: any }) {
+  if (!biomarkers || (!biomarkers.events && !biomarkers.ripple_rate_per_min && !biomarkers.burst_suppression_ratio)) {
+    return null;
+  }
+  const events = Array.isArray(biomarkers.events) ? biomarkers.events : [];
+  const rippleRate = biomarkers.ripple_rate_per_min ?? 0;
+  const bsRatio    = biomarkers.burst_suppression_ratio ?? 0;
+  const continuity = biomarkers.background_continuity_pct ?? 100;
+  const sharpRate  = biomarkers.sharp_transient_rate_per_min ?? 0;
+  const asymIdx    = biomarkers.amplitude_asymmetry_max_index ?? 0;
+  const asymPair   = biomarkers.amplitude_asymmetry_max_pair;
+
+  // Group events by kind for compact display
+  const byKind: Record<string, any[]> = {};
+  for (const e of events) {
+    const k = e.kind || "unknown";
+    (byKind[k] ??= []).push(e);
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Waves className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold">Clinical Biomarkers</h3>
+        <Badge variant="outline" className="text-[9px] ml-auto">
+          derived_from: biomarker · deterministic
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+        <MiniMetric label="HFO rate" value={`${rippleRate.toFixed(2)}/min`} />
+        <MiniMetric label="Sharp transients" value={`${sharpRate.toFixed(2)}/min`} />
+        <MiniMetric label="Burst suppression" value={`${(bsRatio * 100).toFixed(1)}%`} highlight={bsRatio < 0.05} />
+        <MiniMetric label="Background continuity" value={`${continuity.toFixed(0)}%`} highlight={continuity > 90} />
+        <MiniMetric label="Asymmetry" value={asymPair ? `${asymIdx.toFixed(2)} ${asymPair}` : asymIdx.toFixed(2)} />
+      </div>
+
+      {Object.keys(byKind).length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+            Events detected ({events.length} total)
+          </p>
+          {Object.entries(byKind).map(([kind, list]) => (
+            <div key={kind} className="flex items-center justify-between text-xs p-2 rounded border bg-background">
+              <span className="font-mono">{kind.replace(/_/g, " ")}</span>
+              <span className="text-muted-foreground tabular-nums">{list.length}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-3 text-[10px] text-muted-foreground leading-relaxed">
+        Biomarkers are extracted from the pre-normalization µV signal via deterministic signal-processing detectors.
+        Each detector has a fixed version and threshold — same input always produces the same output.
+        These complement, but do not replace, model-based clinical interpretation.
       </p>
     </div>
   );
