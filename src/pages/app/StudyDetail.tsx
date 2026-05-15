@@ -126,10 +126,10 @@ export default function StudyDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("study_pipeline_events")
-        .select("id, created_at, step, status, source, detail, correlation_id")
+        .select("id, created_at, step, status, source, correlation_id")  // dropped 'detail' (JSON) — pulled on demand only
         .eq("study_id", id!)
         .order("created_at", { ascending: false })
-        .limit(80);
+        .limit(20);  // was 80 — most recent events only
       if (error) throw error;
       return data ?? [];
     },

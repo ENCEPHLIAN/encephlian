@@ -146,9 +146,8 @@ export default function Reports() {
     queryFn: async () => {
       const { data } = await supabase
         .from("studies")
-        .select("id, sla, state, triage_status, triage_completed_at, updated_at, meta, ai_draft_json, clinics(name)")
+        .select("id, sla, state, triage_status, triage_completed_at, updated_at, meta, clinics(name)")
         .in("state", ["ai_draft", "in_review"])
-        .not("ai_draft_json", "is", null)
         .order("triage_completed_at", { ascending: false })
         .limit(50);
       return data ?? [];
@@ -313,7 +312,7 @@ export default function Reports() {
             <div className="divide-y divide-border/40">
               {pendingReviewStudies.map((study: any) => {
                 const meta = study.meta as any;
-                const cls = study.ai_draft_json?.classification ?? study.ai_draft_json?.triage?.classification;
+                const cls = undefined as string | undefined; // classification shown on detail view (egress)
                 return (
                   <div
                     key={study.id}

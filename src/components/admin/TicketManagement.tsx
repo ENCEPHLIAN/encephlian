@@ -51,7 +51,7 @@ export default function TicketManagement() {
 
       return combined;
     },
-    refetchInterval: 10000 // Refresh every 10 seconds
+    refetchInterval: 60_000 // 60s — egress-conscious, was 10s
   });
 
   const updateStatusMutation = useMutation({

@@ -37,7 +37,7 @@ export function useStudiesForFiles() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
-        .select("id, state, sla, created_at, meta, triage_status, triage_completed_at, tokens_deducted, ai_draft_json, sample, study_files(id, kind, size_bytes, path, created_at)")
+        .select("id, state, sla, created_at, meta, triage_status, triage_completed_at, tokens_deducted, sample, study_files(id, kind, size_bytes, path, created_at)")
         .or("sample.is.null,sample.eq.false")
         .order("created_at", { ascending: false })
         .limit(100);

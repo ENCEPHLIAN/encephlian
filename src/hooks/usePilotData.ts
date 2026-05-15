@@ -23,8 +23,13 @@ export interface PilotStudy {
   ai_draft_json?: any | null;
 }
 
+// EGRESS-CRITICAL: do NOT include ai_draft_json here. The MIND report can be
+// 50-200 KB per study; pulling it for 50 studies × frequent polling = MBs of
+// Supabase egress per minute per user. The report is already available via
+// blob at eeg-reports/{study_id}/report.json and fetched by StudyDetail on
+// demand. Keep this list lightweight.
 const STUDY_COLUMNS =
-  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, sla_selected_at, ai_draft_json";
+  "id, study_key, reference, sla, state, created_at, meta, original_format, triage_status, triage_progress, triage_completed_at, refund_requested, tokens_deducted, sla_selected_at";
 
 /** If PostgREST/schema lags, fall back without optional columns so pilot never goes blank. */
 const STUDY_COLUMNS_FALLBACK =
@@ -139,24 +144,27 @@ export function usePilotData() {
           filter: `owner=eq.${userId}`,
         },
         (payload) => {
-          if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => refetchStudies(), 120);
+          // Debounce + ignore noisy fields. Only refetch the studies list when
+          // a state-change happens. Avoids constant egress on minor updates.
+          const n = payload.new as PilotStudy;
+          const o = payload.old as Partial<PilotStudy>;
+          const stateChanged =
+            o?.state !== n?.state ||
+            o?.triage_status !== n?.triage_status ||
+            (o?.triage_progress ?? 0) !== (n?.triage_progress ?? 0);
+          if (!stateChanged) return;
 
-          // Toast on triage completion
-          if (payload.eventType === "UPDATE") {
-            const n = payload.new as PilotStudy;
-            const o = payload.old as Partial<PilotStudy>;
-            if (o.triage_status === "processing" && n.triage_status === "completed") {
-              const name = (n.meta as any)?.patient_name || `Study ${n.id.slice(0, 6)}`;
-              toast.success(`Analysis complete: ${name}`, {
-                description: "Report ready for review",
-                action: {
-                  label: "View",
-                  onClick: () => navigate(`/app/studies/${n.id}`),
-                },
-              });
-              refetchWallet();
-            }
+          if (debounce) clearTimeout(debounce);
+          debounce = setTimeout(() => refetchStudies(), 800);
+
+          if (payload.eventType === "UPDATE" &&
+              o?.triage_status === "processing" && n?.triage_status === "completed") {
+            const name = (n.meta as any)?.patient_name || `Study ${n.id.slice(0, 6)}`;
+            toast.success(`Analysis complete: ${name}`, {
+              description: "Report ready for review",
+              action: { label: "View", onClick: () => navigate(`/app/studies/${n.id}`) },
+            });
+            refetchWallet();
           }
         }
       )
@@ -206,15 +214,10 @@ export function usePilotData() {
           const newProgress = STAGE_PROGRESS[status.stage] ?? 5;
 
           if (status.stage === "complete") {
-            // Fetch the real I-Plane report
-            let aiDraft: any = null;
-            if (IPLANE_BASE) {
-              try {
-                const blobId = study.study_key || study.id;
-                const r = await fetch(`${IPLANE_BASE}/mind/report/${blobId}`);
-                if (r.ok) aiDraft = await r.json();
-              } catch {}
-            }
+            // EGRESS-CRITICAL: do NOT upsert the full MIND report into Supabase.
+            // The report lives in Azure Blob (eeg-reports/{id}/report.json) and
+            // StudyDetail fetches it directly from iplane on demand. Mirroring
+            // it into ai_draft_json was the original egress hot-path.
             const { error: upErr } = await supabase
               .from("studies")
               .update({
@@ -222,7 +225,6 @@ export function usePilotData() {
                 triage_progress: 100,
                 triage_completed_at: new Date().toISOString(),
                 state: "completed",
-                ...(aiDraft ? { ai_draft_json: aiDraft } : {}),
               })
               .eq("id", study.id);
             if (!upErr) void refetchStudies();
@@ -269,7 +271,9 @@ export function usePilotData() {
     };
 
     checkStatus(); // immediate on mount / when processing list changes
-    const interval = setInterval(checkStatus, 4_000);
+    // 15s poll instead of 4s — realtime channel handles instant state changes;
+    // this interval only catches cplane status that doesn't broadcast.
+    const interval = setInterval(checkStatus, 15_000);
     return () => clearInterval(interval);
   }, [isAuthenticated, refetchStudies]);
 

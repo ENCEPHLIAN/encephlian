@@ -19,7 +19,7 @@ export default function ActivityLog() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000 // Refresh every 5 seconds
+    refetchInterval: 60_000 // 60s — egress-conscious, was 5s
   });
 
   if (isLoading) {

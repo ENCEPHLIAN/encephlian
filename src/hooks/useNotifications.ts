@@ -74,8 +74,9 @@ function patientLabel(meta: any): string {
 
 function buildTriageComplete(study: any): AppNotification {
   const name = patientLabel(study.meta);
-  const cls = study.ai_draft_json?.classification ?? study.ai_draft_json?.triage?.classification;
-  const resultStr = cls && cls !== "unknown" ? ` · ${cls.charAt(0).toUpperCase() + cls.slice(1)}` : "";
+  // ai_draft_json no longer pulled into list views (egress). Classification
+  // is shown when the user opens the report. Notification stays informational.
+  const resultStr = "";
   return {
     id: `triage_complete_${study.id}`,
     type: "triage_complete",
@@ -160,7 +161,7 @@ export function useNotifications() {
     queryFn: async () => {
       const { data } = await supabase
         .from("studies")
-        .select("id, updated_at, triage_completed_at, meta, sla, ai_draft_json")
+        .select("id, updated_at, triage_completed_at, meta, sla")
         .eq("triage_status", "completed")
         .gte("triage_completed_at", SEVEN_DAYS_AGO())
         .order("triage_completed_at", { ascending: false })
