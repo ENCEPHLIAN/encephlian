@@ -256,10 +256,13 @@ export default function EEGViewer() {
   // Upgrade polling: once in raw mode, check if canonical becomes available
   const upgradeTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [esfPollAttempt, setEsfPollAttempt] = useState(0);
-  // Signal layer: "normalized" = z-scored ESF zarr, "prenorm" = µV ESF (notch+CAR, no z-score), "raw" = original file
-  const [signalLayer, setSignalLayer] = useState<"normalized" | "prenorm" | "raw">("normalized");
-  const signalLayerRef   = useRef<"normalized" | "prenorm" | "raw">("normalized");
-  const prevLayerRef = useRef<"normalized" | "prenorm" | "raw">("normalized");
+  // Signal layer: "normalized" = z-scored ESF zarr (model input), "prenorm" = µV ESF (notch+CAR, no z-score),
+  // "raw" = original file. Default is "prenorm" — clinicians read on the µV-preserved layer.
+  // The z-scored normalized layer is what the model sees; it's analytically useful but
+  // amplitude information is destroyed, so it's not the right first view.
+  const [signalLayer, setSignalLayer] = useState<"normalized" | "prenorm" | "raw">("prenorm");
+  const signalLayerRef   = useRef<"normalized" | "prenorm" | "raw">("prenorm");
+  const prevLayerRef = useRef<"normalized" | "prenorm" | "raw">("prenorm");
   useEffect(() => {
     if (prevLayerRef.current !== signalLayer) {
       analytics.signalLayerChanged(prevLayerRef.current, signalLayer, studyId);
@@ -747,36 +750,70 @@ export default function EEGViewer() {
   }, [globalTime, windowSec, segments, segIdx, seekTo, gotoSegment]);
 
   // ── Window-local overlays ─────────────────────────────────────────────────────
+  // When the artifact has specific 10-20 channel names (post-localization),
+  // render one overlay per affected channel — the box hits only those lanes.
+  // When channels is missing, ["multi"], or ["all"], render a single global
+  // (full-height) overlay. The model has not localized in that case and we
+  // must not pretend it has.
   const winArtifacts = useMemo(() => {
     if (!showArtifacts) return [];
-    return artifacts
-      .filter(a => a.end_sec > windowStart && a.start_sec < windowStart + windowSec)
-      .map(a => {
-        const ac = artifactColor(a.artifact_type);
-        const probPct = typeof a.artifact_probability === "number"
-          ? Math.round(a.artifact_probability * 100)
-          : null;
-        // Build the hover tooltip with the full provenance chain so a clinician
-        // can audit every box. Window-level (2s) is made explicit.
-        const provenanceTitle = [
-          `${ac.label}${probPct != null ? ` · ${probPct}%` : ""}`,
-          `window ${a.start_sec.toFixed(1)}s–${a.end_sec.toFixed(1)}s (2s window classification)`,
-          a.channels?.length ? `channels: ${a.channels.join(", ")}` : null,
-          a.model ? `model: ${a.model}` : "model: mind_clean_v2",
-          a.severity ? `severity: ${a.severity}` : null,
-        ].filter(Boolean).join("\n");
-        return {
-          start_sec: a.start_sec - windowStart,
-          end_sec: a.end_sec - windowStart,
+    const out: any[] = [];
+    for (const a of artifacts) {
+      if (a.end_sec <= windowStart || a.start_sec >= windowStart + windowSec) continue;
+      const ac = artifactColor(a.artifact_type);
+      const probPct = typeof a.artifact_probability === "number"
+        ? Math.round(a.artifact_probability * 100)
+        : null;
+      const localized = Array.isArray(a.channels)
+        && a.channels.length > 0
+        && !a.channels.includes("multi")
+        && !a.channels.includes("all");
+
+      const baseTitle = (chanLabel: string) => [
+        `${ac.label}${probPct != null ? ` · ${probPct}%` : ""}`,
+        `window ${a.start_sec.toFixed(1)}s–${a.end_sec.toFixed(1)}s (2s classification)`,
+        chanLabel,
+        a.model ? `model: ${a.model}` : "model: mind_clean_v2",
+        a.severity ? `severity: ${a.severity}` : null,
+        localized ? "localization: spectral signature (post-hoc)" : "localization: window-level (not channel-specific)",
+      ].filter(Boolean).join("\n");
+
+      const startRel = a.start_sec - windowStart;
+      const endRel   = a.end_sec   - windowStart;
+
+      if (localized) {
+        // Per-channel overlays — one box per affected channel
+        for (const chName of a.channels!) {
+          // Resolve channel name → visible-lane index against the current display
+          const chIdx = displayLabels.findIndex(l => l && l.toUpperCase() === String(chName).toUpperCase());
+          if (chIdx < 0) continue;  // channel not visible in current montage
+          out.push({
+            start_sec: startRel,
+            end_sec:   endRel,
+            label: probPct != null ? `${ac.label} ${probPct}% · ${chName}` : `${ac.label} · ${chName}`,
+            artifact_type: a.artifact_type,
+            channel: chIdx,                        // <-- per-channel render
+            color: ac.bg,
+            borderColor: ac.border,
+            title: baseTitle(`channel: ${chName}`),
+          });
+        }
+      } else {
+        // Window-level — single full-height box
+        out.push({
+          start_sec: startRel,
+          end_sec:   endRel,
           label: probPct != null ? `${ac.label} ${probPct}%` : ac.label,
           artifact_type: a.artifact_type,
-          channel: a.channel,
+          channel: undefined,                       // <-- global render
           color: ac.bg,
           borderColor: ac.border,
-          title: provenanceTitle,  // surfaced on hover by SignalCanvas
-        };
-      });
-  }, [artifacts, showArtifacts, windowStart, windowSec]);
+          title: baseTitle("channels: window-level (no per-channel localization)"),
+        });
+      }
+    }
+    return out;
+  }, [artifacts, showArtifacts, windowStart, windowSec, displayLabels]);
 
   const winMarkers = useMemo<Marker[]>(() => {
     return annotations
@@ -1265,6 +1302,18 @@ export default function EEGViewer() {
               labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
+            {/* Calibration marker — top-right corner of canvas, outside channel-label column.
+                Only shown for µV layers (raw / prenorm) where the scale is meaningful. */}
+            {(signalLayer === "raw" || signalLayer === "prenorm") && (
+              <div className="absolute top-3 right-3 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-1 rounded bg-background/85 border border-border/50 backdrop-blur-sm">
+                <div className="flex items-center gap-0.5">
+                  <span className="inline-block w-[1px] bg-foreground/70" style={{ height: `${Math.max(10, Math.min(28, Math.round(100 / scaleToUVMM(amplitude))))}px` }} />
+                  <span className="text-[9px] font-mono text-foreground/70">100µV</span>
+                </div>
+                <span className="text-[9px] font-mono text-muted-foreground">·</span>
+                <span className="text-[9px] font-mono text-foreground/70">{scaleToUVMM(amplitude)} µV/mm</span>
+              </div>
+            )}
             {/* Layer identity badge — overlaid bottom-left of canvas */}
             <div className="absolute bottom-6 left-[88px] z-10 pointer-events-none">
               {signalLayer === "raw" && (

@@ -895,24 +895,8 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
         };flex-shrink:0;"></span>${label}`;
         el.appendChild(nameRow);
 
-        // µV scale bar — shows physical calibration mark (only in µV mode, first channel)
-        if (di === 0 && signalUnit === "uV" && laneH >= 18) {
-          // Pick a reference amplitude that renders at a useful pixel height
-          const refUvBar = uvPerMm <= 5 ? 50 : uvPerMm <= 15 ? 100 : 200;
-          const scalePx = Math.round(refUvBar * gain); // px = µV × (px/µV)
-          if (scalePx >= 4) {
-            const scaleEl = document.createElement("div");
-            scaleEl.style.cssText = [
-              "display:flex", "align-items:center", "gap:2px",
-              "margin-top:2px",
-            ].join(";");
-            scaleEl.innerHTML = [
-              `<span style="display:inline-block;width:1px;height:${Math.min(scalePx, laneH - 4)}px;background:${colors.textMuted};flex-shrink:0;"></span>`,
-              `<span style="font-size:8px;color:${colors.textMuted};white-space:nowrap;">${refUvBar}µV</span>`,
-            ].join("");
-            el.appendChild(scaleEl);
-          }
-        }
+        // (µV scale bar moved to a dedicated corner overlay below — it was
+        //  pushing the Fp1 channel name down when inlined in the first lane.)
 
         labelsRef.current.appendChild(el);
       }
