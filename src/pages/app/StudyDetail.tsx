@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EditableReportV2 } from "@/components/report/EditableReportV2";
+import { buildEditableStateFromMindReport, persistDraft, persistSigned } from "@/lib/editableReportBridge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
@@ -795,6 +797,11 @@ export default function StudyDetail() {
             Analysis {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
           {!isPilot && (
+            <TabsTrigger value="sign" disabled={gateTriageActions || (!mindReport && !study.ai_draft_json)}>
+              Sign Report
+            </TabsTrigger>
+          )}
+          {!isPilot && (
             <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
           )}
         </TabsList>
@@ -1224,6 +1231,37 @@ export default function StudyDetail() {
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Sign Report Tab — editable SCORE v2 surface */}
+        <TabsContent value="sign">
+          <Card>
+            <CardContent className="p-4">
+              {(() => {
+                const sourceReport = mindReport?.schema_version === "mind.report.v1"
+                  ? mindReport
+                  : (study.ai_draft_json as any)?.schema_version === "mind.report.v1"
+                    ? (study.ai_draft_json as any)
+                    : null;
+                if (!sourceReport) {
+                  return (
+                    <div className="text-center py-12 text-sm text-muted-foreground">
+                      No analysis yet. Run analysis first to enable signing.
+                    </div>
+                  );
+                }
+                const initialState = buildEditableStateFromMindReport(sourceReport);
+                return (
+                  <EditableReportV2
+                    studyId={study.id}
+                    initialState={initialState}
+                    onSave={(s) => persistDraft(study.id, s)}
+                    onSign={(s) => persistSigned(study.id, s)}
+                  />
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
