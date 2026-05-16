@@ -35,7 +35,17 @@ type Meta = {
   source_format?: string;   // vendor format tag (.e, EDF, BDF, etc.)
   layer?: string;
 };
-type Artifact   = { start_sec: number; end_sec: number; label?: string; artifact_type?: string; channel?: number };
+type Artifact   = {
+  start_sec: number;        // window-level start, derived from window_idx × 2s
+  end_sec: number;
+  label?: string;
+  artifact_type?: string;
+  channel?: number;
+  artifact_probability?: number;  // softmax probability from mind_clean_v2
+  severity?: string;
+  model?: string;           // e.g. "mind_clean_v2" — provenance
+  channels?: string[];      // affected channel names, may be ["multi"] for window-level
+};
 type Annotation = { start_sec: number; end_sec?: number; label?: string; channel?: number };
 type Marker     = { id: string; timestamp_sec: number; marker_type: string; label?: string };
 type Segment    = { t_start_s: number; t_end_s: number; label: string; channel_index?: number | null; score?: number | null };
@@ -743,14 +753,27 @@ export default function EEGViewer() {
       .filter(a => a.end_sec > windowStart && a.start_sec < windowStart + windowSec)
       .map(a => {
         const ac = artifactColor(a.artifact_type);
+        const probPct = typeof a.artifact_probability === "number"
+          ? Math.round(a.artifact_probability * 100)
+          : null;
+        // Build the hover tooltip with the full provenance chain so a clinician
+        // can audit every box. Window-level (2s) is made explicit.
+        const provenanceTitle = [
+          `${ac.label}${probPct != null ? ` · ${probPct}%` : ""}`,
+          `window ${a.start_sec.toFixed(1)}s–${a.end_sec.toFixed(1)}s (2s window classification)`,
+          a.channels?.length ? `channels: ${a.channels.join(", ")}` : null,
+          a.model ? `model: ${a.model}` : "model: mind_clean_v2",
+          a.severity ? `severity: ${a.severity}` : null,
+        ].filter(Boolean).join("\n");
         return {
           start_sec: a.start_sec - windowStart,
           end_sec: a.end_sec - windowStart,
-          label: artifactColor(a.artifact_type).label,
+          label: probPct != null ? `${ac.label} ${probPct}%` : ac.label,
           artifact_type: a.artifact_type,
           channel: a.channel,
           color: ac.bg,
           borderColor: ac.border,
+          title: provenanceTitle,  // surfaced on hover by SignalCanvas
         };
       });
   }, [artifacts, showArtifacts, windowStart, windowSec]);

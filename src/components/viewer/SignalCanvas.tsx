@@ -17,6 +17,10 @@ interface ArtifactInterval {
   end_sec: number; // window-relative seconds
   label?: string;
   channel?: number; // if null/undefined => apply to all channels
+  color?: string;       // fill rgba — provided by SignalViewer per artifact_type
+  borderColor?: string; // border rgba
+  title?: string;       // hover tooltip — full provenance string (model, probability, channels)
+  artifact_type?: string;
 }
 
 interface Selection {
@@ -540,29 +544,39 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
       const lbl = (a as any).label ?? "Artifact";
 
       const el = document.createElement("div");
+      // Full provenance tooltip — clinician can audit every overlay.
+      // Falls back to label if no detailed title was provided upstream.
+      const provenanceTitle = a.title || lbl;
+      el.setAttribute("title", provenanceTitle);
+      el.setAttribute("data-artifact-type", a.artifact_type ?? "artifact");
       if (a.channel == null) {
-        // Global artifact — full signal height band with visible left accent
+        // Global artifact — full signal height band with visible left accent.
+        // pointer-events:auto on the box so hover-tooltip fires; the canvas
+        // hit-test below still owns time-clicks.
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${PAD}px`,
           `width:${bw}px`, `height:${signalH - PAD * 2}px`,
           `border-left:2px solid ${br}`,
-          `border-top:1px solid ${faintFill(br, 0.4)}`,
+          `border-top:1px dashed ${faintFill(br, 0.6)}`,  // dashed = window-level classification, not precise event
           `background:${faintFill(bg, artFillAlpha)}`,
-          "pointer-events:none", "box-sizing:border-box", "overflow:visible",
+          "pointer-events:auto",
+          "cursor:help",
+          "box-sizing:border-box", "overflow:visible",
         ].join(";");
         if (bw >= 20) el.appendChild(makeChip(abbrev(lbl), br));
       } else {
         // Per-channel artifact — render in the correct visual lane
-        // channels[] maps visual-lane-index → original-channel-index
         const laneIdx = channels.indexOf(a.channel);
-        if (laneIdx < 0) continue; // channel not currently visible
+        if (laneIdx < 0) continue;
         const yTop = PAD + laneIdx * laneH;
         el.style.cssText = [
           "position:absolute", `left:${x1}px`, `top:${yTop + 1}px`,
           `width:${bw}px`, `height:${Math.max(3, laneH - 2)}px`,
           `border-left:2px solid ${br}`,
           `background:${faintFill(bg, artFillAlpha * 1.4)}`,
-          "pointer-events:none", "box-sizing:border-box",
+          "pointer-events:auto",
+          "cursor:help",
+          "box-sizing:border-box",
         ].join(";");
       }
       artifactRef.current?.appendChild(el);
@@ -720,6 +734,44 @@ function SignalCanvasComponent(props: SignalCanvasProps) {
       // choose color — light mode: alternating red/blue (clinical Natus style)
       const rawLabel = channelLabels[chIdx] || `Ch${chIdx + 1}`;
       const label = normalizeChanLabel(rawLabel);
+
+      // Channel quality — first-line check: is this an all-NaN row?
+      // ESF reserves NaN rows for channels MISSING from the vendor recording.
+      // Render them as an explicit "MISSING" placeholder rather than silently
+      // showing a flat line that looks like a real but quiet signal.
+      let allNaN = true;
+      for (let i = 0; i < sig.length; i++) {
+        if (Number.isFinite(sig[i])) { allNaN = false; break; }
+      }
+      if (allNaN) {
+        // Striped gray placeholder + label "MISSING — not in vendor recording"
+        const stripe = document.createElement("div");
+        stripe.style.cssText = [
+          "position:absolute",
+          `left:${labelW}px`, `top:${laneTop + 1}px`,
+          `width:${signalW}px`, `height:${Math.max(2, laneH - 2)}px`,
+          // diagonal stripes via repeating-linear-gradient — clearly non-data
+          `background:repeating-linear-gradient(45deg, ${
+            theme === "dark"
+              ? "rgba(80,80,90,0.10), rgba(80,80,90,0.10) 6px, transparent 6px, transparent 12px"
+              : "rgba(180,180,190,0.30), rgba(180,180,190,0.30) 6px, transparent 6px, transparent 12px"
+          })`,
+          `border-top:1px dashed ${theme === "dark" ? "rgba(120,120,130,0.4)" : "rgba(160,160,170,0.5)"}`,
+          "pointer-events:auto",
+        ].join(";");
+        stripe.setAttribute("title", `${label} — MISSING (channel not present in vendor recording, ESF quality flag MISSING)`);
+        const txt = document.createElement("span");
+        txt.style.cssText = [
+          "position:absolute", "left:8px", `top:${(laneH - 14) / 2}px`,
+          "font:9px/12px ui-monospace,monospace",
+          `color:${theme === "dark" ? "rgba(200,200,210,0.6)" : "rgba(80,80,90,0.7)"}`,
+          "letter-spacing:0.06em", "text-transform:uppercase",
+        ].join(";");
+        txt.textContent = "MISSING — not in recording";
+        stripe.appendChild(txt);
+        artifactRef.current?.appendChild(stripe);
+        return;  // skip drawing the waveform; nothing to draw
+      }
 
       let colorHex: number;
       if (channelColors[chIdx]) {

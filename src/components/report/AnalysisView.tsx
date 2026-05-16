@@ -198,6 +198,28 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
               Model: {triage.model || "mind_triage_v1"}
               {confidence != null && ` · confidence ${(confidence * 100).toFixed(0)}%`}
             </p>
+            {/* Explicit provenance chain — every contributing component named */}
+            <div className="flex flex-wrap items-center gap-1 mt-1.5">
+              <Badge variant="outline" className="text-[8.5px] gap-0.5 px-1.5 py-0 h-auto font-mono">
+                <Shield className="h-2 w-2" />
+                {triage.derived_from || "model"}
+              </Badge>
+              {(triage.model ?? "").includes("spectral_rules") && (
+                <Badge variant="outline" className="text-[8.5px] gap-0.5 px-1.5 py-0 h-auto font-mono border-amber-500/40 text-amber-700 dark:text-amber-400">
+                  + spectral rule
+                </Badge>
+              )}
+              {(triage.model ?? "").includes("biomarker_rules") && (
+                <Badge variant="outline" className="text-[8.5px] gap-0.5 px-1.5 py-0 h-auto font-mono border-blue-500/40 text-blue-700 dark:text-blue-400">
+                  + biomarker rule
+                </Badge>
+              )}
+              {triage.quality_flag && (
+                <Badge variant="outline" className="text-[8.5px] gap-0.5 px-1.5 py-0 h-auto font-mono border-orange-500/40 text-orange-700 dark:text-orange-400">
+                  {triage.quality_flag}
+                </Badge>
+              )}
+            </div>
           </div>
           {confidence != null && (
             <div className="text-right shrink-0">
