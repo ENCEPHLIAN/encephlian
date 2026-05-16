@@ -56,9 +56,35 @@ interface SlaOption {
   icon?: typeof Zap;
 }
 
-const NATIVE_EXTENSIONS = [".edf", ".bdf", ".e"];   // fully processed by pipeline
-const PROPRIETARY_EXTENSIONS = [".nk", ".eeg", ".21e", ".cnt"]; // need vendor EDF export
+// Vendor formats with native pipeline support (no clinic-side conversion needed).
+// Backed by adapter classes in apps/aplane/adapters.py. Magic-byte detection
+// adds another tier of robustness for files with stripped or shared extensions.
+const NATIVE_EXTENSIONS = [
+  ".edf", ".bdf",                  // universal interchange
+  ".e", ".erd", ".ncs",            // Natus / NicoletOne / Xltek
+  ".lay",                          // Persyst (paired with .dat)
+  ".vhdr",                         // Brain Products BrainVision
+  ".cnt",                          // Compumedics Neuroscan / ANT Neuro (magic-byte disambiguated)
+  ".set",                          // EEGLAB
+  ".mff", ".raw",                  // EGI / Philips dense-array
+  ".dap", ".rs3", ".cef",          // Compumedics Curry
+  ".mefd",                         // MEF3 (Mayo)
+  ".gdf",                          // GDF / BioSig
+  ".nwb",                          // Neurodata Without Borders
+];
+// Indian-market vendors that export to EDF (RMS, Clarity, Allengers, BPL, Skanray).
+// Their proprietary native formats remain unsupported without vendor SDKs.
+const PROPRIETARY_EXTENSIONS = [".nk", ".21e", ".rms", ".cle"];
 const ALL_ACCEPTED_EXTENSIONS = [...NATIVE_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
+
+// Used as a HINT only for the OS file picker.
+// Note: `.e` and other short/uncommon extensions are often greyed out by the
+// OS file picker when the `accept` attribute is restrictive. We include MIME
+// types and the wildcard so the OS still shows these files, then validate
+// the extension in JavaScript after selection.
+const FILE_PICKER_ACCEPT_HINT = ALL_ACCEPTED_EXTENSIONS.join(",")
+  + ",application/octet-stream"
+  + ",.eeg";  // Nihon Kohden + BrainVision data file (.eeg suffix accepted by both adapters)
 
 const INTERNAL_SLA_OPTIONS: SlaOption[] = [
   {
@@ -802,7 +828,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept={ALL_ACCEPTED_EXTENSIONS.join(",")}
+                accept={FILE_PICKER_ACCEPT_HINT}
                 className="hidden"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
@@ -878,7 +904,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                   <FileUp className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
                   <p className="font-medium">Drop EEG file(s) here</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    or click to browse • EDF, BDF, Natus (.e), NK (.nk, .eeg, .21e), CNT
+                    or click to browse • EDF, BDF, Natus (.e/.erd/.ncs), Nihon Kohden (.eeg), Persyst (.lay), BrainVision (.vhdr), Neuroscan/ANT (.cnt), EEGLAB (.set), EGI/Philips (.mff), Curry, MEF3, GDF, NWB
                   </p>
                   <p className="text-xs text-muted-foreground/70 mt-1">Multiple files supported for batch upload</p>
                 </>
