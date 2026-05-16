@@ -38,8 +38,9 @@ export default function StudyReview() {
         .from("studies")
         .select("*, clinics(name)")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Study not found");
       return data;
     },
     refetchInterval: (q) => {
@@ -91,7 +92,7 @@ export default function StudyReview() {
 
       if (data) return data;
 
-      const { data: studyData } = await supabase.from("studies").select("ai_draft_json").eq("id", id).single();
+      const { data: studyData } = await supabase.from("studies").select("ai_draft_json").eq("id", id).maybeSingle();
 
       const raw = studyData?.ai_draft_json as any;
       if (!raw) return null;

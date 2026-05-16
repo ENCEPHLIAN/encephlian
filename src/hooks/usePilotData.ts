@@ -94,7 +94,7 @@ export function usePilotData() {
       }
 
       if (res.error) {
-        console.error("Pilot studies fetch:", res.error);
+        if (import.meta.env.DEV) console.error("Pilot studies fetch:", res.error);
         return [] as PilotStudy[];
       }
       return (res.data || []) as PilotStudy[];
@@ -117,7 +117,7 @@ export function usePilotData() {
         .maybeSingle();
 
       if (error) {
-        console.error("Wallet fetch:", error);
+        if (import.meta.env.DEV) console.error("Wallet fetch:", error);
         return { tokens: 0 };
       }
       return data || { tokens: 0 };
@@ -265,7 +265,7 @@ export function usePilotData() {
             }
           }
         } catch (err) {
-          console.error("[pilot] C-Plane status poll failed", study.id, err);
+          if (import.meta.env.DEV) console.error("[pilot] C-Plane status poll failed", study.id, err);
         }
       }
     };

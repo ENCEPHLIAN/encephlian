@@ -154,9 +154,10 @@ export default function StudyDetail() {
           study_reports(id, run_id, content, report_html, created_at)
         `)
         .eq("id", id!)
-        .single();
+        .maybeSingle();
 
       if (error) throw error;
+      if (!data) throw new Error("Study not found or you don't have access");
       return data;
     },
     enabled: !!id,
@@ -220,9 +221,18 @@ export default function StudyDetail() {
     queryFn: async () => {
       if (!IPLANE_BASE || !id) return null;
       const blobId = (study as any)?.study_key || id;
-      const res = await fetch(`${IPLANE_BASE}/mind/report/${blobId}`);
-      if (!res.ok) return null;
-      return res.json();
+      // Bounded fetch with AbortController — never hang the page if iplane is slow.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15_000);
+      try {
+        const res = await fetch(`${IPLANE_BASE}/mind/report/${blobId}`, { signal: ctrl.signal });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch {
+        return null;
+      } finally {
+        clearTimeout(timer);
+      }
     },
     enabled: !!id && !!IPLANE_BASE && !isLoading,
     staleTime: 30_000,
@@ -430,7 +440,7 @@ export default function StudyDetail() {
       toast.dismiss(tid);
       toast.error("Report content unavailable");
     } catch (error) {
-      console.error("Download error:", error);
+      if (import.meta.env.DEV) console.error("Download error:", error);
       toast.dismiss(tid);
       toast.error("Download failed", {
         description: error instanceof Error ? error.message : "Unknown error",

@@ -299,7 +299,7 @@ function InternalStudiesView() {
           throw new Error(`Azure upload failed: ${uploadRes.status} — ${errText}`);
         }
       } else {
-        console.warn(`[${studyId}] No SAS URL — pipeline may fail without source_url`);
+        if (import.meta.env.DEV) console.warn(`[${studyId}] No SAS URL — pipeline may fail without source_url`);
       }
 
       toast.dismiss(uploadTid);
@@ -310,7 +310,7 @@ function InternalStudiesView() {
       });
       navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
-      console.error("Upload error:", error);
+      if (import.meta.env.DEV) console.error("Upload error:", error);
       toast.dismiss(uploadTid);
       toast.error("Upload failed", { description: error?.message || "Failed to upload EEG" });
     }
@@ -397,7 +397,7 @@ function InternalStudiesView() {
       toast.dismiss(tid);
       toast.error("Report content unavailable");
     } catch (error) {
-      console.error("Download error:", error);
+      if (import.meta.env.DEV) console.error("Download error:", error);
       toast.dismiss(tid);
       toast.error("Download failed");
     }
