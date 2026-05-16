@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditableReportV2 } from "@/components/report/EditableReportV2";
-import { buildEditableStateFromMindReport, persistDraft, persistSigned } from "@/lib/editableReportBridge";
+import { buildEditableStateFromMindReport, persistDraft, persistSigned, loadDraft } from "@/lib/editableReportBridge";
+import type { ScoreV2EditState } from "@/lib/editableReportBridge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
@@ -1239,33 +1240,16 @@ export default function StudyDetail() {
         <TabsContent value="sign">
           <Card>
             <CardContent className="p-4">
-              {(() => {
-                const sourceReport = mindReport?.schema_version === "mind.report.v1"
-                  ? mindReport
-                  : (study.ai_draft_json as any)?.schema_version === "mind.report.v1"
-                    ? (study.ai_draft_json as any)
-                    : null;
-                if (!sourceReport) {
-                  return (
-                    <div className="text-center py-12 text-sm text-muted-foreground">
-                      No analysis yet. Run analysis first to enable signing.
-                    </div>
-                  );
-                }
-                const initialState = buildEditableStateFromMindReport(sourceReport);
-                return (
-                  <EditableReportV2
-                    studyId={study.id}
-                    initialState={initialState}
-                    onSave={(s) => persistDraft(study.id, s)}
-                    onSign={(s) => persistSigned(study.id, s)}
-                  />
-                );
-              })()}
+              <SignReportSurface
+                studyId={study.id}
+                mindReport={mindReport}
+                aiDraftJson={study.ai_draft_json}
+              />
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* (placeholder, never rendered — kept until I clean up the JSX below) */}
         {/* Files Tab */}
         <TabsContent value="files">
           <Card>
@@ -1322,5 +1306,75 @@ export default function StudyDetail() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * SignReportSurface — loads any saved draft on mount and renders the
+ * EditableReportV2 with either the saved state or a fresh derivation
+ * from the mind.report.v1.
+ */
+function SignReportSurface({
+  studyId, mindReport, aiDraftJson,
+}: {
+  studyId: string;
+  mindReport: any;
+  aiDraftJson: any;
+}) {
+  const sourceReport = mindReport?.schema_version === "mind.report.v1"
+    ? mindReport
+    : (aiDraftJson as any)?.schema_version === "mind.report.v1"
+      ? (aiDraftJson as any)
+      : null;
+
+  const [initial, setInitial] = useState<ScoreV2EditState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [hadSavedDraft, setHadSavedDraft] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!sourceReport) { setLoading(false); return; }
+      const saved = await loadDraft(studyId);
+      if (cancelled) return;
+      if (saved) {
+        setInitial(saved);
+        setHadSavedDraft(true);
+      } else {
+        setInitial(buildEditableStateFromMindReport(sourceReport));
+      }
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [studyId, sourceReport]);
+
+  if (!sourceReport) {
+    return (
+      <div className="text-center py-12 text-sm text-muted-foreground">
+        No analysis yet. Run analysis first to enable signing.
+      </div>
+    );
+  }
+  if (loading || !initial) {
+    return (
+      <div className="text-center py-12 text-sm text-muted-foreground">
+        Loading draft…
+      </div>
+    );
+  }
+  return (
+    <>
+      {hadSavedDraft && (
+        <div className="mb-3 text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded border">
+          Restored from saved draft. Edits persist on every save.
+        </div>
+      )}
+      <EditableReportV2
+        studyId={studyId}
+        initialState={initial}
+        onSave={(s) => persistDraft(studyId, s)}
+        onSign={(s) => persistSigned(studyId, s)}
+      />
+    </>
   );
 }

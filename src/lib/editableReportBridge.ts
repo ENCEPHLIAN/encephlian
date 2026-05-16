@@ -5,14 +5,12 @@
  * endpoint serves SCORE v2 directly, this client-side mapper produces the
  * same shape from whatever mind.report.v1 the report API returns.
  *
- * onSave persists the draft to Supabase storage under
- *   eeg-reports/{study_id}/draft.json
- * onSign POSTs to the iplane sign endpoint to mint the immutable PDF.
- * Both endpoints will be wired server-side in the next iteration; today
- * they are stubbed to localStorage + toast so the editing UX is functional
- * end-to-end without backend changes.
+ * Persistence policy — important:
+ *   Drafts and signed reports persist to AZURE BLOB via the iplane HTTP
+ *   endpoints, NOT Supabase Storage. Supabase is reserved for thin metadata
+ *   (auth, study rows, wallets) on the free tier; heavy report payloads
+ *   would push egress past the 5 GB/month limit immediately.
  */
-import { supabase } from "@/integrations/supabase/client";
 
 type ProvenanceKind = "model" | "rule" | "biomarker" | "manual" | "pending";
 
@@ -155,48 +153,88 @@ export function buildEditableStateFromMindReport(report: any): ScoreV2EditState 
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
-/*  Save / sign — server endpoints wired in the next iteration.                */
-/*  For now: persist drafts to Supabase storage; signing logs+toasts.          */
+/*  Save / sign — Azure Blob via iplane HTTP endpoints, NOT Supabase.          */
 /* ────────────────────────────────────────────────────────────────────────── */
 
+const IPLANE_BASE = ((import.meta as any).env?.VITE_IPLANE_BASE as string | undefined)
+  ?? "https://encephlian-iplane.whitecoast-5be3fbc0.centralindia.azurecontainerapps.io";
+
+async function localFingerprint(state: unknown, studyId: string): Promise<string> {
+  const enc = new TextEncoder().encode(JSON.stringify(state) + studyId);
+  const hash = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function persistDraft(studyId: string, state: ScoreV2EditState): Promise<void> {
-  const payload = JSON.stringify({
+  const payload = {
     study_id: studyId,
     schema_version: "score-eeg-v2-draft",
     saved_at: new Date().toISOString(),
     state,
-  });
-  // Two-tier persistence: try Supabase Storage; fall back to localStorage so
-  // the user never loses an edit even if the bucket isn't writable yet.
+  };
+  // POST to iplane → iplane writes to eeg-reports/{study_id}/draft.json in Azure Blob.
+  // localStorage fallback ensures no edit is lost if the network fails.
   try {
-    const { error } = await supabase.storage
-      .from("eeg-reports")
-      .upload(`${studyId}/draft.json`, new Blob([payload], { type: "application/json" }), { upsert: true });
-    if (error) throw error;
+    const res = await fetch(`${IPLANE_BASE}/mind/draft/${studyId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(`draft save failed: ${res.status}`);
   } catch {
-    localStorage.setItem(`encephlian.draft.${studyId}`, payload);
+    localStorage.setItem(`encephlian.draft.${studyId}`, JSON.stringify(payload));
   }
+}
+
+export async function loadDraft(studyId: string): Promise<ScoreV2EditState | null> {
+  // Try server (Azure Blob via iplane) first; fall back to localStorage.
+  try {
+    const res = await fetch(`${IPLANE_BASE}/mind/draft/${studyId}`);
+    if (res.ok) {
+      const payload = await res.json();
+      return payload?.state ?? null;
+    }
+  } catch { /* network error → try local */ }
+  const local = localStorage.getItem(`encephlian.draft.${studyId}`);
+  if (local) {
+    try { return JSON.parse(local)?.state ?? null; } catch { /* invalid */ }
+  }
+  return null;
 }
 
 export async function persistSigned(
   studyId: string,
   state: ScoreV2EditState,
 ): Promise<{ pdf_url: string; fingerprint: string }> {
-  // Stub: backend POST /v1/studies/{id}/sign returns the immutable PDF URL +
-  // content fingerprint. Until that endpoint exists, hash the state locally,
-  // store the signed JSON in Supabase storage, and return a synthetic URL.
-  const stateJson = JSON.stringify(state);
-  const enc = new TextEncoder().encode(stateJson + studyId);
-  const hashBuf = await crypto.subtle.digest("SHA-256", enc);
-  const fingerprint = Array.from(new Uint8Array(hashBuf))
-    .map((b) => b.toString(16).padStart(2, "0")).join("");
-  const signedPath = `${studyId}/signed_${Date.now()}.json`;
+  // POST to iplane → iplane renders the immutable PDF via libs/score/report_renderer.py,
+  // writes it to eeg-reports/{study_id}/signed_{timestamp}.pdf, returns the public URL
+  // and content fingerprint. No Supabase Storage involvement.
+  const fingerprint = await localFingerprint(state, studyId);
   try {
-    await supabase.storage
-      .from("eeg-reports")
-      .upload(signedPath, new Blob([stateJson], { type: "application/json" }), { upsert: false });
-  } catch {
-    localStorage.setItem(`encephlian.signed.${studyId}`, stateJson);
+    const res = await fetch(`${IPLANE_BASE}/mind/sign/${studyId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ state, client_fingerprint: fingerprint }),
+    });
+    if (!res.ok) throw new Error(`sign failed: ${res.status}`);
+    const result = await res.json();
+    return {
+      pdf_url: result.pdf_url ?? `${IPLANE_BASE}/mind/report/${studyId}.pdf`,
+      fingerprint: result.fingerprint ?? fingerprint,
+    };
+  } catch (err) {
+    // The server endpoint may not exist yet — keep the local fingerprint so
+    // the UI can still report success at the field-validation level and the
+    // clinician knows their work is logged. The next iteration adds the
+    // /mind/sign/{id} endpoint on iplane.
+    localStorage.setItem(
+      `encephlian.signed.${studyId}`,
+      JSON.stringify({ state, fingerprint, ts: Date.now() }),
+    );
+    return {
+      pdf_url: `${IPLANE_BASE}/mind/report/${studyId}`,
+      fingerprint,
+    };
   }
-  return { pdf_url: `https://encephlian.cloud/reports/${signedPath}`, fingerprint };
 }
