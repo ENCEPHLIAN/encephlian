@@ -88,7 +88,7 @@ const ROLE_STYLE: Record<string, string> = {
   viewer:    "bg-muted/50 text-muted-foreground",
 };
 
-const EMPTY_ONBOARD = {
+const EMPTY_PROVISION_FORM = {
   clinic_name: "", city: "", sku: "" as SkuTier | "",
   clinician_name: "", clinician_email: "", clinician_password: "",
   initial_tokens: 10,
@@ -118,8 +118,8 @@ export default function AdminClinics() {
   const queryClient = useQueryClient();
   const [editTarget, setEditTarget] = useState<ClinicRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
-  const [onboardOpen, setOnboardOpen] = useState(false);
-  const [onboardForm, setOnboardForm] = useState({ ...EMPTY_ONBOARD });
+  const [provisionOpen, setProvisionOpen] = useState(false);
+  const [provisionForm, setProvisionForm] = useState({ ...EMPTY_PROVISION_FORM });
   const [deleteTarget, setDeleteTarget] = useState<ClinicRow | null>(null);
   const [selectedClinic, setSelectedClinic] = useState<ClinicRow | null>(null);
 
@@ -236,53 +236,73 @@ export default function AdminClinics() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const onboardMutation = useMutation({
-    mutationFn: async (form: typeof onboardForm) => {
-      const { data, error } = await supabase.functions.invoke("admin_onboard_value_unit", { body: form });
+  const provisionMutation = useMutation({
+    mutationFn: async (form: typeof provisionForm) => {
+      // admin_provision_clinic returns:
+      //   200 { ok: true,  request_id, clinic, clinician, tokens }
+      //   4xx/5xx { ok: false, step, error, code, request_id }
+      // Both paths share request_id so toast ↔ Supabase log can be cross-referenced.
+      const { data, error } = await supabase.functions.invoke("admin_provision_clinic", { body: form });
 
-      // The edge function returns `{ ok, error, step }` on failure. Surface the
-      // step so the operator sees exactly where it broke (auth_get_user,
-      // role_check, clinic_insert, user_create, profile_update, role_insert,
-      // membership_insert, wallet_upsert, unhandled).
-      const extractFailure = (payload: any): { msg: string; step?: string } | null => {
+      const extractFailure = (
+        payload: any,
+      ): { msg: string; step?: string; requestId?: string; code?: string } | null => {
         if (!payload) return null;
         if (payload.ok === false || payload.error) {
-          return { msg: payload.error || "Onboarding failed", step: payload.step };
+          return {
+            msg: payload.error || "Provisioning failed",
+            step: payload.step,
+            requestId: payload.request_id,
+            code: payload.code ?? undefined,
+          };
         }
         return null;
       };
 
+      const formatFailure = (f: { msg: string; step?: string; requestId?: string; code?: string }) => {
+        const head = f.step ? `[${f.step}]` : "[provision]";
+        const tail = f.requestId ? ` (${f.requestId})` : "";
+        return `${head} ${f.msg}${tail}`;
+      };
+
       const fromData = extractFailure(data);
-      if (fromData) {
-        throw new Error(fromData.step ? `[${fromData.step}] ${fromData.msg}` : fromData.msg);
-      }
+      if (fromData) throw new Error(formatFailure(fromData));
 
       if (error) {
-        // Non-2xx responses land here; the body is on error.context (string).
         const ctx = (error as any).context;
         try {
           let parsed: any = ctx;
           if (typeof ctx === "string") parsed = JSON.parse(ctx);
           else if (ctx && typeof ctx.text === "function") parsed = JSON.parse(await ctx.text());
           const fromCtx = extractFailure(parsed);
-          if (fromCtx) {
-            throw new Error(fromCtx.step ? `[${fromCtx.step}] ${fromCtx.msg}` : fromCtx.msg);
-          }
+          if (fromCtx) throw new Error(formatFailure(fromCtx));
         } catch (parseErr) {
           if (parseErr instanceof Error && parseErr.message.startsWith("[")) throw parseErr;
         }
         throw error;
       }
-      return data;
+      return data as {
+        ok: true;
+        request_id: string;
+        clinic: { id: string; name: string; sku: string };
+        clinician: { id: string; email: string; name: string };
+        tokens: number;
+      };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
       queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success("Clinic onboarded");
-      setOnboardOpen(false);
-      setOnboardForm({ ...EMPTY_ONBOARD });
+      toast.success(
+        `Clinic provisioned · ${result.clinic.name}`,
+        {
+          description: `${result.clinician.email} · ${result.tokens} tokens · ${result.request_id}`,
+          duration: 6000,
+        },
+      );
+      setProvisionOpen(false);
+      setProvisionForm({ ...EMPTY_PROVISION_FORM });
     },
-    onError: (e: any) => toast.error(e.message, { duration: 8000 }),
+    onError: (e: any) => toast.error(e.message, { duration: 10000 }),
   });
 
   const deleteMutation = useMutation({
@@ -340,13 +360,13 @@ export default function AdminClinics() {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Clinics</h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {clinics?.length ?? 0} value units ·{" "}
+            {clinics?.length ?? 0} clinics ·{" "}
             {clinics?.reduce((s, c) => s + (c.study_count || 0), 0) ?? 0} studies total
           </p>
         </div>
-        <Button size="sm" onClick={() => setOnboardOpen(true)}>
+        <Button size="sm" onClick={() => setProvisionOpen(true)}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Onboard clinic
+          Provision clinic
         </Button>
       </div>
 
@@ -421,7 +441,7 @@ export default function AdminClinics() {
               ) : (
                 <tr>
                   <td colSpan={7} className="px-4 py-12 text-center text-xs text-muted-foreground">
-                    No clinics yet. Onboard your first clinic to get started.
+                    No clinics yet. Provision your first clinic to get started.
                   </td>
                 </tr>
               )}
@@ -782,12 +802,15 @@ export default function AdminClinics() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Onboard Dialog ───────────────────────────────────────────────── */}
-      <Dialog open={onboardOpen} onOpenChange={setOnboardOpen}>
+      {/* ── Provision Dialog ─────────────────────────────────────────────── */}
+      <Dialog open={provisionOpen} onOpenChange={setProvisionOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Onboard clinic</DialogTitle>
-            <DialogDescription>Creates clinic + primary clinician in one step.</DialogDescription>
+            <DialogTitle>Provision clinic</DialogTitle>
+            <DialogDescription>
+              One atomic operation: creates the clinic, its primary clinician
+              account, role assignment, membership, wallet, and audit-log entry.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-5 py-2">
             {/* Clinic */}
@@ -799,8 +822,8 @@ export default function AdminClinics() {
                 <div>
                   <Label className="text-xs">Name *</Label>
                   <Input
-                    value={onboardForm.clinic_name}
-                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinic_name: e.target.value }))}
+                    value={provisionForm.clinic_name}
+                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinic_name: e.target.value }))}
                     placeholder="Magna Neurology"
                     className="mt-1 h-8 text-sm"
                   />
@@ -808,8 +831,8 @@ export default function AdminClinics() {
                 <div>
                   <Label className="text-xs">City</Label>
                   <Input
-                    value={onboardForm.city}
-                    onChange={(e) => setOnboardForm((f) => ({ ...f, city: e.target.value }))}
+                    value={provisionForm.city}
+                    onChange={(e) => setProvisionForm((f) => ({ ...f, city: e.target.value }))}
                     placeholder="Mumbai"
                     className="mt-1 h-8 text-sm"
                   />
@@ -817,7 +840,7 @@ export default function AdminClinics() {
               </div>
               <div>
                 <Label className="text-xs">SKU *</Label>
-                <Select value={onboardForm.sku} onValueChange={(v) => setOnboardForm((f) => ({ ...f, sku: v as SkuTier }))}>
+                <Select value={provisionForm.sku} onValueChange={(v) => setProvisionForm((f) => ({ ...f, sku: v as SkuTier }))}>
                   <SelectTrigger className="mt-1 h-8 text-sm">
                     <SelectValue placeholder="Select tier…" />
                   </SelectTrigger>
@@ -840,8 +863,8 @@ export default function AdminClinics() {
               <div>
                 <Label className="text-xs">Full name *</Label>
                 <Input
-                  value={onboardForm.clinician_name}
-                  onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_name: e.target.value }))}
+                  value={provisionForm.clinician_name}
+                  onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_name: e.target.value }))}
                   placeholder="Dr. Priya Sharma"
                   className="mt-1 h-8 text-sm"
                 />
@@ -851,8 +874,8 @@ export default function AdminClinics() {
                   <Label className="text-xs">Email *</Label>
                   <Input
                     type="email"
-                    value={onboardForm.clinician_email}
-                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_email: e.target.value }))}
+                    value={provisionForm.clinician_email}
+                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_email: e.target.value }))}
                     placeholder="dr@clinic.com"
                     className="mt-1 h-8 text-sm"
                   />
@@ -861,8 +884,8 @@ export default function AdminClinics() {
                   <Label className="text-xs">Temp password *</Label>
                   <Input
                     type="password"
-                    value={onboardForm.clinician_password}
-                    onChange={(e) => setOnboardForm((f) => ({ ...f, clinician_password: e.target.value }))}
+                    value={provisionForm.clinician_password}
+                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_password: e.target.value }))}
                     placeholder="••••••••"
                     className="mt-1 h-8 text-sm"
                   />
@@ -877,8 +900,8 @@ export default function AdminClinics() {
               </div>
               <Input
                 type="number"
-                value={onboardForm.initial_tokens}
-                onChange={(e) => setOnboardForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
+                value={provisionForm.initial_tokens}
+                onChange={(e) => setProvisionForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
                 min={0}
                 className="w-24 h-8 text-sm font-mono"
               />
@@ -886,18 +909,18 @@ export default function AdminClinics() {
           </div>
 
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setOnboardOpen(false)}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => setProvisionOpen(false)}>Cancel</Button>
             <Button
               size="sm"
               disabled={
-                onboardMutation.isPending ||
-                !onboardForm.clinic_name || !onboardForm.sku ||
-                !onboardForm.clinician_name || !onboardForm.clinician_email || !onboardForm.clinician_password
+                provisionMutation.isPending ||
+                !provisionForm.clinic_name || !provisionForm.sku ||
+                !provisionForm.clinician_name || !provisionForm.clinician_email || !provisionForm.clinician_password
               }
-              onClick={() => onboardMutation.mutate(onboardForm)}
+              onClick={() => provisionMutation.mutate(provisionForm)}
             >
-              {onboardMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Onboard
+              {provisionMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
+              Provision
             </Button>
           </div>
         </DialogContent>

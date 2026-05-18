@@ -8,7 +8,7 @@
  * 
  * Two tiers:
  * - internal: Full dev/ops version with all features (your development build)
- * - pilot: Production value unit (what ships to real clinics)
+ * - pilot: Production tier shipped to real clinics
  */
 
 export type SkuTier = 'internal' | 'pilot';
@@ -71,7 +71,7 @@ export function getVisibleNavItems(sku: SkuTier): NavItemId[] {
  * SKU Policy Definitions
  * 
  * - internal: Full access, direct API (dev/ops)
- * - pilot: Production value unit, proxy-enforced, payments enabled
+ * - pilot: Production tier, proxy-enforced, payments enabled
  */
 const SKU_POLICIES: Record<SkuTier, SkuCapabilities> = {
   internal: {
@@ -127,7 +127,7 @@ export const SKU_LABELS: Record<SkuTier, string> = {
  */
 export const SKU_DESCRIPTIONS: Record<SkuTier, string> = {
   internal: 'Full platform with all features (development/ops)',
-  pilot: 'Production value unit: Upload → Triage → Report',
+  pilot: 'Production tier: Upload → Triage → Report',
 };
 
 /**

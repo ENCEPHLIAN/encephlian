@@ -35,7 +35,7 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    title: "Value Units",
+    title: "Tenants",
     items: [
       { name: "Clinics", href: "/admin/clinics", icon: Building2 },
       { name: "Users", href: "/admin/users", icon: Users },

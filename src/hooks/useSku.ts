@@ -19,7 +19,7 @@ interface UseSkuResult {
   can: (capability: SkuCapability) => boolean;
   /** Whether user is on internal SKU (dev/ops) */
   isInternal: boolean;
-  /** Whether user is on pilot SKU (production value unit) */
+  /** Whether user is on pilot SKU (production tier) */
   isPilot: boolean;
   /**
    * Whether this user should see / transact in a token wallet.
