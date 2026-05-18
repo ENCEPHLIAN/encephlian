@@ -289,22 +289,37 @@ export default function Lanes() {
   const [slaFilter, setSlaFilter] = useState<SlaFilter>("ALL");
   const { studies, isLoading, isError, error, refetch } = useStudiesData("all");
 
-  // Realtime: refetch whenever any study changes state or triage_status
+  // Realtime is best-effort. If the WebSocket drops or never connects, we
+  // fall back to polling every 30s so the kanban can't silently go stale.
+  // The realtime channel still primary — the interval is just insurance.
   useEffect(() => {
+    let channelHealthy = true;
     const ch = supabase
       .channel("lanes-rt")
-      .on(
-        "postgres_changes",
+      .on("postgres_changes",
         { event: "UPDATE", schema: "public", table: "studies" },
-        () => { refetch(); }
-      )
-      .on(
-        "postgres_changes",
+        () => { refetch(); })
+      .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "studies" },
-        () => { refetch(); }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+        () => { refetch(); })
+      .subscribe((status) => {
+        // Subscribe status: SUBSCRIBED | CHANNEL_ERROR | TIMED_OUT | CLOSED
+        channelHealthy = status === "SUBSCRIBED";
+      });
+
+    // Fallback poll. Cheap — useStudiesData query is already cached and
+    // refetch is no-op when data is fresh. Runs whether the channel is
+    // healthy or not so we recover from silent drops automatically.
+    const poll = setInterval(() => {
+      if (!channelHealthy || document.visibilityState === "visible") {
+        refetch();
+      }
+    }, 30_000);
+
+    return () => {
+      clearInterval(poll);
+      supabase.removeChannel(ch);
+    };
   }, [refetch]);
 
   const filteredStudies = useMemo(() => {

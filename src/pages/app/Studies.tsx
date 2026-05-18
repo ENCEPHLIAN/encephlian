@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { isAcceptedExtension, ACCEPTED_FORMATS_LABEL } from "@/shared/eegFormats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -243,9 +244,10 @@ function InternalStudiesView() {
     }
 
     const file = files[0];
-    const lowerName = file.name.toLowerCase();
-    if (!lowerName.endsWith('.edf') && !lowerName.endsWith('.bdf')) {
-      toast.error("Invalid file type", { description: "Only .edf and .bdf files are supported" });
+    if (!isAcceptedExtension(file.name)) {
+      toast.error("Unsupported file type", {
+        description: `Supported: ${ACCEPTED_FORMATS_LABEL}`,
+      });
       return;
     }
 
@@ -427,12 +429,15 @@ function InternalStudiesView() {
                   Upload EEG
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Upload EDF/BDF file to create new study</TooltipContent>
+              <TooltipContent>Upload EEG file to create new study · {ACCEPTED_FORMATS_LABEL}</TooltipContent>
             </Tooltip>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".edf,.bdf"
+              // NO `accept` attribute. macOS / Chrome / Firefox file pickers
+              // grey out files whose extension they don't recognise — notably
+              // single-character extensions like `.e` (Natus). JS validates
+              // via isAcceptedExtension after selection.
               className="hidden"
               onChange={(e) => handleFileUpload(e.target.files)}
             />

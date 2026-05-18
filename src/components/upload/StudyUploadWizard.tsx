@@ -56,26 +56,14 @@ interface SlaOption {
   icon?: typeof Zap;
 }
 
-// Vendor formats with native pipeline support (no clinic-side conversion needed).
-// Backed by adapter classes in apps/aplane/adapters.py. Magic-byte detection
-// adds another tier of robustness for files with stripped or shared extensions.
-const NATIVE_EXTENSIONS = [
-  ".edf", ".bdf",                  // universal interchange
-  ".e", ".erd", ".ncs",            // Natus / NicoletOne / Xltek
-  ".lay",                          // Persyst (paired with .dat)
-  ".vhdr",                         // Brain Products BrainVision
-  ".cnt",                          // Compumedics Neuroscan / ANT Neuro (magic-byte disambiguated)
-  ".set",                          // EEGLAB
-  ".mff", ".raw",                  // EGI / Philips dense-array
-  ".dap", ".rs3", ".cef",          // Compumedics Curry
-  ".mefd",                         // MEF3 (Mayo)
-  ".gdf",                          // GDF / BioSig
-  ".nwb",                          // Neurodata Without Borders
-];
-// Indian-market vendors that export to EDF (RMS, Clarity, Allengers, BPL, Skanray).
-// Their proprietary native formats remain unsupported without vendor SDKs.
-const PROPRIETARY_EXTENSIONS = [".nk", ".21e", ".rms", ".cle"];
-const ALL_ACCEPTED_EXTENSIONS = [...NATIVE_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
+// Canonical extension lists live in @/shared/eegFormats — the wizard and
+// Studies.tsx now import from the same module so the two cannot drift.
+import {
+  ALL_ACCEPTED_EXTENSIONS,
+  PROPRIETARY_EXTENSIONS,
+  isAcceptedExtension,
+  fileExtension,
+} from "@/shared/eegFormats";
 
 const INTERNAL_SLA_OPTIONS: SlaOption[] = [
   {
@@ -567,11 +555,31 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       // Fire-and-forget: C-Plane canonicalises the EDF and internally calls I-Plane.
       // Do NOT await — the wizard completes immediately and the study page
       // shows live progress via Supabase realtime + polling.
+      // BUT on failure we DO write a study_pipeline_events row so the failure
+      // is observable on the study card instead of going silent forever.
       fetch(`${cplaneBase}/process`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ study_id: studyId }),
-      }).catch((err) => console.warn("[upload] C-Plane trigger failed:", err));
+      }).catch(async (err) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.warn("[upload] C-Plane trigger failed:", detail);
+        try {
+          await supabase.from("study_pipeline_events").insert({
+            study_id: studyId,
+            step: "cplane_trigger",
+            status: "error",
+            source: "e-plane",
+            detail: { error: detail, cplane_base: cplaneBase, ts: new Date().toISOString() },
+          });
+          await supabase
+            .from("studies")
+            .update({ triage_status: "failed", triage_progress: 0 })
+            .eq("id", studyId);
+        } catch (writeErr) {
+          console.error("[upload] could not record trigger failure", writeErr);
+        }
+      });
 
       onProgress(100, "Analysis running — view progress on the study page");
     }
