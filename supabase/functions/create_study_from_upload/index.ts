@@ -70,13 +70,33 @@ serve(async (req) => {
       contentSha256 = h.length === 64 ? h : null;
     }
 
+    // Canonical extension list — MUST match src/shared/eegFormats.ts in the
+    // frontend repo. Kept inline because edge functions can't import from /src.
+    const ACCEPTED_EXT = [
+      ".edf", ".bdf",                       // universal interchange
+      ".e", ".erd", ".ncs",                 // Natus / NicoletOne / Xltek
+      ".lay", ".vhdr", ".cnt", ".set",      // Persyst / BrainVision / Neuroscan / EEGLAB
+      ".mff", ".raw",                       // EGI / Philips
+      ".dap", ".rs3", ".cef",               // Compumedics Curry
+      ".mefd", ".gdf", ".nwb",              // MEF3 / GDF / NWB
+      ".nk", ".21e", ".rms", ".cle",        // Nihon Kohden / RMS / Clarity / proprietary EDF exporters
+    ];
+
     const lowerName = (fileName as string).toLowerCase();
-    const isBdf = lowerName.endsWith(".bdf");
-    if (!lowerName.endsWith(".edf") && !isBdf) return new Response(
-      JSON.stringify({ error: "Only .edf and .bdf files are supported" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-    const fileType = isBdf ? "bdf" : "edf";
+    const dotIdx = lowerName.lastIndexOf(".");
+    const ext = dotIdx >= 0 ? lowerName.slice(dotIdx) : "";
+    if (!ACCEPTED_EXT.includes(ext)) {
+      return new Response(
+        JSON.stringify({
+          error: `Unsupported file type "${ext || "(no extension)"}". Supported: ${ACCEPTED_EXT.join(", ")}`,
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+    // fileType = extension without the leading dot. Stored in studies.original_format,
+    // study_files.kind, and used to derive the blob path so the SAS URL the
+    // C-Plane returns lines up with the path we record.
+    const fileType = ext.slice(1);
 
     // Resolve clinic
     let clinicId: string | null = null;
@@ -168,8 +188,14 @@ serve(async (req) => {
       detail: { fileName, fileType, user_id: user.id },
     });
 
-    // Get SAS token from C-Plane for direct browser->blob upload
-    const sasRes = await fetch(`${getCplaneBaseUrl()}/upload-token/${studyId}`, { method: "POST" });
+    // Get SAS token from C-Plane for direct browser->blob upload. We MUST pass
+    // the file extension so the SAS URL the C-Plane mints matches the blob path
+    // we record in studies.uploaded_file_path / study_files.path. Without ?ext=
+    // the C-Plane defaults to .edf and any non-.edf upload lands at the wrong key.
+    const sasRes = await fetch(
+      `${getCplaneBaseUrl()}/upload-token/${studyId}?ext=${encodeURIComponent(fileType)}`,
+      { method: "POST" },
+    );
 
     if (!sasRes.ok) {
       const errBody = await sasRes.text().catch(() => "");
