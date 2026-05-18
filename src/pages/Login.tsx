@@ -306,14 +306,6 @@ export default function Login() {
         </div>
       )}
 
-      {/* Stealth-mode footer — nothing but the brand. Legal pages live under
-          /admin/legal/* and are visible only after authentication. */}
-      <footer className="absolute bottom-0 inset-x-0 z-10 px-6 py-3 text-center
-                         text-[10px] tracking-[0.18em] text-muted-foreground/50">
-        ENCEPHLIAN<sup className="text-[7px] align-top relative top-[0.1em] font-light">™</sup>
-        <span className="mx-2 opacity-60">·</span>
-        2026
-      </footer>
     </div>
   );
 }
