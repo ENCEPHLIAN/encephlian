@@ -102,6 +102,11 @@ function App() {
             <GeoRestrictionModal />
             <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <Routes>
+                {/* Root → Login. Login.tsx redirects authenticated users to
+                    /app/dashboard itself, so authenticated users still land
+                    in-app immediately. Unauthenticated users see the form
+                    with the stealth footer. */}
+                <Route path="/" element={<Login />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
 
@@ -111,8 +116,6 @@ function App() {
                 <Route path="/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPage /></Suspense>} />
                 <Route path="/refund"  element={<Suspense fallback={<PageLoader />}><RefundPage /></Suspense>} />
                 <Route path="/support" element={<Suspense fallback={<PageLoader />}><SupportPage /></Suspense>} />
-
-                <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
                 {/* Admin Routes */}
                 <Route element={<AdminRoute />}>

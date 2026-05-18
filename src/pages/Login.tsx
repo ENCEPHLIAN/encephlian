@@ -301,18 +301,26 @@ export default function Login() {
                   </form>
                 )}
               </div>
-
-              <div className="mt-8 text-center text-[11px] text-muted-foreground">
-                By signing in you agree to our{" "}
-                <a href="/terms" className="underline-offset-2 hover:underline">Terms</a>,{" "}
-                <a href="/privacy" className="underline-offset-2 hover:underline">Privacy Policy</a>, and{" "}
-                <a href="/refund" className="underline-offset-2 hover:underline">Refund Policy</a>.{" "}
-                Need help? <a href="/support" className="underline-offset-2 hover:underline">Support</a>.
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
+
+      {/* Stealth-mode footer — discrete legal links. Always rendered on the
+          unauthenticated /  and /login pages. Remove or expand after launch. */}
+      <footer className="absolute bottom-0 inset-x-0 z-10 px-6 py-3 text-center
+                         text-[10px] tracking-wide text-muted-foreground/60
+                         hover:text-muted-foreground transition-colors">
+        <span>Aposematium Pvt Ltd · ENCEPHLIAN · pilot</span>
+        <span className="mx-2 opacity-50">·</span>
+        <a href="/terms"   className="hover:underline">Terms</a>
+        <span className="mx-1.5 opacity-50">·</span>
+        <a href="/privacy" className="hover:underline">Privacy</a>
+        <span className="mx-1.5 opacity-50">·</span>
+        <a href="/refund"  className="hover:underline">Refund</a>
+        <span className="mx-1.5 opacity-50">·</span>
+        <a href="/support" className="hover:underline">Support</a>
+      </footer>
     </div>
   );
 }
