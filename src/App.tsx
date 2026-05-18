@@ -36,6 +36,12 @@ const Support      = lazy(() => import("./pages/app/Support"));
 const Documentation = lazy(() => import("./pages/app/Documentation"));
 const OnboardingGuide = lazy(() => import("./pages/app/OnboardingGuide"));
 
+// ── Public legal pages (unauthenticated) ──────────────────────────────────────
+const TermsPage   = lazy(() => import("./pages/legal/Terms"));
+const PrivacyPage = lazy(() => import("./pages/legal/Privacy"));
+const RefundPage  = lazy(() => import("./pages/legal/Refund"));
+const SupportPage = lazy(() => import("./pages/legal/Support"));
+
 // ── Admin pages (lazy) ────────────────────────────────────────────────────────
 const AdminDashboard   = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminStudies     = lazy(() => import("./pages/admin/AdminStudies"));
@@ -98,6 +104,14 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+
+                {/* Public legal routes — must remain unauthenticated and
+                    survive any auth-wrapper changes above. */}
+                <Route path="/terms"   element={<Suspense fallback={<PageLoader />}><TermsPage /></Suspense>} />
+                <Route path="/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPage /></Suspense>} />
+                <Route path="/refund"  element={<Suspense fallback={<PageLoader />}><RefundPage /></Suspense>} />
+                <Route path="/support" element={<Suspense fallback={<PageLoader />}><SupportPage /></Suspense>} />
+
                 <Route path="/" element={<Navigate to="/app/dashboard" replace />} />
 
                 {/* Admin Routes */}

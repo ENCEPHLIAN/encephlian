@@ -301,8 +301,16 @@ export default function Login() {
                   </form>
                 )}
               </div>
-            )}
-          </div>
+
+              <div className="mt-8 text-center text-[11px] text-muted-foreground">
+                By signing in you agree to our{" "}
+                <a href="/terms" className="underline-offset-2 hover:underline">Terms</a>,{" "}
+                <a href="/privacy" className="underline-offset-2 hover:underline">Privacy Policy</a>, and{" "}
+                <a href="/refund" className="underline-offset-2 hover:underline">Refund Policy</a>.{" "}
+                Need help? <a href="/support" className="underline-offset-2 hover:underline">Support</a>.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
