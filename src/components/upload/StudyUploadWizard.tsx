@@ -77,15 +77,6 @@ const NATIVE_EXTENSIONS = [
 const PROPRIETARY_EXTENSIONS = [".nk", ".21e", ".rms", ".cle"];
 const ALL_ACCEPTED_EXTENSIONS = [...NATIVE_EXTENSIONS, ...PROPRIETARY_EXTENSIONS];
 
-// Used as a HINT only for the OS file picker.
-// Note: `.e` and other short/uncommon extensions are often greyed out by the
-// OS file picker when the `accept` attribute is restrictive. We include MIME
-// types and the wildcard so the OS still shows these files, then validate
-// the extension in JavaScript after selection.
-const FILE_PICKER_ACCEPT_HINT = ALL_ACCEPTED_EXTENSIONS.join(",")
-  + ",application/octet-stream"
-  + ",.eeg";  // Nihon Kohden + BrainVision data file (.eeg suffix accepted by both adapters)
-
 const INTERNAL_SLA_OPTIONS: SlaOption[] = [
   {
     value: "STAT",
@@ -828,7 +819,12 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept={FILE_PICKER_ACCEPT_HINT}
+                // NO `accept` attribute. macOS / Chrome / Firefox file pickers
+                // grey out files whose extension they don't recognise — notably
+                // single-character extensions like `.e` (Natus). A restrictive
+                // `accept` hint hides legitimate vendor files. We let the user
+                // pick anything; JS validates the extension after selection and
+                // reports a clean error toast for unsupported types.
                 className="hidden"
                 onChange={(e) => {
                   const files = Array.from(e.target.files ?? []);
@@ -836,11 +832,18 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                     handleFileSelect(files[0]);
                   } else if (files.length > 1) {
                     const valid = files.filter(f => ALL_ACCEPTED_EXTENSIONS.includes(f.name.toLowerCase().slice(f.name.lastIndexOf("."))));
-                    if (valid.length > 0) {
-                      setFile(valid[0]);
-                      setFileQueue(valid);
-                      setBatchProgress(valid.map(f => ({ name: f.name, status: "pending" as const })));
+                    if (valid.length === 0) {
+                      systemFeedback.report({
+                        severity: "error",
+                        what: "Unsupported file types",
+                        why: "None of the selected files match a supported vendor format.",
+                        action: `Supported: ${ALL_ACCEPTED_EXTENSIONS.join(", ")}`,
+                      });
+                      return;
                     }
+                    setFile(valid[0]);
+                    setFileQueue(valid);
+                    setBatchProgress(valid.map(f => ({ name: f.name, status: "pending" as const })));
                   }
                 }}
               />

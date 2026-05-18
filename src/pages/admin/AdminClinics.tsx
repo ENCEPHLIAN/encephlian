@@ -239,10 +239,38 @@ export default function AdminClinics() {
   const onboardMutation = useMutation({
     mutationFn: async (form: typeof onboardForm) => {
       const { data, error } = await supabase.functions.invoke("admin_onboard_value_unit", { body: form });
-      if (data?.error) throw new Error(data.error);
+
+      // The edge function returns `{ ok, error, step }` on failure. Surface the
+      // step so the operator sees exactly where it broke (auth_get_user,
+      // role_check, clinic_insert, user_create, profile_update, role_insert,
+      // membership_insert, wallet_upsert, unhandled).
+      const extractFailure = (payload: any): { msg: string; step?: string } | null => {
+        if (!payload) return null;
+        if (payload.ok === false || payload.error) {
+          return { msg: payload.error || "Onboarding failed", step: payload.step };
+        }
+        return null;
+      };
+
+      const fromData = extractFailure(data);
+      if (fromData) {
+        throw new Error(fromData.step ? `[${fromData.step}] ${fromData.msg}` : fromData.msg);
+      }
+
       if (error) {
+        // Non-2xx responses land here; the body is on error.context (string).
         const ctx = (error as any).context;
-        try { const p = JSON.parse(typeof ctx === "string" ? ctx : "{}"); if (p?.error) throw new Error(p.error); } catch (_) {}
+        try {
+          let parsed: any = ctx;
+          if (typeof ctx === "string") parsed = JSON.parse(ctx);
+          else if (ctx && typeof ctx.text === "function") parsed = JSON.parse(await ctx.text());
+          const fromCtx = extractFailure(parsed);
+          if (fromCtx) {
+            throw new Error(fromCtx.step ? `[${fromCtx.step}] ${fromCtx.msg}` : fromCtx.msg);
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof Error && parseErr.message.startsWith("[")) throw parseErr;
+        }
         throw error;
       }
       return data;
@@ -254,7 +282,7 @@ export default function AdminClinics() {
       setOnboardOpen(false);
       setOnboardForm({ ...EMPTY_ONBOARD });
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => toast.error(e.message, { duration: 8000 }),
   });
 
   const deleteMutation = useMutation({

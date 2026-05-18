@@ -12,16 +12,26 @@ import { corsHeaders } from '../_shared/cors.ts';
  * 
  * This ensures the value unit (clinic + neurologist) is always consistent.
  */
+// Helper: typed error response with the exact failing step. The frontend
+// surfaces `step` so a clinician/admin knows what to retry.
+function fail(step: string, status: number, detail: string, raw?: unknown) {
+  console.error(`[onboard] FAIL at ${step}: ${detail}`, raw ?? '');
+  return new Response(JSON.stringify({
+    error: detail,
+    step,
+    ok: false,
+  }), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Use service-role client for all operations — JWT is already verified
-    // by the admin portal (TFA + role-based route guard).
-    // We use supabaseAdmin.auth.getUser(token) which calls the Supabase Auth
-    // server directly and works with any JWT algorithm (HS256 or ES256).
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -31,31 +41,34 @@ Deno.serve(async (req) => {
     const token = authHeader.replace('Bearer ', '').trim();
 
     let callerId: string | null = null;
+    let callerEmail: string | null = null;
     if (token) {
-      const { data: { user } } = await supabaseAdmin.auth.getUser(token);
+      const { data: { user }, error: getUserErr } = await supabaseAdmin.auth.getUser(token);
+      if (getUserErr) {
+        return fail('auth_get_user', 401, `Failed to verify token: ${getUserErr.message}`, getUserErr);
+      }
       callerId = user?.id ?? null;
+      callerEmail = user?.email ?? null;
     }
 
     if (!callerId) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return fail('auth_missing', 401, 'Unauthorized: no valid bearer token');
     }
 
     // Verify caller has admin role
-    const { data: roleCheck } = await supabaseAdmin
+    const { data: roleCheck, error: roleErr } = await supabaseAdmin
       .from('user_roles')
       .select('role')
       .eq('user_id', callerId)
       .in('role', ['super_admin', 'management']);
-
-    if (!roleCheck || roleCheck.length === 0) {
-      return new Response(JSON.stringify({ error: 'Forbidden: Admin access required' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+    if (roleErr) {
+      return fail('role_check', 500, `Failed to read caller roles: ${roleErr.message}`, roleErr);
     }
+    if (!roleCheck || roleCheck.length === 0) {
+      return fail('forbidden', 403,
+        `Forbidden: caller ${callerEmail ?? callerId} has no super_admin or management role`);
+    }
+    console.log(`[onboard] caller ${callerEmail} authorised as ${roleCheck.map(r => r.role).join(',')}`);
 
     const { 
       clinic_name, 
@@ -67,43 +80,34 @@ Deno.serve(async (req) => {
       initial_tokens = 10 
     } = await req.json();
 
-    // Validate required fields
     if (!clinic_name || !clinician_name || !clinician_email || !clinician_password) {
-      return new Response(JSON.stringify({ 
-        error: 'Missing required fields: clinic_name, clinician_name, clinician_email, clinician_password' 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return fail('validate_required', 400,
+        'Missing required fields: clinic_name, clinician_name, clinician_email, clinician_password');
     }
 
-    // Validate SKU (only pilot and internal, no demo)
     const validSkus = ['internal', 'pilot'];
     if (!validSkus.includes(sku)) {
-      return new Response(JSON.stringify({ 
-        error: `Invalid SKU: ${sku}. Must be one of: ${validSkus.join(', ')}` 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return fail('validate_sku', 400,
+        `Invalid SKU: ${sku}. Must be one of: ${validSkus.join(', ')}`);
     }
 
-    console.log('Onboarding value unit:', { clinic_name, clinician_email, sku });
+    console.log('[onboard] starting value unit:', { clinic_name, clinician_email, sku });
 
-    // STEP 1: Check if email already exists
-    const { data: existingProfile } = await supabaseAdmin
+    // STEP 1: Check if email already exists in profiles
+    const { data: existingProfile, error: existingProfileErr } = await supabaseAdmin
       .from('profiles')
       .select('id')
       .eq('email', clinician_email.toLowerCase())
       .maybeSingle();
 
+    if (existingProfileErr) {
+      return fail('check_existing_profile', 500,
+        `Failed to check existing profile: ${existingProfileErr.message}`, existingProfileErr);
+    }
+
     if (existingProfile) {
-      return new Response(JSON.stringify({ 
-        error: `User with email ${clinician_email} already exists` 
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return fail('email_exists', 400,
+        `User with email ${clinician_email} already exists`);
     }
 
     // STEP 2: Create the clinic
@@ -112,18 +116,18 @@ Deno.serve(async (req) => {
       .insert({
         name: clinic_name,
         city: city || null,
-        sku: sku, // Use explicitly selected SKU
+        sku: sku,
         is_active: true,
       })
       .select()
       .single();
 
-    if (clinicError) {
-      console.error('Error creating clinic:', clinicError);
-      throw new Error(`Failed to create clinic: ${clinicError.message}`);
+    if (clinicError || !clinic) {
+      return fail('clinic_insert', 500,
+        `Failed to create clinic: ${clinicError?.message ?? 'no row returned'}`, clinicError);
     }
 
-    console.log('Created clinic:', clinic.id);
+    console.log('[onboard] created clinic:', clinic.id);
 
     // STEP 3: Create the auth user
     const { data: newUser, error: userError } = await supabaseAdmin.auth.admin.createUser({
@@ -133,30 +137,45 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: clinician_name },
     });
 
-    if (userError) {
-      // Rollback: delete the clinic we just created
+    if (userError || !newUser?.user?.id) {
       await supabaseAdmin.from('clinics').delete().eq('id', clinic.id);
-      console.error('Error creating user:', userError);
-      throw new Error(`Failed to create user: ${userError.message}`);
+      return fail('user_create', 500,
+        `Failed to create auth user: ${userError?.message ?? 'no user returned'}`, userError);
     }
 
     const userId = newUser.user.id;
-    console.log('Created user:', userId);
+    console.log('[onboard] created auth user:', userId);
 
-    // Wait for trigger to create profile
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // Wait for handle_new_user trigger to create the profile row
+    await new Promise(resolve => setTimeout(resolve, 250));
 
-    // STEP 4: Update profile with full name
-    await supabaseAdmin
+    // Cascade rollback helper: delete auth user (cascades to profile via trigger)
+    // and the clinic we created. Used on any failure after step 3.
+    const rollbackAll = async (reason: string) => {
+      console.error(`[onboard] rolling back: ${reason}`);
+      try { await supabaseAdmin.auth.admin.deleteUser(userId); }
+      catch (e) { console.error('[onboard] rollback user delete failed:', e); }
+      try { await supabaseAdmin.from('clinics').delete().eq('id', clinic.id); }
+      catch (e) { console.error('[onboard] rollback clinic delete failed:', e); }
+    };
+
+    // STEP 4: Update profile with full name + role
+    const { error: profileError } = await supabaseAdmin
       .from('profiles')
-      .update({ 
+      .update({
         full_name: clinician_name,
-        role: 'clinician'
+        role: 'clinician',
       })
       .eq('id', userId);
 
+    if (profileError) {
+      await rollbackAll(`profile_update: ${profileError.message}`);
+      return fail('profile_update', 500,
+        `Failed to update profile: ${profileError.message}`, profileError);
+    }
+
     // STEP 5: Assign clinician role
-    const { error: roleError } = await supabaseAdmin
+    const { error: roleInsertError } = await supabaseAdmin
       .from('user_roles')
       .insert({
         user_id: userId,
@@ -164,9 +183,10 @@ Deno.serve(async (req) => {
         clinic_id: clinic.id,
       });
 
-    if (roleError) {
-      console.error('Error assigning role:', roleError);
-      // Continue - not fatal
+    if (roleInsertError) {
+      await rollbackAll(`role_insert: ${roleInsertError.message}`);
+      return fail('role_insert', 500,
+        `Failed to assign clinician role: ${roleInsertError.message}`, roleInsertError);
     }
 
     // STEP 6: Create clinic membership
@@ -181,8 +201,9 @@ Deno.serve(async (req) => {
       });
 
     if (membershipError) {
-      console.error('Error creating membership:', membershipError);
-      // Continue - not fatal
+      await rollbackAll(`membership_insert: ${membershipError.message}`);
+      return fail('membership_insert', 500,
+        `Failed to create clinic membership: ${membershipError.message}`, membershipError);
     }
 
     // STEP 7: Create wallet with initial tokens
@@ -194,12 +215,15 @@ Deno.serve(async (req) => {
       }, { onConflict: 'user_id' });
 
     if (walletError) {
-      console.error('Error creating wallet:', walletError);
-      // Continue - not fatal
+      await rollbackAll(`wallet_upsert: ${walletError.message}`);
+      return fail('wallet_upsert', 500,
+        `Failed to create wallet: ${walletError.message}`, walletError);
     }
 
-    // STEP 8: Log the audit event
-    await supabaseAdmin.from('audit_logs').insert({
+    // STEP 8: Audit event. The value unit is complete by this point — if the
+    // audit insert fails we log loudly but do NOT roll back (onboarding succeeded;
+    // the operator should fix the audit table rather than lose the user).
+    const { error: auditError } = await supabaseAdmin.from('audit_logs').insert({
       user_id: callerId,
       event_type: 'value_unit_onboarded',
       event_data: {
@@ -208,10 +232,18 @@ Deno.serve(async (req) => {
         clinician_id: userId,
         clinician_email: clinician_email,
         initial_tokens: initial_tokens,
+        sku: sku,
       },
     });
 
+    if (auditError) {
+      console.error('[onboard] WARN: audit log failed but onboarding succeeded:', auditError);
+    }
+
+    console.log('[onboard] SUCCESS:', { clinic_id: clinic.id, user_id: userId, sku });
+
     return new Response(JSON.stringify({
+      ok: true,
       success: true,
       clinic: {
         id: clinic.id,
@@ -223,16 +255,16 @@ Deno.serve(async (req) => {
         name: clinician_name,
       },
       tokens: initial_tokens,
+      audit_warning: auditError ? auditError.message : null,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Onboard value unit error:', error);
+    // Catch truly unexpected errors (programming bugs, network failures).
+    // Anything inside the try body that we expect to fail should already use fail().
+    console.error('[onboard] unhandled error:', error);
     const errorMessage = error instanceof Error ? error.message : 'An error occurred';
-    return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return fail('unhandled', 500, errorMessage, error);
   }
 });
