@@ -146,7 +146,7 @@ export default function Reports() {
     queryFn: async () => {
       const { data } = await supabase
         .from("studies")
-        .select("id, sla, state, triage_status, triage_completed_at, updated_at, meta, clinics(name)")
+        .select("id, sla, state, triage_status, triage_completed_at, created_at, meta, clinics(name)")
         .in("state", ["ai_draft", "in_review"])
         .order("triage_completed_at", { ascending: false })
         .limit(50);
@@ -338,7 +338,7 @@ export default function Reports() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{getPatientLabel(study)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {study.clinics?.name || "—"} · {dayjs(study.triage_completed_at || study.updated_at).format("MMM D, h:mm A")}
+                        {study.clinics?.name || "—"} · {dayjs(study.triage_completed_at || study.created_at).format("MMM D, h:mm A")}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

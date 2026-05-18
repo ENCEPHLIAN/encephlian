@@ -83,7 +83,7 @@ function buildTriageComplete(study: any): AppNotification {
     category: "report",
     title: "Analysis complete",
     body: `${name}${resultStr} — ready for review`,
-    createdAt: study.triage_completed_at || study.updated_at || new Date().toISOString(),
+    createdAt: study.triage_completed_at || study.created_at || new Date().toISOString(),
     studyId: study.id,
     href: `/app/studies/${study.id}`,
     patientName: name,
@@ -98,7 +98,7 @@ function buildTriageStarted(study: any): AppNotification {
     category: "info",
     title: "Analysis started",
     body: `${name} · ${study.sla || "Standard"} priority`,
-    createdAt: study.updated_at || new Date().toISOString(),
+    createdAt: study.created_at || new Date().toISOString(),
     studyId: study.id,
     href: `/app/studies/${study.id}`,
     patientName: name,
@@ -161,7 +161,7 @@ export function useNotifications() {
     queryFn: async () => {
       const { data } = await supabase
         .from("studies")
-        .select("id, updated_at, triage_completed_at, meta, sla")
+        .select("id, created_at, triage_completed_at, meta, sla")
         .eq("triage_status", "completed")
         .gte("triage_completed_at", SEVEN_DAYS_AGO())
         .order("triage_completed_at", { ascending: false })
