@@ -88,12 +88,6 @@ const ROLE_STYLE: Record<string, string> = {
   viewer:    "bg-muted/50 text-muted-foreground",
 };
 
-const EMPTY_PROVISION_FORM = {
-  clinic_name: "", city: "", sku: "" as SkuTier | "",
-  clinician_name: "", clinician_email: "", clinician_password: "",
-  initial_tokens: 10,
-};
-
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
@@ -118,8 +112,6 @@ export default function AdminClinics() {
   const queryClient = useQueryClient();
   const [editTarget, setEditTarget] = useState<ClinicRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", city: "", sku: "pilot" as SkuTier });
-  const [provisionOpen, setProvisionOpen] = useState(false);
-  const [provisionForm, setProvisionForm] = useState({ ...EMPTY_PROVISION_FORM });
   const [deleteTarget, setDeleteTarget] = useState<ClinicRow | null>(null);
   const [selectedClinic, setSelectedClinic] = useState<ClinicRow | null>(null);
 
@@ -236,74 +228,7 @@ export default function AdminClinics() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const provisionMutation = useMutation({
-    mutationFn: async (form: typeof provisionForm) => {
-      // admin_provision_clinic returns:
-      //   200 { ok: true,  request_id, clinic, clinician, tokens }
-      //   4xx/5xx { ok: false, step, error, code, request_id }
-      // Both paths share request_id so toast ↔ Supabase log can be cross-referenced.
-      const { data, error } = await supabase.functions.invoke("admin_provision_clinic", { body: form });
-
-      const extractFailure = (
-        payload: any,
-      ): { msg: string; step?: string; requestId?: string; code?: string } | null => {
-        if (!payload) return null;
-        if (payload.ok === false || payload.error) {
-          return {
-            msg: payload.error || "Provisioning failed",
-            step: payload.step,
-            requestId: payload.request_id,
-            code: payload.code ?? undefined,
-          };
-        }
-        return null;
-      };
-
-      const formatFailure = (f: { msg: string; step?: string; requestId?: string; code?: string }) => {
-        const head = f.step ? `[${f.step}]` : "[provision]";
-        const tail = f.requestId ? ` (${f.requestId})` : "";
-        return `${head} ${f.msg}${tail}`;
-      };
-
-      const fromData = extractFailure(data);
-      if (fromData) throw new Error(formatFailure(fromData));
-
-      if (error) {
-        const ctx = (error as any).context;
-        try {
-          let parsed: any = ctx;
-          if (typeof ctx === "string") parsed = JSON.parse(ctx);
-          else if (ctx && typeof ctx.text === "function") parsed = JSON.parse(await ctx.text());
-          const fromCtx = extractFailure(parsed);
-          if (fromCtx) throw new Error(formatFailure(fromCtx));
-        } catch (parseErr) {
-          if (parseErr instanceof Error && parseErr.message.startsWith("[")) throw parseErr;
-        }
-        throw error;
-      }
-      return data as {
-        ok: true;
-        request_id: string;
-        clinic: { id: string; name: string; sku: string };
-        clinician: { id: string; email: string; name: string };
-        tokens: number;
-      };
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      toast.success(
-        `Clinic provisioned · ${result.clinic.name}`,
-        {
-          description: `${result.clinician.email} · ${result.tokens} tokens · ${result.request_id}`,
-          duration: 6000,
-        },
-      );
-      setProvisionOpen(false);
-      setProvisionForm({ ...EMPTY_PROVISION_FORM });
-    },
-    onError: (e: any) => toast.error(e.message, { duration: 10000 }),
-  });
+  // Provisioning lives at /admin/clinics/new (see AdminClinicNew.tsx).
 
   const deleteMutation = useMutation({
     mutationFn: async (clinicId: string) => {
@@ -364,7 +289,7 @@ export default function AdminClinics() {
             {clinics?.reduce((s, c) => s + (c.study_count || 0), 0) ?? 0} studies total
           </p>
         </div>
-        <Button size="sm" onClick={() => setProvisionOpen(true)}>
+        <Button size="sm" onClick={() => navigate("/admin/clinics/new")}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
           Provision clinic
         </Button>
@@ -802,129 +727,7 @@ export default function AdminClinics() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Provision Dialog ─────────────────────────────────────────────── */}
-      <Dialog open={provisionOpen} onOpenChange={setProvisionOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Provision clinic</DialogTitle>
-            <DialogDescription>
-              One atomic operation: creates the clinic, its primary clinician
-              account, role assignment, membership, wallet, and audit-log entry.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-5 py-2">
-            {/* Clinic */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Building2 className="h-3.5 w-3.5" /> Clinic
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Name *</Label>
-                  <Input
-                    value={provisionForm.clinic_name}
-                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinic_name: e.target.value }))}
-                    placeholder="Magna Neurology"
-                    className="mt-1 h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">City</Label>
-                  <Input
-                    value={provisionForm.city}
-                    onChange={(e) => setProvisionForm((f) => ({ ...f, city: e.target.value }))}
-                    placeholder="Mumbai"
-                    className="mt-1 h-8 text-sm"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs">SKU *</Label>
-                <Select value={provisionForm.sku} onValueChange={(v) => setProvisionForm((f) => ({ ...f, sku: v as SkuTier }))}>
-                  <SelectTrigger className="mt-1 h-8 text-sm">
-                    <SelectValue placeholder="Select tier…" />
-                  </SelectTrigger>
-                  <SelectContent position="popper" sideOffset={4}>
-                    {SKU_TIERS.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        <Badge variant="secondary" className={cn("text-[10px]", SKU_STYLE[t])}>{SKU_LABELS[t]}</Badge>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Primary Clinician */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <User className="h-3.5 w-3.5" /> Primary Clinician
-              </div>
-              <div>
-                <Label className="text-xs">Full name *</Label>
-                <Input
-                  value={provisionForm.clinician_name}
-                  onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_name: e.target.value }))}
-                  placeholder="Dr. Priya Sharma"
-                  className="mt-1 h-8 text-sm"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Email *</Label>
-                  <Input
-                    type="email"
-                    value={provisionForm.clinician_email}
-                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_email: e.target.value }))}
-                    placeholder="dr@clinic.com"
-                    className="mt-1 h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Temp password *</Label>
-                  <Input
-                    type="password"
-                    value={provisionForm.clinician_password}
-                    onChange={(e) => setProvisionForm((f) => ({ ...f, clinician_password: e.target.value }))}
-                    placeholder="••••••••"
-                    className="mt-1 h-8 text-sm"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tokens */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Coins className="h-3.5 w-3.5" /> Starting tokens
-              </div>
-              <Input
-                type="number"
-                value={provisionForm.initial_tokens}
-                onChange={(e) => setProvisionForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))}
-                min={0}
-                className="w-24 h-8 text-sm font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setProvisionOpen(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              disabled={
-                provisionMutation.isPending ||
-                !provisionForm.clinic_name || !provisionForm.sku ||
-                !provisionForm.clinician_name || !provisionForm.clinician_email || !provisionForm.clinician_password
-              }
-              onClick={() => provisionMutation.mutate(provisionForm)}
-            >
-              {provisionMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Provision
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Provision flow lives at /admin/clinics/new now — full-page, no dialog. */}
 
       {/* ── Delete Alert ─────────────────────────────────────────────────── */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>

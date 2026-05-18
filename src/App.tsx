@@ -63,6 +63,7 @@ const AdminInfra       = lazy(() => import("./pages/admin/AdminInfra"));
 const AdminFinance     = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminAccount     = lazy(() => import("./pages/admin/AdminAccount"));
 const AdminClinicDocuments = lazy(() => import("./pages/admin/AdminClinicDocuments"));
+const AdminClinicNew = lazy(() => import("./pages/admin/AdminClinicNew"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -118,6 +119,7 @@ function App() {
                     <Route path="studies" element={<Suspense fallback={<PageLoader />}><AdminStudies /></Suspense>} />
                     <Route path="studies/:id" element={<Suspense fallback={<PageLoader />}><AdminStudyDetail /></Suspense>} />
                     <Route path="clinics" element={<Suspense fallback={<PageLoader />}><AdminClinics /></Suspense>} />
+                    <Route path="clinics/new" element={<Suspense fallback={<PageLoader />}><AdminClinicNew /></Suspense>} />
                     <Route path="users" element={<Suspense fallback={<PageLoader />}><AdminUsers /></Suspense>} />
                     <Route path="health" element={<Suspense fallback={<PageLoader />}><AdminHealth /></Suspense>} />
                     <Route path="diagnostics" element={<Suspense fallback={<PageLoader />}><AdminDiagnostics /></Suspense>} />
