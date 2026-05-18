@@ -188,12 +188,12 @@ serve(async (req) => {
       detail: { fileName, fileType, user_id: user.id },
     });
 
-    // Get SAS token from C-Plane for direct browser->blob upload. We MUST pass
-    // the file extension so the SAS URL the C-Plane mints matches the blob path
-    // we record in studies.uploaded_file_path / study_files.path. Without ?ext=
-    // the C-Plane defaults to .edf and any non-.edf upload lands at the wrong key.
+    // Get SAS token from C-Plane for direct browser->blob upload. The C-Plane
+    // /upload-token endpoint expects the extension WITH the leading dot
+    // (RAW_EXTENSIONS = (".edf", ".bdf", ".e")), so we pass `ext` (e.g. ".e")
+    // not `fileType` (e.g. "e"). Without the dot the C-Plane rejects with 400.
     const sasRes = await fetch(
-      `${getCplaneBaseUrl()}/upload-token/${studyId}?ext=${encodeURIComponent(fileType)}`,
+      `${getCplaneBaseUrl()}/upload-token/${studyId}?ext=${encodeURIComponent(ext)}`,
       { method: "POST" },
     );
 

@@ -253,9 +253,16 @@ function InternalStudiesView() {
 
     const uploadTid = toast.loading(`Preparing upload — ${file.name}`);
     try {
+      // extractEDFPatientMeta parses an EDF/BDF fixed-offset header. For other
+      // vendor formats (.e Natus, .vhdr BrainVision, .set EEGLAB, etc.) those
+      // bytes are unrelated binary and would decode as garbled text. So we
+      // skip extraction for non-EDF/BDF and let the C-Plane fill patient meta
+      // during canonicalisation, or the clinician edit the field manually.
+      const lower = file.name.toLowerCase();
+      const isEdfFamily = lower.endsWith(".edf") || lower.endsWith(".bdf");
       const [contentSha256, patientMeta] = await Promise.all([
         sha256HexFromFile(file),
-        extractEDFPatientMeta(file),
+        isEdfFamily ? extractEDFPatientMeta(file) : Promise.resolve({}),
       ]);
 
       const { data, error: createError } = await supabase.functions.invoke("create_study_from_upload", {
