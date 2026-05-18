@@ -59,14 +59,41 @@ import { PatientMetaEditor } from "@/components/study/PatientMetaEditor";
 
 dayjs.extend(relativeTime);
 
-class ReportErrorBoundary extends Component<{ children: ReactNode }, { crashed: boolean }> {
-  state = { crashed: false };
-  static getDerivedStateFromError() { return { crashed: true }; }
+class ReportErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null; info: { componentStack?: string } | null }
+> {
+  state: { error: Error | null; info: { componentStack?: string } | null } = {
+    error: null,
+    info: null,
+  };
+  static getDerivedStateFromError(error: Error) {
+    return { error, info: null };
+  }
+  componentDidCatch(error: Error, info: { componentStack?: string }) {
+    // Surface to the browser console too so we have the stack in devtools.
+    console.error("[AnalysisView crash]", error, info);
+    this.setState({ error, info });
+  }
   render() {
-    if (this.state.crashed) {
+    if (this.state.error) {
+      const msg = this.state.error.message || String(this.state.error);
+      const stack = (this.state.info?.componentStack ?? this.state.error.stack ?? "")
+        .split("\n").slice(0, 8).join("\n");
       return (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          Report failed to render. Try refreshing or re-generating the analysis.
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-2">
+          <p className="font-medium text-destructive">Report failed to render</p>
+          <p className="text-xs text-destructive/90">
+            <span className="font-mono">{msg}</span>
+          </p>
+          <details className="text-[10px] font-mono text-muted-foreground">
+            <summary className="cursor-pointer">component stack (top 8 frames)</summary>
+            <pre className="mt-1 whitespace-pre-wrap break-all">{stack || "(no stack)"}</pre>
+          </details>
+          <p className="text-[10px] text-muted-foreground">
+            Open the browser devtools Console for the full stack. Copy the message above
+            into a support ticket if it persists across re-renders.
+          </p>
         </div>
       );
     }
