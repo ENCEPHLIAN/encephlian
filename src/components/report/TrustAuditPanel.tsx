@@ -102,11 +102,20 @@ function extractClaims(report: any): ClaimRow[] {
     derived_from: pdrFreq != null ? "rule" : "pending",
     source: "score_engine_v1",
   });
+  // generalized_slowing may be a string ("none"|"mild"|"severe") OR
+  // an object { present, grade } depending on the score engine version.
+  // Flatten to a human-readable string before handing to React.
+  const _gs = bg.generalized_slowing;
+  const _gsStr = _gs == null
+    ? "—"
+    : typeof _gs === "object"
+      ? (_gs.present ? (_gs.grade ?? "present") : "none")
+      : String(_gs);
   rows.push({
     section: "Background",
     field: "Generalised slowing",
-    value: bg.generalized_slowing ?? "—",
-    derived_from: bg.generalized_slowing ? "rule" : "pending",
+    value: _gsStr,
+    derived_from: _gs ? "rule" : "pending",
     source: "score_engine_v1",
   });
 
