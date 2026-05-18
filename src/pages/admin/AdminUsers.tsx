@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import {
   Loader2, Search, MoreHorizontal, Ban, CheckCircle,
   KeyRound, ShieldOff, Trash2, Coins, Copy, Check, User,
-  Plus, Building2,
+  Plus,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -75,18 +75,9 @@ export default function AdminUsers() {
   const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
   const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
 
-  // Create-clinician flow
-  const EMPTY_CREATE_FORM = {
-    clinic_id: "",
-    clinician_name: "",
-    clinician_email: "",
-    clinician_password: "",
-    initial_tokens: 10,
-  };
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState({ ...EMPTY_CREATE_FORM });
+  // Add-clinician flow lives at /admin/users/new-clinician (see AdminClinicianNew.tsx).
 
-  const { data: users, isLoading } = useQuery<UserRow[]>({
+  const { data: users, isLoading, isError, error: usersError, refetch: refetchUsers } = useQuery<UserRow[]>({
     queryKey: ["admin-all-users"],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("admin_get_all_users");
@@ -102,70 +93,6 @@ export default function AdminUsers() {
       if (error) throw error;
       return data as { id: string; name: string }[];
     },
-  });
-
-  const createClinicianMutation = useMutation({
-    mutationFn: async (form: typeof createForm) => {
-      // admin_create_clinician returns:
-      //   200 { ok: true,  request_id, clinic, clinician, tokens }
-      //   4xx/5xx { ok: false, step, error, code, request_id }
-      const { data, error } = await supabase.functions.invoke("admin_create_clinician", { body: form });
-
-      const extractFailure = (
-        payload: any,
-      ): { msg: string; step?: string; requestId?: string; code?: string } | null => {
-        if (!payload) return null;
-        if (payload.ok === false || payload.error) {
-          return {
-            msg: payload.error || "Clinician create failed",
-            step: payload.step,
-            requestId: payload.request_id,
-            code: payload.code ?? undefined,
-          };
-        }
-        return null;
-      };
-      const formatFailure = (f: { msg: string; step?: string; requestId?: string }) => {
-        const head = f.step ? `[${f.step}]` : "[create]";
-        const tail = f.requestId ? ` (${f.requestId})` : "";
-        return `${head} ${f.msg}${tail}`;
-      };
-
-      const fromData = extractFailure(data);
-      if (fromData) throw new Error(formatFailure(fromData));
-
-      if (error) {
-        const ctx = (error as any).context;
-        try {
-          let parsed: any = ctx;
-          if (typeof ctx === "string") parsed = JSON.parse(ctx);
-          else if (ctx && typeof ctx.text === "function") parsed = JSON.parse(await ctx.text());
-          const fromCtx = extractFailure(parsed);
-          if (fromCtx) throw new Error(formatFailure(fromCtx));
-        } catch (parseErr) {
-          if (parseErr instanceof Error && parseErr.message.startsWith("[")) throw parseErr;
-        }
-        throw error;
-      }
-      return data as {
-        ok: true;
-        request_id: string;
-        clinic: { id: string; name: string; sku: string };
-        clinician: { id: string; email: string; name: string };
-        tokens: number;
-      };
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["admin-all-users"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-all-clinics"] });
-      toast.success(`Clinician added to ${result.clinic.name}`, {
-        description: `${result.clinician.email} · ${result.tokens} tokens · ${result.request_id}`,
-        duration: 6000,
-      });
-      setCreateOpen(false);
-      setCreateForm({ ...EMPTY_CREATE_FORM });
-    },
-    onError: (e: any) => toast.error(e.message, { duration: 10000 }),
   });
 
   const sendResetMutation = useMutation({
@@ -308,14 +235,22 @@ export default function AdminUsers() {
           </SelectContent>
         </Select>
         <div className="flex-1" />
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" onClick={() => navigate("/admin/users/new-clinician")}>
           <Plus className="h-3.5 w-3.5 mr-1.5" />
           Add clinician
         </Button>
       </div>
 
       {/* Table */}
-      {isLoading ? (
+      {isError ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-6 text-center space-y-2">
+          <p className="text-sm font-medium">Could not load users</p>
+          <p className="text-xs text-muted-foreground">{(usersError as Error)?.message}</p>
+          <Button variant="outline" size="sm" onClick={() => refetchUsers()} className="mt-2">
+            Retry
+          </Button>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
@@ -480,102 +415,7 @@ export default function AdminUsers() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Add Clinician Dialog ─────────────────────────────────────────── */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Add clinician</DialogTitle>
-            <DialogDescription>
-              Atomic: creates the auth user, sets profile.role=clinician, attaches
-              them to the selected clinic, tops up the wallet, writes the audit entry.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div>
-              <Label className="text-xs flex items-center gap-1.5">
-                <Building2 className="h-3 w-3" /> Clinic *
-              </Label>
-              <Select
-                value={createForm.clinic_id}
-                onValueChange={(v) => setCreateForm((f) => ({ ...f, clinic_id: v }))}
-              >
-                <SelectTrigger className="mt-1 h-8 text-sm">
-                  <SelectValue placeholder="Pick a clinic…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clinics?.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label className="text-xs">Full name *</Label>
-              <Input
-                value={createForm.clinician_name}
-                onChange={(e) => setCreateForm((f) => ({ ...f, clinician_name: e.target.value }))}
-                placeholder="Dr. Priya Sharma"
-                className="mt-1 h-8 text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs">Email *</Label>
-                <Input
-                  type="email"
-                  value={createForm.clinician_email}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, clinician_email: e.target.value }))}
-                  placeholder="dr@clinic.com"
-                  className="mt-1 h-8 text-sm"
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Temp password *</Label>
-                <Input
-                  type="password"
-                  value={createForm.clinician_password}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, clinician_password: e.target.value }))}
-                  placeholder="••••••••"
-                  className="mt-1 h-8 text-sm"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-xs flex items-center gap-1.5">
-                <Coins className="h-3 w-3" /> Starting tokens
-              </Label>
-              <Input
-                type="number"
-                value={createForm.initial_tokens}
-                onChange={(e) =>
-                  setCreateForm((f) => ({ ...f, initial_tokens: parseInt(e.target.value) || 0 }))
-                }
-                min={0}
-                className="mt-1 w-24 h-8 text-sm font-mono"
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button
-              size="sm"
-              disabled={
-                createClinicianMutation.isPending ||
-                !createForm.clinic_id || !createForm.clinician_name ||
-                !createForm.clinician_email || !createForm.clinician_password
-              }
-              onClick={() => createClinicianMutation.mutate(createForm)}
-            >
-              {createClinicianMutation.isPending && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
-              Add
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Add-clinician flow lives at /admin/users/new-clinician now — full page. */}
 
       {/* Delete User */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>

@@ -54,7 +54,7 @@ export default function AdminStudies() {
   const [stateFilter, setStateFilter] = useState<string>(searchParams.get("state") || "all");
   const [deleteTarget, setDeleteTarget] = useState<Study | null>(null);
 
-  const { data: studies, isLoading } = useQuery<Study[]>({
+  const { data: studies, isLoading, isError, error: studiesError, refetch: refetchStudies } = useQuery<Study[]>({
     queryKey: ["admin-all-studies"],
     queryFn: async () => {
       const [studiesRes, clinicsRes] = await Promise.all([
@@ -192,7 +192,15 @@ export default function AdminStudies() {
       </div>
 
       {/* Table */}
-      {isLoading ? (
+      {isError ? (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-6 text-center space-y-2">
+          <p className="text-sm font-medium">Could not load studies</p>
+          <p className="text-xs text-muted-foreground">{(studiesError as Error)?.message}</p>
+          <Button variant="outline" size="sm" onClick={() => refetchStudies()} className="mt-2">
+            Retry
+          </Button>
+        </div>
+      ) : isLoading ? (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>

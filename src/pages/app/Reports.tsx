@@ -156,7 +156,7 @@ export default function Reports() {
     refetchInterval: 60000,
   });
 
-  const { data: reports, isLoading } = useQuery({
+  const { data: reports, isLoading, isError, error: reportsError, refetch: refetchReports } = useQuery({
     queryKey: ["reports-list"],
     queryFn: async () => {
       // Show only real user reports (exclude sample)
@@ -247,6 +247,21 @@ export default function Reports() {
       draft: reports.filter(r => r.status === "draft" || r.status === "pending_review").length,
     };
   }, [reports, pendingReviewStudies]);
+
+  if (isError) {
+    return (
+      <div className="p-6 max-w-md mx-auto mt-12 text-center space-y-3">
+        <p className="text-sm font-medium">Could not load reports</p>
+        <p className="text-xs text-muted-foreground">{(reportsError as Error)?.message}</p>
+        <button
+          onClick={() => refetchReports()}
+          className="text-xs underline text-primary hover:opacity-80"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

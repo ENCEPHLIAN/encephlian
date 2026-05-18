@@ -66,7 +66,7 @@ export default function ReportDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState<any>(null);
 
-  const { data: report, isLoading } = useQuery({
+  const { data: report, isLoading, isError, error: reportError, refetch } = useQuery({
     queryKey: ["report-detail", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -77,10 +77,10 @@ export default function ReportDetail() {
           profiles:interpreter(full_name, credentials)
         `)
         .eq("id", id)
-        .single();
-      
+        .maybeSingle();
+
       if (error) throw error;
-      return data as Report;
+      return (data as Report | null);
     },
     enabled: !!id,
   });
@@ -189,11 +189,29 @@ export default function ReportDetail() {
     );
   }
 
+  if (isError) {
+    return (
+      <div className="p-6 max-w-md mx-auto mt-12 text-center space-y-3">
+        <p className="text-sm font-medium">Could not load this report</p>
+        <p className="text-xs text-muted-foreground">{(reportError as Error)?.message}</p>
+        <div className="flex justify-center gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+          <Button variant="link" size="sm" onClick={() => navigate("/app/reports")}>
+            Back to Reports
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!report) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-muted-foreground">Report not found</p>
-        <Button variant="link" onClick={() => navigate("/app/reports")}>
+      <div className="p-6 max-w-md mx-auto mt-12 text-center space-y-3">
+        <p className="text-sm font-medium">Report not found</p>
+        <p className="text-xs text-muted-foreground">
+          It may have been deleted or you don't have access to it.
+        </p>
+        <Button variant="link" size="sm" onClick={() => navigate("/app/reports")}>
           Back to Reports
         </Button>
       </div>

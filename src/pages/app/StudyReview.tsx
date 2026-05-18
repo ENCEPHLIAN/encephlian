@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, ArrowLeft, FileSignature, PenLine, ShieldCheck, Brain, Waves } from "lucide-react";
+import { Loader2, ArrowLeft, FileSignature, PenLine, ShieldCheck, Brain, Waves, RefreshCw } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { toast } from "@/components/ui/sonner";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,7 +32,7 @@ export default function StudyReview() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [signing, setSigning] = useState(false);
 
-  const { data: study, isLoading: studyLoading } = useQuery({
+  const { data: study, isLoading: studyLoading, refetch: refetchStudy, isFetching: studyFetching } = useQuery({
     queryKey: ["study", id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -43,6 +44,9 @@ export default function StudyReview() {
       if (!data) throw new Error("Study not found");
       return data;
     },
+    // Always refetch on mount/focus so a stuck status can't trap the clinician.
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     refetchInterval: (q) => {
       const row = q.state.data as { triage_status?: string } | undefined;
       if (row?.triage_status === "processing") return 3_000;
@@ -79,7 +83,7 @@ export default function StudyReview() {
     };
   }, [id, queryClient]);
 
-  const { data: draft, isLoading: draftLoading } = useQuery({
+  const { data: draft, isLoading: draftLoading, refetch: refetchDraft, isFetching: draftFetching } = useQuery({
     queryKey: ["ai-draft", id],
     queryFn: async () => {
       const { data } = await supabase
@@ -236,18 +240,40 @@ export default function StudyReview() {
   }
 
   if (!draft) {
+    const refreshing = studyFetching || draftFetching;
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 max-w-lg mx-auto">
         <Button variant="ghost" onClick={() => navigate(-1)}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
         <Card>
-          <CardContent className="p-8 text-center space-y-2">
-            <p className="text-muted-foreground">No draft report yet</p>
-            <p className="text-sm text-muted-foreground">
-              Analysis may still be running — this page updates automatically when the draft is ready.
+          <CardContent className="p-8 text-center space-y-4">
+            <div className="space-y-1">
+              <p className="font-medium">No draft report yet</p>
+              <p className="text-sm text-muted-foreground">
+                triage_status:{" "}
+                <span className="font-mono">{study.triage_status ?? "unknown"}</span>
+                {study.state && (
+                  <>
+                    {" · "}state: <span className="font-mono">{study.state}</span>
+                  </>
+                )}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Auto-refresh is on while triage runs. If the status stays stuck,
+              click Refresh manually or open a support ticket with this study id.
             </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { refetchStudy(); refetchDraft(); }}
+              disabled={refreshing}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5 mr-1.5", refreshing && "animate-spin")} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Button>
           </CardContent>
         </Card>
       </div>

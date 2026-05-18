@@ -65,7 +65,7 @@ const NAV_SECTIONS = [
   {
     title: "Tools",
     items: [
-      { name: "EEG Push", href: "/admin/eeg-push", icon: SendHorizontal },
+      { name: "EEG Push", href: "/admin/data-push", icon: SendHorizontal },
       { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
       { name: "Restore", href: "/admin/restore", icon: RotateCcw },
     ],
