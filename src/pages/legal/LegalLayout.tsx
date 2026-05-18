@@ -29,11 +29,11 @@ export default function LegalLayout({
       <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-3">
           <Link
-            to="/"
+            to="/admin"
             className="flex items-center gap-2 text-sm font-bold tracking-tight hover:opacity-80"
           >
             <ChevronLeft className="h-4 w-4" />
-            <span>ENCEPHLIAN</span>
+            <span>Back to admin</span>
           </Link>
           <div className="text-xs text-muted-foreground">
             <span className="font-mono">{version}</span>
@@ -85,10 +85,10 @@ export default function LegalLayout({
             trademarks of Aposematium Private Limited.
           </p>
           <p className="mt-2 space-x-3">
-            <Link to="/terms" className="hover:underline">Terms</Link>
-            <Link to="/privacy" className="hover:underline">Privacy</Link>
-            <Link to="/refund" className="hover:underline">Refund &amp; Cancellation</Link>
-            <Link to="/support" className="hover:underline">Support</Link>
+            <Link to="/admin/legal/terms" className="hover:underline">Terms</Link>
+            <Link to="/admin/legal/privacy" className="hover:underline">Privacy</Link>
+            <Link to="/admin/legal/refund" className="hover:underline">Refund &amp; Cancellation</Link>
+            <Link to="/admin/legal/support" className="hover:underline">Support</Link>
           </p>
         </footer>
       </main>

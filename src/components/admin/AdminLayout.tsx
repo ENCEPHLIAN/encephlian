@@ -25,6 +25,7 @@ import {
   Ticket,
   Cloud,
   TrendingUp,
+  FileText,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -38,6 +39,7 @@ const NAV_SECTIONS = [
     title: "Tenants",
     items: [
       { name: "Clinics", href: "/admin/clinics", icon: Building2 },
+      { name: "Documents", href: "/admin/clinic-documents", icon: FileText },
       { name: "Users", href: "/admin/users", icon: Users },
       { name: "Wallets", href: "/admin/wallets", icon: Coins },
     ],
@@ -74,6 +76,7 @@ const NAV_SECTIONS = [
       { name: "Settings", href: "/admin/settings", icon: Settings },
       { name: "Account", href: "/admin/account", icon: Shield },
       { name: "Docs", href: "/admin/docs", icon: BookOpen },
+      { name: "Legal drafts", href: "/admin/legal/terms", icon: FileText },
     ],
   },
 ];

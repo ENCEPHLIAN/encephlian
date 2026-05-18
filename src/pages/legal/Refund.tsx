@@ -89,7 +89,7 @@ export default function Refund() {
         with the subject line "Refund Escalation". Disputes are addressed by
         the Grievance Officer within seven (7) days of receipt. Unresolved
         disputes are subject to the dispute-resolution and governing-law clauses
-        of the <a href="/terms">Terms of Service</a>.
+        of the <a href="/admin/legal/terms">Terms of Service</a>.
       </p>
 
       <h2>8. GST and Invoicing</h2>

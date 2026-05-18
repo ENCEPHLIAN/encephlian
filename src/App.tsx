@@ -62,6 +62,7 @@ const AdminReportV0    = lazy(() => import("./pages/admin/AdminReportV0"));
 const AdminInfra       = lazy(() => import("./pages/admin/AdminInfra"));
 const AdminFinance     = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminAccount     = lazy(() => import("./pages/admin/AdminAccount"));
+const AdminClinicDocuments = lazy(() => import("./pages/admin/AdminClinicDocuments"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -110,13 +111,6 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
 
-                {/* Public legal routes — must remain unauthenticated and
-                    survive any auth-wrapper changes above. */}
-                <Route path="/terms"   element={<Suspense fallback={<PageLoader />}><TermsPage /></Suspense>} />
-                <Route path="/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPage /></Suspense>} />
-                <Route path="/refund"  element={<Suspense fallback={<PageLoader />}><RefundPage /></Suspense>} />
-                <Route path="/support" element={<Suspense fallback={<PageLoader />}><SupportPage /></Suspense>} />
-
                 {/* Admin Routes */}
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminLayout />}>
@@ -139,7 +133,15 @@ function App() {
                     <Route path="infra" element={<Suspense fallback={<PageLoader />}><AdminInfra /></Suspense>} />
                     <Route path="finance" element={<Suspense fallback={<PageLoader />}><AdminFinance /></Suspense>} />
                     <Route path="account" element={<Suspense fallback={<PageLoader />}><AdminAccount /></Suspense>} />
+                    <Route path="clinic-documents" element={<Suspense fallback={<PageLoader />}><AdminClinicDocuments /></Suspense>} />
                     <Route path="docs" element={<Suspense fallback={<PageLoader />}><Documentation /></Suspense>} />
+
+                    {/* Legal drafts — admin-only until counsel signs off and we
+                        re-expose them at /terms etc. for clinic users. */}
+                    <Route path="legal/terms"   element={<Suspense fallback={<PageLoader />}><TermsPage /></Suspense>} />
+                    <Route path="legal/privacy" element={<Suspense fallback={<PageLoader />}><PrivacyPage /></Suspense>} />
+                    <Route path="legal/refund"  element={<Suspense fallback={<PageLoader />}><RefundPage /></Suspense>} />
+                    <Route path="legal/support" element={<Suspense fallback={<PageLoader />}><SupportPage /></Suspense>} />
                   </Route>
                 </Route>
 

@@ -91,14 +91,14 @@ export default function Support() {
         the subject line <strong>"Clinical Concern"</strong>. These tickets are
         routed directly to the clinical lead and are tracked as P1 by default.
         Outputs of the Platform are decision support; the signing Clinician
-        remains the physician of record (see <a href="/terms">Terms §3</a>).
+        remains the physician of record (see <a href="/admin/legal/terms">Terms §3</a>).
       </p>
 
       <h2>Escalation Path</h2>
       <ol>
         <li>Support team — first contact at <a href="mailto:info@encephlian.cloud">info@encephlian.cloud</a></li>
         <li>Engineering on-call — auto-escalated for P0 / P1</li>
-        <li>Grievance Officer — for unresolved data-protection complaints (see <a href="/privacy">Privacy Policy §11</a>)</li>
+        <li>Grievance Officer — for unresolved data-protection complaints (see <a href="/admin/legal/privacy">Privacy Policy §11</a>)</li>
         <li>Executive Sponsor — for unresolved P0 incidents beyond 24 hours</li>
       </ol>
 

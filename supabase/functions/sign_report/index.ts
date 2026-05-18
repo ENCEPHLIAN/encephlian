@@ -26,9 +26,17 @@ serve(async (req) => {
 
     const { studyId, reportContent } = await req.json();
 
+    // request_id correlation: accept from header, generate if absent
+    let requestId = req.headers.get("x-request-id");
+    if (!requestId) {
+      const arr = new Uint8Array(4);
+      crypto.getRandomValues(arr);
+      requestId = "sign_" + Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+
     if (!studyId || !reportContent) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
+        JSON.stringify({ error: "Missing required fields", step: "validate_required", request_id: requestId }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -68,25 +76,31 @@ serve(async (req) => {
         p_user_id: user.id,
         p_study_id: studyId,
         p_cost: 0,
-        p_content: reportContent
+        p_content: reportContent,
+        p_request_id: requestId,
       }
     );
 
     if (signError) {
+      console.error(`[sign ${requestId}] consume_credit_and_sign failed:`, signError);
       throw signError;
     }
 
-    console.log("Report signed successfully:", result);
-
-    // Send email receipt (optional - can be implemented later)
-    // await sendReceiptEmail(user.email, result);
+    console.log(`[sign ${requestId}] success report=${result?.report_id} hash=${result?.content_sha256}`);
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        ...result 
+      JSON.stringify({
+        success: true,
+        request_id: requestId,
+        ...result,
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+          "x-request-id": requestId,
+        },
+      }
     );
   } catch (error) {
     console.error("Error signing report:", error);

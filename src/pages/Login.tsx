@@ -306,20 +306,13 @@ export default function Login() {
         </div>
       )}
 
-      {/* Stealth-mode footer — discrete legal links. Always rendered on the
-          unauthenticated /  and /login pages. Remove or expand after launch. */}
+      {/* Stealth-mode footer — nothing but the brand. Legal pages live under
+          /admin/legal/* and are visible only after authentication. */}
       <footer className="absolute bottom-0 inset-x-0 z-10 px-6 py-3 text-center
-                         text-[10px] tracking-wide text-muted-foreground/60
-                         hover:text-muted-foreground transition-colors">
-        <span>Aposematium Pvt Ltd · ENCEPHLIAN · pilot</span>
-        <span className="mx-2 opacity-50">·</span>
-        <a href="/terms"   className="hover:underline">Terms</a>
-        <span className="mx-1.5 opacity-50">·</span>
-        <a href="/privacy" className="hover:underline">Privacy</a>
-        <span className="mx-1.5 opacity-50">·</span>
-        <a href="/refund"  className="hover:underline">Refund</a>
-        <span className="mx-1.5 opacity-50">·</span>
-        <a href="/support" className="hover:underline">Support</a>
+                         text-[10px] tracking-[0.18em] text-muted-foreground/50">
+        ENCEPHLIAN<sup className="text-[7px] align-top relative top-[0.1em] font-light">™</sup>
+        <span className="mx-2 opacity-60">·</span>
+        2026
       </footer>
     </div>
   );

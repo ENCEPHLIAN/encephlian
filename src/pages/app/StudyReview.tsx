@@ -159,21 +159,30 @@ export default function StudyReview() {
     }
 
     setSigning(true);
+    // Short correlation id so the success toast + audit_logs row share a key.
+    const reqArr = new Uint8Array(4);
+    crypto.getRandomValues(reqArr);
+    const requestId = "sign_" + Array.from(reqArr, (b) => b.toString(16).padStart(2, "0")).join("");
     try {
-      const { error } = await supabase.rpc("consume_credit_and_sign", {
+      const { data, error } = await supabase.rpc("consume_credit_and_sign", {
         p_user_id: (await supabase.auth.getUser()).data.user?.id,
         p_study_id: id,
         p_cost: 0,
         p_content: currentDraft,
+        p_request_id: requestId,
       });
 
       if (error) throw error;
 
       invalidateStudyCaches();
+      const hashShort = (data as any)?.content_sha256?.slice(0, 8);
       toast.success("Report signed", {
-        description: tokensAlreadyCharged > 0
-          ? `No further charge — ${tokensAlreadyCharged} token(s) used at triage.`
-          : "Report is finalized and ready to download.",
+        description: [
+          tokensAlreadyCharged > 0
+            ? `${tokensAlreadyCharged} token(s) used at triage · no further charge.`
+            : "Report is finalized and ready to download.",
+          hashShort ? `hash ${hashShort} · ${requestId}` : requestId,
+        ].join(" · "),
         action: {
           label: "Download PDF",
           onClick: () => navigate(`/app/studies/${id}`),
@@ -183,7 +192,7 @@ export default function StudyReview() {
       navigate(`/app/studies/${id}`);
     } catch (error: any) {
       toast.error("Could not sign report", {
-        description: error.message,
+        description: `${error.message} (${requestId})`,
       });
     } finally {
       setSigning(false);
