@@ -70,7 +70,6 @@ Deno.serve(async (req) => {
       console.log('Cleaning up orphaned profile:', profile.id);
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', profile.id);
       await supabaseAdmin.from('wallets').delete().eq('user_id', profile.id);
-      await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', profile.id);
       await supabaseAdmin.from('tfa_secrets').delete().eq('user_id', profile.id);
       await supabaseAdmin.from('notes').delete().eq('user_id', profile.id);
       await supabaseAdmin.from('support_tickets').delete().eq('user_id', profile.id);
@@ -88,7 +87,6 @@ Deno.serve(async (req) => {
       console.log('Found existing auth user, deleting:', existingAuthUser.id);
       await supabaseAdmin.from('wallet_transactions').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('wallets').delete().eq('user_id', existingAuthUser.id);
-      await supabaseAdmin.from('earnings_wallets').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('tfa_secrets').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('notes').delete().eq('user_id', existingAuthUser.id);
       await supabaseAdmin.from('support_tickets').delete().eq('user_id', existingAuthUser.id);

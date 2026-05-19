@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Download, X, FileText, Image as ImageIcon } from "lucide-react";
+import { Download, X, FileText, Image as ImageIcon, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { PDFViewer } from "./PDFViewer";
-import mammoth from "mammoth";
-import DOMPurify from "dompurify";
+
+// PDF rendering pulls react-pdf (~1.5 MB) — defer until the dialog actually
+// previews a PDF. mammoth (DOCX) + DOMPurify likewise loaded on demand inside
+// the loadFile() effect. Slashes Files.js cold-load by ~1.5 MB.
+const PDFViewer = lazy(() => import("./PDFViewer").then(m => ({ default: m.PDFViewer })));
 
 interface FilePreviewDialogProps {
   file: {
@@ -63,12 +65,17 @@ export function FilePreviewDialog({
           const text = await data.text();
           setFileContent(text);
         } else if (fileType === "docx") {
-          // Download and convert DOCX to HTML with sanitization
+          // Download and convert DOCX to HTML with sanitization. mammoth and
+          // DOMPurify are dynamic-imported here so they don't land in the
+          // cold-load chunk for users who never preview a .docx.
           const { data, error } = await supabase.storage.from(bucket).download(file.path);
           if (error) throw error;
           const arrayBuffer = await data.arrayBuffer();
+          const [{ default: mammoth }, { default: DOMPurify }] = await Promise.all([
+            import("mammoth"),
+            import("dompurify"),
+          ]);
           const result = await mammoth.convertToHtml({ arrayBuffer });
-          // Sanitize HTML to prevent XSS attacks
           const sanitizedHtml = DOMPurify.sanitize(result.value, {
             ALLOWED_TAGS: ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 
                           'strong', 'em', 'u', 'table', 'tr', 'td', 'th', 'br', 'span', 
@@ -125,7 +132,15 @@ export function FilePreviewDialog({
 
   const renderPreview = () => {
     if (fileType === "pdf" && fileUrl) {
-      return <PDFViewer fileUrl={fileUrl} />;
+      return (
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        }>
+          <PDFViewer fileUrl={fileUrl} />
+        </Suspense>
+      );
     }
 
     if (fileType === "image" && fileUrl) {
