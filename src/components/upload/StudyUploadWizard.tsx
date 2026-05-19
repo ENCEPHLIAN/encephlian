@@ -539,16 +539,18 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .eq("id", studyId);
       onProgress(100, "File saved — choose triage on Studies");
     } else {
-      // Mark sla_selected_at now — SLA was chosen in the wizard, no token deduction for internal
+      // Mark sla_selected_at now — SLA was chosen in the wizard, no token deduction for internal.
+      // triage_status stays 'pending' until C-Plane actually picks up the job and transitions
+      // it to 'processing' — setting 'processing' here was a lie that bit us as a 1s+ race.
+      // The C-Plane owns the processing/completed/failed transitions from now on.
       await supabase
         .from("studies")
         .update({
           state: "uploaded",
           uploaded_file_path: blobName,
           sla_selected_at: new Date().toISOString(),
-          triage_status: "processing",
-          triage_progress: 5,
-          triage_started_at: new Date().toISOString(),
+          triage_status: "pending",
+          triage_progress: 0,
         })
         .eq("id", studyId);
 
