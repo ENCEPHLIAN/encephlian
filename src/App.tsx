@@ -65,6 +65,7 @@ const AdminAccount     = lazy(() => import("./pages/admin/AdminAccount"));
 const AdminClinicDocuments = lazy(() => import("./pages/admin/AdminClinicDocuments"));
 const AdminClinicNew = lazy(() => import("./pages/admin/AdminClinicNew"));
 const AdminClinicianNew = lazy(() => import("./pages/admin/AdminClinicianNew"));
+const AdminTrace = lazy(() => import("./pages/admin/AdminTrace"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -130,6 +131,7 @@ function App() {
                     <Route path="cleanup" element={<Suspense fallback={<PageLoader />}><AdminCleanup /></Suspense>} />
                     <Route path="restore" element={<Suspense fallback={<PageLoader />}><AdminRestore /></Suspense>} />
                     <Route path="audit" element={<Suspense fallback={<PageLoader />}><AdminAuditLogs /></Suspense>} />
+                    <Route path="trace" element={<Suspense fallback={<PageLoader />}><AdminTrace /></Suspense>} />
                     <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
                     <Route path="data-push" element={<Suspense fallback={<PageLoader />}><AdminDataPush /></Suspense>} />
                     <Route path="read-api" element={<Suspense fallback={<PageLoader />}><AdminReadApi /></Suspense>} />

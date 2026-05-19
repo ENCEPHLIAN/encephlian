@@ -26,6 +26,7 @@ import {
   Cloud,
   TrendingUp,
   FileText,
+  Search,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -59,6 +60,7 @@ const NAV_SECTIONS = [
       { name: "Finance", href: "/admin/finance", icon: TrendingUp },
       { name: "Diagnostics", href: "/admin/diagnostics", icon: Wrench },
       { name: "Audit Logs", href: "/admin/audit", icon: ScrollText },
+      { name: "Trace", href: "/admin/trace", icon: Search },
       { name: "Tickets", href: "/admin/tickets", icon: Ticket },
     ],
   },

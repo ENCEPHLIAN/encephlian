@@ -1,0 +1,88 @@
+name: CI
+
+# Devops #1 — every push and PR gets typechecked + built. If either fails,
+# the merge is blocked. No deployment fan-out — Vercel handles that on its
+# own webhook off `main` once GitHub confirms the merge.
+#
+# Owner: #71 (QA / Test Gate)
+# Slot for: multitenancy RLS guard once we wire a Supabase service-role
+# secret into Actions — see ci-rls.yml.example as a follow-up.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-build:
+    name: typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle size report
+        # Print the chunks-over-500kB warning so we can see regressions in the PR
+        # diff. Doesn't fail — the build threshold is informational.
+        run: |
+          echo "::group::Bundle chunks"
+          find dist/assets -name "*.js" -size +500k -exec ls -lh {} \;
+          echo "::endgroup::"
+
+  # Multitenancy guard — runs against the live DB. Disabled until you wire
+  # SUPABASE_SERVICE_ROLE_KEY + SUPABASE_DB_URL as GitHub secrets. Uncomment
+  # the `if:` check below to enable.
+  rls-guard:
+    name: multitenancy RLS guard
+    runs-on: ubuntu-latest
+    if: false  # Set to `${{ secrets.SUPABASE_DB_URL != '' }}` once secrets are added
+    steps:
+      - name: Run cross-clinic isolation sweep
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+          ADMIN_USER_ID: ${{ secrets.ADMIN_USER_ID }}  # super_admin uuid
+        run: |
+          psql "$PGURL" <<SQL
+            BEGIN;
+            SET LOCAL ROLE authenticated;
+            SELECT set_config('request.jwt.claim.sub', '$ADMIN_USER_ID', true);
+            SELECT
+              CASE
+                WHEN (public.admin_test_all_clinic_isolation()->>'ok')::boolean
+                  THEN 'PASS: 0 cross-clinic leaks'
+                ELSE
+                  pg_catalog.format(
+                    'FAIL: %s pairs leaked — %s',
+                    (public.admin_test_all_clinic_isolation()->>'failed')::int,
+                    public.admin_test_all_clinic_isolation()->'results'
+                  )
+              END AS result;
+            -- Fail the job if the sweep reports a leak
+            DO \$\$
+            BEGIN
+              IF NOT ((public.admin_test_all_clinic_isolation())->>'ok')::boolean THEN
+                RAISE EXCEPTION 'multitenancy guard FAILED — cross-clinic data leaked';
+              END IF;
+            END \$\$;
+            ROLLBACK;
+          SQL
