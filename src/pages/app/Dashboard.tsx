@@ -1,6 +1,7 @@
 import { useState, useCallback, memo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2, Activity, Upload, TrendingUp, Clock, CheckCircle2, AlertCircle, RefreshCw, WifiOff, Layers, ArrowRight } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import KPICard from "@/components/dashboard/KPICard";
 import UrgentQueue from "@/components/dashboard/UrgentQueue";
 import PendingTriageSection from "@/components/dashboard/PendingTriageSection";
@@ -101,21 +102,40 @@ export default function Dashboard() {
   }
 
   if (isLoading) {
+    // Layout-matching skeleton — same vertical rhythm as the rendered page
+    // so there's no jump when data arrives. Spinners flash; skeletons settle.
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
-          <p className="text-muted-foreground">Loading dashboard...</p>
-          {loadingTooLong && (
-            <div className="space-y-2">
-              <p className="text-sm text-amber-600">Taking longer than expected. This could be a network issue.</p>
-              <Button onClick={() => refetchStudies()} variant="outline" size="sm" className="gap-2">
-                <RefreshCw className="h-3.5 w-3.5" />
-                Retry
-              </Button>
-            </div>
-          )}
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-7 w-32" />
+            <Skeleton className="h-4 w-40" />
+          </div>
         </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Skeleton className="h-16 rounded-md" />
+          <Skeleton className="h-16 rounded-md" />
+          <Skeleton className="h-16 rounded-md" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 rounded-lg" />
+          ))}
+        </div>
+        <div className="space-y-2">
+          <Skeleton className="h-5 w-32" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-md" />
+          ))}
+        </div>
+        {loadingTooLong && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
+            <span>Taking longer than expected — possible network issue.</span>
+            <Button onClick={() => refetchStudies()} variant="ghost" size="sm" className="h-7 gap-1.5">
+              <RefreshCw className="h-3 w-3" /> Retry
+            </Button>
+          </div>
+        )}
       </div>
     );
   }

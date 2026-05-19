@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, memo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { isAcceptedExtension, ACCEPTED_FORMATS_LABEL } from "@/shared/eegFormats";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -414,8 +415,23 @@ function InternalStudiesView() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <img src={logoSrc} alt="Loading" className="h-10 w-10 animate-pulse" />
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-32" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <Skeleton className="h-9 w-32" />
+        </div>
+        <div className="rounded-lg border border-border/60 p-4 space-y-3">
+          <div className="flex gap-3">
+            <Skeleton className="h-9 flex-1" />
+            <Skeleton className="h-9 w-32" />
+          </div>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-12 w-full rounded-md" />
+          ))}
+        </div>
       </div>
     );
   }
