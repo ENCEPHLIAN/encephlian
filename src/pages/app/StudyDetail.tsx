@@ -177,7 +177,6 @@ export default function StudyDetail() {
           clinics(name, logo_url, sku),
           study_files(*),
           reports(*, profiles:interpreter(full_name, credentials)),
-          canonical_eeg_records(id, schema_version, tensor_path, native_sampling_hz, sfreq_model),
           study_reports(id, run_id, content, report_html, created_at)
         `)
         .eq("id", id!)
@@ -517,7 +516,6 @@ export default function StudyDetail() {
   const stateConfig = STATE_CONFIG[study.state || "uploaded"] || STATE_CONFIG.uploaded;
   const triageConfig = TRIAGE_STATUS_CONFIG[study.triage_status || "pending"] || TRIAGE_STATUS_CONFIG.pending;
   const report = study.reports?.[0];
-  const canonicalRecord = study.canonical_eeg_records?.[0];
   const hasReport = !!report || study.state === "signed";
   const isSigned = study.state === "signed" || report?.status === "signed";
   const isProcessing = study.triage_status === "processing";

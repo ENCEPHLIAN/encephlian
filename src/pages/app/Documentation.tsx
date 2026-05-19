@@ -70,7 +70,7 @@ Bandpass: Butterworth 0.5–70 Hz (clinical standard for routine EEG).
 ICA: FastICA on first N independent components for artifact separation.
 Channel quality scoring: flat-line detection, variance estimation, clipping check.
 
-Output: ESF zarr store written to Azure Blob (canonical_eeg_records).`,
+Output: ESF zarr store written to Azure Blob.`,
       },
       {
         heading: "Model Inference (I-Plane)",
@@ -392,7 +392,7 @@ TUH corpus: 105k EDFs across 7 subcorpora. Stored locally on VM + mirrored to Az
         body: `Project: encephlian (prod)
 Region: ap-south-1 (Mumbai)
 
-Key tables: studies, study_files, study_pipeline_events, study_reports, reports, clinics, clinic_members, wallets, wallet_transactions, canonical_eeg_records
+Key tables: studies, study_files, study_pipeline_events, reports, report_drafts, clinics, clinic_memberships, wallets, wallet_transactions, audit_logs
 
 Realtime: enabled on studies, study_pipeline_events, wallet_transactions
 Storage buckets: eeg-uploads, eeg-raw, eeg-json, eeg-reports
