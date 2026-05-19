@@ -14,7 +14,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      ai_drafts: {
+      report_drafts: {
         Row: {
           created_at: string | null
           draft: Json
@@ -78,47 +78,6 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
-      }
-      canonical_eeg_records: {
-        Row: {
-          canonical_json: Json
-          created_at: string
-          id: string
-          native_sampling_hz: number | null
-          schema_version: string
-          sfreq_model: number | null
-          study_id: string
-          tensor_path: string
-        }
-        Insert: {
-          canonical_json: Json
-          created_at?: string
-          id?: string
-          native_sampling_hz?: number | null
-          schema_version?: string
-          sfreq_model?: number | null
-          study_id: string
-          tensor_path: string
-        }
-        Update: {
-          canonical_json?: Json
-          created_at?: string
-          id?: string
-          native_sampling_hz?: number | null
-          schema_version?: string
-          sfreq_model?: number | null
-          study_id?: string
-          tensor_path?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "canonical_eeg_records_study_id_fkey"
-            columns: ["study_id"]
-            isOneToOne: true
-            referencedRelation: "studies"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       clinic_memberships: {
         Row: {
@@ -206,59 +165,6 @@ export type Database = {
           tz?: string | null
         }
         Relationships: []
-      }
-      eeg_markers: {
-        Row: {
-          channel: string | null
-          created_at: string
-          duration_sec: number | null
-          id: string
-          label: string | null
-          marker_type: string
-          notes: string | null
-          severity: string | null
-          study_id: string
-          timestamp_sec: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          channel?: string | null
-          created_at?: string
-          duration_sec?: number | null
-          id?: string
-          label?: string | null
-          marker_type: string
-          notes?: string | null
-          severity?: string | null
-          study_id: string
-          timestamp_sec: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          channel?: string | null
-          created_at?: string
-          duration_sec?: number | null
-          id?: string
-          label?: string | null
-          marker_type?: string
-          notes?: string | null
-          severity?: string | null
-          study_id?: string
-          timestamp_sec?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "eeg_markers_study_id_fkey"
-            columns: ["study_id"]
-            isOneToOne: false
-            referencedRelation: "studies"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       notes: {
         Row: {

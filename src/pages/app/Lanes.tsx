@@ -404,7 +404,7 @@ export default function Lanes() {
   }
 
   return (
-    <div className="p-6 space-y-4 h-full flex flex-col">
+    <div className="p-6 space-y-4 h-full flex flex-col animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>

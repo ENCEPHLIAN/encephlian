@@ -87,7 +87,7 @@ export default function StudyReview() {
     queryKey: ["ai-draft", id],
     queryFn: async () => {
       const { data } = await supabase
-        .from("ai_drafts")
+        .from("report_drafts")
         .select("*")
         .eq("study_id", id)
         .order("created_at", { ascending: false })

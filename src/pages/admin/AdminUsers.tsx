@@ -202,7 +202,7 @@ export default function AdminUsers() {
   }, [users, search, clinicFilter]);
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-5xl animate-fade-in">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Users</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
