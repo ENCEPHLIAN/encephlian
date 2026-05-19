@@ -138,7 +138,7 @@ export default function PilotStudiesView() {
       if (report?.id) {
         toast.info("Generating PDF...");
         await supabase.functions.invoke("generate_report_pdf", { body: { reportId: report.id } });
-        const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).single();
+        const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).maybeSingle();
         if (fresh?.pdf_path) {
           const { data, error } = await supabase.storage.from("eeg-reports").download(fresh.pdf_path);
           if (!error && data) {

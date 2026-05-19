@@ -344,7 +344,7 @@ function InternalStudiesView() {
           body: { reportId: report.id },
         });
         if (!genError) {
-          const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).single();
+          const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).maybeSingle();
           pdfPath = fresh?.pdf_path ?? null;
         }
       }

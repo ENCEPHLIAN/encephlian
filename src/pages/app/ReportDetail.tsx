@@ -140,7 +140,7 @@ export default function ReportDetail() {
           .from("reports")
           .select("pdf_path")
           .eq("id", id)
-          .single();
+          .maybeSingle();
         pdfPath = fresh?.pdf_path;
         queryClient.invalidateQueries({ queryKey: ["report-detail", id] });
       } catch (err: any) {
