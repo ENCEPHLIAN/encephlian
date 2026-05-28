@@ -132,11 +132,14 @@ function FieldEditor<T>(props: FieldEditorProps<T>) {
   }, [isEditedByClinician, isHighConfidence, isLowConfidence]);
 
   return (
-    <div className={cn(
-      "space-y-1 rounded-md px-2 py-1.5",
-      isPending && "bg-muted/30",
-      isLowConfidence && !isEditedByClinician && "bg-amber-50/40",
-    )}>
+    <div
+      className={cn(
+        "space-y-1 rounded-md px-2 py-1.5",
+        isPending && "bg-muted/30",
+        isLowConfidence && !isEditedByClinician && "bg-amber-50/40",
+      )}
+      data-field-key={(props as any).fieldKey ?? undefined}
+    >
       <div className="flex items-center gap-2">
         <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
@@ -310,36 +313,42 @@ export function EditableReportV2(props: EditableReportV2Props) {
     } finally { setSaving(false); }
   };
 
+  const REQUIRED_FIELDS: { key: keyof ScoreV2EditState; label: string }[] = [
+    { key: "diagnostic_significance",      label: "Diagnostic significance" },
+    { key: "diagnostic_significance_text", label: "Diagnostic significance (text)" },
+    { key: "summary_of_findings",          label: "Summary of findings" },
+  ];
+
+  const missingRequired = REQUIRED_FIELDS.filter(({ key }) =>
+    state[key].value == null
+    || (typeof state[key].value === "string" && (state[key].value as string).trim() === ""),
+  );
+
   const handleSign = async () => {
-    // Validate: every required field must be non-null + clinician-confirmed
-    const required: (keyof ScoreV2EditState)[] = [
-      "diagnostic_significance", "summary_of_findings",
-    ];
-    const missing = required.filter((k) => state[k].value == null);
-    if (missing.length) {
-      toast.error("Cannot sign — fields required", {
-        description: missing.map(String).join(", "),
+    if (missingRequired.length) {
+      toast.error("Sign blocked — required fields are empty", {
+        description: missingRequired.map((f) => f.label).join(" · "),
+        duration: 6000,
       });
-      return;
-    }
-    const lowConfidenceUnaccepted = Object.entries(state).filter(([_, p]) =>
-      p.confidence >= 0.4 && p.confidence < 0.8 && !p.edited_by_clinician
-    );
-    if (lowConfidenceUnaccepted.length) {
-      toast.error("Review required fields before signing", {
-        description: `${lowConfidenceUnaccepted.length} low-confidence field(s) need acceptance or edit.`,
+      // Scroll to first missing field so the clinician can act immediately.
+      const firstKey = String(missingRequired[0].key);
+      document.querySelector(`[data-field-key="${firstKey}"]`)?.scrollIntoView({
+        behavior: "smooth", block: "center",
       });
       return;
     }
     setSigning(true);
     try {
-      const { pdf_url, fingerprint } = await onSign(state);
+      const { fingerprint } = await onSign(state);
       toast.success("Report signed", {
-        description: `Fingerprint: ${fingerprint.slice(0, 8)} · PDF saved.`,
-        action: { label: "Open PDF", onClick: () => window.open(pdf_url, "_blank") },
+        description: `Fingerprint ${fingerprint.slice(0, 8)} · State updated to signed.`,
+        duration: 4000,
       });
     } catch (e: any) {
-      toast.error("Sign failed", { description: e?.message });
+      toast.error("Sign failed", {
+        description: e?.message ?? "Unknown error. Check console.",
+        duration: 8000,
+      });
     } finally { setSigning(false); }
   };
 
@@ -352,13 +361,31 @@ export function EditableReportV2(props: EditableReportV2Props) {
           <p className="text-[10px] text-muted-foreground">Study {studyId.slice(0, 8)} · Editable · Click any field to override</p>
         </div>
         <div className="flex items-center gap-2">
+          {!readOnly && missingRequired.length > 0 && (
+            <Badge
+              variant="outline"
+              className="text-[9px] gap-1 border-amber-500/40 text-amber-700 dark:text-amber-300"
+              title={`Sign blocked. Fill: ${missingRequired.map((f) => f.label).join(", ")}`}
+            >
+              <AlertTriangle className="h-2.5 w-2.5" />
+              {missingRequired.length} blocking sign
+            </Badge>
+          )}
           {!readOnly && (
             <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : "Save draft"}
             </Button>
           )}
           {!readOnly && (
-            <Button size="sm" onClick={handleSign} disabled={signing} className="gap-1.5">
+            <Button
+              size="sm"
+              onClick={handleSign}
+              disabled={signing || missingRequired.length > 0}
+              className="gap-1.5"
+              title={missingRequired.length > 0
+                ? `Fill required fields first: ${missingRequired.map((f) => f.label).join(", ")}`
+                : "Sign report (state → 'signed')"}
+            >
               <FileSignature className="h-3.5 w-3.5" />
               {signing ? "Signing…" : "Sign report"}
             </Button>

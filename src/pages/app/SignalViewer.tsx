@@ -371,7 +371,7 @@ export default function EEGViewer() {
     let alive = true;
     setMeta(null); setSignals(null); setArtifacts([]); setAnnotations([]); setSegments([]);
     setWindowStart(0); setCursor(0); setFatalError(null); setRawEdfMode(false);
-    setSignalLayer("normalized"); signalLayerRef.current = "normalized";
+    setSignalLayer("prenorm"); signalLayerRef.current = "prenorm";
     setEsfPollAttempt(0);
     didSeek.current = false;
     strippedLegacyViewParamsRef.current = false;
@@ -440,8 +440,8 @@ export default function EEGViewer() {
                 edfReader.current = null;
                 cache.current.clear();
                 setRawEdfMode(false);
-                setSignalLayer("normalized");
-                signalLayerRef.current = "normalized";
+                setSignalLayer("prenorm");
+                signalLayerRef.current = "prenorm";
                 setMeta(newMeta);
                 toast.success("Analysis complete — waveform ready");
                 return;
@@ -504,13 +504,15 @@ export default function EEGViewer() {
                   const newMeta = (r2 as any).data?.meta ?? (r2 as any).data;
                   canonicalMetaRef.current = newMeta;
                   setCanonicalPresent(true);
-                  // Auto-upgrade only if user hasn't explicitly switched to raw
-                  if (signalLayerRef.current === "normalized") {
+                  // Auto-upgrade only if user hasn't explicitly switched to raw.
+                  // Default layer is "prenorm" (µV-calibrated, authentic) — keep
+                  // them there once canonical is ready unless they opted into raw.
+                  if (signalLayerRef.current === "prenorm" || signalLayerRef.current === "normalized") {
                     edfReader.current = null;
                     cache.current.clear();
                     setRawEdfMode(false);
-                    setSignalLayer("normalized");
-                    signalLayerRef.current = "normalized";
+                    setSignalLayer("prenorm");
+                    signalLayerRef.current = "prenorm";
                     setMeta(newMeta);
                     toast.success("Enhanced signal view ready");
                   }
@@ -1327,8 +1329,8 @@ export default function EEGViewer() {
                 </span>
               )}
               {signalLayer === "normalized" && (
-                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-purple-500/40 bg-purple-500/10 text-purple-400">
-                  ○ ESF NORM · {meta.n_channels}ch · z-scored · model input
+                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-500 dark:text-amber-300">
+                  ⚠ ESF NORM · z-score · auto-gain · NOT raw amplitude · model input
                 </span>
               )}
             </div>

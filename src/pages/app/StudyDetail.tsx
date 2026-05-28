@@ -663,15 +663,6 @@ export default function StudyDetail() {
                 </Button>
               )}
               
-              {canReview && (
-                <Button asChild>
-                  <Link to={`/app/studies/${id}/review`}>
-                    <FileSignature className="h-4 w-4 mr-2" />
-                    Review & Sign
-                  </Link>
-                </Button>
-              )}
-              
               {hasReport && (
                 <Button
                   variant="outline"
@@ -1288,9 +1279,10 @@ export default function StudyDetail() {
           <Card>
             <CardContent className="p-4">
               <SignReportSurface
-                studyId={study.id}
+                study={study}
                 mindReport={mindReport}
                 aiDraftJson={study.ai_draft_json}
+                onSignedRedirect={() => navigate(`/app/studies/${study.id}`)}
               />
             </CardContent>
           </Card>
@@ -1357,17 +1349,22 @@ export default function StudyDetail() {
 }
 
 /**
- * SignReportSurface — loads any saved draft on mount and renders the
- * EditableReportV2 with either the saved state or a fresh derivation
- * from the mind.report.v1.
+ * SignReportSurface — loads any saved draft and renders EditableReportV2.
+ *
+ * onSign calls the real consume_credit_and_sign RPC (same one StudyReview
+ * uses) so signing actually moves the study to state='signed' in DB. Falls
+ * back to persistDraft on save (drafts still go to iplane/localStorage).
  */
 function SignReportSurface({
-  studyId, mindReport, aiDraftJson,
+  study, mindReport, aiDraftJson, onSignedRedirect,
 }: {
-  studyId: string;
+  study: any;
   mindReport: any;
   aiDraftJson: any;
+  onSignedRedirect: () => void;
 }) {
+  const studyId = study.id as string;
+  const queryClient = useQueryClient();
   const sourceReport = mindReport?.schema_version === "mind.report.v1"
     ? mindReport
     : (aiDraftJson as any)?.schema_version === "mind.report.v1"
@@ -1377,6 +1374,9 @@ function SignReportSurface({
   const [initial, setInitial] = useState<ScoreV2EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [hadSavedDraft, setHadSavedDraft] = useState(false);
+
+  const paidTriage = studyTriageIsPaid(study);
+  const alreadySigned = study.state === "signed";
 
   useEffect(() => {
     let cancelled = false;
@@ -1402,6 +1402,17 @@ function SignReportSurface({
       </div>
     );
   }
+  if (!paidTriage && !alreadySigned) {
+    return (
+      <div className="text-center py-10 space-y-3">
+        <AlertCircle className="h-8 w-8 mx-auto text-amber-500/60" />
+        <p className="text-sm">Triage not paid — sign is locked.</p>
+        <p className="text-xs text-muted-foreground max-w-md mx-auto">
+          Pick Standard or Priority on the Overview tab to charge tokens and unlock signing.
+        </p>
+      </div>
+    );
+  }
   if (loading || !initial) {
     return (
       <div className="text-center py-12 text-sm text-muted-foreground">
@@ -1409,6 +1420,53 @@ function SignReportSurface({
       </div>
     );
   }
+
+  const handleSignToDb = async (state: ScoreV2EditState) => {
+    const { data: userRes } = await supabase.auth.getUser();
+    const userId = userRes.user?.id;
+    if (!userId) throw new Error("Not signed in.");
+    const reqArr = new Uint8Array(4);
+    crypto.getRandomValues(reqArr);
+    const requestId = "sign_" + Array.from(reqArr, (b) => b.toString(16).padStart(2, "0")).join("");
+
+    const { data, error } = await supabase.rpc("consume_credit_and_sign", {
+      p_user_id: userId,
+      p_study_id: studyId,
+      p_cost: 0,
+      p_content: {
+        schema_version: "score.v2.editable_state",
+        state,
+        request_id: requestId,
+        signed_at: new Date().toISOString(),
+      },
+    });
+    if (error) throw error;
+
+    // Invalidate every cache that surfaces this study so the UI reflects
+    // state='signed' immediately without a manual refresh.
+    queryClient.invalidateQueries({ queryKey: ["study", studyId] });
+    queryClient.invalidateQueries({ queryKey: ["study-detail", studyId] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
+    queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
+    queryClient.invalidateQueries({ queryKey: ["ai-draft", studyId] });
+
+    const fingerprint = (data as any)?.content_sha256 ?? requestId;
+    // No PDF url is returned by the RPC; the download surfaces are on the
+    // Report tab. Hand the requestId back for the success toast.
+    setTimeout(onSignedRedirect, 600);
+    return { pdf_url: "", fingerprint };
+  };
+
+  if (alreadySigned) {
+    return (
+      <div className="text-center py-10 space-y-2">
+        <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500" />
+        <p className="text-sm font-medium">Already signed.</p>
+        <p className="text-xs text-muted-foreground">Open the Report tab to download the signed PDF.</p>
+      </div>
+    );
+  }
+
   return (
     <>
       {hadSavedDraft && (
@@ -1420,7 +1478,7 @@ function SignReportSurface({
         studyId={studyId}
         initialState={initial}
         onSave={(s) => persistDraft(studyId, s)}
-        onSign={(s) => persistSigned(studyId, s)}
+        onSign={handleSignToDb}
       />
     </>
   );
