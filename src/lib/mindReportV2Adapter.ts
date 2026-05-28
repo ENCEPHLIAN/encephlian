@@ -45,17 +45,52 @@ function mkPending<T>(
 function mk<T>(args: {
   field_id: string;
   value: T | null;
-  kind: ProvenanceKind;
+  kind: "model" | "rule" | "biomarker";
   source: string;
+  /** REQUIRED when kind='model' — e.g. "mind_triage". */
+  model_name?: string;
+  /** REQUIRED when kind='model' — e.g. "3.0.1". */
+  model_version?: string;
+  /** REQUIRED when kind='rule' — e.g. "pdr_from_occipital_alpha". */
+  rule_name?: string;
+  rule_version?: string;
   confidence?: number;
   derivation?: string[];
   required_channels?: string[];
 }): FieldProposal<T> {
-  const prov: Provenance = {
-    derived_from: args.kind,
-    source: args.source,
-    confidence: args.confidence ?? null,
-  };
+  // Build the discriminated-union variant the new schema requires. Each
+  // kind has its own required fields; mis-shaped objects fail validation
+  // at the adapter's output boundary.
+  let prov: Provenance;
+  if (args.kind === "model") {
+    if (!args.model_name || !args.model_version) {
+      throw new Error(`mk() for kind='model' requires model_name + model_version (field ${args.field_id})`);
+    }
+    prov = {
+      derived_from:  "model",
+      source:        args.source,
+      model_name:    args.model_name,
+      model_version: args.model_version,
+      confidence:    args.confidence ?? null,
+    };
+  } else if (args.kind === "rule") {
+    if (!args.rule_name) {
+      throw new Error(`mk() for kind='rule' requires rule_name (field ${args.field_id})`);
+    }
+    prov = {
+      derived_from: "rule",
+      source:       args.source,
+      rule_name:    args.rule_name,
+      rule_version: args.rule_version ?? null,
+      confidence:   args.confidence ?? null,
+    };
+  } else {
+    prov = {
+      derived_from: "biomarker",
+      source:       args.source,
+      confidence:   args.confidence ?? null,
+    };
+  }
   return {
     field_id: args.field_id,
     value: args.value,
@@ -63,6 +98,18 @@ function mk<T>(args: {
     derivation_path: args.derivation,
     required_channels: args.required_channels ?? null,
   };
+}
+
+/** Parse a legacy model identifier like "mind_triage_v3" into
+ *  (name="mind_triage", version="3.0.0"). Falls back to (id, "0.0.0") when
+ *  the identifier doesn't follow the convention. */
+function splitLegacyModelId(id: string): { name: string; version: string } {
+  const m = id.match(/^(.*)_v(\d+(?:\.\d+){0,2})$/);
+  if (m) {
+    const v = m[2].includes(".") ? m[2] : `${m[2]}.0.0`;
+    return { name: m[1], version: v };
+  }
+  return { name: id, version: "0.0.0" };
 }
 
 export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
@@ -110,6 +157,9 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
   if (sharps > 0)      summaryParts.push(`${sharps} candidate sharp transients flagged — IED classification requires neurologist review.`);
 
   const sigModelSource = triage?.model ?? "mind_triage_v3";
+  const sigModelSplit  = splitLegacyModelId(sigModelSource);
+  const seizureSource  = seizure?.model ?? "heuristic_v0.1";
+  const seizureSplit   = splitLegacyModelId(seizureSource);
 
   // ─── Background activity ──────────────────────────────────────────────
   const pdrPresent = pdrRaw?.present !== false;
@@ -159,21 +209,28 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
         value: significance,
         kind: cls === "inconclusive" ? "rule" : "model",
         source: sigModelSource,
-        confidence: cls === "inconclusive" ? 0.3 : 0.85,
-        derivation: [`triage:${sigModelSource} → ${cls}@${conf.toFixed(2)}`],
+        model_name:    sigModelSplit.name,
+        model_version: sigModelSplit.version,
+        rule_name:     "inconclusive_passthrough_v1",
+        confidence:    cls === "inconclusive" ? 0.3 : 0.85,
+        derivation:    [`triage:${sigModelSource} → ${cls}@${conf.toFixed(2)}`],
       }),
       diagnostic_significance_text: mk({
         field_id: "signature.diagnostic_significance_text",
         value: sigText,
         kind: cls === "inconclusive" ? "rule" : "model",
         source: sigModelSource,
-        confidence: cls === "inconclusive" ? 0.3 : 0.85,
+        model_name:    sigModelSplit.name,
+        model_version: sigModelSplit.version,
+        rule_name:     "inconclusive_passthrough_v1",
+        confidence:    cls === "inconclusive" ? 0.3 : 0.85,
       }),
       summary_of_findings: mk({
         field_id: "signature.summary_of_findings",
         value: summaryParts.join(" "),
         kind: "rule",
         source: "v1_adapter_template",
+        rule_name: "summary_template_v1",
         confidence: 0.75,
       }),
     },
@@ -183,6 +240,7 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
         value: pdrPresent,
         kind: "rule",
         source: "score_engine_v1",
+        rule_name: "pdr_present_from_score_v1",
         confidence: 0.85,
         required_channels: ["O1", "O2"],
       }),
@@ -192,6 +250,7 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
             value: pdrFreq,
             kind: "rule",
             source: "score_engine_v1",
+            rule_name: "pdr_frequency_from_score_v1",
             confidence: 0.85,
             required_channels: ["O1", "O2"],
           })
@@ -205,6 +264,7 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
         value: pdrSym,
         kind: "rule",
         source: "score_engine_v1",
+        rule_name: "pdr_symmetry_from_score_v1",
         confidence: 0.7,
         required_channels: ["O1", "O2"],
       }),
@@ -230,6 +290,7 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
             value: bg.generalized_slowing,
             kind: "rule",
             source: "score_engine_v1",
+            rule_name: "generalized_slowing_from_score_v1",
             confidence: 0.7,
           })
         : mkPending(
@@ -275,9 +336,11 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
         field_id: "ictal.seizure_events",
         value: Array.isArray(seizure?.events) ? seizure.events : [],
         kind: "rule",
-        source: seizure?.model ?? "heuristic_v0.1",
+        source: seizureSource,
+        rule_name: `heuristic_seizure_zscore_${seizureSplit.version}`,
+        rule_version: seizureSplit.version,
         confidence: 0.5,
-        derivation: [`engine=${seizure?.model ?? "heuristic_v0.1"} (Z-score spike rule)`],
+        derivation: [`engine=${seizureSource} (Z-score spike rule)`],
       }),
       status_epilepticus_concern: mkPending(
         "ictal.status_epilepticus_concern",

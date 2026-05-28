@@ -1,0 +1,5860 @@
+-- GENERATED FILE — DO NOT EDIT MANUALLY.
+-- Source: src/shared/mindReportV2.ts (Zod)
+-- Regenerate with: npm run export:v2-schema
+--
+-- Seeds the canonical mind.report.v2 JSON Schema into schema_definitions.
+-- The schema is referenced by validate_triage_draft_json() to gate writes
+-- via pg_jsonschema's jsonb_matches_schema().
+--
+-- IDEMPOTENT: re-running INSERTs nothing if the (name, version) row exists.
+-- To publish a new schema version, bump SCHEMA_VERSION in the export script
+-- and re-run; this file generates a new INSERT with the new version.
+
+INSERT INTO public.schema_definitions (name, version, schema, description, schema_sha256)
+VALUES (
+  'mind.report.v2',
+  '2.0.0',
+  $mind_v2${
+  "$ref": "#/definitions/MindReportV2",
+  "definitions": {
+    "MindReportV2": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "string",
+          "const": "mind.report.v2"
+        },
+        "study_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "generated_by": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "asserted_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pending_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "limitations_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "asserted_count",
+            "pending_count",
+            "limitations_count"
+          ],
+          "additionalProperties": false
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "channels": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "markers": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "affects_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "signature": {
+          "type": "object",
+          "properties": {
+            "diagnostic_significance": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "diagnostic_significance_text": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "summary_of_findings": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "diagnostic_significance",
+            "diagnostic_significance_text",
+            "summary_of_findings"
+          ],
+          "additionalProperties": false
+        },
+        "background_activity": {
+          "type": "object",
+          "properties": {
+            "pdr_present": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "pdr_frequency_hz": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "pdr_symmetry": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "symmetric",
+                        "asymmetric_mild",
+                        "asymmetric_marked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "symmetric",
+                        "asymmetric_mild",
+                        "asymmetric_marked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "continuity": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "continuous",
+                        "discontinuous",
+                        "burst_suppression"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "continuous",
+                        "discontinuous",
+                        "burst_suppression"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "symmetry": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "symmetric",
+                        "asymmetric_mild",
+                        "asymmetric_marked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "symmetric",
+                        "asymmetric_mild",
+                        "asymmetric_marked"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "generalized_slowing": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "focal_slowing": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "region": {
+                            "type": "string"
+                          },
+                          "frequency_band": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "region",
+                          "frequency_band"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "region": {
+                            "type": "string"
+                          },
+                          "frequency_band": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "region",
+                          "frequency_band"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "reactivity": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "reactive",
+                        "non_reactive",
+                        "unknown"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "reactive",
+                        "non_reactive",
+                        "unknown"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "pdr_present",
+            "pdr_frequency_hz",
+            "pdr_symmetry",
+            "continuity",
+            "symmetry",
+            "generalized_slowing",
+            "focal_slowing",
+            "reactivity"
+          ],
+          "additionalProperties": false
+        },
+        "interictal": {
+          "type": "object",
+          "properties": {
+            "ieds": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "onset_time": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "confidence": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "location"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "location": {
+                            "type": "string"
+                          },
+                          "onset_time": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "confidence": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "location"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "sharp_transients_count": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "asymmetry": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "present": {
+                          "type": "boolean"
+                        },
+                        "region": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "index": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "present"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "present": {
+                          "type": "boolean"
+                        },
+                        "region": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "index": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "present"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "ieds",
+            "sharp_transients_count",
+            "asymmetry"
+          ],
+          "additionalProperties": false
+        },
+        "ictal": {
+          "type": "object",
+          "properties": {
+            "seizure_events": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "onset_time": {
+                            "type": "number"
+                          },
+                          "offset_time": {
+                            "type": "number"
+                          },
+                          "confidence": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "onset_time",
+                          "offset_time"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "onset_time": {
+                            "type": "number"
+                          },
+                          "offset_time": {
+                            "type": "number"
+                          },
+                          "confidence": {
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "minimum": 0,
+                                "maximum": 1
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "onset_time",
+                          "offset_time"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "status_epilepticus_concern": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "seizure_events",
+            "status_epilepticus_concern"
+          ],
+          "additionalProperties": false
+        },
+        "photo_modulators": {
+          "type": "object",
+          "properties": {
+            "photic_response": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "photoparoxysmal",
+                        "absent",
+                        "not_assessed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "photoparoxysmal",
+                        "absent",
+                        "not_assessed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            },
+            "hyperventilation_response": {
+              "type": "object",
+              "properties": {
+                "field_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "abnormal",
+                        "not_assessed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "provenance": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "model"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "model_run_id": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "calibrated_confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "model_name",
+                        "model_version"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "rule"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "rule_version": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "rule_name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "biomarker"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "confidence": {
+                          "anyOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "pending"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "pending_reason": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing_channels": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "missing_markers": {
+                          "anyOf": [
+                            {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source",
+                        "pending_reason"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "derived_from": {
+                          "type": "string",
+                          "const": "clinician"
+                        },
+                        "source": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "edited_by": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "edit_timestamp": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "derived_from",
+                        "source"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "required_channels": {
+                  "anyOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "derivation_path": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "original_value": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "normal",
+                        "abnormal",
+                        "not_assessed"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "original_derived_from": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "model",
+                        "rule",
+                        "biomarker",
+                        "pending",
+                        "clinician"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "edit_timestamp": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "edited_by": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "information_value": {
+                  "type": [
+                    "number",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "field_id",
+                "value",
+                "provenance"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "photic_response",
+            "hyperventilation_response"
+          ],
+          "additionalProperties": false
+        },
+        "prose": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "field_bindings": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field_id": {
+                        "type": "string"
+                      },
+                      "char_range": {
+                        "type": "array",
+                        "minItems": 2,
+                        "maxItems": 2,
+                        "items": [
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "field_id",
+                      "char_range"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "text",
+                "field_bindings"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schema_version",
+        "study_id",
+        "generated_at",
+        "generated_by",
+        "summary",
+        "limitations",
+        "signature",
+        "background_activity",
+        "interictal",
+        "ictal",
+        "photo_modulators"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://encephlian.cloud/schemas/mind.report.v2.json",
+  "title": "MindReportV2"
+}
+$mind_v2$::jsonb,
+  'Honest-output clinical report contract. Per-field provenance discriminated union (model/rule/biomarker/pending/clinician); pending fields require pending_reason and value=null; channel-dependency gate enforced server-side.',
+  '3c69b1c81457982be46dd68648ff7160cf2acfb6a9c8a529bdd350fbf897e73e'
+)
+ON CONFLICT (name, version) DO NOTHING;

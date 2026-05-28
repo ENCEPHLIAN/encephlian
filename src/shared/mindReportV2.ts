@@ -17,7 +17,13 @@
 
 import { z } from "zod";
 
-/* ───── Provenance ──────────────────────────────────────────────────────── */
+/* ───── Provenance — discriminated union per kind ───────────────────────── */
+/**
+ * Each kind has its OWN required fields. This is the §9 honesty contract
+ * in type form: a pending field MUST carry a reason; a model field MUST
+ * name its version; a rule field MUST name its rule. The TypeScript +
+ * runtime validator both refuse anything looser.
+ */
 
 export const ProvenanceKindSchema = z.enum([
   "model",      // ML output (VIGIL, FORGE, VERTEX, MIND-Triage, MIND-Clean…)
@@ -28,20 +34,52 @@ export const ProvenanceKindSchema = z.enum([
 ]);
 export type ProvenanceKind = z.infer<typeof ProvenanceKindSchema>;
 
-export const ProvenanceSchema = z.object({
-  derived_from:          ProvenanceKindSchema,
-  source:                z.string(),
-  version:               z.string().nullish(),
-  model_version:         z.string().nullish(),
-  model_run_id:          z.string().nullish(),
-  rule_name:             z.string().nullish(),
-  rule_version:          z.string().nullish(),
+const ProvenanceModelSchema = z.object({
+  derived_from:          z.literal("model"),
+  source:                z.string().min(1),
+  model_name:            z.string().min(1),    // e.g. "mind_triage"
+  model_version:         z.string().min(1),    // e.g. "3.0.1"
+  model_run_id:          z.string().nullish(), // audit linkage; optional in v1, will be required post-deploy
   confidence:            z.number().min(0).max(1).nullish(),
   calibrated_confidence: z.number().min(0).max(1).nullish(),
-  pending_reason:        z.string().nullish(),
+});
+
+const ProvenanceRuleSchema = z.object({
+  derived_from:          z.literal("rule"),
+  source:                z.string().min(1),    // e.g. "score_engine_v1"
+  rule_name:             z.string().min(1),    // e.g. "pdr_from_occipital_alpha"
+  rule_version:          z.string().nullish(),
+  confidence:            z.number().min(0).max(1).nullish(),
+});
+
+const ProvenanceBiomarkerSchema = z.object({
+  derived_from:          z.literal("biomarker"),
+  source:                z.string().min(1),    // e.g. "biomarkers.burst_suppression_ratio"
+  confidence:            z.number().min(0).max(1).nullish(),
+});
+
+const ProvenancePendingSchema = z.object({
+  derived_from:          z.literal("pending"),
+  source:                z.string().min(1),
+  pending_reason:        z.string().min(1),    // REQUIRED non-empty — the whole point
   missing_channels:      z.array(z.string()).nullish(),
   missing_markers:       z.array(z.string()).nullish(),
 });
+
+const ProvenanceClinicianSchema = z.object({
+  derived_from:          z.literal("clinician"),
+  source:                z.string().min(1),
+  edited_by:             z.string().nullish(),
+  edit_timestamp:        z.string().nullish(),
+});
+
+export const ProvenanceSchema = z.discriminatedUnion("derived_from", [
+  ProvenanceModelSchema,
+  ProvenanceRuleSchema,
+  ProvenanceBiomarkerSchema,
+  ProvenancePendingSchema,
+  ProvenanceClinicianSchema,
+]);
 export type Provenance = z.infer<typeof ProvenanceSchema>;
 
 /* ───── FieldProposal<T> ────────────────────────────────────────────────── */
@@ -52,7 +90,7 @@ export type Provenance = z.infer<typeof ProvenanceSchema>;
  */
 export const FieldProposalSchema = <V extends z.ZodTypeAny>(value: V) =>
   z.object({
-    field_id:              z.string(),
+    field_id:              z.string().min(1),
     value:                 value.nullable(),
     provenance:            ProvenanceSchema,
     required_channels:     z.array(z.string()).nullish(),
@@ -62,6 +100,16 @@ export const FieldProposalSchema = <V extends z.ZodTypeAny>(value: V) =>
     edit_timestamp:        z.string().nullish(),
     edited_by:             z.string().nullish(),
     information_value:     z.number().nullish(),
+  }).superRefine((f, ctx) => {
+    // §9 invariant: pending fields MUST carry a null value. Any non-null
+    // pending field is a contract violation.
+    if (f.provenance.derived_from === "pending" && f.value !== null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["value"],
+        message: "pending field must have value=null (use derived_from='clinician' for an explicit empty)",
+      });
+    }
   });
 
 /** Generic FieldProposal type — used when the value type is opaque

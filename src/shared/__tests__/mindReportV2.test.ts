@@ -20,11 +20,16 @@ const SAMPLE_UUID = "11111111-1111-1111-1111-111111111111";
 const SAMPLE_ISO  = "2026-05-28T19:00:00.000Z";
 
 function mkValidV2(overrides?: Partial<MindReportV2>): MindReportV2 {
-  const fp = <T>(field_id: string, value: T, kind: "model" | "rule" | "biomarker" | "pending" | "clinician" = "rule"): FieldProposal<T> => ({
-    field_id,
-    value,
-    provenance: { derived_from: kind, source: "test" },
-  });
+  const fp = <T>(field_id: string, value: T, kind: "model" | "rule" | "biomarker" | "clinician" = "rule"): FieldProposal<T> => {
+    const provenance: any = kind === "model"
+      ? { derived_from: "model", source: "test_model", model_name: "test_model", model_version: "1.0.0" }
+      : kind === "rule"
+      ? { derived_from: "rule", source: "test_rule", rule_name: "test_rule" }
+      : kind === "biomarker"
+      ? { derived_from: "biomarker", source: "test_biomarker" }
+      : { derived_from: "clinician", source: "clinician" };
+    return { field_id, value, provenance };
+  };
   const pending = <T>(field_id: string): FieldProposal<T> => ({
     field_id,
     value: null,
@@ -86,20 +91,58 @@ describe("ProvenanceKindSchema", () => {
   });
 });
 
-describe("ProvenanceSchema", () => {
-  it("parses a minimal provenance", () => {
-    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "mind_triage_v3" }).success).toBe(true);
+describe("ProvenanceSchema (discriminated union per kind)", () => {
+  const model = (extras: object = {}) => ({
+    derived_from: "model", source: "mind_triage_v3",
+    model_name: "mind_triage", model_version: "3.0.1", ...extras,
   });
-  it("requires source", () => {
-    expect(ProvenanceSchema.safeParse({ derived_from: "model" }).success).toBe(false);
+
+  it("model: parses with model_name + model_version", () => {
+    expect(ProvenanceSchema.safeParse(model()).success).toBe(true);
   });
-  it("rejects confidence outside [0,1]", () => {
-    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "x", confidence: 1.1 }).success).toBe(false);
-    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "x", confidence: -0.1 }).success).toBe(false);
+  it("model: REJECTS missing model_version (the whole point)", () => {
+    const r = ProvenanceSchema.safeParse({ derived_from: "model", source: "x", model_name: "y" });
+    expect(r.success).toBe(false);
   });
-  it("accepts null and missing for optional confidence", () => {
-    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "x", confidence: null }).success).toBe(true);
-    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "x" }).success).toBe(true);
+  it("model: REJECTS missing model_name", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "model", source: "x", model_version: "1" }).success).toBe(false);
+  });
+  it("model: rejects confidence outside [0,1]", () => {
+    expect(ProvenanceSchema.safeParse(model({ confidence: 1.1 })).success).toBe(false);
+    expect(ProvenanceSchema.safeParse(model({ confidence: -0.1 })).success).toBe(false);
+  });
+  it("model: accepts null and missing confidence", () => {
+    expect(ProvenanceSchema.safeParse(model({ confidence: null })).success).toBe(true);
+    expect(ProvenanceSchema.safeParse(model()).success).toBe(true);
+  });
+
+  it("rule: parses with rule_name; REJECTS without", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "rule", source: "score", rule_name: "pdr" }).success).toBe(true);
+    expect(ProvenanceSchema.safeParse({ derived_from: "rule", source: "score" }).success).toBe(false);
+  });
+
+  it("biomarker: parses with just source", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "biomarker", source: "biomarkers.bs_ratio" }).success).toBe(true);
+  });
+
+  it("pending: REQUIRES non-empty pending_reason (§9 contract)", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "pending", source: "x", pending_reason: "O1 BAD" }).success).toBe(true);
+    expect(ProvenanceSchema.safeParse({ derived_from: "pending", source: "x" }).success).toBe(false);
+    expect(ProvenanceSchema.safeParse({ derived_from: "pending", source: "x", pending_reason: "" }).success).toBe(false);
+  });
+  it("pending: accepts missing_channels / missing_markers", () => {
+    expect(ProvenanceSchema.safeParse({
+      derived_from: "pending", source: "x", pending_reason: "missing O1",
+      missing_channels: ["O1"],
+    }).success).toBe(true);
+  });
+
+  it("clinician: parses with just source", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "clinician", source: "clinician" }).success).toBe(true);
+  });
+
+  it("rejects an unknown kind", () => {
+    expect(ProvenanceSchema.safeParse({ derived_from: "mixed", source: "x" }).success).toBe(false);
   });
 });
 
@@ -109,21 +152,28 @@ describe("FieldProposalSchema factory", () => {
     expect(Bool.safeParse({
       field_id: "x.y",
       value: true,
-      provenance: { derived_from: "rule", source: "r" },
+      provenance: { derived_from: "rule", source: "r", rule_name: "rule_x" },
     }).success).toBe(true);
   });
-  it("accepts null value", () => {
+  it("accepts null value for pending", () => {
     expect(Bool.safeParse({
       field_id: "x.y",
       value: null,
-      provenance: { derived_from: "pending", source: "r" },
+      provenance: { derived_from: "pending", source: "r", pending_reason: "blocked" },
     }).success).toBe(true);
+  });
+  it("rejects pending with non-null value (§9 invariant)", () => {
+    expect(Bool.safeParse({
+      field_id: "x.y",
+      value: true,
+      provenance: { derived_from: "pending", source: "r", pending_reason: "blocked" },
+    }).success).toBe(false);
   });
   it("rejects wrong value type", () => {
     expect(Bool.safeParse({
       field_id: "x.y",
       value: "true",
-      provenance: { derived_from: "rule", source: "r" },
+      provenance: { derived_from: "rule", source: "r", rule_name: "rule_x" },
     }).success).toBe(false);
   });
 });
