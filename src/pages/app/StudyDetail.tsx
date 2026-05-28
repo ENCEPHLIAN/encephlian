@@ -21,6 +21,7 @@ import {
   Download, 
   Activity, 
   ArrowLeft,
+  ArrowRight,
   User,
   Calendar,
   Clock,
@@ -305,10 +306,10 @@ export default function StudyDetail() {
 
     if (study.state === "ai_draft" && prev !== "ai_draft") {
       toast.success("Analysis complete", {
-        description: "Recording has been processed. Ready for physician review.",
+        description: "Recording has been processed. Ready to sign.",
         action: {
-          label: "Review & Sign →",
-          onClick: () => navigate(`/app/studies/${id}/review`),
+          label: "Sign →",
+          onClick: () => navigate(`/app/studies/${id}`),
         },
         duration: 10_000,
       });
@@ -536,8 +537,15 @@ export default function StudyDetail() {
       study.state === "completed");
   const StateIcon = stateConfig.icon;
   const studyHandle = getStudyHandle(study);
+  // Land on the tab that matches "what's next" for this state:
+  //   ai_draft / in_review → Sign (clinician's pending action)
+  //   has analysis but earlier state → AI analysis (review surface)
+  //   gated or nothing → Overview
   const defaultStudyTab =
-    gateTriageActions ? "overview" : study.ai_draft_json || mindReport ? "ai-analysis" : "overview";
+    gateTriageActions ? "overview" :
+    (study.state === "ai_draft" || study.state === "in_review") ? "sign" :
+    (study.ai_draft_json || mindReport) ? "ai-analysis" :
+    "overview";
 
   return (
     <div className="space-y-6 pb-8">
@@ -1282,7 +1290,6 @@ export default function StudyDetail() {
                 study={study}
                 mindReport={mindReport}
                 aiDraftJson={study.ai_draft_json}
-                onSignedRedirect={() => navigate(`/app/studies/${study.id}`)}
               />
             </CardContent>
           </Card>
@@ -1356,15 +1363,16 @@ export default function StudyDetail() {
  * back to persistDraft on save (drafts still go to iplane/localStorage).
  */
 function SignReportSurface({
-  study, mindReport, aiDraftJson, onSignedRedirect,
+  study, mindReport, aiDraftJson,
 }: {
   study: any;
   mindReport: any;
   aiDraftJson: any;
-  onSignedRedirect: () => void;
 }) {
   const studyId = study.id as string;
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { isPilot } = useSku();
   const sourceReport = mindReport?.schema_version === "mind.report.v1"
     ? mindReport
     : (aiDraftJson as any)?.schema_version === "mind.report.v1"
@@ -1451,18 +1459,31 @@ function SignReportSurface({
     queryClient.invalidateQueries({ queryKey: ["ai-draft", studyId] });
 
     const fingerprint = (data as any)?.content_sha256 ?? requestId;
-    // No PDF url is returned by the RPC; the download surfaces are on the
-    // Report tab. Hand the requestId back for the success toast.
-    setTimeout(onSignedRedirect, 600);
+    // No PDF url is returned by the RPC; the download lives on the Report
+    // tab. Don't auto-navigate — let the realtime study-row update flip
+    // this surface to the 'alreadySigned' state below, which exposes the
+    // 'next' CTAs explicitly so the clinician chooses what to do.
     return { pdf_url: "", fingerprint };
   };
 
   if (alreadySigned) {
+    const nextUrl = isPilot ? "/app/studies" : "/app/lanes";
+    const nextLabel = isPilot ? "Next in studies" : "Next in lanes";
     return (
-      <div className="text-center py-10 space-y-2">
-        <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-500" />
-        <p className="text-sm font-medium">Already signed.</p>
-        <p className="text-xs text-muted-foreground">Open the Report tab to download the signed PDF.</p>
+      <div className="flex flex-col items-center justify-center py-10 space-y-4">
+        <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
+          <CheckCircle2 className="h-7 w-7 text-emerald-500" />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-medium">Report signed</p>
+          <p className="text-xs text-muted-foreground">
+            State is finalized. Open the Report tab to download the PDF.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => navigate(nextUrl)} className="gap-1.5">
+          {nextLabel}
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
       </div>
     );
   }
