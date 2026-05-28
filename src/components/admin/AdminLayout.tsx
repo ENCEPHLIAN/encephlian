@@ -27,6 +27,8 @@ import {
   TrendingUp,
   FileText,
   Search,
+  Brain,
+  Edit3,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -50,6 +52,13 @@ const NAV_SECTIONS = [
     items: [
       { name: "Studies", href: "/admin/studies", icon: BarChart3 },
       { name: "Read API", href: "/admin/read-api", icon: Zap },
+    ],
+  },
+  {
+    title: "Honest output",
+    items: [
+      { name: "Models", href: "/admin/models", icon: Brain },
+      { name: "Edit deltas", href: "/admin/edit-deltas", icon: Edit3 },
     ],
   },
   {
