@@ -918,6 +918,345 @@ export type Database = {
           },
         ]
       }
+      // ─── honest-output foundation (migration 20260528010000) ───
+      // Hand-added until next `supabase gen types --linked` regen — the
+      // table shapes match the migration; regen will overwrite identically.
+      schema_definitions: {
+        Row: {
+          name: string
+          version: string
+          schema: Json
+          description: string | null
+          schema_sha256: string
+          created_at: string
+          created_by: string | null
+        }
+        Insert: {
+          name: string
+          version: string
+          schema: Json
+          description?: string | null
+          schema_sha256: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Update: {
+          name?: string
+          version?: string
+          schema?: Json
+          description?: string | null
+          schema_sha256?: string
+          created_at?: string
+          created_by?: string | null
+        }
+        Relationships: []
+      }
+      model_versions: {
+        Row: {
+          id: string
+          name: string
+          version: string
+          family: string
+          status: string
+          training_corpus: string | null
+          validation_metrics: Json | null
+          weights_sha256: string | null
+          weights_blob_path: string | null
+          model_card_url: string | null
+          emits_schema_name: string | null
+          emits_schema_version: string | null
+          deployed_at: string | null
+          deprecated_at: string | null
+          notes: string | null
+          created_at: string
+          created_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          version: string
+          family: string
+          status: string
+          training_corpus?: string | null
+          validation_metrics?: Json | null
+          weights_sha256?: string | null
+          weights_blob_path?: string | null
+          model_card_url?: string | null
+          emits_schema_name?: string | null
+          emits_schema_version?: string | null
+          deployed_at?: string | null
+          deprecated_at?: string | null
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          version?: string
+          family?: string
+          status?: string
+          training_corpus?: string | null
+          validation_metrics?: Json | null
+          weights_sha256?: string | null
+          weights_blob_path?: string | null
+          model_card_url?: string | null
+          emits_schema_name?: string | null
+          emits_schema_version?: string | null
+          deployed_at?: string | null
+          deprecated_at?: string | null
+          notes?: string | null
+          created_at?: string
+          created_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      model_calibration_runs: {
+        Row: {
+          id: string
+          model_version_id: string
+          measured_at: string
+          holdout_set_label: string
+          n_samples: number
+          ece: number | null
+          brier_score: number | null
+          platt_a: number | null
+          platt_b: number | null
+          reliability_diagram: Json | null
+          threshold_metrics: Json | null
+          notes: string | null
+          measured_by: string | null
+        }
+        Insert: {
+          id?: string
+          model_version_id: string
+          measured_at?: string
+          holdout_set_label: string
+          n_samples: number
+          ece?: number | null
+          brier_score?: number | null
+          platt_a?: number | null
+          platt_b?: number | null
+          reliability_diagram?: Json | null
+          threshold_metrics?: Json | null
+          notes?: string | null
+          measured_by?: string | null
+        }
+        Update: {
+          id?: string
+          model_version_id?: string
+          measured_at?: string
+          holdout_set_label?: string
+          n_samples?: number
+          ece?: number | null
+          brier_score?: number | null
+          platt_a?: number | null
+          platt_b?: number | null
+          reliability_diagram?: Json | null
+          threshold_metrics?: Json | null
+          notes?: string | null
+          measured_by?: string | null
+        }
+        Relationships: [{
+          foreignKeyName: "model_calibration_runs_model_version_id_fkey"
+          columns: ["model_version_id"]
+          isOneToOne: false
+          referencedRelation: "model_versions"
+          referencedColumns: ["id"]
+        }]
+      }
+      channel_quality_assessments: {
+        Row: {
+          id: string
+          study_id: string
+          channel_label: string
+          source: string
+          source_version: string | null
+          source_model_id: string | null
+          quality_class: string
+          confidence: number | null
+          details: Json | null
+          assessed_at: string
+        }
+        Insert: {
+          id?: string
+          study_id: string
+          channel_label: string
+          source: string
+          source_version?: string | null
+          source_model_id?: string | null
+          quality_class: string
+          confidence?: number | null
+          details?: Json | null
+          assessed_at?: string
+        }
+        Update: {
+          id?: string
+          study_id?: string
+          channel_label?: string
+          source?: string
+          source_version?: string | null
+          source_model_id?: string | null
+          quality_class?: string
+          confidence?: number | null
+          details?: Json | null
+          assessed_at?: string
+        }
+        Relationships: [{
+          foreignKeyName: "channel_quality_assessments_study_id_fkey"
+          columns: ["study_id"]
+          isOneToOne: false
+          referencedRelation: "studies"
+          referencedColumns: ["id"]
+        }]
+      }
+      report_emission_events: {
+        Row: {
+          id: string
+          study_id: string
+          emitted_by: string
+          emitted_at: string
+          schema_name: string
+          schema_version: string
+          model_version_id: string | null
+          payload_sha256: string
+          payload_preview: Json | null
+          request_id: string | null
+          superseded_by: string | null
+        }
+        Insert: {
+          id?: string
+          study_id: string
+          emitted_by: string
+          emitted_at?: string
+          schema_name: string
+          schema_version: string
+          model_version_id?: string | null
+          payload_sha256: string
+          payload_preview?: Json | null
+          request_id?: string | null
+          superseded_by?: string | null
+        }
+        Update: {
+          id?: string
+          study_id?: string
+          emitted_by?: string
+          emitted_at?: string
+          schema_name?: string
+          schema_version?: string
+          model_version_id?: string | null
+          payload_sha256?: string
+          payload_preview?: Json | null
+          request_id?: string | null
+          superseded_by?: string | null
+        }
+        Relationships: []
+      }
+      clinician_edit_deltas: {
+        Row: {
+          id: string
+          study_id: string
+          clinician_id: string
+          field_id: string
+          edit_type: string
+          original_value: Json | null
+          new_value: Json | null
+          original_derived_from: string | null
+          source_emission_id: string | null
+          reason_code: string | null
+          reason_text: string | null
+          information_value: number | null
+          client_request_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          study_id: string
+          clinician_id: string
+          field_id: string
+          edit_type: string
+          original_value?: Json | null
+          new_value?: Json | null
+          original_derived_from?: string | null
+          source_emission_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          information_value?: number | null
+          client_request_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          study_id?: string
+          clinician_id?: string
+          field_id?: string
+          edit_type?: string
+          original_value?: Json | null
+          new_value?: Json | null
+          original_derived_from?: string | null
+          source_emission_id?: string | null
+          reason_code?: string | null
+          reason_text?: string | null
+          information_value?: number | null
+          client_request_id?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      reprocess_jobs: {
+        Row: {
+          id: string
+          initiated_by: string | null
+          description: string | null
+          target_filter: Json
+          target_model_version_id: string | null
+          status: string
+          studies_total: number | null
+          studies_processed: number
+          studies_failed: number
+          request_id: string | null
+          started_at: string | null
+          finished_at: string | null
+          error_summary: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          initiated_by?: string | null
+          description?: string | null
+          target_filter: Json
+          target_model_version_id?: string | null
+          status: string
+          studies_total?: number | null
+          studies_processed?: number
+          studies_failed?: number
+          request_id?: string | null
+          started_at?: string | null
+          finished_at?: string | null
+          error_summary?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          initiated_by?: string | null
+          description?: string | null
+          target_filter?: Json
+          target_model_version_id?: string | null
+          status?: string
+          studies_total?: number | null
+          studies_processed?: number
+          studies_failed?: number
+          request_id?: string | null
+          started_at?: string | null
+          finished_at?: string | null
+          error_summary?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       my_memberships: {

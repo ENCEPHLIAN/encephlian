@@ -10,7 +10,8 @@
  *
  * Architecture target: docs/specs/augur-design.md (AUGUR grammar engine not yet built — current pre-fill is the deterministic mapper).
  */
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
+import { captureEditDelta, newEditDeltaSessionId } from "@/lib/editDeltaCapture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -261,47 +262,101 @@ export function EditableReportV2(props: EditableReportV2Props) {
   const [state, setState] = useState<ScoreV2EditState>(initialState);
   const [saving, setSaving] = useState(false);
   const [signing, setSigning] = useState(false);
+  // Session id correlates every edit made in this editor mount. Lets the
+  // training pipeline group edits that happened in one sitting.
+  const sessionIdRef = useRef<string>(newEditDeltaSessionId());
 
   const updateField = useCallback(
     <K extends keyof ScoreV2EditState>(key: K, next: ScoreV2EditState[K]) => {
-      setState((s) => ({ ...s, [key]: next }));
+      setState((s) => {
+        const prev = s[key];
+        if (prev.value !== (next as any).value) {
+          captureEditDelta({
+            studyId,
+            fieldId:             String(key),
+            editType:            "edit",
+            originalValue:       prev.value,
+            newValue:            (next as any).value,
+            originalDerivedFrom: prev.provenance.derived_from,
+            clientRequestId:     sessionIdRef.current,
+          }).catch(() => { /* logged inside helper */ });
+        }
+        return { ...s, [key]: next };
+      });
     },
-    [],
+    [studyId],
   );
 
   const acceptField = useCallback(
     <K extends keyof ScoreV2EditState>(key: K) => {
-      setState((s) => ({
-        ...s,
-        [key]: { ...s[key], edited_by_clinician: true } as ScoreV2EditState[K],
-      }));
+      setState((s) => {
+        const prev = s[key];
+        captureEditDelta({
+          studyId,
+          fieldId:             String(key),
+          editType:            "accept",
+          originalValue:       prev.value,
+          newValue:            prev.value,
+          originalDerivedFrom: prev.provenance.derived_from,
+          clientRequestId:     sessionIdRef.current,
+        }).catch(() => {});
+        return {
+          ...s,
+          [key]: { ...prev, edited_by_clinician: true } as ScoreV2EditState[K],
+        };
+      });
     },
-    [],
+    [studyId],
   );
 
   const clearField = useCallback(
     <K extends keyof ScoreV2EditState>(key: K) => {
-      setState((s) => ({
-        ...s,
-        [key]: {
-          ...s[key],
-          value: null,
-          edited_by_clinician: true,
-          original_value: s[key].original_value ?? s[key].value,
-        } as ScoreV2EditState[K],
-      }));
+      setState((s) => {
+        const prev = s[key];
+        captureEditDelta({
+          studyId,
+          fieldId:             String(key),
+          editType:            "clear",
+          originalValue:       prev.original_value ?? prev.value,
+          newValue:            null,
+          originalDerivedFrom: prev.provenance.derived_from,
+          clientRequestId:     sessionIdRef.current,
+        }).catch(() => {});
+        return {
+          ...s,
+          [key]: {
+            ...prev,
+            value: null,
+            edited_by_clinician: true,
+            original_value: prev.original_value ?? prev.value,
+          } as ScoreV2EditState[K],
+        };
+      });
     },
-    [],
+    [studyId],
   );
 
-  const markIncorrect = useCallback(<K extends keyof ScoreV2EditState>(key: K) => {
-    // Surface to feedback channel; do not mutate value. The model-improvement
-    // loop pulls these from server-side audit log.
-    toast.info("Flagged as incorrect", {
-      description: `${String(key)} — pre-filled value will be reviewed in next training cycle.`,
-    });
-    // POST to /v1/feedback in real implementation
-  }, []);
+  const markIncorrect = useCallback(
+    <K extends keyof ScoreV2EditState>(key: K) => {
+      const proposal = state[key];
+      // Capture as a reject delta — flows into the same training pipeline as
+      // any other override. Value isn't changed; the reject records intent.
+      captureEditDelta({
+        studyId,
+        fieldId:             String(key),
+        editType:            "reject",
+        originalValue:       proposal.value,
+        newValue:            proposal.value,
+        originalDerivedFrom: proposal.provenance.derived_from,
+        reasonCode:          "marked_incorrect",
+        clientRequestId:     sessionIdRef.current,
+      }).catch(() => {});
+      toast.info("Flagged as incorrect", {
+        description: `${String(key)} — recorded for the next training cycle.`,
+      });
+    },
+    [studyId, state],
+  );
 
   const handleSave = async () => {
     setSaving(true);

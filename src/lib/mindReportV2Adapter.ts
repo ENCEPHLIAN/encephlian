@@ -18,7 +18,10 @@ import {
   SymmetryClass,
   ContinuityClass,
   computeSummary,
+  parseMindReportV2,
+  formatV2Errors,
 } from "@/shared/mindReportV2";
+import { ZodError } from "zod";
 
 function mkPending<T>(
   field_id: string,
@@ -298,5 +301,17 @@ export function adaptV1ToV2(v1: any, studyId: string): MindReportV2 {
     prose: null,
   };
 
-  return { ...partial, summary: computeSummary(partial) };
+  const candidate = { ...partial, summary: computeSummary(partial) };
+
+  // Validate at the boundary. If we built an invalid v2, that's a bug here
+  // (not in the caller) — surface it loudly with field-level diagnostics so
+  // the offending mapping is obvious.
+  try {
+    return parseMindReportV2(candidate);
+  } catch (e) {
+    if (e instanceof ZodError) {
+      throw new Error(`adaptV1ToV2 produced an invalid MindReportV2: ${formatV2Errors(e)}`);
+    }
+    throw e;
+  }
 }

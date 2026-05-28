@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
+import { captureEditDelta } from "@/lib/editDeltaCapture";
 import { cn } from "@/lib/utils";
 
 export const REJECT_REASONS = [
@@ -55,38 +55,29 @@ export function RejectFinding({
     if (!selectedCode) return;
     setSubmitting(true);
     setError(null);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error: insErr } = await supabase.from("audit_logs").insert({
-        event_type: "clinician_reject",
-        action: "reject_finding",
-        resource_type: "study",
-        resource_id: studyId,
-        user_id: user?.id ?? null,
-        event_data: {
-          field_id: fieldId,
-          field_label: fieldLabel,
-          reason_code: selectedCode,
-          reason_text: reasonText.trim() || null,
-        },
-      });
-      if (insErr) throw insErr;
-      setSubmitted(true);
-      onRejected?.(selectedCode, reasonText.trim());
-      setTimeout(() => {
-        setOpen(false);
-        // Reset after close animation
-        setTimeout(() => {
-          setSubmitted(false);
-          setSelectedCode(null);
-          setReasonText("");
-        }, 200);
-      }, 1200);
-    } catch (e: any) {
-      setError(e?.message ?? "Could not record rejection.");
-    } finally {
+    const result = await captureEditDelta({
+      studyId,
+      fieldId,
+      editType:   "reject",
+      reasonCode: selectedCode,
+      reasonText: reasonText.trim() || null,
+    });
+    if (!result.ok) {
+      setError(result.error ?? "Could not record rejection.");
       setSubmitting(false);
+      return;
     }
+    setSubmitted(true);
+    onRejected?.(selectedCode, reasonText.trim());
+    setTimeout(() => {
+      setOpen(false);
+      setTimeout(() => {
+        setSubmitted(false);
+        setSelectedCode(null);
+        setReasonText("");
+      }, 200);
+    }, 1200);
+    setSubmitting(false);
   };
 
   return (
