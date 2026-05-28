@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditableReportV2 } from "@/components/report/EditableReportV2";
 import { TrustAuditPanel } from "@/components/report/TrustAuditPanel";
+import { HonestReportWrap } from "@/components/report/HonestReportWrap";
 import { buildEditableStateFromMindReport, persistDraft, persistSigned, loadDraft } from "@/lib/editableReportBridge";
 import type { ScoreV2EditState } from "@/lib/editableReportBridge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1232,17 +1233,21 @@ export default function StudyDetail() {
                 </div>
               ) : mindReport?.schema_version === "mind.report.v1" ? (
                 <ReportErrorBoundary>
-                  <div className="space-y-4">
-                    <TrustAuditPanel report={mindReport} />
-                    <AnalysisView report={mindReport} studyId={study.id} />
-                  </div>
+                  <HonestReportWrap report={mindReport} studyId={study.id}>
+                    <div className="space-y-4">
+                      <TrustAuditPanel report={mindReport} />
+                      <AnalysisView report={mindReport} studyId={study.id} />
+                    </div>
+                  </HonestReportWrap>
                 </ReportErrorBoundary>
               ) : study.ai_draft_json && (study.ai_draft_json as any).schema_version === "mind.report.v1" ? (
                 <ReportErrorBoundary>
-                  <div className="space-y-4">
-                    <TrustAuditPanel report={study.ai_draft_json} />
-                    <AnalysisView report={study.ai_draft_json} studyId={study.id} />
-                  </div>
+                  <HonestReportWrap report={study.ai_draft_json} studyId={study.id}>
+                    <div className="space-y-4">
+                      <TrustAuditPanel report={study.ai_draft_json} />
+                      <AnalysisView report={study.ai_draft_json} studyId={study.id} />
+                    </div>
+                  </HonestReportWrap>
                 </ReportErrorBoundary>
               ) : study.ai_draft_json ? (
                 // Legacy format (old MetricsView schema)

@@ -20,6 +20,21 @@ import { PilotInlineSla } from "@/components/pilot/PilotInlineSla";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { getPatientLabel } from "@/lib/studyDisplay";
+import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
+import { ThreeCounterStrip } from "@/components/report/ThreeCounterStrip";
+import type { ReportSummary } from "@/shared/mindReportV2";
+
+function getV2Summary(study: PilotStudy): ReportSummary | null {
+  const v1 = study.ai_draft_json as any;
+  // Only run the adapter when ai_draft_json is a real v1 report. Flat triage
+  // blobs would yield identical pending counts on every card — misleading.
+  if (!v1 || v1.schema_version !== "mind.report.v1") return null;
+  try {
+    return adaptV1ToV2(v1, study.id).summary;
+  } catch {
+    return null;
+  }
+}
 
 function getTriageResult(study: PilotStudy): { classification: string; confidence: number } | null {
   const report = study.ai_draft_json;
@@ -496,6 +511,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
             const src = formatStudySourceLine(meta, study.original_format ?? null);
             const isSigned = study.state === "signed";
             const triageResult = getTriageResult(study);
+            const v2Summary = getV2Summary(study);
             const isNormal = triageResult?.classification === "normal";
             const isAbnormal = triageResult?.classification === "abnormal";
             return (
@@ -551,6 +567,9 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                       </p>
                       {src && (
                         <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5" title={src}>{src}</p>
+                      )}
+                      {v2Summary && (
+                        <ThreeCounterStrip summary={v2Summary} size="sm" className="mt-1.5" />
                       )}
                     </div>
 

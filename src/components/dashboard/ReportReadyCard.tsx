@@ -6,6 +6,8 @@ import { useNavigate } from "react-router-dom";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { cn } from "@/lib/utils";
+import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
+import { ThreeCounterStrip } from "@/components/report/ThreeCounterStrip";
 
 dayjs.extend(relativeTime);
 
@@ -47,6 +49,12 @@ export default function ReportReadyCard({ study, onRequestRefund, hideRefundButt
   const isNormal = cls === "normal";
   const isAbnormal = cls === "abnormal";
   const hasClassification = cls && cls !== "unknown";
+
+  // v2 honest-output summary — only shown when ai_draft_json is a full v1 report.
+  const v2Summary = (() => {
+    if (report?.schema_version !== "mind.report.v1") return null;
+    try { return adaptV1ToV2(report, study.id).summary; } catch { return null; }
+  })();
 
   return (
     <Card className={cn(
@@ -103,6 +111,9 @@ export default function ReportReadyCard({ study, onRequestRefund, hideRefundButt
                 </Badge>
               )}
             </div>
+            {v2Summary && (
+              <ThreeCounterStrip summary={v2Summary} size="sm" className="mt-1.5" />
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
