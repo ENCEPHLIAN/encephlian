@@ -455,7 +455,7 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
         <div className="flex items-center gap-2">
           <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           <h3 className="text-xs font-medium">Seizure Detection</h3>
-          <Badge variant="outline" className="text-[9px] ml-auto">{seizure.model || "heuristic_v0.1"}</Badge>
+          <Badge variant="outline" className="text-[9px] ml-auto" title="Rule-based heuristic (Z-score spike rule). VERTEX seizure head not yet deployed.">{seizure.model || "heuristic_v0.1"} · rule-based</Badge>
         </div>
         {ictNote && (
           <p className="text-[10px] text-muted-foreground px-1">{ictNote}</p>

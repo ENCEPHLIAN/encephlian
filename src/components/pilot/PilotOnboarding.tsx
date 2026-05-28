@@ -95,7 +95,7 @@ const WORKFLOW_STEPS = [
   {
     icon: Brain,
     title: "3. Analysis",
-    desc: "The pipeline processes the EEG: artifact cleanup, signal analysis, and anomaly detection. Track progress in real-time on your dashboard.",
+    desc: "The pipeline processes the EEG: artifact cleanup, signal analysis, and structured findings with provenance. Track progress in real-time on your dashboard.",
     time: "5-15 min",
   },
   {
@@ -163,7 +163,7 @@ export default function PilotOnboarding({
                   <strong className="text-foreground">HIPAA Compliant</strong>
                   <p className="text-muted-foreground mt-0.5">
                     All data encrypted at rest and in transit. SOC2 Type II
-                    certified infrastructure.
+                    assessment in progress.
                   </p>
                 </div>
               </div>

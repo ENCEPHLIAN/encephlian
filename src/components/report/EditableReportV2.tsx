@@ -1,14 +1,14 @@
 /**
  * EditableReportV2 — clinician-facing SCORE v2 report with per-field edit + sign.
  *
- * Pre-filled by the AUGUR engine (server-side). Every field is editable.
+ * Pre-filled by the deterministic MIND→SCORE mapper (server-side). Every field is editable.
  * Hover on any value shows its derivation path. Signing locks the report,
  * generates the immutable signed PDF, and writes a content fingerprint.
  *
  * This is the *editing* surface. The read-only signed PDF is produced from
  * the same data by `libs/score/report_renderer.py` on the server.
  *
- * Architecture matches docs/specs/augur-design.md.
+ * Architecture target: docs/specs/augur-design.md (AUGUR grammar engine not yet built — current pre-fill is the deterministic mapper).
  */
 import { useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
@@ -541,7 +541,7 @@ export function EditableReportV2(props: EditableReportV2Props) {
           pattern. Skeleton stays focused on the highest-value sections. */}
 
       <p className="text-[10px] text-muted-foreground text-center py-4">
-        Pre-fill engine: AUGUR (knowledge-graph) — proposes; clinician disposes.
+        Pre-fill engine: deterministic MIND→SCORE mapper — proposes; clinician disposes.
         Every signed field becomes part of the immutable PDF + content fingerprint.
       </p>
     </div>

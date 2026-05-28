@@ -42,7 +42,7 @@ const VALUE_STEPS = [
     icon: FileText,
     label: "Triage Report",
     desc: "Clinically structured PDF",
-    time: "Instant",
+    time: "Auto-delivered",
   },
 ];
 

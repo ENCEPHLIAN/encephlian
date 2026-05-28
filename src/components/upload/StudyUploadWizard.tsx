@@ -917,7 +917,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
                   <FileUp className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
                   <p className="font-medium">Drop EEG file(s) here</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    or click to browse • EDF, BDF, Natus (.e/.erd/.ncs), Nihon Kohden (.eeg), Persyst (.lay), BrainVision (.vhdr), Neuroscan/ANT (.cnt), EEGLAB (.set), EGI/Philips (.mff), Curry, MEF3, GDF, NWB
+                    or click to browse • EDF, BDF, Natus (.e) — other vendors: export EDF first
                   </p>
                   <p className="text-xs text-muted-foreground/70 mt-1">Multiple files supported for batch upload</p>
                 </>

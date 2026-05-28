@@ -698,7 +698,7 @@ export default function AdminInfra() {
           Azure costs (blue) run on credits — scale freely. Platform costs (orange) are fixed cash commitments regardless of study volume —
           Vercel Pro is fixed at $20/mo; Supabase upgrades to Pro (~$25/mo) only when DB exceeds 500 MB or auth MAU exceeds 50k.
           Adding a second clinic to Scenario A adds ~$0.60/study in blob + egress (Azure credits only). Container Apps are shared — per-clinic marginal cost is almost entirely storage and egress.
-          ARIA models (VIGIL, FORGE) add ~3s C-Plane CPU per study once deployed — negligible at these volumes.
+          When VIGIL+FORGE are deployed, expect ~3s additional C-Plane CPU per study — not currently active (models trained but not loaded into iplane).
         </p>
       </div>
 

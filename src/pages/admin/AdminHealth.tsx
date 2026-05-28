@@ -457,8 +457,8 @@ export default function AdminHealth() {
               </>}
               <Separator className="my-1" />
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">ARIA (self-supervised)</p>
-              <KV label="VIGIL" value={ip.vigil_model === "loaded" ? "loaded" : "training (auto-deploy when done)"} />
-              <KV label="FORGE" value={ip.forge_model === "loaded" ? "loaded" : "queued after VIGIL"} />
+              <KV label="VIGIL" value={ip.vigil_model === "loaded" ? "loaded" : "trained — awaiting deploy"} />
+              <KV label="FORGE" value={ip.forge_model === "loaded" ? "loaded" : "trained — awaiting deploy"} />
             </>}
           </ServiceCard>
 
@@ -572,7 +572,7 @@ export default function AdminHealth() {
               status: ip?.vigil_model === "loaded" ? "healthy" : "training",
               note: ip?.vigil_model === "loaded"
                 ? "Per-window quality score + per-channel degradation class"
-                : "Training on TUAB (40 epochs, ~18hrs CPU). Auto-deploys on completion.",
+                : "Trained on TUH EEG Abnormal v3.0.1 (40 epochs). On VM; not yet in blob/iplane.",
               spec: "1D CNN per-ch → attention → 16-class degradation",
               corpus: "TUH EEG Abnormal v3.0.1 (1521 EDFs, self-supervised)"
             },
@@ -582,7 +582,7 @@ export default function AdminHealth() {
               status: ip?.forge_model === "loaded" ? "healthy" : "queued",
               note: ip?.forge_model === "loaded"
                 ? "Per-recording clinic-invariant normalization parameters"
-                : "Queued — starts automatically when VIGIL completes.",
+                : "Trained on TUH EEG v3.0.1 (NT-Xent contrastive). On VM; not yet in blob/iplane.",
               spec: "NT-Xent contrastive MLP across clinic sessions",
               corpus: "TUH EEG v3.0.1 (69,672 EDFs, multi-clinic)"
             },
