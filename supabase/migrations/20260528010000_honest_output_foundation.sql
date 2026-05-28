@@ -55,8 +55,8 @@ DROP POLICY IF EXISTS "schema_definitions_admin_write" ON public.schema_definiti
 CREATE POLICY "schema_definitions_admin_write"
   ON public.schema_definitions FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 2. model_versions — registry of every model and where it lives
@@ -113,8 +113,8 @@ DROP POLICY IF EXISTS "model_versions_admin_write" ON public.model_versions;
 CREATE POLICY "model_versions_admin_write"
   ON public.model_versions FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 3. model_calibration_runs — per-model-per-day reliability metrics
@@ -153,8 +153,8 @@ DROP POLICY IF EXISTS "calibration_runs_admin_write" ON public.model_calibration
 CREATE POLICY "calibration_runs_admin_write"
   ON public.model_calibration_runs FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 4. channel_quality_assessments — VIGIL output, scoped per study
@@ -201,8 +201,8 @@ DROP POLICY IF EXISTS "channel_quality_admin_write" ON public.channel_quality_as
 CREATE POLICY "channel_quality_admin_write"
   ON public.channel_quality_assessments FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 5. report_emission_events — append-only emission audit
@@ -252,8 +252,8 @@ DROP POLICY IF EXISTS "emission_events_admin_write" ON public.report_emission_ev
 CREATE POLICY "emission_events_admin_write"
   ON public.report_emission_events FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 6. clinician_edit_deltas — append-only field-level edit/accept/reject
@@ -302,7 +302,7 @@ CREATE POLICY "edit_deltas_read_self"
   USING (
     clinician_id = auth.uid()
     OR has_role(auth.uid(), 'super_admin'::app_role)
-    OR has_role(auth.uid(), 'ops'::app_role)
+    OR has_role(auth.uid(), 'management'::app_role)
     OR EXISTS (
       SELECT 1
         FROM public.studies s
@@ -374,8 +374,8 @@ DROP POLICY IF EXISTS "reprocess_jobs_admin_all" ON public.reprocess_jobs;
 CREATE POLICY "reprocess_jobs_admin_all"
   ON public.reprocess_jobs FOR ALL
   TO authenticated
-  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role))
-  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'ops'::app_role));
+  USING (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role))
+  WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role) OR has_role(auth.uid(), 'management'::app_role));
 
 -- ───────────────────────────────────────────────────────────────────────
 -- 8. studies.triage_draft_json shape validator (BEFORE INSERT/UPDATE)
