@@ -39,7 +39,7 @@ export default function Privacy() {
         <li>Pseudonymised patient identifiers, age, sex</li>
         <li>EEG recordings (raw vendor file, prenorm μV, normalised ESF)</li>
         <li>Clinical metadata: SLA, referring physician, recording date, indication</li>
-        <li>Reports: AI-generated drafts, clinician edits, signed PDFs</li>
+        <li>Reports: model-generated drafts, clinician edits, signed PDFs</li>
       </ul>
 
       <h3>3.3 Technical &amp; Operational Data</h3>

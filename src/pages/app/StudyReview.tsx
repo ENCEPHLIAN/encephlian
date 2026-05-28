@@ -68,7 +68,7 @@ export default function StudyReview() {
           if (t) clearTimeout(t);
           t = setTimeout(() => {
             void queryClient.invalidateQueries({ queryKey: ["study", id] });
-            void queryClient.invalidateQueries({ queryKey: ["ai-draft", id] });
+            void queryClient.invalidateQueries({ queryKey: ["triage-draft", id] });
           }, 100);
         },
       )
@@ -84,7 +84,7 @@ export default function StudyReview() {
   }, [id, queryClient]);
 
   const { data: draft, isLoading: draftLoading, refetch: refetchDraft, isFetching: draftFetching } = useQuery({
-    queryKey: ["ai-draft", id],
+    queryKey: ["triage-draft", id],
     queryFn: async () => {
       const { data } = await supabase
         .from("report_drafts")
@@ -96,9 +96,9 @@ export default function StudyReview() {
 
       if (data) return data;
 
-      const { data: studyData } = await supabase.from("studies").select("ai_draft_json").eq("id", id).maybeSingle();
+      const { data: studyData } = await supabase.from("studies").select("triage_draft_json").eq("id", id).maybeSingle();
 
-      const raw = studyData?.ai_draft_json as any;
+      const raw = studyData?.triage_draft_json as any;
       if (!raw) return null;
 
       const score = raw.score || {};
@@ -151,7 +151,7 @@ export default function StudyReview() {
     queryClient.invalidateQueries({ queryKey: ["study-detail", id] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
     queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
-    queryClient.invalidateQueries({ queryKey: ["ai-draft", id] });
+    queryClient.invalidateQueries({ queryKey: ["triage-draft", id] });
   };
 
   const handleSign = async () => {

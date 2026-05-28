@@ -16,7 +16,7 @@ export default function ActivityFeed({ studies }: ActivityFeedProps) {
   
   // Get recent activities
   const recentStudies = studies
-    .filter(s => s.state === 'signed' || s.state === 'ai_draft')
+    .filter(s => s.state === 'signed' || s.state === 'triage_draft')
     .sort((a, b) => dayjs(b.created_at).diff(dayjs(a.created_at)))
     .slice(0, 5);
 
@@ -37,7 +37,7 @@ export default function ActivityFeed({ studies }: ActivityFeedProps) {
         id: study.id,
         icon: Sparkles,
         iconColor: "text-purple-500",
-        text: `Generated AI draft for ${patientId}`,
+        text: `Generated draft for ${patientId}`,
         time: dayjs(study.created_at).fromNow()
       };
     }

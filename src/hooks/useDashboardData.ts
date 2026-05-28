@@ -21,7 +21,7 @@ export interface Study {
   tokens_deducted?: number;
   duration_min?: number;
   sample?: boolean;
-  ai_draft_json?: any | null;
+  triage_draft_json?: any | null;
 }
 
 export function useDashboardData() {
@@ -242,7 +242,7 @@ export function useDashboardData() {
         (s) => s.state === "signed" || s.triage_status === "completed"
       ).slice(0, 5),
       pendingStudies: studies.filter(
-        (s) => s.state === "uploaded" || s.state === "ai_draft" || s.state === "in_review"
+        (s) => s.state === "uploaded" || s.state === "triage_draft" || s.state === "in_review"
       ),
     };
   }, [studies]);

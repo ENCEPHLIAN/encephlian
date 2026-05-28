@@ -18,7 +18,7 @@ interface Study {
   refund_requested?: boolean;
   tokens_deducted?: number;
   state: string;
-  ai_draft_json?: any;
+  triage_draft_json?: any;
 }
 
 interface RecentReportsSectionProps {
@@ -27,7 +27,7 @@ interface RecentReportsSectionProps {
 }
 
 function getClassification(study: Study) {
-  const r = study.ai_draft_json;
+  const r = study.triage_draft_json;
   if (!r) return null;
   const cls = r.classification ?? r.triage?.classification ?? null;
   const conf = r.triage_confidence ?? r.triage?.confidence ?? null;

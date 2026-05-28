@@ -41,7 +41,7 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "ai_drafts_study_id_fkey"
+            foreignKeyName: "triage_drafts_study_id_fkey"
             columns: ["study_id"]
             isOneToOne: false
             referencedRelation: "studies"
@@ -573,8 +573,8 @@ export type Database = {
       }
       studies: {
         Row: {
-          ai_draft_json: Json | null
-          ai_draft_text: string | null
+          triage_draft_json: Json | null
+          triage_draft_text: string | null
           clinic_id: string
           created_at: string | null
           duration_min: number | null
@@ -607,8 +607,8 @@ export type Database = {
           uploaded_file_path: string | null
         }
         Insert: {
-          ai_draft_json?: Json | null
-          ai_draft_text?: string | null
+          triage_draft_json?: Json | null
+          triage_draft_text?: string | null
           clinic_id: string
           created_at?: string | null
           duration_min?: number | null
@@ -641,8 +641,8 @@ export type Database = {
           uploaded_file_path?: string | null
         }
         Update: {
-          ai_draft_json?: Json | null
-          ai_draft_text?: string | null
+          triage_draft_json?: Json | null
+          triage_draft_text?: string | null
           clinic_id?: string
           created_at?: string | null
           duration_min?: number | null
@@ -996,8 +996,8 @@ export type Database = {
       admin_get_all_studies: {
         Args: never
         Returns: {
-          ai_draft_json: Json | null
-          ai_draft_text: string | null
+          triage_draft_json: Json | null
+          triage_draft_text: string | null
           clinic_id: string
           created_at: string | null
           duration_min: number | null

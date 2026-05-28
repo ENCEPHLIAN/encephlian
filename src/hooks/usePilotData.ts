@@ -20,10 +20,10 @@ export interface PilotStudy {
   triage_completed_at: string | null;
   refund_requested: boolean | null;
   tokens_deducted: number | null;
-  ai_draft_json?: any | null;
+  triage_draft_json?: any | null;
 }
 
-// EGRESS-CRITICAL: do NOT include ai_draft_json here. The MIND report can be
+// EGRESS-CRITICAL: do NOT include triage_draft_json here. The MIND report can be
 // 50-200 KB per study; pulling it for 50 studies × frequent polling = MBs of
 // Supabase egress per minute per user. The report is already available via
 // blob at eeg-reports/{study_id}/report.json and fetched by StudyDetail on
@@ -217,7 +217,7 @@ export function usePilotData() {
             // EGRESS-CRITICAL: do NOT upsert the full MIND report into Supabase.
             // The report lives in Azure Blob (eeg-reports/{id}/report.json) and
             // StudyDetail fetches it directly from iplane on demand. Mirroring
-            // it into ai_draft_json was the original egress hot-path.
+            // it into triage_draft_json was the original egress hot-path.
             const { error: upErr } = await supabase
               .from("studies")
               .update({
@@ -300,7 +300,7 @@ export function usePilotData() {
         (s) =>
           s.state === "signed" ||
           s.triage_status === "completed" ||
-          s.state === "ai_draft" ||
+          s.state === "triage_draft" ||
           s.state === "complete" ||
           s.state === "completed" ||
           s.state === "in_review",

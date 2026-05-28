@@ -31,7 +31,7 @@ const stateColors: Record<string, string> = {
   awaiting_sla: "bg-amber-500",
   preprocessing: "bg-yellow-500",
   canonicalized: "bg-cyan-500",
-  ai_draft: "bg-purple-500",
+  triage_draft: "bg-purple-500",
   in_review: "bg-orange-500",
   complete: "bg-green-500",
   signed: "bg-green-500",
@@ -125,7 +125,7 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
               <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
             </div>
             {(() => {
-              const report = (study as any).ai_draft_json;
+              const report = (study as any).triage_draft_json;
               const cls = report?.classification ?? report?.triage?.classification;
               const conf = report?.triage_confidence ?? report?.triage?.confidence;
               if (!cls || cls === "unknown") return null;
@@ -368,10 +368,10 @@ function InternalStudiesView() {
       }
 
       // Client-side PDF via @react-pdf/renderer
-      const content = (report?.content as any) ?? (study?.ai_draft_json as any);
+      const content = (report?.content as any) ?? (study?.triage_draft_json as any);
       if (content) {
         const meta = study.meta as any;
-        const aiDraft = study?.ai_draft_json as any;
+        const triageDraft = study?.triage_draft_json as any;
 
         const [{ pdf: renderPDF }, { ReportDocument }] = await Promise.all([
           import("@react-pdf/renderer"),
@@ -386,8 +386,8 @@ function InternalStudiesView() {
             signedDate: dayjs(report?.signed_at || report?.created_at || new Date()).format("MMMM D, YYYY"),
             studyId: study.id,
             content,
-            aiClassification: aiDraft?.triage?.classification ?? aiDraft?.classification,
-            aiConfidence: aiDraft?.triage?.confidence ?? aiDraft?.triage_confidence,
+            triageClassification: triageDraft?.triage?.classification ?? triageDraft?.classification,
+            triageConfidence: triageDraft?.triage?.confidence ?? triageDraft?.triage_confidence,
           }) as any
         ).toBlob();
 
@@ -491,7 +491,7 @@ function InternalStudiesView() {
                   <SelectItem value="complete">Complete</SelectItem>
                   <SelectItem value="preprocessing">Preprocessing</SelectItem>
                   <SelectItem value="canonicalized">Canonicalized</SelectItem>
-                  <SelectItem value="ai_draft">AI Draft</SelectItem>
+                  <SelectItem value="triage_draft">Triage Draft</SelectItem>
                   <SelectItem value="in_review">In Review</SelectItem>
                   <SelectItem value="signed">Signed</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>

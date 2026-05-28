@@ -27,7 +27,7 @@ const PILOT_STEPS = [
 function stepIndex(study: StudyRow): number {
   const st = study.state || "";
   if (st === "signed") return 4;
-  if (["ai_draft", "in_review", "complete", "completed"].includes(st)) return 3;
+  if (["triage_draft", "in_review", "complete", "completed"].includes(st)) return 3;
   if (st === "processing" || study.triage_status === "processing") return 2;
   if (st === "uploaded") return 2; // file on blob, pipeline firing
   if (st === "awaiting_sla") return 1; // file uploaded, SLA not yet chosen

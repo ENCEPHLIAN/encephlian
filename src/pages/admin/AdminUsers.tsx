@@ -545,7 +545,7 @@ export default function AdminUsers() {
                                   "bg-emerald-500/10 text-emerald-600": s.state === "complete" || s.state === "completed" || s.state === "signed",
                                   "bg-red-500/10 text-red-500": s.state === "failed",
                                   "bg-amber-500/10 text-amber-500": s.state === "processing",
-                                  "bg-violet-500/10 text-violet-500": s.state === "ai_draft",
+                                  "bg-violet-500/10 text-violet-500": s.state === "triage_draft",
                                 })}>{s.state || "pending"}</Badge>
                               </td>
                               <td className="px-3 py-2 text-muted-foreground">{formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}</td>

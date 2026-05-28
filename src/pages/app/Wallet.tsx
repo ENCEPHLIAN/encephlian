@@ -103,7 +103,7 @@ export default function Wallet() {
         <div>
           <h1 className="text-xl font-semibold">Wallet</h1>
           <p className="text-muted-foreground text-sm">
-            Tokens power your AI triage reports
+            Tokens power your triage reports
           </p>
         </div>
         <PilotWalletCard />

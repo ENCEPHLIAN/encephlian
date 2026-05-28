@@ -22,7 +22,7 @@ export interface StudyForFiles {
   triage_status: string | null;
   triage_completed_at: string | null;
   tokens_deducted: number | null;
-  ai_draft_json: any | null;
+  triage_draft_json: any | null;
   meta: any;
   sample: boolean | null;
   study_files: StudyFile[];

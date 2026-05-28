@@ -24,7 +24,7 @@ export interface StudyListItem {
   triage_started_at: string | null;
   triage_completed_at: string | null;
   clinics: { name: string } | null;
-  ai_draft_json?: any | null;
+  triage_draft_json?: any | null;
 }
 
 export function useStudiesData(stateFilter: string) {

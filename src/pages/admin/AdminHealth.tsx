@@ -209,7 +209,7 @@ export default function AdminHealth() {
         counts[s.state] = (counts[s.state] || 0) + 1;
       }
       const total = data?.length || 0;
-      const complete = (counts["complete"] || 0) + (counts["ai_draft"] || 0) + (counts["signed"] || 0) + (counts["in_review"] || 0);
+      const complete = (counts["complete"] || 0) + (counts["triage_draft"] || 0) + (counts["signed"] || 0) + (counts["in_review"] || 0);
       const failed = counts["failed"] || 0;
       const active = (counts["processing"] || 0) + (counts["uploaded"] || 0);
       const today = (data || []).filter(s => new Date(s.created_at) > new Date(Date.now() - 86400000)).length;
@@ -490,7 +490,7 @@ export default function AdminHealth() {
               { label: "Uploaded", key: "uploaded", color: "text-blue-400" },
               { label: "Processing", key: "processing", color: "text-purple-400" },
               { label: "Complete", key: "complete", color: "text-emerald-500" },
-              { label: "AI Draft", key: "ai_draft", color: "text-cyan-400" },
+              { label: "Triage Draft", key: "triage_draft", color: "text-cyan-400" },
               { label: "In Review", key: "in_review", color: "text-amber-400" },
               { label: "Signed", key: "signed", color: "text-emerald-600" },
               { label: "Failed", key: "failed", color: "text-red-500" },

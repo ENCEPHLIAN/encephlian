@@ -53,7 +53,7 @@ export function QuickTipsDialog() {
                 <li className="flex gap-3">
                   <Activity className="h-5 w-5 text-primary flex-shrink-0" />
                   <div>
-                    <p className="font-medium">AI assists your reviews</p>
+                    <p className="font-medium">Model assists your reviews</p>
                     <p className="text-sm text-muted-foreground">Get draft reports in seconds, review and sign</p>
                   </div>
                 </li>

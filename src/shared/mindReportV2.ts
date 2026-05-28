@@ -16,7 +16,7 @@ export type ProvenanceKind =
   | "rule"       // Deterministic libs/score rule (e.g. bs_ratio > 0.10 → discontinuous)
   | "biomarker"  // Numeric signal biomarker (amplitude asymmetry, BS ratio…)
   | "pending"    // System refused to assert — required input unavailable
-  | "clinician"; // Clinician override after AI proposal
+  | "clinician"; // Clinician override after model proposal
 
 export interface Provenance {
   derived_from: ProvenanceKind;

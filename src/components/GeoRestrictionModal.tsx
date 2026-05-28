@@ -74,7 +74,7 @@ export function GeoRestrictionModal() {
               our services are not yet formally available.
             </p>
             <p>
-              If your organisation is interested in deploying ENCEPHLIAN's AI-powered EEG triage
+              If your organisation is interested in deploying ENCEPHLIAN's model-powered EEG triage
               infrastructure, our team would be pleased to discuss regulatory pathways and
               availability timelines in your region.
             </p>
@@ -84,7 +84,7 @@ export function GeoRestrictionModal() {
         <div className="mt-2 rounded-lg border border-border/60 bg-muted/30 p-4 space-y-2">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span>Clinical-grade AI · HIPAA-compliant infrastructure · Certification in progress</span>
+            <span>Clinical-grade triage · HIPAA-compliant infrastructure · Certification in progress</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Mail className="h-3.5 w-3.5 text-primary shrink-0" />

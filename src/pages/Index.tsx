@@ -35,7 +35,7 @@ const Index = () => {
             </h1>
             
             <p className="text-xl md:text-2xl text-foreground/80 max-w-2xl mx-auto font-light">
-              AI EEG analysis for neurology clinics.
+              EEG triage for neurology clinics.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-6 justify-center items-center pt-12">
@@ -67,7 +67,7 @@ const Index = () => {
                 <div className="p-2 bg-primary/10 rounded-lg group-hover:bg-primary/20 transition-colors">
                   <Brain className="h-5 w-5 text-primary" />
                 </div>
-                <span className="font-medium">AI-Assisted</span>
+                <span className="font-medium">Model-assisted</span>
               </div>
             </div>
           </div>
@@ -114,9 +114,9 @@ const Index = () => {
               <div className="h-14 w-14 bg-primary/10 rounded-xl flex items-center justify-center mb-6 glow-cyan">
                 <Brain className="h-7 w-7 text-primary" />
               </div>
-              <h3 className="text-2xl font-bold mb-3">AI-Assisted Reports</h3>
+              <h3 className="text-2xl font-bold mb-3">Model-assisted Reports</h3>
               <p className="text-muted-foreground mb-6">
-                Advanced CDSS to support your clinical decision-making process with AI-powered insights.
+                Advanced CDSS to support your clinical decision-making process with model-powered insights.
               </p>
               <ul className="space-y-3">
                 <li className="flex items-start gap-3">
@@ -185,7 +185,7 @@ const Index = () => {
               </p>
               <p className="text-foreground/80 leading-relaxed">
                 Encephalian is a Clinical Decision Support System (CDSS) designed to assist healthcare professionals. 
-                It is <strong>not a diagnostic AI</strong> and should not replace professional medical judgment, diagnosis, or treatment decisions. 
+                It is <strong>not a diagnostic device</strong> and should not replace professional medical judgment, diagnosis, or treatment decisions. 
                 All clinical decisions must be made by qualified healthcare professionals. This system provides assistive analysis only 
                 and should be used as a supplementary tool in clinical workflows.
               </p>

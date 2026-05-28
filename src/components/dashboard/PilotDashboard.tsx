@@ -34,7 +34,7 @@ const VALUE_STEPS = [
   },
   {
     icon: Brain,
-    label: "AI Analysis",
+    label: "Triage analysis",
     desc: "MIND® processes it",
     time: "~15 min",
   },
@@ -50,7 +50,7 @@ const VALUE_STEPS = [
 function getProgressLabel(progress: number): string {
   if (progress < 15) return "Queuing...";
   if (progress < 35) return "Preprocessing signals...";
-  if (progress < 60) return "Running AI analysis...";
+  if (progress < 60) return "Running Triage analysis...";
   if (progress < 85) return "Generating report...";
   return "Finalizing...";
 }
@@ -113,8 +113,8 @@ export default function PilotDashboard() {
           if (!error && data) { triggerDownload(data, `report-${study.id.slice(0, 8)}.pdf`); toast.success("Download started"); return; }
         }
       }
-      // Fallback: generate HTML from ai_draft_json
-      const raw = study.ai_draft_json as any;
+      // Fallback: generate HTML from triage_draft_json
+      const raw = study.triage_draft_json as any;
       if (raw) {
         const meta = study.meta as any;
         const cls = raw.classification ?? raw.triage?.classification;
@@ -129,7 +129,7 @@ export default function PilotDashboard() {
           { h: "Impression", t: impression || null },
           { h: "Recommended Action", t: action || null },
         ].filter((s): s is { h: string; t: string } => !!s.t);
-        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Triage Report</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;line-height:1.7}h1{font-size:1.4rem;border-bottom:2px solid #111;padding-bottom:8px}h2{font-size:.95rem;font-weight:700;margin-top:1.4rem;text-transform:uppercase;letter-spacing:.04em}.meta{color:#555;font-size:.85rem;margin-bottom:1.5rem}p{white-space:pre-wrap;margin:0;font-size:.95rem}.footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.75rem;color:#999}@media print{body{margin:20mm}}</style></head><body><h1>ENCEPHLIAN™ Triage Report</h1><div class="meta"><strong>Patient:</strong> ${meta?.patient_name || "Unknown"}<br><strong>Date:</strong> ${dayjs(study.triage_completed_at || study.created_at).format("MMMM D, YYYY")}<br><strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}</div>${sections.map(s => `<h2>${s.h}</h2><p>${s.t}</p>`).join("")}<div class="footer">ENCEPHLIAN™ · AI triage · For physician review only</div></body></html>`;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Triage Report</title><style>body{font-family:Georgia,serif;max-width:720px;margin:40px auto;color:#111;line-height:1.7}h1{font-size:1.4rem;border-bottom:2px solid #111;padding-bottom:8px}h2{font-size:.95rem;font-weight:700;margin-top:1.4rem;text-transform:uppercase;letter-spacing:.04em}.meta{color:#555;font-size:.85rem;margin-bottom:1.5rem}p{white-space:pre-wrap;margin:0;font-size:.95rem}.footer{margin-top:2rem;padding-top:1rem;border-top:1px solid #ddd;font-size:.75rem;color:#999}@media print{body{margin:20mm}}</style></head><body><h1>ENCEPHLIAN™ Triage Report</h1><div class="meta"><strong>Patient:</strong> ${meta?.patient_name || "Unknown"}<br><strong>Date:</strong> ${dayjs(study.triage_completed_at || study.created_at).format("MMMM D, YYYY")}<br><strong>Study ID:</strong> ${study.id.slice(0, 8).toUpperCase()}</div>${sections.map(s => `<h2>${s.h}</h2><p>${s.t}</p>`).join("")}<div class="footer">ENCEPHLIAN™ · Triage · For physician review only</div></body></html>`;
         triggerDownload(new Blob([html], { type: "text/html" }), `report-${study.id.slice(0, 8)}.html`);
         toast.success("Report downloaded", { description: "Open the .html file and print to PDF" });
         return;
@@ -181,7 +181,7 @@ export default function PilotDashboard() {
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isNewUser
-              ? "Get your first AI triage report in minutes"
+              ? "Get your first triage report in minutes"
               : totalActive > 0
               ? `${totalActive} active • ${completedReports.length} completed`
               : `${completedReports.length} reports completed`}
@@ -449,7 +449,7 @@ export default function PilotDashboard() {
             <div className="space-y-1">
               {completedReports.slice(0, 4).map((study) => {
                 const meta = study.meta as any;
-                const report = study.ai_draft_json;
+                const report = study.triage_draft_json;
                 const cls = report?.classification ?? report?.triage?.classification ?? null;
                 const conf = report?.triage_confidence ?? report?.triage?.confidence ?? null;
                 const isNormal = cls === "normal";

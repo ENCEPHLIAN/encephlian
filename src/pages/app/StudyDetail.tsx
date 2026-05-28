@@ -109,7 +109,7 @@ const STATE_CONFIG: Record<string, { label: string; color: string; icon: any }> 
   uploaded: { label: "Uploaded", color: "bg-blue-500", icon: FileIcon },
   processing: { label: "Processing", color: "bg-purple-500", icon: Zap },
   awaiting_sla: { label: "Awaiting SLA", color: "bg-amber-500", icon: Clock },
-  ai_draft: { label: "AI Draft Ready", color: "bg-cyan-500", icon: FileText },
+  triage_draft: { label: "Triage Draft Ready", color: "bg-cyan-500", icon: FileText },
   complete: { label: "Analysis Ready", color: "bg-cyan-500", icon: Brain },
   in_review: { label: "In Review", color: "bg-orange-500", icon: Eye },
   signed: { label: "Signed", color: "bg-emerald-500", icon: CheckCircle2 },
@@ -274,7 +274,7 @@ export default function StudyDetail() {
       if (!row) return false;
       if (row.triage_status === "processing") return 8_000;
       const state = row.state;
-      if (state === "uploaded" || state === "processing" || state === "ai_draft") return 10_000;
+      if (state === "uploaded" || state === "processing" || state === "triage_draft") return 10_000;
       return false;
     },
   });
@@ -304,7 +304,7 @@ export default function StudyDetail() {
     prevStateRef.current = study.state;
     if (!prev || prev === study.state) return;
 
-    if (study.state === "ai_draft" && prev !== "ai_draft") {
+    if (study.state === "triage_draft" && prev !== "triage_draft") {
       toast.success("Analysis complete", {
         description: "Recording has been processed. Ready to sign.",
         action: {
@@ -427,9 +427,9 @@ export default function StudyDetail() {
       }
 
       // Client-side PDF via @react-pdf/renderer
-      const content = (report?.content as any) ?? (study?.ai_draft_json as any);
+      const content = (report?.content as any) ?? (study?.triage_draft_json as any);
       if (content) {
-        const aiDraft = study?.ai_draft_json as any;
+        const triageDraft = study?.triage_draft_json as any;
         const meta = study.meta as any;
 
         const [{ pdf: renderPDF }, { ReportDocument }] = await Promise.all([
@@ -447,8 +447,8 @@ export default function StudyDetail() {
             content,
             interpreterName: (report?.profiles as any)?.full_name,
             interpreterCredentials: (report?.profiles as any)?.credentials,
-            aiClassification: aiDraft?.triage?.classification ?? aiDraft?.classification,
-            aiConfidence: aiDraft?.triage?.confidence ?? aiDraft?.triage_confidence,
+            triageClassification: triageDraft?.triage?.classification ?? triageDraft?.classification,
+            triageConfidence: triageDraft?.triage?.confidence ?? triageDraft?.triage_confidence,
           }) as any
         ).toBlob();
 
@@ -522,8 +522,8 @@ export default function StudyDetail() {
   const isSigned = study.state === "signed" || report?.status === "signed";
   const isProcessing = study.triage_status === "processing";
   const canGenerateReport = !hasReport && !isProcessing &&
-    (study.state === "uploaded" || study.state === "parsed" || study.state === "ai_draft") &&
-    !study.ai_draft_json;
+    (study.state === "uploaded" || study.state === "parsed" || study.state === "triage_draft") &&
+    !study.triage_draft_json;
   const triagePaid = studyTriageIsPaid(study);
   // Pilot users must pay (tokens) before analysis runs. Internal users are never gated.
   const gateTriageActions = isPilot && !triagePaid && study.state !== "signed";
@@ -531,20 +531,20 @@ export default function StudyDetail() {
   const canReview =
     (!isPilot || triagePaid) &&
     (study.triage_status === "completed" ||
-      study.state === "ai_draft" ||
+      study.state === "triage_draft" ||
       study.state === "in_review" ||
       study.state === "complete" ||
       study.state === "completed");
   const StateIcon = stateConfig.icon;
   const studyHandle = getStudyHandle(study);
   // Land on the tab that matches "what's next" for this state:
-  //   ai_draft / in_review → Sign (clinician's pending action)
-  //   has analysis but earlier state → AI analysis (review surface)
+  //   triage_draft / in_review → Sign (clinician's pending action)
+  //   has analysis but earlier state → Triage analysis (review surface)
   //   gated or nothing → Overview
   const defaultStudyTab =
     gateTriageActions ? "overview" :
-    (study.state === "ai_draft" || study.state === "in_review") ? "sign" :
-    (study.ai_draft_json || mindReport) ? "ai-analysis" :
+    (study.state === "triage_draft" || study.state === "in_review") ? "sign" :
+    (study.triage_draft_json || mindReport) ? "analysis" :
     "overview";
 
   return (
@@ -578,7 +578,7 @@ export default function StudyDetail() {
                 </Badge>
                 {(() => {
                   const activeReport = mindReport?.schema_version === "mind.report.v1" ? mindReport
-                    : (study.ai_draft_json as any)?.schema_version === "mind.report.v1" ? study.ai_draft_json
+                    : (study.triage_draft_json as any)?.schema_version === "mind.report.v1" ? study.triage_draft_json
                     : null;
                   if (!activeReport) return null;
                   const cls  = activeReport.triage?.classification;
@@ -710,7 +710,7 @@ export default function StudyDetail() {
       <StudyFlowProgress study={study} isPilot={isPilot} />
 
       {/* Signal Analysis Pipeline — architecture indicator */}
-      {(study.ai_draft_json || study.triage_status === "completed") && (
+      {(study.triage_draft_json || study.triage_status === "completed") && (
         <Card className="border-border/60">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-start gap-3">
@@ -735,7 +735,7 @@ export default function StudyDetail() {
                       <p className="text-xs font-medium">Classification</p>
                       <p className="text-[10px] text-muted-foreground">
                         {(() => {
-                          const r = study.ai_draft_json as any;
+                          const r = study.triage_draft_json as any;
                           const cls = r?.classification ?? r?.triage?.classification;
                           const conf = r?.triage_confidence ?? r?.triage?.confidence;
                           if (!cls || cls === "unknown") return "Unclassified";
@@ -793,7 +793,7 @@ export default function StudyDetail() {
           <AlertDescription className="text-sm">
             {isPilot ? (
               <div className="flex flex-col gap-3 mt-1">
-                <span>Choose a triage priority to start AI analysis. Tokens are charged now.</span>
+                <span>Choose a triage priority to start Triage analysis. Tokens are charged now.</span>
                 <PilotInlineSla
                   study={study as unknown as PilotStudy}
                   tokenBalance={tokenBalance}
@@ -830,11 +830,11 @@ export default function StudyDetail() {
               Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
             </TabsTrigger>
           )}
-          <TabsTrigger value="ai-analysis" disabled={gateTriageActions}>
-            Analysis {(study.ai_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+          <TabsTrigger value="analysis" disabled={gateTriageActions}>
+            Analysis {(study.triage_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
           {!isPilot && (
-            <TabsTrigger value="sign" disabled={gateTriageActions || (!mindReport && !study.ai_draft_json)}>
+            <TabsTrigger value="sign" disabled={gateTriageActions || (!mindReport && !study.triage_draft_json)}>
               Sign Report
             </TabsTrigger>
           )}
@@ -1150,7 +1150,7 @@ export default function StudyDetail() {
         </TabsContent>
 
         {/* Analysis Tab — Pipeline results */}
-        <TabsContent value="ai-analysis">
+        <TabsContent value="analysis">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
@@ -1165,7 +1165,7 @@ export default function StudyDetail() {
               {/* ── Channel mapping quality warning ── */}
               {(() => {
                 const activeReport = mindReport?.schema_version === "mind.report.v1" ? mindReport
-                  : (study.ai_draft_json as any)?.schema_version === "mind.report.v1" ? study.ai_draft_json
+                  : (study.triage_draft_json as any)?.schema_version === "mind.report.v1" ? study.triage_draft_json
                   : null;
                 if (!activeReport) return null;
                 const triage = activeReport.triage || {};
@@ -1177,7 +1177,7 @@ export default function StudyDetail() {
                 const messages: Record<string, { title: string; body: string }> = {
                   insufficient_channels: {
                     title: "Insufficient channel mapping",
-                    body: `Only ${validCh ?? "?"} of ${totalCh ?? 19} EEG channels could be mapped from this file. The input montage may be bipolar or use non-standard labels. The AI result is not reliable — manual review is required.`,
+                    body: `Only ${validCh ?? "?"} of ${totalCh ?? 19} EEG channels could be mapped from this file. The input montage may be bipolar or use non-standard labels. The result is not reliable — manual review is required.`,
                   },
                   low_confidence: {
                     title: "Low model confidence",
@@ -1239,19 +1239,19 @@ export default function StudyDetail() {
                     </div>
                   </HonestReportWrap>
                 </ReportErrorBoundary>
-              ) : study.ai_draft_json && (study.ai_draft_json as any).schema_version === "mind.report.v1" ? (
+              ) : study.triage_draft_json && (study.triage_draft_json as any).schema_version === "mind.report.v1" ? (
                 <ReportErrorBoundary>
-                  <HonestReportWrap report={study.ai_draft_json} studyId={study.id}>
+                  <HonestReportWrap report={study.triage_draft_json} studyId={study.id}>
                     <div className="space-y-4">
-                      <TrustAuditPanel report={study.ai_draft_json} />
-                      <AnalysisView report={study.ai_draft_json} studyId={study.id} />
+                      <TrustAuditPanel report={study.triage_draft_json} />
+                      <AnalysisView report={study.triage_draft_json} studyId={study.id} />
                     </div>
                   </HonestReportWrap>
                 </ReportErrorBoundary>
-              ) : study.ai_draft_json ? (
+              ) : study.triage_draft_json ? (
                 // Legacy format (old MetricsView schema)
                 <MetricsView
-                  data={study.ai_draft_json}
+                  data={study.triage_draft_json}
                   studyId={study.id}
                   patientAge={patientAge?.toString()}
                   patientGender={patientGender}
@@ -1289,7 +1289,7 @@ export default function StudyDetail() {
               <SignReportSurface
                 study={study}
                 mindReport={mindReport}
-                aiDraftJson={study.ai_draft_json}
+                triageDraftJson={study.triage_draft_json}
               />
             </CardContent>
           </Card>
@@ -1363,11 +1363,11 @@ export default function StudyDetail() {
  * back to persistDraft on save (drafts still go to iplane/localStorage).
  */
 function SignReportSurface({
-  study, mindReport, aiDraftJson,
+  study, mindReport, triageDraftJson,
 }: {
   study: any;
   mindReport: any;
-  aiDraftJson: any;
+  triageDraftJson: any;
 }) {
   const studyId = study.id as string;
   const navigate = useNavigate();
@@ -1375,8 +1375,8 @@ function SignReportSurface({
   const { isPilot } = useSku();
   const sourceReport = mindReport?.schema_version === "mind.report.v1"
     ? mindReport
-    : (aiDraftJson as any)?.schema_version === "mind.report.v1"
-      ? (aiDraftJson as any)
+    : (triageDraftJson as any)?.schema_version === "mind.report.v1"
+      ? (triageDraftJson as any)
       : null;
 
   const [initial, setInitial] = useState<ScoreV2EditState | null>(null);
@@ -1456,7 +1456,7 @@ function SignReportSurface({
     queryClient.invalidateQueries({ queryKey: ["study-detail", studyId] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] });
     queryClient.invalidateQueries({ queryKey: ["pilot-studies"] });
-    queryClient.invalidateQueries({ queryKey: ["ai-draft", studyId] });
+    queryClient.invalidateQueries({ queryKey: ["triage-draft", studyId] });
 
     const fingerprint = (data as any)?.content_sha256 ?? requestId;
     // No PDF url is returned by the RPC; the download lives on the Report

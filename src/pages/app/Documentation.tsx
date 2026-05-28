@@ -82,12 +82,12 @@ MIND models:
 - MIND-SCORE: structured annotation generation in SCORE format.
 - REVE (in training): equipment-specific denoising for matched-hardware scenarios.
 
-I-Plane returns structured JSON; C-Plane writes to studies.ai_draft_json and study_pipeline_events.`,
+I-Plane returns structured JSON; C-Plane writes to studies.triage_draft_json and study_pipeline_events.`,
       },
       {
         heading: "State Machine",
         body: `studies.state (storage + workflow state):
-  pending → awaiting_sla → uploaded → parsed → processing → ai_draft → in_review → signed
+  pending → awaiting_sla → uploaded → parsed → processing → triage_draft → in_review → signed
 
 studies.triage_status (inference state):
   pending → processing → completed | failed
@@ -119,7 +119,7 @@ ESF is immutable after creation. Reprocessing creates a new versioned record.`,
       },
       {
         heading: "SCORE Annotations",
-        body: `SCORE (Standardized Computer-based Organized Reporting of EEG) annotations are stored in studies.ai_draft_json as:
+        body: `SCORE (Standardized Computer-based Organized Reporting of EEG) annotations are stored in studies.triage_draft_json as:
 
 {
   schema_version: "mind.report.v1",

@@ -141,14 +141,14 @@ export default function Reports() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
 
-  // Studies with AI analysis complete — awaiting physician sign-off
+  // Studies with Triage analysis complete — awaiting physician sign-off
   const { data: pendingReviewStudies = [] } = useQuery({
     queryKey: ["reports-pending-review"],
     queryFn: async () => {
       const { data } = await supabase
         .from("studies")
         .select("id, sla, state, triage_status, triage_completed_at, created_at, meta, clinics(name)")
-        .in("state", ["ai_draft", "in_review"])
+        .in("state", ["triage_draft", "in_review"])
         .order("triage_completed_at", { ascending: false })
         .limit(50);
       return data ?? [];
@@ -329,7 +329,7 @@ export default function Reports() {
         </Card>
       </div>
 
-      {/* Pending Review — studies with AI analysis ready for physician sign-off */}
+      {/* Pending Review — studies with Triage analysis ready for physician sign-off */}
       {pendingReviewStudies.length > 0 && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardHeader className="pb-2">

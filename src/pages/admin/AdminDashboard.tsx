@@ -41,7 +41,7 @@ const STATE_CONFIG: Record<string, { label: string; color: string; dot: string }
   pending:      { label: "Pending",    color: "text-muted-foreground", dot: "bg-muted-foreground/40" },
   uploaded:     { label: "Uploaded",   color: "text-blue-500",         dot: "bg-blue-500" },
   processing:   { label: "Processing", color: "text-amber-500",        dot: "bg-amber-500" },
-  ai_draft:     { label: "AI Draft",   color: "text-violet-500",       dot: "bg-violet-500" },
+  triage_draft:     { label: "Triage Draft",   color: "text-violet-500",       dot: "bg-violet-500" },
   complete:     { label: "Complete",   color: "text-emerald-500",      dot: "bg-emerald-500" },
   signed:       { label: "Signed",     color: "text-emerald-600",      dot: "bg-emerald-600" },
   failed:       { label: "Failed",     color: "text-red-500",          dot: "bg-red-500" },

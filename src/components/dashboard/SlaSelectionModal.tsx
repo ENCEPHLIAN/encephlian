@@ -247,7 +247,7 @@ export default function SlaSelectionModal({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              {confirming ? "Confirm Analysis" : "Start AI Analysis"}
+              {confirming ? "Confirm Analysis" : "Start Triage analysis"}
             </DialogTitle>
           </DialogHeader>
 

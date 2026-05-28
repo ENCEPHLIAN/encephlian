@@ -29,7 +29,7 @@ export interface RejectFindingProps {
 }
 
 /**
- * One-tap reject affordance for an AI block (Internal SKU). Persists to
+ * One-tap reject affordance for an model finding (Internal SKU). Persists to
  * audit_logs with event_type='clinician_reject' and event_data carrying
  * field_id + reason_code + optional free-text. Per-clinician override rate
  * is computed downstream from these rows (RejectFinding doesn't track it).
@@ -97,7 +97,7 @@ export function RejectFinding({
             "inline-flex items-center gap-1 text-[10px] text-muted-foreground/70 hover:text-destructive transition-colors",
             className,
           )}
-          title={`Reject AI finding: ${fieldLabel}`}
+          title={`Reject finding: ${fieldLabel}`}
           aria-label={`Reject ${fieldLabel}`}
         >
           <ThumbsDown className="h-3 w-3" />

@@ -74,7 +74,7 @@ function patientLabel(meta: any): string {
 
 function buildTriageComplete(study: any): AppNotification {
   const name = patientLabel(study.meta);
-  // ai_draft_json no longer pulled into list views (egress). Classification
+  // triage_draft_json no longer pulled into list views (egress). Classification
   // is shown when the user opens the report. Notification stays informational.
   const resultStr = "";
   return {

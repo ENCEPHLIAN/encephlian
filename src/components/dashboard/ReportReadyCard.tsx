@@ -19,7 +19,7 @@ interface Study {
   refund_requested?: boolean;
   tokens_deducted?: number;
   state: string;
-  ai_draft_json?: any;
+  triage_draft_json?: any;
 }
 
 interface ReportReadyCardProps {
@@ -42,14 +42,14 @@ export default function ReportReadyCard({ study, onRequestRefund, hideRefundButt
                     dayjs().diff(completedAt, 'hour') < 48;
 
   // Classification from MIND report
-  const report = study.ai_draft_json;
+  const report = study.triage_draft_json;
   const cls = report?.classification ?? report?.triage?.classification ?? null;
   const conf = report?.triage_confidence ?? report?.triage?.confidence ?? null;
   const isNormal = cls === "normal";
   const isAbnormal = cls === "abnormal";
   const hasClassification = cls && cls !== "unknown";
 
-  // v2 honest-output summary — only shown when ai_draft_json is a full v1 report.
+  // v2 honest-output summary — only shown when triage_draft_json is a full v1 report.
   const v2Summary = (() => {
     if (report?.schema_version !== "mind.report.v1") return null;
     try { return adaptV1ToV2(report, study.id).summary; } catch { return null; }

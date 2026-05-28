@@ -77,8 +77,8 @@ const styles = StyleSheet.create({
     fontFamily: "Helvetica-Bold",
     color: "#111111",
   },
-  // ── AI chip ───────────────────────────────────────────
-  aiChip: {
+  // ── Triage chip ───────────────────────────────────────────
+  triageChip: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f0f0f0",
@@ -88,19 +88,19 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     gap: 4,
   },
-  aiLabel: {
+  triageLabel: {
     fontSize: 7,
     color: "#666666",
     textTransform: "uppercase",
     letterSpacing: 0.5,
     fontFamily: "Helvetica-Bold",
   },
-  aiValue: {
+  triageValue: {
     fontSize: 8.5,
     fontFamily: "Helvetica-Bold",
     color: "#111111",
   },
-  aiDot: {
+  triageDot: {
     fontSize: 7,
     color: "#999",
     marginHorizontal: 4,
@@ -183,8 +183,8 @@ export interface ReportPDFProps {
   };
   interpreterName?: string;
   interpreterCredentials?: string;
-  aiClassification?: string;
-  aiConfidence?: number;
+  triageClassification?: string;
+  triageConfidence?: number;
 }
 
 const SECTIONS: { key: keyof ReportPDFProps["content"]; title: string }[] = [
@@ -205,12 +205,12 @@ export function ReportDocument({
   content,
   interpreterName,
   interpreterCredentials,
-  aiClassification,
-  aiConfidence,
+  triageClassification,
+  triageConfidence,
 }: ReportPDFProps) {
-  const showAI = !!aiClassification && aiClassification !== "unknown" && aiClassification !== "inconclusive";
-  const aiLabel = showAI
-    ? aiClassification!.charAt(0).toUpperCase() + aiClassification!.slice(1)
+  const showTriage = !!triageClassification && triageClassification !== "unknown" && triageClassification !== "inconclusive";
+  const triageLabel = showTriage
+    ? triageClassification!.charAt(0).toUpperCase() + triageClassification!.slice(1)
     : null;
 
   return (
@@ -259,17 +259,17 @@ export function ReportDocument({
           </View>
         </View>
 
-        {/* ── AI classification chip ── */}
-        {showAI && (
-          <View style={styles.aiChip}>
-            <Text style={styles.aiLabel}>Classification</Text>
-            <Text style={styles.aiDot}>·</Text>
-            <Text style={styles.aiValue}>{aiLabel}</Text>
-            {typeof aiConfidence === "number" && aiConfidence >= 0.65 && (
+        {/* ── Triage classification chip ── */}
+        {showTriage && (
+          <View style={styles.triageChip}>
+            <Text style={styles.triageLabel}>Classification</Text>
+            <Text style={styles.triageDot}>·</Text>
+            <Text style={styles.triageValue}>{triageLabel}</Text>
+            {typeof triageConfidence === "number" && triageConfidence >= 0.65 && (
               <>
-                <Text style={styles.aiDot}>·</Text>
-                <Text style={[styles.aiLabel, { color: "#888" }]}>
-                  {Math.round(aiConfidence * 100)}% confidence
+                <Text style={styles.triageDot}>·</Text>
+                <Text style={[styles.triageLabel, { color: "#888" }]}>
+                  {Math.round(triageConfidence * 100)}% confidence
                 </Text>
               </>
             )}

@@ -61,7 +61,7 @@ export default function MetricsView({
           </p>
           <Badge variant="outline" className="text-[9px] gap-1">
             <Shield className="h-2.5 w-2.5" />
-            {data.model_version?.includes("ai") ? "AI" : "Deterministic"}
+            {data.model_version?.includes("ai") ? "Model" : "Deterministic"}
           </Badge>
         </div>
 

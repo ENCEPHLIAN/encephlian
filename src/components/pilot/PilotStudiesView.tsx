@@ -24,8 +24,8 @@ import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
 import type { ReportSummary } from "@/shared/mindReportV2";
 
 function getV2Summary(study: PilotStudy): ReportSummary | null {
-  const v1 = study.ai_draft_json as any;
-  // Only run the adapter when ai_draft_json is a real v1 report. Flat triage
+  const v1 = study.triage_draft_json as any;
+  // Only run the adapter when triage_draft_json is a real v1 report. Flat triage
   // blobs would yield identical pending counts on every card — misleading.
   if (!v1 || v1.schema_version !== "mind.report.v1") return null;
   try {
@@ -36,7 +36,7 @@ function getV2Summary(study: PilotStudy): ReportSummary | null {
 }
 
 function getTriageResult(study: PilotStudy): { classification: string; confidence: number } | null {
-  const report = study.ai_draft_json;
+  const report = study.triage_draft_json;
   if (!report) return null;
   const c = report.classification ?? report.triage_classification ?? null;
   const conf = report.triage_confidence ?? report.confidence ?? null;
@@ -163,8 +163,8 @@ export default function PilotStudiesView() {
         }
       }
 
-      // 3. Fallback: generate HTML report from ai_draft_json
-      const raw = study.ai_draft_json as any;
+      // 3. Fallback: generate HTML report from triage_draft_json
+      const raw = study.triage_draft_json as any;
       if (raw) {
         const meta = study.meta as any;
         const patientName = getPatientLabel(study);
@@ -301,7 +301,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
               </div>
               <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Brain className="h-3 w-3" /> AI-analyzed
+                  <Brain className="h-3 w-3" /> Triaged
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" /> ~15 min
@@ -403,7 +403,7 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
               progress < 30
                 ? "Preprocessing..."
                 : progress < 70
-                ? "AI analysis..."
+                ? "Triage analysis..."
                 : "Generating report...";
             // Time-to-result: typical pipeline = 8-15 min. Show estimate based on progress.
             const startedAt = study.sla_selected_at || study.created_at;

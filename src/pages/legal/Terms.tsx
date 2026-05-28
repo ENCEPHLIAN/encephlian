@@ -8,7 +8,7 @@ export default function Terms() {
       <ul>
         <li><strong>"Company", "we", "us", "our"</strong> means Aposematium Private Limited, a company incorporated under the Companies Act, 2013, doing business as <strong>ENCEPHLIAN</strong>.</li>
         <li><strong>"Platform"</strong> means the ENCEPHLIAN web application, application programming interfaces, inference services, viewer, and admin console.</li>
-        <li><strong>"Services"</strong> means clinical decision support for electroencephalography (EEG) interpretation, including signal ingestion, normalisation, AI-assisted triage, biomarker detection, structured reporting, and audit trails.</li>
+        <li><strong>"Services"</strong> means clinical decision support for electroencephalography (EEG) interpretation, including signal ingestion, normalisation, model-assisted triage, biomarker detection, structured reporting, and audit trails.</li>
         <li><strong>"Clinic"</strong> means the legal entity that contracts with the Company for use of the Services on behalf of its clinicians and patients.</li>
         <li><strong>"Clinician"</strong> means a registered medical practitioner authorised by a Clinic to use the Platform. Clinicians must hold a valid registration with the National Medical Commission (NMC) or a State Medical Council in India and be the physician of record for the studies they sign.</li>
         <li><strong>"Patient Data"</strong> means EEG recordings, demographics, and any other personal or sensitive personal data processed via the Platform in relation to an identifiable patient.</li>
@@ -19,7 +19,7 @@ export default function Terms() {
       <p>The Platform is offered only to (a) Clinics with a valid commercial agreement with the Company, and (b) Clinicians provisioned by such Clinics. The Company may verify medical registration, KYC, and corporate identity before activating an account. You are responsible for the accuracy of information provided and for maintaining the confidentiality of credentials. Sharing of credentials, multi-user accounts, and credential sharing across Clinics are prohibited.</p>
 
       <h2>3. Nature of the Services — Clinical Decision Support, Not Diagnosis</h2>
-      <p>The Platform is a <strong>Clinical Decision Support System (CDSS)</strong>. Outputs of the Platform — including triage scores, biomarker flags, normalised waveforms, AI-generated draft reports, and structured findings — are <em>decision-support information</em> intended to assist a qualified Clinician. They are <strong>not</strong> a diagnosis and do not replace clinical judgement.</p>
+      <p>The Platform is a <strong>Clinical Decision Support System (CDSS)</strong>. Outputs of the Platform — including triage scores, biomarker flags, normalised waveforms, model-generated draft reports, and structured findings — are <em>decision-support information</em> intended to assist a qualified Clinician. They are <strong>not</strong> a diagnosis and do not replace clinical judgement.</p>
       <p>The Clinician who signs a report is the physician of record and remains solely responsible for diagnosis, interpretation, and patient care. The Company makes no representation that any output is sufficient to establish a diagnosis or to direct treatment without independent clinician review.</p>
 
       <h2>4. Regulatory Status</h2>
@@ -28,9 +28,9 @@ export default function Terms() {
       <h2>5. Clinician Obligations</h2>
       <ul>
         <li>Use the Platform only in connection with patients for whom you are the treating Clinician or where you have a lawful basis to do so.</li>
-        <li>Obtain informed consent from patients (or their lawfully authorised representatives) for the processing of their EEG data, including its analysis by AI-assisted decision support.</li>
+        <li>Obtain informed consent from patients (or their lawfully authorised representatives) for the processing of their EEG data, including its analysis by model-assisted decision support.</li>
         <li>Comply with the <strong>NMC Telemedicine Practice Guidelines, 2020</strong>, the <strong>Indian Medical Council (Professional Conduct, Etiquette and Ethics) Regulations, 2002</strong>, and all applicable medical-records retention rules.</li>
-        <li>Review every AI-generated draft before signing. Edit the draft to reflect your clinical judgement. The signed report carries your signature and is your professional opinion.</li>
+        <li>Review every model-generated draft before signing. Edit the draft to reflect your clinical judgement. The signed report carries your signature and is your professional opinion.</li>
         <li>Do not upload data unrelated to clinical EEG interpretation. Do not attempt to reverse-engineer the models or scrape outputs.</li>
       </ul>
 
@@ -47,7 +47,7 @@ export default function Terms() {
       <p>Each party shall keep confidential all non-public information disclosed by the other in connection with these Terms and shall not disclose it to third parties except as expressly permitted herein or as required by law. This obligation survives termination.</p>
 
       <h2>10. Warranties and Disclaimers</h2>
-      <p>The Company warrants that it will provide the Services with reasonable skill and care and in accordance with applicable laws. <strong>Except as expressly stated in these Terms, the Services are provided on an "as is" and "as available" basis without any warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, accuracy of decision-support output, or non-infringement.</strong> The Company does not warrant that the Services will be uninterrupted, error-free, or that the output of any AI model will be free of false negatives or false positives. Performance metrics, where published, refer to validation on labelled datasets and are not guarantees on individual cases.</p>
+      <p>The Company warrants that it will provide the Services with reasonable skill and care and in accordance with applicable laws. <strong>Except as expressly stated in these Terms, the Services are provided on an "as is" and "as available" basis without any warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, accuracy of decision-support output, or non-infringement.</strong> The Company does not warrant that the Services will be uninterrupted, error-free, or that the output of any model will be free of false negatives or false positives. Performance metrics, where published, refer to validation on labelled datasets and are not guarantees on individual cases.</p>
 
       <h2>11. Indemnification</h2>
       <p>The Clinic shall indemnify and hold harmless the Company against all claims, damages, losses and expenses arising from (a) the Clinic's or any Clinician's use of the Services in violation of these Terms, (b) any patient claim alleging negligence in interpretation or diagnosis by the Clinician, and (c) any breach of the Clinic's regulatory obligations as a healthcare provider.</p>

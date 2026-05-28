@@ -152,7 +152,7 @@ export default function Support() {
               <AccordionTrigger className="text-base font-medium">How do I upload studies?</AccordionTrigger>
               <AccordionContent className="text-sm text-muted-foreground leading-relaxed">
                 Go to <span className="font-medium">Files → EEG Studies</span>, then drag and drop your EDF files or
-                click to browse. The system automatically parses and queues them for AI review.
+                click to browse. The system automatically parses and queues them for triage.
               </AccordionContent>
             </AccordionItem>
 

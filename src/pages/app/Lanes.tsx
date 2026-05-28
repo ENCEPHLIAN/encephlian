@@ -35,7 +35,7 @@ type SLAKey = keyof typeof SLA_CONFIG;
 const TRIAGE_STAGES = [
   { id: "uploaded",   label: "Uploaded",   icon: Upload,       description: "Awaiting SLA selection" },
   { id: "processing", label: "Processing", icon: Brain,        description: "Analysis in progress" },
-  { id: "ai_draft",   label: "Draft",      icon: Eye,          description: "Ready for review" },
+  { id: "triage_draft",   label: "Draft",      icon: Eye,          description: "Ready for review" },
   { id: "in_review",  label: "In Review",  icon: Clock,        description: "Under physician review" },
   { id: "signed",     label: "Signed",     icon: CheckCircle2, description: "Report finalized" },
 ] as const;
@@ -64,7 +64,7 @@ function getTimeInfo(study: Study): { remaining: number; overdue: boolean; forma
 /* ── Study card ─────────────────────────────────── */
 
 function getClassification(study: Study): { cls: string | null; conf: number | null } {
-  const report = (study as any).ai_draft_json;
+  const report = (study as any).triage_draft_json;
   if (!report) return { cls: null, conf: null };
   const cls = report.classification ?? report.triage?.classification ?? null;
   const conf = report.triage_confidence ?? report.triage?.confidence ?? null;
@@ -345,8 +345,8 @@ export default function Lanes() {
       processing: filteredStudies
         .filter(s => s.triage_status === "processing")
         .sort(sortByUrgency),
-      ai_draft: filteredStudies
-        .filter(s => s.state === "ai_draft" || (s.triage_status === "completed" && s.state !== "signed" && s.state !== "in_review"))
+      triage_draft: filteredStudies
+        .filter(s => s.state === "triage_draft" || (s.triage_status === "completed" && s.state !== "signed" && s.state !== "in_review"))
         .sort(sortByUrgency),
       in_review: filteredStudies
         .filter(s => s.state === "in_review")
@@ -365,7 +365,7 @@ export default function Lanes() {
     if (!stageStudies) return 0;
     return (stageStudies.uploaded?.length || 0) +
            (stageStudies.processing?.length || 0) +
-           (stageStudies.ai_draft?.length || 0) +
+           (stageStudies.triage_draft?.length || 0) +
            (stageStudies.in_review?.length || 0);
   }, [stageStudies]);
 
