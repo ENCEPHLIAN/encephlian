@@ -5,7 +5,7 @@ import { corsHeaders } from "../_shared/cors.ts";
 import { insertPipelineEvent } from "../_shared/pipeline_log.ts";
 
 /**
- * generate_ai_report — A3/A5: Trigger real C-Plane pipeline
+ * generate_triage_report — A3/A5: Trigger real C-Plane pipeline
  *
  * Called after the frontend completes direct Azure Blob upload.
  * Fires POST /process to C-Plane which runs the full ESF pipeline
@@ -100,7 +100,7 @@ serve(async (req) => {
     if (!hasSlа && !hasPaidTokens) {
       await insertPipelineEvent(supabase, {
         study_id,
-        step: "edge.generate_ai_report.gate_rejected",
+        step: "edge.generate_triage_report.gate_rejected",
         status: "error",
         source: "supabase_edge",
         correlation_id: correlationId,
@@ -119,12 +119,12 @@ serve(async (req) => {
       "completed",
       "complete",
       "in_review",
-      "ai_draft",
+      "triage_draft",
     ]);
     if (noRequeueStates.has(study.state)) {
       await insertPipelineEvent(supabase, {
         study_id,
-        step: "edge.generate_ai_report.idempotent_skip",
+        step: "edge.generate_triage_report.idempotent_skip",
         status: "skipped",
         source: "supabase_edge",
         correlation_id: correlationId,
@@ -142,7 +142,7 @@ serve(async (req) => {
 
     await insertPipelineEvent(supabase, {
       study_id,
-      step: "edge.generate_ai_report.request",
+      step: "edge.generate_triage_report.request",
       status: "info",
       source: "supabase_edge",
       correlation_id: correlationId,
@@ -156,7 +156,7 @@ serve(async (req) => {
 
     await insertPipelineEvent(supabase, {
       study_id,
-      step: "edge.generate_ai_report.cplane_dispatch",
+      step: "edge.generate_triage_report.cplane_dispatch",
       status: "info",
       source: "supabase_edge",
       correlation_id: correlationId,
@@ -175,7 +175,7 @@ serve(async (req) => {
       console.error(`[${study_id}] C-Plane /process error ${cplaneRes.status}: ${errText}`);
       await insertPipelineEvent(supabase, {
         study_id,
-        step: "edge.generate_ai_report.cplane_http_error",
+        step: "edge.generate_triage_report.cplane_http_error",
         status: "error",
         source: "supabase_edge",
         correlation_id: correlationId,
@@ -206,7 +206,7 @@ serve(async (req) => {
 
     await insertPipelineEvent(supabase, {
       study_id,
-      step: "edge.generate_ai_report.cplane_queued",
+      step: "edge.generate_triage_report.cplane_queued",
       status: "ok",
       source: "supabase_edge",
       correlation_id: correlationId,
@@ -219,7 +219,7 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error("generate_ai_report:", error);
+    console.error("generate_triage_report:", error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },

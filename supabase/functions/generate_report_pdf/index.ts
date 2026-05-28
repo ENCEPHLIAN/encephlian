@@ -38,7 +38,7 @@ serve(async (req) => {
       .from("reports")
       .select(`
         *,
-        studies!inner(id, meta, created_at, ai_draft_json, clinics(name, brand_name)),
+        studies!inner(id, meta, created_at, triage_draft_json, clinics(name, brand_name)),
         profiles!interpreter(full_name, credentials, medical_license_number)
       `)
       .eq("id", reportId)
@@ -47,7 +47,7 @@ serve(async (req) => {
     if (reportError) throw reportError;
 
     const signed    = report.content as any || {};          // neurologist's edited text
-    const mindData  = report.studies.ai_draft_json as any;  // mind.report.v1
+    const mindData  = report.studies.triage_draft_json as any;  // mind.report.v1
     const studyMeta = report.studies.meta as any || {};
     const clinicName = report.studies.clinics?.brand_name || report.studies.clinics?.name || "ENCEPHLIAN";
     const isMindV1  = mindData?.schema_version === "mind.report.v1";
@@ -354,7 +354,7 @@ serve(async (req) => {
     setFont("italic", 7);
     pdf.setTextColor(140);
     const disclaimer =
-      "This report was generated with MIND® AI-assisted EEG analysis. " +
+      "This report was generated with MIND® model-assisted EEG analysis. " +
       "Machine findings require clinical interpretation by a qualified neurologist. " +
       "ENCEPHLIAN Platform · MIND® v" + (mindData?.pipeline_version || "1.x");
     const discLines = pdf.splitTextToSize(disclaimer, CW);

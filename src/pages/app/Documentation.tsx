@@ -181,7 +181,7 @@ Reads first 64KB only (EDF header max ~8KB). Extracts patient identification fie
 Merges extracted fields into studies.meta (fill-only). Updates studies.state → parsed, studies.srate_hz, studies.duration_min.`,
       },
       {
-        heading: "generate_ai_report",
+        heading: "generate_triage_report",
         body: `POST — triggers the full C-Plane → I-Plane triage pipeline.
 
 Request: { study_id, sla? }
@@ -397,7 +397,7 @@ Key tables: studies, study_files, study_pipeline_events, reports, report_drafts,
 Realtime: enabled on studies, study_pipeline_events, wallet_transactions
 Storage buckets: eeg-uploads, eeg-raw, eeg-json, eeg-reports
 
-Edge functions deployed: parse_eeg_study, create_study_from_upload, generate_ai_report, send_triage_notification`,
+Edge functions deployed: parse_eeg_study, create_study_from_upload, generate_triage_report, send_triage_notification`,
       },
     ],
   },

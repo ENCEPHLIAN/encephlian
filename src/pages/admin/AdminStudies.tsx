@@ -73,7 +73,7 @@ export default function AdminStudies() {
 
   const retryMutation = useMutation({
     mutationFn: async (studyId: string) => {
-      const res = await supabase.functions.invoke("generate_ai_report", {
+      const res = await supabase.functions.invoke("generate_triage_report", {
         body: { study_id: studyId },
       });
       if (res.error) throw res.error;
@@ -123,7 +123,7 @@ export default function AdminStudies() {
       const ids = failedStudies.map((s) => s.id);
       await Promise.allSettled(
         ids.map((sid) =>
-          supabase.functions.invoke("generate_ai_report", { body: { study_id: sid } })
+          supabase.functions.invoke("generate_triage_report", { body: { study_id: sid } })
         )
       );
     },

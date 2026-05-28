@@ -23,7 +23,7 @@ function generateEncStudyReference(): string {
  * Request:  { fileName: string, contentSha256?: string }
  * Response: { studyId, sasUrl, blobPath, expiresAt } | duplicate: { studyId, duplicate: true, message }
  *
- * After upload completes, call generate_ai_report({ study_id }) to start pipeline.
+ * After upload completes, call generate_triage_report({ study_id }) to start pipeline.
  */
 
 serve(async (req) => {

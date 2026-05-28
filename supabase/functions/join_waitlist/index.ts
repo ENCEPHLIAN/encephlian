@@ -60,12 +60,12 @@ serve(async (req) => {
       body: JSON.stringify({
         from: "ENCEPHLIAN <noreply@encephlian.cloud>",
         to: ["info@encephlian.cloud"],
-        subject: `Waitlist Signup: ${feature || "AI Anomaly Detection"}`,
+        subject: `Waitlist Signup: ${feature || "Anomaly Detection"}`,
         html: `
           <h2>New Waitlist Signup</h2>
           <p><strong>Name:</strong> ${profile?.full_name || "Unknown"}</p>
           <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Feature:</strong> ${feature || "AI Anomaly Detection"}</p>
+          <p><strong>Feature:</strong> ${feature || "Anomaly Detection"}</p>
           <p><strong>User ID:</strong> ${user.id}</p>
           <p><strong>Time:</strong> ${new Date().toISOString()}</p>
         `,
@@ -82,7 +82,7 @@ serve(async (req) => {
     await supabase.from("audit_logs").insert({
       user_id: user.id,
       event_type: "waitlist_joined",
-      event_data: { email, feature: feature || "AI Anomaly Detection" }
+      event_data: { email, feature: feature || "Anomaly Detection" }
     });
 
     console.log("Waitlist signup processed:", email);

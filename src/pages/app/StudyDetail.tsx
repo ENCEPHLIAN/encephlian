@@ -338,7 +338,7 @@ export default function StudyDetail() {
     try {
       await toast.promise(
         (async () => {
-          const { error } = await supabase.functions.invoke("generate_ai_report", { body });
+          const { error } = await supabase.functions.invoke("generate_triage_report", { body });
           if (error) throw error;
           void refetch();
           void refetchMind();
@@ -360,7 +360,7 @@ export default function StudyDetail() {
     try {
       await toast.promise(
         (async () => {
-          const { error } = await supabase.functions.invoke("generate_ai_report", {
+          const { error } = await supabase.functions.invoke("generate_triage_report", {
             body: { study_id: id },
           });
           if (error) throw error;
@@ -1437,6 +1437,10 @@ function SignReportSurface({
     crypto.getRandomValues(reqArr);
     const requestId = "sign_" + Array.from(reqArr, (b) => b.toString(16).padStart(2, "0")).join("");
 
+    // IMPORTANT: pass p_request_id explicitly. There are two RPC overloads
+    // in the DB (4-arg and 5-arg with p_request_id DEFAULT NULL); a 4-arg
+    // call matches both equally and PostgREST errors "Could not choose the
+    // best candidate function between …".
     const { data, error } = await supabase.rpc("consume_credit_and_sign", {
       p_user_id: userId,
       p_study_id: studyId,
@@ -1447,6 +1451,7 @@ function SignReportSurface({
         request_id: requestId,
         signed_at: new Date().toISOString(),
       },
+      p_request_id: requestId,
     });
     if (error) throw error;
 

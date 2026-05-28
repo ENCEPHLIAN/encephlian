@@ -89,7 +89,7 @@ BEGIN
     v_test_study_id,
     v_user_id,
     v_internal_clinic_id,
-    'ai_draft',
+    'triage_draft',
     '24H',
     'azure_blob',
     'blob:eeg-raw/0918b2e1-d3ac-4728-a248-f627f503b4f9.edf',

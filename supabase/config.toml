@@ -48,7 +48,7 @@ verify_jwt = false
 verify_jwt = false
 
 # --- Report Generation ---
-[functions.generate_ai_report]
+[functions.generate_triage_report]
 verify_jwt = false
 
 [functions.generate_report_pdf]

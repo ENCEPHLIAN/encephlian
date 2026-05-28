@@ -205,7 +205,7 @@ export default function SlaSelectionModal({
         });
       } else {
         // Internal: SLA selection recorded server-side, no token deduction
-        const { error } = await supabase.functions.invoke("generate_ai_report", {
+        const { error } = await supabase.functions.invoke("generate_triage_report", {
           body: { study_id: study.id, sla: selected },
         });
         if (error) throw error;
