@@ -384,6 +384,17 @@ export default function Lanes() {
     return Math.round((overdueCount / activeCount) * 100);
   }, [overdueCount, activeCount]);
 
+  // Per-bucket SLA compliance — count + overdue per SLA. Excludes signed
+  // (they no longer have an active deadline). Empty buckets hidden.
+  const slaCompliance = useMemo(() => {
+    if (!studies) return [];
+    return (["STAT", "24H", "48H", "ROUTINE"] as const).map((bucket) => {
+      const inBucket = studies.filter(s => s.sla === bucket && s.state !== "signed");
+      const overdue = inBucket.filter(s => getTimeInfo(s).overdue).length;
+      return { bucket, total: inBucket.length, overdue };
+    }).filter(b => b.total > 0);
+  }, [studies]);
+
   if (isLoading) return <LanesSkeleton />;
 
   if (isError) {
@@ -481,6 +492,34 @@ export default function Lanes() {
           </div>
         )}
       </div>
+
+      {/* SLA-bucket compliance row */}
+      {slaCompliance.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+            SLA compliance
+          </span>
+          {slaCompliance.map((b) => (
+            <div
+              key={b.bucket}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] tabular-nums",
+                b.overdue > 0
+                  ? "border-destructive/30 bg-destructive/5"
+                  : "border-emerald-500/20 bg-emerald-500/5",
+              )}
+            >
+              <span className="font-semibold">{b.bucket}</span>
+              <span className="font-mono">{b.total}</span>
+              {b.overdue > 0 ? (
+                <span className="text-destructive font-medium">({b.overdue} overdue)</span>
+              ) : (
+                <span className="text-emerald-600 dark:text-emerald-400">on-time</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Kanban board */}
       <div className="flex-1 overflow-x-auto">

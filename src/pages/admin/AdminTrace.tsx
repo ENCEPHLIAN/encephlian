@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -69,17 +70,29 @@ function CopyChip({ value }: { value: string }) {
 }
 
 export default function AdminTrace() {
-  const [query, setQuery] = useState("");
-  const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQ = searchParams.get("q") ?? "";
+  const [query, setQuery] = useState(initialQ);
+  const [searchedQuery, setSearchedQuery] = useState<string | null>(initialQ || null);
+
+  // Keep URL in sync when user searches. Allows deep-link from StudyDetail
+  // ("Open in trace") and copy-pasteable shareable URLs.
+  useEffect(() => {
+    if (searchedQuery && searchParams.get("q") !== searchedQuery) {
+      setSearchParams({ q: searchedQuery }, { replace: true });
+    }
+  }, [searchedQuery, searchParams, setSearchParams]);
 
   const audit = useQuery<AuditRow[]>({
     queryKey: ["admin-trace-audit", searchedQuery],
     enabled: !!searchedQuery,
     queryFn: async () => {
+      // Search request_id, embedded request_id, AND resource_id — so a
+      // study UUID, request_id, or audit-row id all hit.
       const { data, error } = await supabase
         .from("audit_logs")
         .select("id, created_at, event_type, action, resource_type, resource_id, user_id, actor_email, actor_role, event_data, request_id")
-        .or(`request_id.eq.${searchedQuery},event_data->>request_id.eq.${searchedQuery}`)
+        .or(`request_id.eq.${searchedQuery},event_data->>request_id.eq.${searchedQuery},resource_id.eq.${searchedQuery}`)
         .order("created_at", { ascending: true })
         .limit(500);
       if (error) throw error;
@@ -106,6 +119,7 @@ export default function AdminTrace() {
     const trimmed = query.trim();
     if (!trimmed) return;
     setSearchedQuery(trimmed);
+    setSearchParams({ q: trimmed }, { replace: true });
   };
 
   const auditCount = audit.data?.length ?? 0;

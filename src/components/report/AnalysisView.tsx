@@ -20,6 +20,7 @@ import {
   Activity, Brain, Shield, Zap, Clock, AlertCircle,
   CheckCircle2, Info, ExternalLink, Waves, FileText,
 } from "lucide-react";
+import { RejectFinding } from "./RejectFinding";
 
 interface AnalysisViewProps {
   report: any;
@@ -455,7 +456,12 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
         <div className="flex items-center gap-2">
           <Zap className="h-3.5 w-3.5 text-muted-foreground" />
           <h3 className="text-xs font-medium">Seizure Detection</h3>
-          <Badge variant="outline" className="text-[9px] ml-auto" title="Rule-based heuristic (Z-score spike rule). VERTEX seizure head not yet deployed.">{seizure.model || "heuristic_v0.1"} · rule-based</Badge>
+          <div className="ml-auto flex items-center gap-2">
+            <Badge variant="outline" className="text-[9px]" title="Rule-based heuristic (Z-score spike rule). VERTEX seizure head not yet deployed.">{seizure.model || "heuristic_v0.1"} · rule-based</Badge>
+            {studyId && (
+              <RejectFinding studyId={studyId} fieldId="ictal.seizure_events" fieldLabel="Seizure detection" />
+            )}
+          </div>
         </div>
         {ictNote && (
           <p className="text-[10px] text-muted-foreground px-1">{ictNote}</p>

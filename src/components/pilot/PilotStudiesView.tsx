@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { getPatientLabel } from "@/lib/studyDisplay";
 import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
-import { ThreeCounterStrip } from "@/components/report/ThreeCounterStrip";
 import type { ReportSummary } from "@/shared/mindReportV2";
 
 function getV2Summary(study: PilotStudy): ReportSummary | null {
@@ -568,8 +567,11 @@ ${sections.map(s => `<h2>${s.h}</h2>\n<p>${s.t}</p>`).join("\n")}
                       {src && (
                         <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5" title={src}>{src}</p>
                       )}
-                      {v2Summary && (
-                        <ThreeCounterStrip summary={v2Summary} size="sm" className="mt-1.5" />
+                      {v2Summary && v2Summary.pending_count > 0 && (
+                        <p className="text-[10px] text-amber-700/70 dark:text-amber-400/70 mt-1">
+                          {v2Summary.pending_count} finding{v2Summary.pending_count !== 1 ? "s" : ""} pending
+                          {v2Summary.limitations_count > 0 && ` · ${v2Summary.limitations_count} limitation${v2Summary.limitations_count !== 1 ? "s" : ""}`}
+                        </p>
                       )}
                     </div>
 

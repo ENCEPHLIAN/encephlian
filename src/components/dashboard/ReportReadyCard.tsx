@@ -7,7 +7,6 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { cn } from "@/lib/utils";
 import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
-import { ThreeCounterStrip } from "@/components/report/ThreeCounterStrip";
 
 dayjs.extend(relativeTime);
 
@@ -111,8 +110,11 @@ export default function ReportReadyCard({ study, onRequestRefund, hideRefundButt
                 </Badge>
               )}
             </div>
-            {v2Summary && (
-              <ThreeCounterStrip summary={v2Summary} size="sm" className="mt-1.5" />
+            {v2Summary && v2Summary.pending_count > 0 && (
+              <p className="text-[10px] text-amber-700/70 dark:text-amber-400/70 mt-1">
+                {v2Summary.pending_count} finding{v2Summary.pending_count !== 1 ? "s" : ""} pending
+                {v2Summary.limitations_count > 0 && ` · ${v2Summary.limitations_count} limitation${v2Summary.limitations_count !== 1 ? "s" : ""}`}
+              </p>
             )}
           </div>
 

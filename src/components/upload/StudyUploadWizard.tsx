@@ -718,7 +718,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
             Step {step} of {wizardSteps.length}: {wizardSteps[step - 1]?.label ?? ""}
             {isPilot && (
               <span className="block mt-1 text-xs">
-                After upload, pick Standard or Priority on Studies — tokens apply only then.
+                Upload is free. Triage costs <span className="font-mono font-semibold">1 token</span> (Standard, ~15 min) or <span className="font-mono font-semibold">2 tokens</span> (Priority, ~5 min), charged when you start it on Studies.
               </span>
             )}
           </DialogDescription>
