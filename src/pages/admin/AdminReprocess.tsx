@@ -107,6 +107,7 @@ export default function AdminReprocess() {
   const [createdAfter, setCreatedAfter]    = useState("");
   const [schemaVersionFilter, setSchemaVersionFilter] = useState("ALL");
   const [submitting, setSubmitting]        = useState(false);
+  const [processing, setProcessing]        = useState(false);
 
   const resetForm = () => {
     setDescription("");
@@ -204,23 +205,56 @@ export default function AdminReprocess() {
             executor picks them up and updates progress.
           </p>
         </div>
-        <Button size="sm" onClick={() => setOpenForm((v) => !v)} className="gap-1.5">
-          <Play className="h-3.5 w-3.5" />
-          {openForm ? "Close" : "New job"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              setProcessing(true);
+              try {
+                const { data, error } = await supabase.functions.invoke("reprocess_executor", { body: {} });
+                if (error) throw error;
+                if (data?.idle) {
+                  toast.info("Queue idle", { description: "No queued or running jobs to process." });
+                } else if (data?.job_complete) {
+                  toast.success(`Job complete · ${data.processed ?? 0} processed${data.failed ? `, ${data.failed} failed` : ""}`);
+                } else {
+                  toast.success(`Processed ${data?.processed ?? 0} / ${data?.total ?? "?"}`, {
+                    description: `Run again to continue the batch. job=${data?.job_id?.slice(0, 8) ?? "?"}`,
+                  });
+                }
+                qc.invalidateQueries({ queryKey: ["admin", "reprocess", "jobs"] });
+              } catch (e: any) {
+                toast.error("Executor invoke failed", { description: e?.message ?? "unknown" });
+              } finally {
+                setProcessing(false);
+              }
+            }}
+            disabled={processing}
+            className="gap-1.5"
+            title="Run reprocess_executor edge function once. Processes up to 25 studies of the oldest queued/running job."
+          >
+            {processing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+            Process queue
+          </Button>
+          <Button size="sm" onClick={() => setOpenForm((v) => !v)} className="gap-1.5">
+            <Play className="h-3.5 w-3.5" />
+            {openForm ? "Close" : "New job"}
+          </Button>
+        </div>
       </div>
 
-      {/* Executor notice — surfaced ONLY when there are queued jobs */}
+      {/* Executor hint — explain the trigger options when jobs are queued */}
       {noExecutorYet && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
+        <Card className="border-border/60 bg-muted/30">
           <CardContent className="p-3 flex items-start gap-2.5">
-            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-snug">
-              The reprocess executor is not yet running. Queued jobs will sit
-              until a worker is deployed (planned: an edge function that polls
-              <span className="font-mono"> status='queued' </span>, iterates the
-              filter, calls <span className="font-mono">generate_triage_report</span>
-              per study, and updates progress).
+              Jobs are picked up by <span className="font-mono">reprocess_executor</span>.
+              Click <span className="font-medium">Process queue</span> to run one batch (≤ 25 studies)
+              now, or wire pg_cron to invoke it every minute. Each batch calls
+              <span className="font-mono"> promote_to_v2 </span> per study so all §9 gates fire on the
+              re-validated payload.
             </p>
           </CardContent>
         </Card>
