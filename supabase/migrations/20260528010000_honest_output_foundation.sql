@@ -808,60 +808,67 @@ END $$;
 
 DO $$
 DECLARE
-  test_study uuid;
-  payload jsonb;
-  out_payload jsonb;
+  test_study   uuid;
+  test_marker  text := 'vigil_test_marker_' || encode(gen_random_bytes(4), 'hex');
+  payload      jsonb;
+  out_payload  jsonb;
   field_derived text;
   field_reason text;
 BEGIN
-  -- Test 4: enforce_channel_gate DEMOTES fields whose required_channels intersect bad channels
-  -- Create a temp study with one bad channel; verify gate forces pending.
-  -- We need a real studies row + a real channel_quality row. Use temp via savepoint.
-  SAVEPOINT gate_test;
+  -- Test 4: enforce_channel_gate DEMOTES fields whose required_channels
+  -- intersect bad channels. We can't use SAVEPOINT inside a PL/pgSQL DO
+  -- block (PostgreSQL forbids it), so we use INSERT + assert + DELETE
+  -- and gate everything on a unique source marker so a failed test
+  -- can be re-run without colliding with leftover rows.
 
-  -- Need a clinic and an owner. Find any existing clinic + user. If none, skip.
-  test_study := NULL;
   SELECT s.id INTO test_study FROM public.studies s LIMIT 1;
   IF test_study IS NULL THEN
     RAISE NOTICE 'TEST SKIP: enforce_channel_gate with bad channel (no studies row to borrow)';
-    ROLLBACK TO SAVEPOINT gate_test;
     RETURN;
   END IF;
 
-  -- Borrow the study's id but DON'T persist the channel quality row.
-  INSERT INTO public.channel_quality_assessments
-    (study_id, channel_label, source, source_version, quality_class, confidence)
-  VALUES
-    (test_study, 'O1', 'vigil_test_marker', 'test', 'bad', 0.95);
+  BEGIN
+    INSERT INTO public.channel_quality_assessments
+      (study_id, channel_label, source, source_version, quality_class, confidence)
+    VALUES
+      (test_study, 'O1', test_marker, 'test', 'bad', 0.95);
 
-  payload := jsonb_build_object(
-    'signature', jsonb_build_object(
-      'x', jsonb_build_object(
-        'field_id', 'signature.x',
-        'value', 9.2,
-        'provenance', jsonb_build_object(
-          'derived_from', 'model',
-          'source', 'mind_triage_v3',
-          'model_name', 'mind_triage',
-          'model_version', '3.0.1'
-        ),
-        'required_channels', jsonb_build_array('O1', 'O2')
+    payload := jsonb_build_object(
+      'signature', jsonb_build_object(
+        'x', jsonb_build_object(
+          'field_id', 'signature.x',
+          'value', 9.2,
+          'provenance', jsonb_build_object(
+            'derived_from', 'model',
+            'source', 'mind_triage_v3',
+            'model_name', 'mind_triage',
+            'model_version', '3.0.1'
+          ),
+          'required_channels', jsonb_build_array('O1', 'O2')
+        )
       )
-    )
-  );
-  out_payload := public.enforce_channel_gate(test_study, payload);
-  field_derived := out_payload->'signature'->'x'->'provenance'->>'derived_from';
-  field_reason  := out_payload->'signature'->'x'->'provenance'->>'pending_reason';
+    );
+    out_payload := public.enforce_channel_gate(test_study, payload);
+    field_derived := out_payload->'signature'->'x'->'provenance'->>'derived_from';
+    field_reason  := out_payload->'signature'->'x'->'provenance'->>'pending_reason';
 
-  IF field_derived <> 'pending' THEN
-    RAISE EXCEPTION 'enforce_channel_gate test failed: expected pending when O1 is bad, got %', field_derived;
-  END IF;
-  IF field_reason IS NULL OR field_reason NOT LIKE '%O1%' THEN
-    RAISE EXCEPTION 'enforce_channel_gate test failed: expected pending_reason to mention O1, got %', field_reason;
-  END IF;
-  RAISE NOTICE 'TEST PASS: enforce_channel_gate demotes O1-dependent field to pending';
+    IF field_derived <> 'pending' THEN
+      RAISE EXCEPTION 'enforce_channel_gate test failed: expected pending when O1 is bad, got %', field_derived;
+    END IF;
+    IF field_reason IS NULL OR field_reason NOT LIKE '%O1%' THEN
+      RAISE EXCEPTION 'enforce_channel_gate test failed: expected pending_reason to mention O1, got %', field_reason;
+    END IF;
+    RAISE NOTICE 'TEST PASS: enforce_channel_gate demotes O1-dependent field to pending';
 
-  ROLLBACK TO SAVEPOINT gate_test;
+    -- Clean up test row (idempotent on the unique source marker).
+    DELETE FROM public.channel_quality_assessments
+     WHERE study_id = test_study AND source = test_marker;
+  EXCEPTION WHEN OTHERS THEN
+    -- Best-effort cleanup even on assertion failure, then re-raise.
+    DELETE FROM public.channel_quality_assessments
+     WHERE study_id = test_study AND source = test_marker;
+    RAISE;
+  END;
 END $$;
 
 -- Final notice
