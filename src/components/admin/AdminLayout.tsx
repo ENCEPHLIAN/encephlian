@@ -29,6 +29,8 @@ import {
   Search,
   Brain,
   Edit3,
+  Gauge,
+  RefreshCw,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -58,7 +60,9 @@ const NAV_SECTIONS = [
     title: "Honest output",
     items: [
       { name: "Models", href: "/admin/models", icon: Brain },
+      { name: "Calibration", href: "/admin/calibration", icon: Gauge },
       { name: "Edit deltas", href: "/admin/edit-deltas", icon: Edit3 },
+      { name: "Reprocess", href: "/admin/reprocess", icon: RefreshCw },
     ],
   },
   {

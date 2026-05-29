@@ -68,6 +68,8 @@ const AdminClinicianNew = lazy(() => import("./pages/admin/AdminClinicianNew"));
 const AdminTrace = lazy(() => import("./pages/admin/AdminTrace"));
 const AdminModels      = lazy(() => import("./pages/admin/AdminModels"));
 const AdminEditDeltas  = lazy(() => import("./pages/admin/AdminEditDeltas"));
+const AdminCalibration = lazy(() => import("./pages/admin/AdminCalibration"));
+const AdminReprocess   = lazy(() => import("./pages/admin/AdminReprocess"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -136,6 +138,8 @@ function App() {
                     <Route path="trace" element={<Suspense fallback={<PageLoader />}><AdminTrace /></Suspense>} />
                     <Route path="models" element={<Suspense fallback={<PageLoader />}><AdminModels /></Suspense>} />
                     <Route path="edit-deltas" element={<Suspense fallback={<PageLoader />}><AdminEditDeltas /></Suspense>} />
+                    <Route path="calibration" element={<Suspense fallback={<PageLoader />}><AdminCalibration /></Suspense>} />
+                    <Route path="reprocess" element={<Suspense fallback={<PageLoader />}><AdminReprocess /></Suspense>} />
                     <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
                     <Route path="data-push" element={<Suspense fallback={<PageLoader />}><AdminDataPush /></Suspense>} />
                     <Route path="read-api" element={<Suspense fallback={<PageLoader />}><AdminReadApi /></Suspense>} />
