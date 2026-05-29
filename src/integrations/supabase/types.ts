@@ -10,38 +10,123 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
+    PostgrestVersion: "14.4"
   }
   public: {
     Tables: {
-      report_drafts: {
+      audit_logs: {
         Row: {
-          created_at: string | null
-          draft: Json
+          action: string | null
+          actor_email: string | null
+          actor_role: string | null
+          after_state: Json | null
+          before_state: Json | null
+          created_at: string
+          db_role: string | null
+          event_data: Json | null
+          event_type: string
+          hash_prev: string | null
+          hash_self: string | null
           id: string
-          model: string | null
-          study_id: string | null
-          version: string | null
+          ip_address: unknown
+          request_id: string | null
+          resource_id: string | null
+          resource_type: string | null
+          session_id: string | null
+          user_agent: string | null
+          user_id: string | null
         }
         Insert: {
-          created_at?: string | null
-          draft: Json
+          action?: string | null
+          actor_email?: string | null
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          db_role?: string | null
+          event_data?: Json | null
+          event_type: string
+          hash_prev?: string | null
+          hash_self?: string | null
           id?: string
-          model?: string | null
-          study_id?: string | null
-          version?: string | null
+          ip_address?: unknown
+          request_id?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
         }
         Update: {
-          created_at?: string | null
-          draft?: Json
+          action?: string | null
+          actor_email?: string | null
+          actor_role?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          created_at?: string
+          db_role?: string | null
+          event_data?: Json | null
+          event_type?: string
+          hash_prev?: string | null
+          hash_self?: string | null
           id?: string
-          model?: string | null
-          study_id?: string | null
-          version?: string | null
+          ip_address?: unknown
+          request_id?: string | null
+          resource_id?: string | null
+          resource_type?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      channel_quality_assessments: {
+        Row: {
+          assessed_at: string
+          channel_label: string
+          confidence: number | null
+          details: Json | null
+          id: string
+          quality_class: string
+          source: string
+          source_model_id: string | null
+          source_version: string | null
+          study_id: string
+        }
+        Insert: {
+          assessed_at?: string
+          channel_label: string
+          confidence?: number | null
+          details?: Json | null
+          id?: string
+          quality_class: string
+          source: string
+          source_model_id?: string | null
+          source_version?: string | null
+          study_id: string
+        }
+        Update: {
+          assessed_at?: string
+          channel_label?: string
+          confidence?: number | null
+          details?: Json | null
+          id?: string
+          quality_class?: string
+          source?: string
+          source_model_id?: string | null
+          source_version?: string | null
+          study_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "triage_drafts_study_id_fkey"
+            foreignKeyName: "channel_quality_assessments_source_model_id_fkey"
+            columns: ["source_model_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_quality_assessments_study_id_fkey"
             columns: ["study_id"]
             isOneToOne: false
             referencedRelation: "studies"
@@ -49,35 +134,148 @@ export type Database = {
           },
         ]
       }
-      audit_logs: {
+      clinic_documents: {
         Row: {
+          clinic_id: string
+          countersigned_at: string | null
+          countersigned_by: string | null
           created_at: string
-          event_data: Json | null
-          event_type: string
+          created_by: string | null
+          doc_type: string
+          effective_date: string | null
+          expiry_date: string | null
+          file_mime: string | null
+          file_path: string | null
+          file_sha256: string | null
+          file_size_bytes: number | null
           id: string
-          ip_address: unknown
-          user_agent: string | null
-          user_id: string | null
+          notes: string | null
+          parent_document_id: string | null
+          sent_at: string | null
+          sent_by: string | null
+          signature_method: string
+          signature_provider_envelope_id: string | null
+          signed_at: string | null
+          signed_by_email: string | null
+          signed_by_name: string | null
+          signed_by_role: string | null
+          signed_ip: unknown
+          status: string
+          updated_at: string
+          version: number
+          viewed_at: string | null
         }
         Insert: {
+          clinic_id: string
+          countersigned_at?: string | null
+          countersigned_by?: string | null
           created_at?: string
-          event_data?: Json | null
-          event_type: string
+          created_by?: string | null
+          doc_type: string
+          effective_date?: string | null
+          expiry_date?: string | null
+          file_mime?: string | null
+          file_path?: string | null
+          file_sha256?: string | null
+          file_size_bytes?: number | null
           id?: string
-          ip_address?: unknown
-          user_agent?: string | null
-          user_id?: string | null
+          notes?: string | null
+          parent_document_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          signature_method?: string
+          signature_provider_envelope_id?: string | null
+          signed_at?: string | null
+          signed_by_email?: string | null
+          signed_by_name?: string | null
+          signed_by_role?: string | null
+          signed_ip?: unknown
+          status?: string
+          updated_at?: string
+          version?: number
+          viewed_at?: string | null
         }
         Update: {
+          clinic_id?: string
+          countersigned_at?: string | null
+          countersigned_by?: string | null
           created_at?: string
-          event_data?: Json | null
-          event_type?: string
+          created_by?: string | null
+          doc_type?: string
+          effective_date?: string | null
+          expiry_date?: string | null
+          file_mime?: string | null
+          file_path?: string | null
+          file_sha256?: string | null
+          file_size_bytes?: number | null
           id?: string
-          ip_address?: unknown
-          user_agent?: string | null
-          user_id?: string | null
+          notes?: string | null
+          parent_document_id?: string | null
+          sent_at?: string | null
+          sent_by?: string | null
+          signature_method?: string
+          signature_provider_envelope_id?: string | null
+          signed_at?: string | null
+          signed_by_email?: string | null
+          signed_by_name?: string | null
+          signed_by_role?: string | null
+          signed_ip?: unknown
+          status?: string
+          updated_at?: string
+          version?: number
+          viewed_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clinic_documents_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_countersigned_by_fkey"
+            columns: ["countersigned_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_parent_document_id_fkey"
+            columns: ["parent_document_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_documents_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       clinic_memberships: {
         Row: {
@@ -100,14 +298,94 @@ export type Database = {
             foreignKeyName: "clinic_memberships_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
           },
           {
             foreignKeyName: "clinic_memberships_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clinician_edit_deltas: {
+        Row: {
+          client_request_id: string | null
+          clinician_id: string
+          created_at: string
+          edit_type: string
+          field_id: string
+          id: string
+          information_value: number | null
+          new_value: Json | null
+          original_derived_from: string | null
+          original_value: Json | null
+          reason_code: string | null
+          reason_text: string | null
+          source_emission_id: string | null
+          study_id: string
+        }
+        Insert: {
+          client_request_id?: string | null
+          clinician_id: string
+          created_at?: string
+          edit_type: string
+          field_id: string
+          id?: string
+          information_value?: number | null
+          new_value?: Json | null
+          original_derived_from?: string | null
+          original_value?: Json | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source_emission_id?: string | null
+          study_id: string
+        }
+        Update: {
+          client_request_id?: string | null
+          clinician_id?: string
+          created_at?: string
+          edit_type?: string
+          field_id?: string
+          id?: string
+          information_value?: number | null
+          new_value?: Json | null
+          original_derived_from?: string | null
+          original_value?: Json | null
+          reason_code?: string | null
+          reason_text?: string | null
+          source_emission_id?: string | null
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clinician_edit_deltas_source_emission_id_fkey"
+            columns: ["source_emission_id"]
+            isOneToOne: false
+            referencedRelation: "report_emission_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinician_edit_deltas_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
             referencedColumns: ["id"]
           },
         ]
@@ -165,6 +443,133 @@ export type Database = {
           tz?: string | null
         }
         Relationships: []
+      }
+      model_calibration_runs: {
+        Row: {
+          brier_score: number | null
+          ece: number | null
+          holdout_set_label: string
+          id: string
+          measured_at: string
+          measured_by: string | null
+          model_version_id: string
+          n_samples: number
+          notes: string | null
+          platt_a: number | null
+          platt_b: number | null
+          reliability_diagram: Json | null
+          threshold_metrics: Json | null
+        }
+        Insert: {
+          brier_score?: number | null
+          ece?: number | null
+          holdout_set_label: string
+          id?: string
+          measured_at?: string
+          measured_by?: string | null
+          model_version_id: string
+          n_samples: number
+          notes?: string | null
+          platt_a?: number | null
+          platt_b?: number | null
+          reliability_diagram?: Json | null
+          threshold_metrics?: Json | null
+        }
+        Update: {
+          brier_score?: number | null
+          ece?: number | null
+          holdout_set_label?: string
+          id?: string
+          measured_at?: string
+          measured_by?: string | null
+          model_version_id?: string
+          n_samples?: number
+          notes?: string | null
+          platt_a?: number | null
+          platt_b?: number | null
+          reliability_diagram?: Json | null
+          threshold_metrics?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_calibration_runs_model_version_id_fkey"
+            columns: ["model_version_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      model_versions: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deployed_at: string | null
+          deprecated_at: string | null
+          emits_schema_name: string | null
+          emits_schema_version: string | null
+          family: string
+          id: string
+          model_card_url: string | null
+          name: string
+          notes: string | null
+          status: string
+          training_corpus: string | null
+          updated_at: string
+          validation_metrics: Json | null
+          version: string
+          weights_blob_path: string | null
+          weights_sha256: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deployed_at?: string | null
+          deprecated_at?: string | null
+          emits_schema_name?: string | null
+          emits_schema_version?: string | null
+          family: string
+          id?: string
+          model_card_url?: string | null
+          name: string
+          notes?: string | null
+          status: string
+          training_corpus?: string | null
+          updated_at?: string
+          validation_metrics?: Json | null
+          version: string
+          weights_blob_path?: string | null
+          weights_sha256?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deployed_at?: string | null
+          deprecated_at?: string | null
+          emits_schema_name?: string | null
+          emits_schema_version?: string | null
+          family?: string
+          id?: string
+          model_card_url?: string | null
+          name?: string
+          notes?: string | null
+          status?: string
+          training_corpus?: string | null
+          updated_at?: string
+          validation_metrics?: Json | null
+          version?: string
+          weights_blob_path?: string | null
+          weights_sha256?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_versions_emits_schema_name_emits_schema_version_fkey"
+            columns: ["emits_schema_name", "emits_schema_version"]
+            isOneToOne: false
+            referencedRelation: "schema_definitions"
+            referencedColumns: ["name", "version"]
+          },
+        ]
       }
       notes: {
         Row: {
@@ -242,6 +647,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      pilot_subscription_charges: {
+        Row: {
+          created_at: string
+          razorpay_payment_id: string
+          razorpay_subscription_id: string
+          tokens_credited: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          razorpay_payment_id: string
+          razorpay_subscription_id: string
+          tokens_credited?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          razorpay_payment_id?: string
+          razorpay_subscription_id?: string
+          tokens_credited?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pilot_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          razorpay_plan_id: string | null
+          razorpay_subscription_id: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          razorpay_plan_id?: string | null
+          razorpay_subscription_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          razorpay_plan_id?: string | null
+          razorpay_subscription_id?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       platform_settings: {
         Row: {
@@ -353,6 +815,112 @@ export type Database = {
           },
         ]
       }
+      report_drafts: {
+        Row: {
+          created_at: string | null
+          draft: Json
+          id: string
+          model: string | null
+          study_id: string | null
+          version: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          draft: Json
+          id?: string
+          model?: string | null
+          study_id?: string | null
+          version?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          draft?: Json
+          id?: string
+          model?: string | null
+          study_id?: string | null
+          version?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_drafts_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      report_emission_events: {
+        Row: {
+          emitted_at: string
+          emitted_by: string
+          id: string
+          model_version_id: string | null
+          payload_preview: Json | null
+          payload_sha256: string
+          request_id: string | null
+          schema_name: string
+          schema_version: string
+          study_id: string
+          superseded_by: string | null
+        }
+        Insert: {
+          emitted_at?: string
+          emitted_by: string
+          id?: string
+          model_version_id?: string | null
+          payload_preview?: Json | null
+          payload_sha256: string
+          request_id?: string | null
+          schema_name: string
+          schema_version: string
+          study_id: string
+          superseded_by?: string | null
+        }
+        Update: {
+          emitted_at?: string
+          emitted_by?: string
+          id?: string
+          model_version_id?: string | null
+          payload_preview?: Json | null
+          payload_sha256?: string
+          request_id?: string | null
+          schema_name?: string
+          schema_version?: string
+          study_id?: string
+          superseded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_emission_events_model_version_id_fkey"
+            columns: ["model_version_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_emission_events_schema_name_schema_version_fkey"
+            columns: ["schema_name", "schema_version"]
+            isOneToOne: false
+            referencedRelation: "schema_definitions"
+            referencedColumns: ["name", "version"]
+          },
+          {
+            foreignKeyName: "report_emission_events_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_emission_events_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "report_emission_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_templates: {
         Row: {
           created_at: string | null
@@ -428,6 +996,65 @@ export type Database = {
           },
         ]
       }
+      reprocess_jobs: {
+        Row: {
+          created_at: string
+          description: string | null
+          error_summary: string | null
+          finished_at: string | null
+          id: string
+          initiated_by: string | null
+          request_id: string | null
+          started_at: string | null
+          status: string
+          studies_failed: number
+          studies_processed: number
+          studies_total: number | null
+          target_filter: Json
+          target_model_version_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          initiated_by?: string | null
+          request_id?: string | null
+          started_at?: string | null
+          status: string
+          studies_failed?: number
+          studies_processed?: number
+          studies_total?: number | null
+          target_filter: Json
+          target_model_version_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          error_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          initiated_by?: string | null
+          request_id?: string | null
+          started_at?: string | null
+          status?: string
+          studies_failed?: number
+          studies_processed?: number
+          studies_total?: number | null
+          target_filter?: Json
+          target_model_version_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reprocess_jobs_target_model_version_id_fkey"
+            columns: ["target_model_version_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       review_events: {
         Row: {
           actor: string | null
@@ -470,46 +1097,35 @@ export type Database = {
           },
         ]
       }
-      study_pipeline_events: {
+      schema_definitions: {
         Row: {
-          id: string
-          study_id: string
           created_at: string
-          step: string
-          status: string
-          source: string
-          detail: Json
-          correlation_id: string | null
+          created_by: string | null
+          description: string | null
+          name: string
+          schema: Json
+          schema_sha256: string
+          version: string
         }
         Insert: {
-          id?: string
-          study_id: string
           created_at?: string
-          step: string
-          status: string
-          source: string
-          detail?: Json
-          correlation_id?: string | null
+          created_by?: string | null
+          description?: string | null
+          name: string
+          schema: Json
+          schema_sha256: string
+          version: string
         }
         Update: {
-          id?: string
-          study_id?: string
           created_at?: string
-          step?: string
-          status?: string
-          source?: string
-          detail?: Json
-          correlation_id?: string | null
+          created_by?: string | null
+          description?: string | null
+          name?: string
+          schema?: Json
+          schema_sha256?: string
+          version?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "study_pipeline_events_study_id_fkey"
-            columns: ["study_id"]
-            isOneToOne: false
-            referencedRelation: "studies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       service_health_logs: {
         Row: {
@@ -573,8 +1189,8 @@ export type Database = {
       }
       studies: {
         Row: {
-          triage_draft_json: Json | null
-          triage_draft_text: string | null
+          ai_draft_json: Json | null
+          ai_draft_text: string | null
           clinic_id: string
           created_at: string | null
           duration_min: number | null
@@ -601,14 +1217,16 @@ export type Database = {
           study_key: string | null
           tokens_deducted: number | null
           triage_completed_at: string | null
+          triage_draft_json: Json | null
+          triage_draft_text: string | null
           triage_progress: number | null
           triage_started_at: string | null
           triage_status: string | null
           uploaded_file_path: string | null
         }
         Insert: {
-          triage_draft_json?: Json | null
-          triage_draft_text?: string | null
+          ai_draft_json?: Json | null
+          ai_draft_text?: string | null
           clinic_id: string
           created_at?: string | null
           duration_min?: number | null
@@ -635,14 +1253,16 @@ export type Database = {
           study_key?: string | null
           tokens_deducted?: number | null
           triage_completed_at?: string | null
+          triage_draft_json?: Json | null
+          triage_draft_text?: string | null
           triage_progress?: number | null
           triage_started_at?: string | null
           triage_status?: string | null
           uploaded_file_path?: string | null
         }
         Update: {
-          triage_draft_json?: Json | null
-          triage_draft_text?: string | null
+          ai_draft_json?: Json | null
+          ai_draft_text?: string | null
           clinic_id?: string
           created_at?: string | null
           duration_min?: number | null
@@ -669,6 +1289,8 @@ export type Database = {
           study_key?: string | null
           tokens_deducted?: number | null
           triage_completed_at?: string | null
+          triage_draft_json?: Json | null
+          triage_draft_text?: string | null
           triage_progress?: number | null
           triage_started_at?: string | null
           triage_status?: string | null
@@ -679,8 +1301,22 @@ export type Database = {
             foreignKeyName: "studies_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
           },
           {
             foreignKeyName: "studies_owner_fkey"
@@ -722,6 +1358,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "study_files_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: false
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      study_pipeline_events: {
+        Row: {
+          correlation_id: string | null
+          created_at: string
+          detail: Json
+          id: string
+          source: string
+          status: string
+          step: string
+          study_id: string
+        }
+        Insert: {
+          correlation_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          source: string
+          status: string
+          step: string
+          study_id: string
+        }
+        Update: {
+          correlation_id?: string | null
+          created_at?: string
+          detail?: Json
+          id?: string
+          source?: string
+          status?: string
+          step?: string
+          study_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "study_pipeline_events_study_id_fkey"
             columns: ["study_id"]
             isOneToOne: false
             referencedRelation: "studies"
@@ -851,8 +1528,22 @@ export type Database = {
             foreignKeyName: "user_roles_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "user_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
           },
         ]
       }
@@ -918,347 +1609,25 @@ export type Database = {
           },
         ]
       }
-      // ─── honest-output foundation (migration 20260528010000) ───
-      // Hand-added until next `supabase gen types --linked` regen — the
-      // table shapes match the migration; regen will overwrite identically.
-      schema_definitions: {
-        Row: {
-          name: string
-          version: string
-          schema: Json
-          description: string | null
-          schema_sha256: string
-          created_at: string
-          created_by: string | null
-        }
-        Insert: {
-          name: string
-          version: string
-          schema: Json
-          description?: string | null
-          schema_sha256: string
-          created_at?: string
-          created_by?: string | null
-        }
-        Update: {
-          name?: string
-          version?: string
-          schema?: Json
-          description?: string | null
-          schema_sha256?: string
-          created_at?: string
-          created_by?: string | null
-        }
-        Relationships: []
-      }
-      model_versions: {
-        Row: {
-          id: string
-          name: string
-          version: string
-          family: string
-          status: string
-          training_corpus: string | null
-          validation_metrics: Json | null
-          weights_sha256: string | null
-          weights_blob_path: string | null
-          model_card_url: string | null
-          emits_schema_name: string | null
-          emits_schema_version: string | null
-          deployed_at: string | null
-          deprecated_at: string | null
-          notes: string | null
-          created_at: string
-          created_by: string | null
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          version: string
-          family: string
-          status: string
-          training_corpus?: string | null
-          validation_metrics?: Json | null
-          weights_sha256?: string | null
-          weights_blob_path?: string | null
-          model_card_url?: string | null
-          emits_schema_name?: string | null
-          emits_schema_version?: string | null
-          deployed_at?: string | null
-          deprecated_at?: string | null
-          notes?: string | null
-          created_at?: string
-          created_by?: string | null
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          version?: string
-          family?: string
-          status?: string
-          training_corpus?: string | null
-          validation_metrics?: Json | null
-          weights_sha256?: string | null
-          weights_blob_path?: string | null
-          model_card_url?: string | null
-          emits_schema_name?: string | null
-          emits_schema_version?: string | null
-          deployed_at?: string | null
-          deprecated_at?: string | null
-          notes?: string | null
-          created_at?: string
-          created_by?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      model_calibration_runs: {
-        Row: {
-          id: string
-          model_version_id: string
-          measured_at: string
-          holdout_set_label: string
-          n_samples: number
-          ece: number | null
-          brier_score: number | null
-          platt_a: number | null
-          platt_b: number | null
-          reliability_diagram: Json | null
-          threshold_metrics: Json | null
-          notes: string | null
-          measured_by: string | null
-        }
-        Insert: {
-          id?: string
-          model_version_id: string
-          measured_at?: string
-          holdout_set_label: string
-          n_samples: number
-          ece?: number | null
-          brier_score?: number | null
-          platt_a?: number | null
-          platt_b?: number | null
-          reliability_diagram?: Json | null
-          threshold_metrics?: Json | null
-          notes?: string | null
-          measured_by?: string | null
-        }
-        Update: {
-          id?: string
-          model_version_id?: string
-          measured_at?: string
-          holdout_set_label?: string
-          n_samples?: number
-          ece?: number | null
-          brier_score?: number | null
-          platt_a?: number | null
-          platt_b?: number | null
-          reliability_diagram?: Json | null
-          threshold_metrics?: Json | null
-          notes?: string | null
-          measured_by?: string | null
-        }
-        Relationships: [{
-          foreignKeyName: "model_calibration_runs_model_version_id_fkey"
-          columns: ["model_version_id"]
-          isOneToOne: false
-          referencedRelation: "model_versions"
-          referencedColumns: ["id"]
-        }]
-      }
-      channel_quality_assessments: {
-        Row: {
-          id: string
-          study_id: string
-          channel_label: string
-          source: string
-          source_version: string | null
-          source_model_id: string | null
-          quality_class: string
-          confidence: number | null
-          details: Json | null
-          assessed_at: string
-        }
-        Insert: {
-          id?: string
-          study_id: string
-          channel_label: string
-          source: string
-          source_version?: string | null
-          source_model_id?: string | null
-          quality_class: string
-          confidence?: number | null
-          details?: Json | null
-          assessed_at?: string
-        }
-        Update: {
-          id?: string
-          study_id?: string
-          channel_label?: string
-          source?: string
-          source_version?: string | null
-          source_model_id?: string | null
-          quality_class?: string
-          confidence?: number | null
-          details?: Json | null
-          assessed_at?: string
-        }
-        Relationships: [{
-          foreignKeyName: "channel_quality_assessments_study_id_fkey"
-          columns: ["study_id"]
-          isOneToOne: false
-          referencedRelation: "studies"
-          referencedColumns: ["id"]
-        }]
-      }
-      report_emission_events: {
-        Row: {
-          id: string
-          study_id: string
-          emitted_by: string
-          emitted_at: string
-          schema_name: string
-          schema_version: string
-          model_version_id: string | null
-          payload_sha256: string
-          payload_preview: Json | null
-          request_id: string | null
-          superseded_by: string | null
-        }
-        Insert: {
-          id?: string
-          study_id: string
-          emitted_by: string
-          emitted_at?: string
-          schema_name: string
-          schema_version: string
-          model_version_id?: string | null
-          payload_sha256: string
-          payload_preview?: Json | null
-          request_id?: string | null
-          superseded_by?: string | null
-        }
-        Update: {
-          id?: string
-          study_id?: string
-          emitted_by?: string
-          emitted_at?: string
-          schema_name?: string
-          schema_version?: string
-          model_version_id?: string | null
-          payload_sha256?: string
-          payload_preview?: Json | null
-          request_id?: string | null
-          superseded_by?: string | null
-        }
-        Relationships: []
-      }
-      clinician_edit_deltas: {
-        Row: {
-          id: string
-          study_id: string
-          clinician_id: string
-          field_id: string
-          edit_type: string
-          original_value: Json | null
-          new_value: Json | null
-          original_derived_from: string | null
-          source_emission_id: string | null
-          reason_code: string | null
-          reason_text: string | null
-          information_value: number | null
-          client_request_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          study_id: string
-          clinician_id: string
-          field_id: string
-          edit_type: string
-          original_value?: Json | null
-          new_value?: Json | null
-          original_derived_from?: string | null
-          source_emission_id?: string | null
-          reason_code?: string | null
-          reason_text?: string | null
-          information_value?: number | null
-          client_request_id?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          study_id?: string
-          clinician_id?: string
-          field_id?: string
-          edit_type?: string
-          original_value?: Json | null
-          new_value?: Json | null
-          original_derived_from?: string | null
-          source_emission_id?: string | null
-          reason_code?: string | null
-          reason_text?: string | null
-          information_value?: number | null
-          client_request_id?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
-      reprocess_jobs: {
-        Row: {
-          id: string
-          initiated_by: string | null
-          description: string | null
-          target_filter: Json
-          target_model_version_id: string | null
-          status: string
-          studies_total: number | null
-          studies_processed: number
-          studies_failed: number
-          request_id: string | null
-          started_at: string | null
-          finished_at: string | null
-          error_summary: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          initiated_by?: string | null
-          description?: string | null
-          target_filter: Json
-          target_model_version_id?: string | null
-          status: string
-          studies_total?: number | null
-          studies_processed?: number
-          studies_failed?: number
-          request_id?: string | null
-          started_at?: string | null
-          finished_at?: string | null
-          error_summary?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          initiated_by?: string | null
-          description?: string | null
-          target_filter?: Json
-          target_model_version_id?: string | null
-          status?: string
-          studies_total?: number | null
-          studies_processed?: number
-          studies_failed?: number
-          request_id?: string | null
-          started_at?: string | null
-          finished_at?: string | null
-          error_summary?: string | null
-          created_at?: string
-        }
-        Relationships: []
-      }
     }
     Views: {
+      clinic_activation_status: {
+        Row: {
+          activation_complete: boolean | null
+          active_doc_count: number | null
+          clinic_id: string | null
+          clinic_name: string | null
+          consent_template_active: boolean | null
+          dpa_active: boolean | null
+          is_active: boolean | null
+          loi_active: boolean | null
+          mou_active: boolean | null
+          msa_active: boolean | null
+          sku: string | null
+          total_doc_count: number | null
+        }
+        Relationships: []
+      }
       my_memberships: {
         Row: {
           clinic_id: string | null
@@ -1277,8 +1646,72 @@ export type Database = {
             foreignKeyName: "clinic_memberships_clinic_id_fkey"
             columns: ["clinic_id"]
             isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clinic_memberships_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
+          },
+        ]
+      }
+      signed_reports_without_pdf: {
+        Row: {
+          clinic_id: string | null
+          clinic_name: string | null
+          clinic_sku: string | null
+          interpreter: string | null
+          report_created_at: string | null
+          report_id: string | null
+          seconds_since_sign: number | null
+          signed_at: string | null
+          study_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_interpreter_fkey"
+            columns: ["interpreter"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_study_id_fkey"
+            columns: ["study_id"]
+            isOneToOne: true
+            referencedRelation: "studies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinic_activation_status"
+            referencedColumns: ["clinic_id"]
+          },
+          {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "studies_clinic_id_fkey"
+            columns: ["clinic_id"]
+            isOneToOne: false
+            referencedRelation: "user_clinic_context"
+            referencedColumns: ["clinic_id"]
           },
         ]
       }
@@ -1294,18 +1727,11 @@ export type Database = {
           sku: string | null
           user_id: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "user_roles_clinic_id_fkey"
-            columns: ["clinic_id"]
-            isOneToOne: false
-            referencedRelation: "clinics"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Functions: {
+      _user_is_admin_role: { Args: { p_user_id: string }; Returns: boolean }
       admin_adjust_tokens: {
         Args: { p_amount: number; p_operation: string; p_user_id: string }
         Returns: Json
@@ -1335,8 +1761,8 @@ export type Database = {
       admin_get_all_studies: {
         Args: never
         Returns: {
-          triage_draft_json: Json | null
-          triage_draft_text: string | null
+          ai_draft_json: Json | null
+          ai_draft_text: string | null
           clinic_id: string
           created_at: string | null
           duration_min: number | null
@@ -1363,6 +1789,8 @@ export type Database = {
           study_key: string | null
           tokens_deducted: number | null
           triage_completed_at: string | null
+          triage_draft_json: Json | null
+          triage_draft_text: string | null
           triage_progress: number | null
           triage_started_at: string | null
           triage_status: string | null
@@ -1439,6 +1867,32 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_provision_clinic_resources: {
+        Args: {
+          p_actor_id: string
+          p_city: string
+          p_clinic_name: string
+          p_clinician_email: string
+          p_clinician_name: string
+          p_initial_tokens: number
+          p_new_user_id: string
+          p_request_id: string
+          p_sku: string
+        }
+        Returns: Json
+      }
+      admin_provision_clinician_for_clinic: {
+        Args: {
+          p_actor_id: string
+          p_clinic_id: string
+          p_clinician_email: string
+          p_clinician_name: string
+          p_initial_tokens: number
+          p_new_user_id: string
+          p_request_id: string
+        }
+        Returns: Json
+      }
       admin_push_eeg_to_user: {
         Args: {
           p_clinic_id: string
@@ -1476,6 +1930,11 @@ export type Database = {
         Args: { p_suspend?: boolean; p_user_id: string }
         Returns: Json
       }
+      admin_test_all_clinic_isolation: { Args: never; Returns: Json }
+      admin_test_clinic_isolation: {
+        Args: { p_clinic_b: string; p_clinician_a: string }
+        Returns: Json
+      }
       admin_update_clinic: {
         Args: { p_clinic_id: string; p_updates: Json }
         Returns: Json
@@ -1497,23 +1956,38 @@ export type Database = {
         Returns: Json
       }
       admin_verify_tfa: { Args: never; Returns: Json }
-      calculate_withdrawal_breakdown: {
-        Args: { p_requested_amount: number; p_user_id: string }
-        Returns: Json
-      }
       check_tfa_status: { Args: never; Returns: Json }
-      consume_credit_and_sign: {
-        Args: {
-          p_content: Json
-          p_cost: number
-          p_study_id: string
-          p_user_id: string
-        }
-        Returns: Json
-      }
+      consume_credit_and_sign:
+        | {
+            Args: {
+              p_content: Json
+              p_cost: number
+              p_study_id: string
+              p_user_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_content: Json
+              p_cost: number
+              p_request_id?: string
+              p_study_id: string
+              p_user_id: string
+            }
+            Returns: Json
+          }
       credit_wallet: {
-        Args: { p_tokens: number; p_user_id: string }
-        Returns: undefined
+        Args: { p_reason?: string; p_tokens: number; p_user_id: string }
+        Returns: number
+      }
+      debit_wallet: {
+        Args: { p_reason: string; p_tokens: number; p_user_id: string }
+        Returns: number
+      }
+      enforce_channel_gate: {
+        Args: { p_payload: Json; p_study_id: string }
+        Returns: Json
       }
       get_current_fy: { Args: never; Returns: string }
       get_current_quarter: { Args: never; Returns: string }
@@ -1538,14 +2012,20 @@ export type Database = {
         }
         Returns: boolean
       }
-      lock_withdrawal_amount: {
-        Args: { p_amount: number; p_user_id: string }
+      json_matches_schema: {
+        Args: { instance: Json; schema: Json }
         Returns: boolean
       }
-      process_completed_withdrawal: {
-        Args: { p_withdrawal_id: string }
-        Returns: Json
+      jsonb_matches_schema: {
+        Args: { instance: Json; schema: Json }
+        Returns: boolean
       }
+      jsonschema_is_valid: { Args: { schema: Json }; Returns: boolean }
+      jsonschema_validation_errors: {
+        Args: { instance: Json; schema: Json }
+        Returns: string[]
+      }
+      recompute_v2_summary: { Args: { p_payload: Json }; Returns: Json }
       request_token_refund: {
         Args: { p_reason?: string; p_study_id: string }
         Returns: Json
@@ -1554,16 +2034,9 @@ export type Database = {
         Args: { p_sla: string; p_study_id: string }
         Returns: Json
       }
-      unlock_failed_withdrawal: {
-        Args: { p_withdrawal_id: string }
-        Returns: Json
-      }
     }
     Enums: {
-      app_role:
-        | "super_admin"
-        | "management"
-        | "clinician"
+      app_role: "super_admin" | "management" | "clinician"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1691,11 +2164,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: [
-        "super_admin",
-        "management",
-        "clinician",
-      ],
+      app_role: ["super_admin", "management", "clinician"],
     },
   },
 } as const
