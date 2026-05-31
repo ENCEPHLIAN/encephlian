@@ -167,9 +167,21 @@ validation rejects the write.
 
 ### Backend writes:
 - `studies.triage_draft_json` — v1 or v2 payload.
-- `channel_quality_assessments` — one row per (channel, source). Use
-  UPSERT (`ON CONFLICT (study_id, channel_label, source, source_version)
-  DO UPDATE`) when re-running. VIGIL is the canonical `source`.
+- `channel_quality_assessments` — one row per (channel, source) per study.
+  The C-Plane writes 19 rows (one per ESF channel) at canonical-conversion
+  time, source-tagged `aplane_canonical_v1`, source_version = C-Plane git
+  SHA. Bridge implemented in `encephlian-core` →
+  `apps/cplane/main.py:_supabase_write_channel_quality` after
+  `to_esf()` returns. Quality assessment uses signal-processing rules
+  (variance/IQR-based ChannelQuality enum from
+  `libs/esf/convert.py:_assess_quality`).
+  Any future learned model that supersedes the rule-based writer
+  registers as its own source tag (e.g. `vigil_v2`) and writes
+  additional rows alongside; consumers pick the latest per
+  (channel, study) by `assessed_at DESC`.
+  Mapping ChannelQuality int → quality_class text:
+    GOOD (0) → "good"  ·  NOISY (1) → "degraded"
+    BAD  (2) → "bad"   ·  MISSING (3) → "missing"
 - `model_versions` (super_admin/management only) — when a new model is
   registered.
 - `model_calibration_runs` (super_admin/management only) — when
