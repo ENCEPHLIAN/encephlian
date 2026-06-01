@@ -63,6 +63,9 @@ import {
   PROPRIETARY_EXTENSIONS,
   isAcceptedExtension,
   fileExtension,
+  detectBundles,
+  BUNDLE_VENDOR_LABEL,
+  type DetectedBundle,
 } from "@/shared/eegFormats";
 
 const INTERNAL_SLA_OPTIONS: SlaOption[] = [
@@ -589,6 +592,202 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     return { studyId };
   }, [userId, clinicId, selectedSla, patientData, edfMeta, file, isProprietaryFormat, isPilot]);
 
+  // Upload a multi-file vendor bundle as ONE study. All files go to the
+  // folder layout eeg-raw/{studyId}/{filename}. C-Plane's folder-layout
+  // fallback finds them on /process. Used for Nihon Kohden (.EEG+.21E+.PNT),
+  // BrainVision (.vhdr+.eeg+.vmrk), Persyst (.lay+.dat), etc.
+  const uploadBundle = useCallback(async (
+    bundle: DetectedBundle,
+    cplaneBase: string,
+    onProgress: (pct: number, stage: string) => void,
+  ): Promise<{ studyId: string; duplicate?: boolean }> => {
+    if (!userId || !clinicId) throw new Error("Missing authentication or clinic");
+
+    const vendorLabel = BUNDLE_VENDOR_LABEL[bundle.vendor];
+    const entryExt = (fileExtension(bundle.entryFile.name) || "").toUpperCase().slice(1);
+    const totalBytes = bundle.allFiles.reduce((s, f) => s + f.size, 0);
+    const studyMeta: Record<string, any> = {
+      patient_name: patientData.patient_name || null,
+      patient_id: patientData.patient_id || null,
+      patient_age: patientData.patient_age ? parseInt(patientData.patient_age) : null,
+      patient_gender: patientData.patient_gender || null,
+      notes: patientData.notes || null,
+      original_filename: bundle.entryFile.name,
+      file_size_bytes: totalBytes,
+      bundle_vendor: bundle.vendor,
+      bundle_files: bundle.allFiles.map(f => f.name),
+      bundle_file_count: bundle.allFiles.length,
+    };
+
+    // Dedupe on the entry file's sha256 (same as single-file path)
+    let sourceContentSha256: string | null = null;
+    let reference: string | null = null;
+    try {
+      if (isSha256Available()) {
+        onProgress(2, `Fingerprinting ${vendorLabel} bundle…`);
+        sourceContentSha256 = await sha256HexFromFile(bundle.entryFile);
+        const { data: dupRow } = await supabase
+          .from("studies")
+          .select("id, tokens_deducted, sla_selected_at, triage_status")
+          .eq("clinic_id", clinicId)
+          .eq("owner", userId)
+          .eq("source_content_sha256", sourceContentSha256)
+          .neq("state", "failed")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (dupRow?.id) {
+          const started =
+            (dupRow.tokens_deducted ?? 0) > 0 ||
+            !!dupRow.sla_selected_at ||
+            (dupRow.triage_status && dupRow.triage_status !== "pending");
+          if (started) {
+            onProgress(100, "Same recording — opening existing study");
+            return { studyId: dupRow.id, duplicate: true };
+          }
+        }
+        reference = generateEncStudyReference();
+      }
+    } catch (e) {
+      console.warn("[upload] bundle dedupe skipped:", e);
+    }
+
+    onProgress(5, `Creating study for ${vendorLabel} bundle...`);
+    const insertRow: Record<string, unknown> = {
+      owner: userId,
+      clinic_id: clinicId,
+      state: "awaiting_sla",
+      sla: isPilot ? "pending" : selectedSla,
+      uploaded_file_path: `blob:eeg-raw/pending`,
+      original_format: entryExt,
+      indication: patientData.indication || null,
+      meta: studyMeta,
+    };
+    if (reference && sourceContentSha256) {
+      insertRow.reference = reference;
+      insertRow.source_content_sha256 = sourceContentSha256;
+    }
+
+    let { data: study, error: studyError } = await supabase
+      .from("studies")
+      .insert(insertRow as never)
+      .select("id")
+      .single();
+    if (studyError && reference && sourceContentSha256) {
+      delete insertRow.reference;
+      delete insertRow.source_content_sha256;
+      const retry = await supabase
+        .from("studies")
+        .insert(insertRow as never)
+        .select("id")
+        .single();
+      study = retry.data; studyError = retry.error;
+    }
+    if (studyError || !study?.id) throw new Error(studyError?.message ?? "no id returned");
+    const studyId = study.id;
+
+    // Upload each file in the bundle to folder layout. Sequential — clinics
+    // upload one bundle at a time and parallel uploads risk hitting Azure
+    // throttling on small clinical bandwidth.
+    let bytesDone = 0;
+    for (let i = 0; i < bundle.allFiles.length; i++) {
+      const f = bundle.allFiles[i];
+      onProgress(
+        8 + Math.round((bytesDone / totalBytes) * 72),
+        `Uploading ${f.name} (${i + 1}/${bundle.allFiles.length})...`,
+      );
+      // Get SAS for this filename in folder layout
+      const sasRes = await fetch(
+        `${cplaneBase}/upload-token/${studyId}?filename=${encodeURIComponent(f.name)}`,
+        { method: "POST" },
+      );
+      if (!sasRes.ok) {
+        const txt = await sasRes.text().catch(() => "");
+        throw new Error(`Bundle upload token failed for ${f.name}: ${sasRes.status} ${txt}`);
+      }
+      const { sas_url: sasUrl } = await sasRes.json();
+      // PUT to blob
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        activeXhrRef.current = xhr;
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            onProgress(
+              8 + Math.round(((bytesDone + e.loaded) / totalBytes) * 72),
+              `Uploading ${f.name}...`,
+            );
+          }
+        };
+        xhr.onload = () => {
+          activeXhrRef.current = null;
+          xhr.status >= 200 && xhr.status < 300
+            ? resolve()
+            : reject(new Error(`Upload ${f.name} failed: HTTP ${xhr.status}`));
+        };
+        xhr.onerror = () => { activeXhrRef.current = null; reject(new Error(`Network error uploading ${f.name}`)); };
+        xhr.onabort = () => { activeXhrRef.current = null; reject(new Error("Upload cancelled")); };
+        xhr.timeout = 600000;
+        xhr.ontimeout = () => { activeXhrRef.current = null; reject(new Error("UPLOAD_TIMEOUT")); };
+        xhr.open("PUT", sasUrl);
+        xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+        xhr.setRequestHeader("Content-Type", "application/octet-stream");
+        xhr.send(f);
+      });
+      bytesDone += f.size;
+    }
+
+    onProgress(84, `Registering ${vendorLabel} bundle...`);
+
+    // Studies-row finalization mirrors single-file flow. uploaded_file_path
+    // points at the folder, not a specific file — bundle UI keys off the
+    // bundle_files meta list.
+    if (isPilot) {
+      await supabase
+        .from("studies")
+        .update({
+          state: "awaiting_sla", sla: "pending",
+          triage_status: "pending", triage_progress: 0,
+          uploaded_file_path: `${studyId}/`,
+        })
+        .eq("id", studyId);
+      onProgress(100, "Bundle saved — choose triage on Studies");
+    } else {
+      await supabase
+        .from("studies")
+        .update({
+          state: "uploaded",
+          uploaded_file_path: `${studyId}/`,
+          sla_selected_at: new Date().toISOString(),
+          triage_status: "pending", triage_progress: 0,
+        })
+        .eq("id", studyId);
+      // Trigger C-Plane — no source_urls, C-Plane uses folder-layout fallback
+      fetch(`${cplaneBase}/process`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ study_id: studyId }),
+      }).catch(async (err) => {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.warn("[upload] bundle C-Plane trigger failed:", detail);
+        try {
+          await supabase.from("study_pipeline_events").insert({
+            study_id: studyId, step: "cplane_trigger", status: "error",
+            source: "e-plane",
+            detail: { error: detail, cplane_base: cplaneBase, ts: new Date().toISOString() },
+          });
+          await supabase
+            .from("studies")
+            .update({ triage_status: "failed", triage_progress: 0 })
+            .eq("id", studyId);
+        } catch (writeErr) {
+          console.error("[upload] could not record bundle trigger failure", writeErr);
+        }
+      });
+      onProgress(100, `${vendorLabel} bundle uploaded — analysis running`);
+    }
+    return { studyId };
+  }, [userId, clinicId, selectedSla, patientData, isPilot]);
+
   // Submit the study (single or batch)
   const handleSubmit = useCallback(async () => {
     if (!file || !userId) {
@@ -617,14 +816,38 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
     const filesToUpload = fileQueue.length > 1 ? fileQueue : [file];
     const lastStudyIds: string[] = [];
 
+    // Detect bundles vs loose files. NK / BrainVision / Persyst etc. send
+    // multiple sibling files per session — group them into one study so
+    // MNE can find the entry-file's siblings in the blob folder.
+    const { bundles, loose } = detectBundles(filesToUpload);
+    type Work =
+      | { kind: "bundle"; bundle: DetectedBundle; label: string }
+      | { kind: "file";   file: File;             label: string };
+    const work: Work[] = [
+      ...bundles.map(b => ({
+        kind: "bundle" as const, bundle: b,
+        label: `${BUNDLE_VENDOR_LABEL[b.vendor]} bundle (${b.allFiles.length} files)`,
+      })),
+      ...loose.map(f => ({ kind: "file" as const, file: f, label: f.name })),
+    ];
+
     try {
-      if (filesToUpload.length === 1) {
-        // Single-file path — navigate to study on completion
+      if (work.length === 1) {
+        // Single-study path — navigate to study on completion
         setUploadStage("Starting upload...");
-        const { studyId, duplicate } = await uploadOneFile(filesToUpload[0], CPLANE_BASE, (pct, stage) => {
-          setUploadProgress(pct);
-          setUploadStage(stage);
-        });
+        const w = work[0];
+        const { studyId, duplicate } = w.kind === "bundle"
+          ? await uploadBundle(w.bundle, CPLANE_BASE, (pct, stage) => {
+              setUploadProgress(pct);
+              setUploadStage(stage);
+            })
+          : await uploadOneFile(w.file, CPLANE_BASE, (pct, stage) => {
+              setUploadProgress(pct);
+              setUploadStage(stage);
+            });
+        // Reuse the existing branch by reassigning into the same vars used below
+        const _unusedSingleFile = filesToUpload[0];
+        void _unusedSingleFile;
         lastStudyIds.push(studyId);
         systemFeedback.report({
           severity: "info",
@@ -643,18 +866,28 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         navigate(`/app/studies/${studyId}`);
         onOpenChange(false);
       } else {
-        // Batch path — upload all files, show queue progress
-        const progress = filesToUpload.map(f => ({ name: f.name, status: "pending" as const }));
+        // Batch path — bundles + loose files. Each item in `work` becomes
+        // ONE study (a bundle is N files → 1 study; a loose file is 1 file
+        // → 1 study). Progress UI keys off the work-item label so a NK
+        // bundle shows "Nihon Kohden bundle (5 files)" rather than 5
+        // separate rows.
+        const progress = work.map(w => ({ name: w.label, status: "pending" as const }));
         setBatchProgress(progress);
         let completed = 0;
 
-        for (let i = 0; i < filesToUpload.length; i++) {
+        for (let i = 0; i < work.length; i++) {
           setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "uploading" } : p));
           try {
-            const { studyId } = await uploadOneFile(filesToUpload[i], CPLANE_BASE, (pct, stage) => {
-              setUploadProgress(Math.round(((i + pct / 100) / filesToUpload.length) * 100));
-              setUploadStage(`[${i + 1}/${filesToUpload.length}] ${stage}`);
-            });
+            const w = work[i];
+            const { studyId } = w.kind === "bundle"
+              ? await uploadBundle(w.bundle, CPLANE_BASE, (pct, stage) => {
+                  setUploadProgress(Math.round(((i + pct / 100) / work.length) * 100));
+                  setUploadStage(`[${i + 1}/${work.length}] ${stage}`);
+                })
+              : await uploadOneFile(w.file, CPLANE_BASE, (pct, stage) => {
+                  setUploadProgress(Math.round(((i + pct / 100) / work.length) * 100));
+                  setUploadStage(`[${i + 1}/${work.length}] ${stage}`);
+                });
             lastStudyIds.push(studyId);
             completed++;
             setBatchProgress(prev => prev.map((p, idx) => idx === i ? { ...p, status: "done" } : p));
@@ -665,7 +898,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
 
         systemFeedback.report({
           severity: "info",
-          what: `${completed}/${filesToUpload.length} studies uploaded`,
+          what: `${completed}/${work.length} studies uploaded`,
           why: "Analysis pipelines started for all uploaded files.",
           action: "Opening studies list...",
         });
@@ -689,7 +922,7 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
       setIsUploading(false);
       setUploadStage("");
     }
-  }, [file, fileQueue, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, isPilot, uploadOneFile, navigate, onOpenChange, resetWizard]);
+  }, [file, fileQueue, userId, clinicId, selectedSla, patientData, edfMeta, isProprietaryFormat, isPilot, uploadOneFile, uploadBundle, navigate, onOpenChange, resetWizard]);
 
   // Validation
   const canProceedStep1 = !!file;
