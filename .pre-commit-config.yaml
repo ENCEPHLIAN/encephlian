@@ -1,0 +1,75 @@
+# Pre-commit hooks: structural defense against secret leaks.
+#
+# One-time setup (per machine):
+#   pip install pre-commit
+#   pre-commit install        # registers the hook in .git/hooks/pre-commit
+#
+# Hooks fire on `git commit` and scan staged changes only.
+# See .pre-commit-readme.md for details, exceptions, and the threat model.
+
+repos:
+  # -----------------------------------------------------------------
+  # detect-secrets (Yelp) - entropy + plugin-based secret scanner.
+  # Uses .secrets.baseline to whitelist known/false-positive findings.
+  # Run `detect-secrets scan > .secrets.baseline` once to seed it.
+  # -----------------------------------------------------------------
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        exclude: |
+          (?x)^(
+            package-lock\.json|
+            bun\.lock|
+            bun\.lockb|
+            node_modules/.*|
+            dist/.*|
+            \.vercel/.*|
+            supabase/\.temp/.*|
+            \.secrets\.baseline
+          )$
+
+  # -----------------------------------------------------------------
+  # Generic file-hygiene hooks. detect-private-key catches PEM/SSH
+  # blocks (BEGIN PRIVATE KEY, BEGIN RSA PRIVATE KEY, etc).
+  # -----------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=2048"]
+
+  # -----------------------------------------------------------------
+  # ENCEPHLIAN-specific patterns. detect-secrets ships a JWT plugin
+  # but it can miss novel issuers; this is a belt-and-braces backstop
+  # for the exact shapes that have leaked from this codebase before
+  # (Supabase service-role JWT, literal-key fallback, Azure storage).
+  # Implementation: scripts/check_secrets.py
+  # -----------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: encephlian-secret-patterns
+        name: ENCEPHLIAN secret patterns (JWT, Supabase, Azure)
+        description: >
+          Rejects JWT tokens, literal SUPABASE_*_KEY = "eyJ..."
+          assignments, and 88-char Azure storage keys. Append
+          `# pragma: allowlist secret` to bypass on a single line.
+        entry: python3 scripts/check_secrets.py
+        language: system
+        types: [text]
+        exclude: |
+          (?x)^(
+            \.secrets\.baseline|
+            \.pre-commit-config\.yaml|
+            \.pre-commit-readme\.md|
+            scripts/check_secrets\.py|
+            package-lock\.json|
+            bun\.lock|
+            bun\.lockb|
+            node_modules/.*|
+            dist/.*
+          )$
