@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, FileText, Eye, Download, Upload, Lock, Unlock, Loader2 as Spinner } from "lucide-react";
+import { Search, FileText, Eye, Download, Upload, Loader2 as Spinner } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import dayjs from "dayjs";
 import { toast } from "@/components/ui/sonner";
@@ -119,26 +119,9 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             <span className="text-[10px] text-muted-foreground tabular-nums">{study.triage_progress || 0}%</span>
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
-              <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
-            </div>
-            {(() => {
-              const report = (study as any).triage_draft_json;
-              const cls = report?.classification ?? report?.triage?.classification;
-              const conf = report?.triage_confidence ?? report?.triage?.confidence;
-              if (!cls || cls === "unknown") return null;
-              const isNormal = cls === "normal";
-              return (
-                <Badge className={`text-[10px] w-fit ${isNormal ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" : "bg-red-500/10 text-red-600 border-red-500/20"}`}>
-                  {isNormal ? "Normal" : "Abnormal"}
-                  {typeof conf === "number" && conf > 0 && (
-                    <span className="ml-1 opacity-60">{Math.round(conf * 100)}%</span>
-                  )}
-                </Badge>
-              );
-            })()}
+          <div className="flex items-center gap-1.5">
+            <div className={`h-2 w-2 rounded-full ${stateColors[study.state as string] || 'bg-muted'}`} />
+            <span className="capitalize text-xs">{study.state?.replace("_", " ")}</span>
           </div>
         )}
       </TableCell>
@@ -156,35 +139,30 @@ const StudyRow = memo(({ study, onDownload, onNavigate }: {
             <TooltipContent>View Details</TooltipContent>
           </Tooltip>
           
-          {/* EEG Viewer - gated by token deduction */}
+          {/* EEG Viewer - available once SLA chosen and tokens deducted */}
           {study.tokens_deducted && study.tokens_deducted > 0 ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-primary"
                   onClick={() => onNavigate(`/app/eeg-viewer?studyId=${study.study_key || study.id}`)}
                 >
-                  <Unlock className="h-4 w-4" />
+                  <Eye className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open EEG Viewer (Unlocked)</TooltipContent>
+              <TooltipContent>Open EEG Viewer</TooltipContent>
             </Tooltip>
           ) : (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground"
-                  onClick={() => onNavigate(`/app/studies/${study.id}`)}
-                >
-                  <Lock className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Select SLA to unlock viewer</TooltipContent>
-            </Tooltip>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-[11px] font-normal border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5"
+              onClick={() => onNavigate(`/app/studies/${study.id}`)}
+            >
+              Choose priority
+            </Button>
           )}
           
           {study.state === 'signed' && (
@@ -227,9 +205,15 @@ function InternalStudiesView() {
   const [search, setSearch] = useState("");
   const [stateFilter, setStateFilter] = useState<string>("all");
 
-  // Use optimized hook with request deduplication
-  const { studies, isLoading } = useStudiesData(stateFilter);
-  const filteredStudies = useFilteredStudies(studies, search);
+  // "processing" is a UI-collapse over multiple pipeline states; the hook only
+  // supports a single .eq, so for that case we fetch all and post-filter below.
+  const PROCESSING_STATES = ["processing", "preprocessing", "canonicalized", "triage_draft"];
+  const hookFilter = stateFilter === "processing" ? "all" : stateFilter;
+  const { studies, isLoading } = useStudiesData(hookFilter);
+  const searchFiltered = useFilteredStudies(studies, search);
+  const filteredStudies = stateFilter === "processing"
+    ? searchFiltered.filter((s) => PROCESSING_STATES.includes(s.state))
+    : searchFiltered;
 
   const handleNavigate = useCallback((path: string) => {
     navigate(path);
@@ -485,14 +469,9 @@ function InternalStudiesView() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All States</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="uploaded">Uploaded</SelectItem>
+                  <SelectItem value="awaiting_sla">Awaiting priority</SelectItem>
                   <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="complete">Complete</SelectItem>
-                  <SelectItem value="preprocessing">Preprocessing</SelectItem>
-                  <SelectItem value="canonicalized">Canonicalized</SelectItem>
-                  <SelectItem value="triage_draft">Triage Draft</SelectItem>
-                  <SelectItem value="in_review">In Review</SelectItem>
+                  <SelectItem value="in_review">In review</SelectItem>
                   <SelectItem value="signed">Signed</SelectItem>
                   <SelectItem value="failed">Failed</SelectItem>
                 </SelectContent>

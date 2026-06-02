@@ -152,42 +152,37 @@ const StudyCard = memo(function StudyCard({ study }: { study: Study }) {
           </div>
         )}
 
-        {/* Row 4: Classification badge + Time + Arrow */}
+        {/* Row 4: Classification marker + Time + Arrow (one clock only) */}
         <div className="flex items-center justify-between gap-1">
-          {hasClassification ? (
-            <Badge className={cn(
-              "text-[10px] px-1.5 py-0 h-4 gap-0.5",
-              isNormal
-                ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                : "bg-red-500/10 text-red-600 border-red-500/20"
-            )}>
-              {isNormal
-                ? <ShieldCheck className="h-2.5 w-2.5" />
-                : <AlertCircle className="h-2.5 w-2.5" />}
-              {isNormal ? "Normal" : "Abnormal"}
-              {typeof conf === "number" && conf > 0 && (
-                <span className="opacity-60 ml-0.5">{Math.round(conf * 100)}%</span>
-              )}
-            </Badge>
-          ) : (
+          <div className="flex items-center gap-1.5 min-w-0">
+            {hasClassification && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 text-[10px] font-medium",
+                  isNormal ? "text-emerald-600" : "text-red-600"
+                )}
+                title={isNormal ? "Normal" : "Abnormal"}
+              >
+                {isNormal
+                  ? <ShieldCheck className="h-2.5 w-2.5" />
+                  : <AlertCircle className="h-2.5 w-2.5" />}
+                {isNormal ? "Normal" : "Abnormal"}
+                {typeof conf === "number" && conf > 0 && (
+                  <span className="opacity-60 ml-0.5">{Math.round(conf * 100)}%</span>
+                )}
+              </span>
+            )}
             <span
-              className={`text-[11px] font-medium ${
+              className={cn(
+                "text-[11px] font-medium",
                 timeInfo.overdue ? "text-destructive" : "text-muted-foreground"
-              }`}
+              )}
             >
               {timeInfo.overdue && <AlertTriangle className="h-3 w-3 inline mr-0.5 -mt-0.5" />}
               {timeInfo.formatted}
             </span>
-          )}
-          <div className="flex items-center gap-1 ml-auto">
-            {hasClassification && (
-              <span className={`text-[10px] ${timeInfo.overdue ? "text-destructive" : "text-muted-foreground/70"}`}>
-                {timeInfo.overdue && <AlertTriangle className="h-2.5 w-2.5 inline mr-0.5" />}
-                {timeInfo.formatted}
-              </span>
-            )}
-            <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity" />
           </div>
+          <ArrowRight className="h-3 w-3 text-muted-foreground/40 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
         </div>
       </CardContent>
     </Card>

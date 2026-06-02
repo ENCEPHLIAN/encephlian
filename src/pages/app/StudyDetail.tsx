@@ -538,12 +538,12 @@ export default function StudyDetail() {
   const StateIcon = stateConfig.icon;
   const studyHandle = getStudyHandle(study);
   // Land on the tab that matches "what's next" for this state:
-  //   triage_draft / in_review → Sign (clinician's pending action)
-  //   has analysis but earlier state → Triage analysis (review surface)
+  //   triage_draft / in_review → Report (clinician authors/signs here)
+  //   has analysis but earlier state → Analysis (review surface)
   //   gated or nothing → Overview
   const defaultStudyTab =
     gateTriageActions ? "overview" :
-    (study.state === "triage_draft" || study.state === "in_review") ? "sign" :
+    (study.state === "triage_draft" || study.state === "in_review") ? "report" :
     (study.triage_draft_json || mindReport) ? "analysis" :
     "overview";
 
@@ -760,17 +760,11 @@ export default function StudyDetail() {
                 />
               </div>
             ) : (
-              <div className="flex flex-col gap-3 mt-1">
-                <span>Select Standard (12–24 h) or Priority (30–90 min) to start analysis.</span>
-                <Button
-                  size="sm"
-                  className="self-start"
-                  onClick={() => setSlaModalOpen(true)}
-                >
-                  <Brain className="h-3.5 w-3.5 mr-1.5" />
-                  Select Analysis Priority
-                </Button>
-              </div>
+              <span>
+                Select Standard (12–24 h) or Priority (30–90 min) to start analysis — use the
+                <span className="font-medium"> Select Analysis Priority </span>
+                button in the header.
+              </span>
             )}
           </AlertDescription>
         </Alert>
@@ -781,18 +775,16 @@ export default function StudyDetail() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {!isPilot && (
-            <TabsTrigger value="report" disabled={!hasReport || gateTriageActions}>
-              Report {hasReport && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
+            <TabsTrigger
+              value="report"
+              disabled={gateTriageActions || (!hasReport && !mindReport && !study.triage_draft_json)}
+            >
+              Report {isSigned && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
             </TabsTrigger>
           )}
           <TabsTrigger value="analysis" disabled={gateTriageActions}>
             Analysis {(study.triage_draft_json || mindReport) && <CheckCircle2 className="h-3 w-3 ml-1 text-emerald-500" />}
           </TabsTrigger>
-          {!isPilot && (
-            <TabsTrigger value="sign" disabled={gateTriageActions || (!mindReport && !study.triage_draft_json)}>
-              Sign Report
-            </TabsTrigger>
-          )}
           {!isPilot && (
             <TabsTrigger value="files">Files ({study.study_files?.length || 0})</TabsTrigger>
           )}
@@ -801,18 +793,17 @@ export default function StudyDetail() {
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
           {!isPilot ? (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ListOrdered className="h-4 w-4 text-primary" />
-                Pipeline activity
-              </CardTitle>
-              <CardDescription>
+          <details className="group rounded-lg border bg-card">
+            <summary className="flex items-center gap-2 cursor-pointer select-none px-4 py-3 text-sm font-medium hover:bg-muted/30 rounded-lg">
+              <ListOrdered className="h-4 w-4 text-primary" />
+              Pipeline trace ({pipelineEvents.length} event{pipelineEvents.length === 1 ? "" : "s"})
+              <span className="ml-auto text-xs text-muted-foreground font-normal">debug</span>
+            </summary>
+            <div className="px-4 pb-4 pt-1">
+              <p className="text-xs text-muted-foreground mb-3">
                 Append-only trace from Edge, C-Plane, and I-Plane. Correlation IDs group one upload with its
                 downstream steps.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+              </p>
               {pipelineEvents.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   No pipeline events yet. They appear after you upload and processing starts.
@@ -865,8 +856,8 @@ export default function StudyDetail() {
                   </div>
                 </ScrollArea>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </details>
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -967,118 +958,118 @@ export default function StudyDetail() {
 
         </TabsContent>
 
-        {/* Report Tab */}
+        {/* Report Tab — single source of truth.
+            Signed studies: read-only signed view (with download).
+            Unsigned with analysis ready: EditableReportV2 authoring/signing surface.
+            Otherwise: empty state. */}
         <TabsContent value="report" className="space-y-4">
-          {hasReport && report ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      EEG Analysis Report
-                    </CardTitle>
-                    <CardDescription>
-                      {isSigned ? (
+          {isSigned ? (
+            report ? (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        EEG Analysis Report
+                      </CardTitle>
+                      <CardDescription>
                         <span className="flex items-center gap-1 text-emerald-600">
                           <CheckCircle2 className="h-3 w-3" />
                           Signed {report.signed_at && dayjs(report.signed_at).fromNow()}
                           {report.profiles?.full_name && ` by ${report.profiles.full_name}`}
                         </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-amber-600">
-                          <Clock className="h-3 w-3" />
-                          Draft - {report.status}
-                        </span>
-                      )}
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2">
-                    {!isSigned && (
-                      <Button variant="outline" asChild size="sm">
-                        <Link to={`/app/reports/${report.id}`}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Edit Report
-                        </Link>
+                      </CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={handleDownloadReport} disabled={downloading} size="sm">
+                        {downloading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="h-4 w-4" />
+                        )}
                       </Button>
-                    )}
-                    <Button variant="outline" onClick={handleDownloadReport} disabled={downloading} size="sm">
-                      {downloading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="h-4 w-4" />
-                      )}
-                    </Button>
+                    </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {(() => {
-                  const content = report.content as any;
-                  return (
-                    <>
-                      {content?.background_activity && (
-                        <div>
-                          <h4 className="font-medium mb-2 text-sm text-muted-foreground uppercase tracking-wide">
-                            Background Activity
-                          </h4>
-                          <p className="text-sm whitespace-pre-wrap">{content.background_activity}</p>
-                        </div>
-                      )}
-
-                      {content?.impression && (
-                        <>
-                          <Separator />
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {(() => {
+                    const content = report.content as any;
+                    return (
+                      <>
+                        {content?.background_activity && (
                           <div>
                             <h4 className="font-medium mb-2 text-sm text-muted-foreground uppercase tracking-wide">
-                              Impression
+                              Background Activity
                             </h4>
-                            <p className="text-sm whitespace-pre-wrap">{content.impression}</p>
+                            <p className="text-sm whitespace-pre-wrap">{content.background_activity}</p>
                           </div>
-                        </>
-                      )}
+                        )}
 
-                      {content?.recommendations && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="font-medium mb-2 text-sm text-muted-foreground uppercase tracking-wide">
-                              Recommendations
-                            </h4>
-                            <p className="text-sm whitespace-pre-wrap">{content.recommendations}</p>
-                          </div>
-                        </>
-                      )}
+                        {content?.impression && (
+                          <>
+                            <Separator />
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm text-muted-foreground uppercase tracking-wide">
+                                Impression
+                              </h4>
+                              <p className="text-sm whitespace-pre-wrap">{content.impression}</p>
+                            </div>
+                          </>
+                        )}
 
-                      {!content?.background_activity && !content?.impression && !content?.recommendations && (
-                        <p className="text-center text-muted-foreground py-8">
-                          Report content not available
-                        </p>
-                      )}
-                    </>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          ) : hasReport ? (
-            /* Study is signed but the reports join was blocked by RLS — show download-only view */
+                        {content?.recommendations && (
+                          <>
+                            <Separator />
+                            <div>
+                              <h4 className="font-medium mb-2 text-sm text-muted-foreground uppercase tracking-wide">
+                                Recommendations
+                              </h4>
+                              <p className="text-sm whitespace-pre-wrap">{content.recommendations}</p>
+                            </div>
+                          </>
+                        )}
+
+                        {!content?.background_activity && !content?.impression && !content?.recommendations && (
+                          <p className="text-center text-muted-foreground py-8">
+                            Report content not available
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            ) : (
+              /* Study is signed but the reports join was blocked by RLS — show download-only view */
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
+                  <CheckCircle2 className="h-12 w-12 text-emerald-500" />
+                  <div className="text-center">
+                    <p className="text-lg font-medium">Report signed</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      The signed report is ready. Click download to retrieve it.
+                    </p>
+                  </div>
+                  <Button onClick={handleDownloadReport} disabled={downloading}>
+                    {downloading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Download Report
+                  </Button>
+                </CardContent>
+              </Card>
+            )
+          ) : mindReport || study.triage_draft_json ? (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
-                <CheckCircle2 className="h-12 w-12 text-emerald-500" />
-                <div className="text-center">
-                  <p className="text-lg font-medium">Report signed</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    The signed report is ready. Click download to retrieve it.
-                  </p>
-                </div>
-                <Button onClick={handleDownloadReport} disabled={downloading}>
-                  {downloading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
-                  )}
-                  Download Report
-                </Button>
+              <CardContent className="p-4">
+                <SignReportSurface
+                  study={study}
+                  mindReport={mindReport}
+                  triageDraftJson={study.triage_draft_json}
+                />
               </CardContent>
             </Card>
           ) : (
@@ -1087,7 +1078,7 @@ export default function StudyDetail() {
                 <FileText className="h-12 w-12 text-muted-foreground/30 mb-4" />
                 <p className="text-lg font-medium">No report yet</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Generate a report to get started
+                  Run analysis first to author and sign a report.
                 </p>
                 {canGenerateReport && (
                   <Button onClick={handleGenerateAIReport} disabled={generating || gateTriageActions}>
@@ -1218,39 +1209,17 @@ export default function StudyDetail() {
                   <p className="text-sm text-muted-foreground">
                     No analysis yet.
                     {IPLANE_BASE
-                      ? " Click \"Run Analysis\" above to start."
+                      ? gateTriageActions
+                        ? " Use the Select Analysis Priority button at the top of this page."
+                        : " Use the Run Analysis button at the top of this page."
                       : " Upload an EDF file and wait for the pipeline to complete."}
                   </p>
-                  {IPLANE_BASE && (
-                    <Button
-                      onClick={gateTriageActions ? () => setSlaModalOpen(true) : handleRunAITriage}
-                      disabled={runningTriage}
-                      size="sm"
-                    >
-                      {runningTriage ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Brain className="h-4 w-4 mr-2" />}
-                      {gateTriageActions ? "Select Analysis Priority" : "Run Analysis"}
-                    </Button>
-                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Sign Report Tab — editable SCORE v2 surface */}
-        <TabsContent value="sign">
-          <Card>
-            <CardContent className="p-4">
-              <SignReportSurface
-                study={study}
-                mindReport={mindReport}
-                triageDraftJson={study.triage_draft_json}
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* (placeholder, never rendered — kept until I clean up the JSX below) */}
         {/* Files Tab */}
         <TabsContent value="files">
           <Card>
