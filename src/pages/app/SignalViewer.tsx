@@ -53,7 +53,9 @@ type FocusedSeg = { label: string; t_start_s: number; t_end_s: number; channel_i
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
-function keyFor(s: number, l: number) { return `${s}:${l}`; }
+function keyFor(s: number, l: number, layer: "normalized" | "prenorm" | "raw" = "prenorm") {
+  return `${layer}:${s}:${l}`;
+}
 function fmtTime(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
@@ -232,6 +234,27 @@ export default function EEGViewer() {
   const cache       = useRef<Map<string, number[][]>>(new Map());
   const reqId       = useRef(0);
   const fetchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Predictive prefetch ─────────────────────────────────────────────────────
+  // Small bookkeeping LRU (max 3 keys: prev / current / next) tracking which
+  // chunks have been speculatively warmed. The underlying byte data lives in
+  // `cache.current` (the existing 30-entry chunk cache); this set is only used
+  // to (a) drive a console.debug + data-attribute when a hit avoids network,
+  // and (b) avoid re-issuing prefetches we've already fired.
+  const prefetchLru = useRef<Map<string, true>>(new Map());
+  const PREFETCH_LRU_MAX = 3;
+  // Monotonically incremented on every windowStart / layer change; in-flight
+  // prefetches whose generation no longer matches discard their result.
+  // (fetchBinary holds its own AbortController, so we can't cancel the network
+  // call itself; this is the next-best thing — drop stale payloads on rapid
+  // scroll so they don't poison the cache or trigger spurious re-renders.)
+  const prefetchGen = useRef(0);
+  // Tab visibility: pauses prefetch when the user tabs away. We don't pause the
+  // primary window fetch (user may have come back specifically to see signal).
+  const tabVisibleRef = useRef(typeof document !== "undefined" ? document.visibilityState === "visible" : true);
+  // Set true when the current window render came from cache (no network).
+  // Surfaced as `data-prefetch-hit` on the canvas wrapper so tests/DevTools can
+  // confirm prefetch behaviour without reading internal React state.
+  const [lastWindowFromCache, setLastWindowFromCache] = useState(false);
   const didSeek     = useRef(false);
   /** Strip legacy ?viewT / ?viewW once per study (old links; no longer used) */
   const strippedLegacyViewParamsRef = useRef(false);
@@ -363,6 +386,7 @@ export default function EEGViewer() {
     didSeek.current = false;
     strippedLegacyViewParamsRef.current = false;
     cache.current.clear(); edfReader.current = null;
+    prefetchLru.current.clear(); prefetchGen.current += 1;
     rawEdfRef.current = null; rawMetaRef.current = null; canonicalMetaRef.current = null;
     if (upgradeTimerRef.current) { clearTimeout(upgradeTimerRef.current); upgradeTimerRef.current = null; }
 
@@ -426,6 +450,7 @@ export default function EEGViewer() {
                 setFatalError(null);
                 edfReader.current = null;
                 cache.current.clear();
+                prefetchLru.current.clear(); prefetchGen.current += 1;
                 setRawEdfMode(false);
                 setSignalLayer("prenorm");
                 signalLayerRef.current = "prenorm";
@@ -497,6 +522,7 @@ export default function EEGViewer() {
                   if (signalLayerRef.current === "prenorm" || signalLayerRef.current === "normalized") {
                     edfReader.current = null;
                     cache.current.clear();
+                    prefetchLru.current.clear(); prefetchGen.current += 1;
                     setRawEdfMode(false);
                     setSignalLayer("prenorm");
                     signalLayerRef.current = "prenorm";
@@ -598,6 +624,96 @@ export default function EEGViewer() {
     };
   }, [studyId, canonicalPresent, rawEdfMode]);
 
+  // ── Effects: tab visibility (drives prefetch pause) ───────────────────────────
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => {
+      tabVisibleRef.current = document.visibilityState === "visible";
+      // On returning to the tab, bump generation so any in-flight (now-stale)
+      // prefetch results from before the pause are discarded.
+      if (!tabVisibleRef.current) prefetchGen.current += 1;
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
+
+  // ── Predictive prefetch helper ────────────────────────────────────────────────
+  // Fires background fetches for chunks adjacent to the current window. Forward
+  // chunk (windowStart + windowSec) gets primary priority — typical reading
+  // direction. We also opportunistically warm the previous chunk to make
+  // cursor-back instant. All work is gated by:
+  //   - tab visible
+  //   - not in raw-EDF mode (in-memory, no network)
+  //   - chunk not already cached
+  //   - generation match at result time (rapid scroll discards stale payloads)
+  const schedulePrefetch = useCallback(
+    (
+      ws: number,
+      fs: number,
+      max: number,
+      len: number,
+      layer: "normalized" | "prenorm" | "raw",
+      nCh: number,
+    ) => {
+      if (!tabVisibleRef.current) return;
+      if (edfReader.current) return; // raw-EDF mode: no network, no benefit
+      if (!studyId) return;
+
+      const gen = prefetchGen.current;
+      // Forward chunk first (priority), then previous. Order matters because
+      // the browser will pipeline them in this sequence.
+      const candidates: number[] = [];
+      const nextWs = clamp(ws + windowSec, 0, max);
+      if (nextWs !== ws) candidates.push(nextWs);
+      const prevWs = clamp(ws - windowSec, 0, max);
+      if (prevWs !== ws && prevWs !== nextWs) candidates.push(prevWs);
+
+      for (const targetWs of candidates) {
+        const targetStart = Math.floor(targetWs * fs);
+        const nk = keyFor(targetStart, len, layer);
+        if (cache.current.has(nk)) continue;
+        // Track immediately so concurrent passes don't double-fire.
+        prefetchLru.current.set(nk, true);
+        // Trim LRU to max size (FIFO ≈ LRU since we re-insert on hit).
+        while (prefetchLru.current.size > PREFETCH_LRU_MAX) {
+          const oldest = prefetchLru.current.keys().next().value;
+          if (oldest === undefined) break;
+          prefetchLru.current.delete(oldest);
+        }
+
+        fetchChunk(studyId, targetStart, len, layer)
+          .then(r => {
+            // Drop result if a newer scroll has invalidated the prefetch chain,
+            // or tab went hidden mid-flight, or layer was swapped.
+            if (gen !== prefetchGen.current) return;
+            if (!tabVisibleRef.current) return;
+            if (!r.ok) {
+              prefetchLru.current.delete(nk);
+              return;
+            }
+            const f32 = new Float32Array(r.data);
+            if (f32.length !== nCh * len) {
+              prefetchLru.current.delete(nk);
+              return;
+            }
+            const sig = reshapeAuto(f32, nCh, len);
+            cache.current.set(nk, sig);
+            if (cache.current.size > 30) {
+              const oldest = cache.current.keys().next().value;
+              if (oldest !== undefined) cache.current.delete(oldest);
+            }
+          })
+          .catch(() => {
+            // Best-effort — failures fall back to the on-demand path silently.
+            prefetchLru.current.delete(nk);
+          });
+      }
+    },
+    // windowSec is captured via closure; intentionally re-creating the callback
+    // on windowSec change keeps the prefetch step in sync with the user's view.
+    [studyId, windowSec],
+  );
+
   // ── Effects: window fetch ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!meta) return;
@@ -611,16 +727,33 @@ export default function EEGViewer() {
 
     const startSamp = Math.floor(ws * fs);
     const len       = Math.max(1, Math.floor(windowSec * fs));
-    const k         = keyFor(startSamp, len);
+    const curLayer  = signalLayerRef.current;
+    const k         = keyFor(startSamp, len, curLayer);
+
+    // Rapid scroll = stale prefetches must drop their payloads.
+    prefetchGen.current += 1;
 
     const hit = cache.current.get(k);
     if (hit && hit.length === meta.n_channels) {
       if (fetchDebounceRef.current) { clearTimeout(fetchDebounceRef.current); fetchDebounceRef.current = null; }
+      const wasPrefetched = prefetchLru.current.has(k);
+      if (wasPrefetched) {
+        // Refresh LRU recency so this key stays warm.
+        prefetchLru.current.delete(k);
+        prefetchLru.current.set(k, true);
+        // eslint-disable-next-line no-console
+        console.debug("[SignalViewer] prefetch hit — skipped network", { key: k });
+      }
       setSignals(hit);
+      setLastWindowFromCache(true);
       setLoadingWin(false);
+      // Cache hit still triggers a forward-prefetch of the next chunk so the
+      // chain stays warm even when the user scrolls through cached territory.
+      schedulePrefetch(ws, fs, max, len, curLayer, meta.n_channels);
       return;
     }
 
+    setLastWindowFromCache(false);
     setLoadingWin(true);
     const id = ++reqId.current;
 
@@ -645,7 +778,7 @@ export default function EEGViewer() {
     fetchDebounceRef.current = setTimeout(() => {
       fetchDebounceRef.current = null;
 
-      fetchChunk(studyId, startSamp, len, signalLayerRef.current)
+      fetchChunk(studyId, startSamp, len, curLayer)
         .then(r => {
           if (!r.ok) throw new Error((r as any).error);
           const nCh   = isFinite(hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"])) ? hdrNum(r.headers, ["x-eeg-nchannels", "x-eeg-channel-count"]) : meta.n_channels;
@@ -659,30 +792,11 @@ export default function EEGViewer() {
           cache.current.set(k, sig);
           if (cache.current.size > 30) cache.current.delete(cache.current.keys().next().value!);
           setSignals(sig);
+          // After current-window fetch lands, warm the next chunk.
+          schedulePrefetch(ws, fs, max, len, curLayer, meta.n_channels);
         })
         .catch(e => { if (id === reqId.current && !signals) setFatalError(String(e)); })
         .finally(() => { if (id === reqId.current) setLoadingWin(false); });
-
-      // Prefetch next 2 windows during playback
-      if (playing) {
-        const curLayer = signalLayerRef.current;
-        for (const offset of [windowSec / 2, windowSec]) {
-          const nextWs = clamp(ws + offset, 0, max);
-          const nk = keyFor(Math.floor(nextWs * fs), len);
-          if (!cache.current.has(nk)) {
-            fetchChunk(studyId, Math.floor(nextWs * fs), len, curLayer)
-              .then(r => {
-                if (!r.ok) return;
-                const f32 = new Float32Array(r.data);
-                if (f32.length === meta.n_channels * len) {
-                  cache.current.set(nk, reshapeAuto(f32, meta.n_channels, len));
-                  if (cache.current.size > 30) cache.current.delete(cache.current.keys().next().value!);
-                }
-              })
-              .catch(() => {});
-          }
-        }
-      }
     }, playing ? 0 : 80);
 
     return () => {
@@ -1057,6 +1171,7 @@ export default function EEGViewer() {
                 reqId.current += 1;
                 edfReader.current = null;
                 cache.current.clear();
+                prefetchLru.current.clear(); prefetchGen.current += 1;
                 setSignals(null); setLoadingRaw(true);
                 try {
                   // Primary: Read API raw zarr — works for all formats (.e, EDF, BDF) after processing
@@ -1114,6 +1229,7 @@ export default function EEGViewer() {
                 reqId.current += 1;
                 edfReader.current = null;
                 cache.current.clear();
+                prefetchLru.current.clear(); prefetchGen.current += 1;
                 if (prenormMetaRef.current) {
                   setMeta(prenormMetaRef.current); setSignals(null);
                   signalLayerRef.current = "prenorm"; setSignalLayer("prenorm");
@@ -1152,6 +1268,7 @@ export default function EEGViewer() {
                 reqId.current += 1;
                 edfReader.current = null;
                 cache.current.clear();
+                prefetchLru.current.clear(); prefetchGen.current += 1;
                 const canon = canonicalMetaRef.current;
                 if (!canon) { toast.message("ESF view not ready"); return; }
                 setSignals(null); setMeta(canon);
@@ -1167,7 +1284,12 @@ export default function EEGViewer() {
 
       {/* ── Canvas + sidebar (relative: collapsed sidebar is a floating control) ─ */}
       <div className="relative flex-1 flex overflow-hidden min-h-0">
-        <div className="flex-1 min-w-0 min-h-0" onWheel={handleWheelScroll} style={{ touchAction: "none" }}>
+        <div
+          className="flex-1 min-w-0 min-h-0"
+          onWheel={handleWheelScroll}
+          style={{ touchAction: "none" }}
+          data-prefetch-hit={lastWindowFromCache ? "1" : "0"}
+        >
           {plotSignalsReady ? (
             <>
             <SignalCanvas
