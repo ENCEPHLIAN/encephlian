@@ -165,23 +165,63 @@ function extractClaims(report: any): ClaimRow[] {
     source: "biomarkers v1.0 (deterministic detectors)",
   });
 
-  // ─── Artefacts (clean v2) ────────────────────────────────────
-  rows.push({
-    section: "Artefacts",
-    field: "Clean percentage",
-    value: typeof clean.clean_percentage === "number"
-      ? `${clean.clean_percentage.toFixed(1)}%`
-      : "—",
-    derived_from: "model",
-    source: "mind_clean_v2 (per-window 5-class)",
-  });
-  rows.push({
-    section: "Artefacts",
-    field: "Artefact windows",
-    value: `${clean.artifact_windows ?? 0} of ${clean.total_windows ?? 0} (2s windows)`,
-    derived_from: "model",
-    source: "mind_clean_v2",
-  });
+  // ─── Artefacts ───────────────────────────────────────────────
+  // mind_clean_v2 was deprecated 2026-06-02 after TUH validation showed 25.78%
+  // accuracy. The I-Plane no longer loads the model in production, and new
+  // biomarkers payloads carry `artifact_classifier.status = "deprecated_pending_aegis"`.
+  // The replacement model (AEGIS) is months out. Until AEGIS lands, surface an
+  // honest pending state rather than re-attributing stale numbers to a model
+  // that is no longer running.
+  const cleanModel = (clean.model ?? "") as string;
+  const artifactClassifierStatus = biomarkers.artifact_classifier?.status as string | undefined;
+  const isCleanV2Deprecated =
+    cleanModel === "mind_clean_v2" ||
+    artifactClassifierStatus === "deprecated_pending_aegis";
+  // Treat absent `clean.model` as deprecated too — historic rows produced by
+  // mind_clean_v2 predate the field, and the I-Plane no longer emits them.
+  const noLiveArtifactModel = !cleanModel || isCleanV2Deprecated;
+
+  if (noLiveArtifactModel) {
+    // The `source` string is what surfaces in the right-hand column (the
+    // `notes` field is currently not rendered), so the clinical reason has
+    // to live inside `source` to be visible — matching the existing pattern
+    // used by mind_subtype_v1 / mind_seizure_v1 pending rows above.
+    const pendingSource =
+      "mind_clean_v3_pending_aegis — artifact classification temporarily unavailable, replacement model (AEGIS) under development";
+    rows.push({
+      section: "Artefacts",
+      field: "Clean percentage",
+      value: "(unavailable)",
+      derived_from: "pending",
+      source: pendingSource,
+    });
+    rows.push({
+      section: "Artefacts",
+      field: "Artefact windows",
+      value: "(unavailable)",
+      derived_from: "pending",
+      source: pendingSource,
+    });
+  } else {
+    // A live, non-deprecated artifact model produced these rows (AEGIS or later).
+    // Preserve full model provenance.
+    rows.push({
+      section: "Artefacts",
+      field: "Clean percentage",
+      value: typeof clean.clean_percentage === "number"
+        ? `${clean.clean_percentage.toFixed(1)}%`
+        : "—",
+      derived_from: "model",
+      source: `${cleanModel} (per-window classifier)`,
+    });
+    rows.push({
+      section: "Artefacts",
+      field: "Artefact windows",
+      value: `${clean.artifact_windows ?? 0} of ${clean.total_windows ?? 0} (2s windows)`,
+      derived_from: "model",
+      source: cleanModel,
+    });
+  }
 
   // ─── Seizure (pending) ───────────────────────────────────────
   rows.push({

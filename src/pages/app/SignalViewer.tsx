@@ -51,18 +51,6 @@ type Marker     = { id: string; timestamp_sec: number; marker_type: string; labe
 type Segment    = { t_start_s: number; t_end_s: number; label: string; channel_index?: number | null; score?: number | null };
 type FocusedSeg = { label: string; t_start_s: number; t_end_s: number; channel_index?: number; score?: number };
 
-// ── Artifact type color map ────────────────────────────────────────────────────
-const ARTIFACT_COLORS: Record<string, { bg: string; border: string; label: string }> = {
-  eye_movement:    { bg: "rgba(139,92,246,0.10)",  border: "rgba(139,92,246,0.38)", label: "Eye"      },
-  muscle:          { bg: "rgba(249,115,22,0.10)",  border: "rgba(249,115,22,0.38)", label: "Muscle"   },
-  electrode_noise: { bg: "rgba(234,179,8,0.10)",   border: "rgba(234,179,8,0.38)",  label: "Noise"    },
-  electrode:       { bg: "rgba(234,179,8,0.10)",   border: "rgba(234,179,8,0.38)",  label: "Noise"    },
-  artifact:        { bg: "rgba(239,68,68,0.10)",   border: "rgba(239,68,68,0.35)",  label: "Artifact" },
-};
-function artifactColor(t?: string) {
-  return ARTIFACT_COLORS[t ?? "artifact"] ?? ARTIFACT_COLORS.artifact;
-}
-
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function clamp(n: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, n)); }
 function keyFor(s: number, l: number) { return `${s}:${l}`; }
@@ -223,7 +211,6 @@ export default function EEGViewer() {
   const [playing, setPlaying]     = useState(false);
   const [speed, setSpeed]         = useState(1);
   const [amplitude, setAmplitude] = useState(1.0);
-  const [showArtifacts, setShowArtifacts]   = useState(true);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   // Clinical display controls
   const [hfFilter, setHfFilter]             = useState(70);
@@ -752,70 +739,9 @@ export default function EEGViewer() {
   }, [globalTime, windowSec, segments, segIdx, seekTo, gotoSegment]);
 
   // ── Window-local overlays ─────────────────────────────────────────────────────
-  // When the artifact has specific 10-20 channel names (post-localization),
-  // render one overlay per affected channel — the box hits only those lanes.
-  // When channels is missing, ["multi"], or ["all"], render a single global
-  // (full-height) overlay. The model has not localized in that case and we
-  // must not pretend it has.
-  const winArtifacts = useMemo(() => {
-    if (!showArtifacts) return [];
-    const out: any[] = [];
-    for (const a of artifacts) {
-      if (a.end_sec <= windowStart || a.start_sec >= windowStart + windowSec) continue;
-      const ac = artifactColor(a.artifact_type);
-      const probPct = typeof a.artifact_probability === "number"
-        ? Math.round(a.artifact_probability * 100)
-        : null;
-      const localized = Array.isArray(a.channels)
-        && a.channels.length > 0
-        && !a.channels.includes("multi")
-        && !a.channels.includes("all");
-
-      const baseTitle = (chanLabel: string) => [
-        `${ac.label}${probPct != null ? ` · ${probPct}%` : ""}`,
-        `window ${a.start_sec.toFixed(1)}s–${a.end_sec.toFixed(1)}s (2s classification)`,
-        chanLabel,
-        a.model ? `model: ${a.model}` : "model: mind_clean_v2",
-        a.severity ? `severity: ${a.severity}` : null,
-        localized ? "localization: spectral signature (post-hoc)" : "localization: window-level (not channel-specific)",
-      ].filter(Boolean).join("\n");
-
-      const startRel = a.start_sec - windowStart;
-      const endRel   = a.end_sec   - windowStart;
-
-      if (localized) {
-        // Per-channel overlays — one box per affected channel
-        for (const chName of a.channels!) {
-          // Resolve channel name → visible-lane index against the current display
-          const chIdx = displayLabels.findIndex(l => l && l.toUpperCase() === String(chName).toUpperCase());
-          if (chIdx < 0) continue;  // channel not visible in current montage
-          out.push({
-            start_sec: startRel,
-            end_sec:   endRel,
-            label: probPct != null ? `${ac.label} ${probPct}% · ${chName}` : `${ac.label} · ${chName}`,
-            artifact_type: a.artifact_type,
-            channel: chIdx,                        // <-- per-channel render
-            color: ac.bg,
-            borderColor: ac.border,
-            title: baseTitle(`channel: ${chName}`),
-          });
-        }
-      } else {
-        // Window-level — single full-height box
-        out.push({
-          start_sec: startRel,
-          end_sec:   endRel,
-          label: probPct != null ? `${ac.label} ${probPct}%` : ac.label,
-          artifact_type: a.artifact_type,
-          channel: undefined,                       // <-- global render
-          color: ac.bg,
-          borderColor: ac.border,
-          title: baseTitle("channels: window-level (no per-channel localization)"),
-        });
-      }
-    }
-    return out;
-  }, [artifacts, showArtifacts, windowStart, windowSec, displayLabels]);
+  // Artifact overlay rendering removed 2026-06-02 — MIND Clean v2 deprecated,
+  // pending AEGIS. The `artifacts` fetch is preserved (forward-compatible) but
+  // currently flows as an empty array.
 
   const winMarkers = useMemo<Marker[]>(() => {
     return annotations
@@ -839,16 +765,7 @@ export default function EEGViewer() {
   }, [segments, windowStart, windowSec]);
 
   // ── Overlay legend counts ─────────────────────────────────────────────────────
-  const artifactCount  = artifacts.length;
   const annotationCount = annotations.length;
-  const artifactTypeCounts = useMemo(() => {
-    const m: Record<string, number> = {};
-    for (const a of artifacts) {
-      const t = a.artifact_type ?? "artifact";
-      m[t] = (m[t] ?? 0) + 1;
-    }
-    return m;
-  }, [artifacts]);
 
   // Dispatch window resize after sidebar toggle so SignalCanvas's ResizeObserver
   // sees the updated container width after the flex layout settles.
@@ -1077,19 +994,6 @@ export default function EEGViewer() {
             seekTo(((e.clientX - r.left) / r.width) * duration);
           }}
         >
-          {/* Artifact bands in minimap — ALWAYS visible; this is a navigator not a toggle target */}
-          {artifacts.map((a, i) => {
-            const ac = artifactColor((a as any).label ?? "artifact");
-            return (
-              <div key={`a${i}`} className="absolute top-0 h-[3px] pointer-events-none"
-                style={{
-                  left: `${(a.start_sec / duration) * 100}%`,
-                  width: `${Math.max(0.2, ((a.end_sec - a.start_sec) / duration) * 100)}%`,
-                  background: ac.border,
-                  opacity: 0.7,
-                }} />
-            );
-          })}
           {/* Segment bands — bottom 2px strip, color-coded by label (always visible) */}
           {segments.map((s, i) => {
             const c = getSegmentColor(s.label);
@@ -1132,24 +1036,6 @@ export default function EEGViewer() {
               );
             });
           })()}
-          {/* Artifact chip — clicking toggles bands; always fully visible */}
-          {artifactCount > 0 && (
-            <button
-              onClick={() => setShowArtifacts(v => !v)}
-              title={showArtifacts ? "Hide artifact bands" : "Show artifact bands"}
-              className="flex items-center gap-0.5 text-[10px] pointer-events-auto"
-            >
-              {Object.entries(artifactTypeCounts).map(([type, count]) => {
-                const ac = artifactColor(type);
-                return (
-                  <span key={type} className="flex items-center gap-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ background: ac.border }} />
-                    <span style={{ color: ac.border }}>{count}</span>
-                  </span>
-                );
-              })}
-            </button>
-          )}
         </div>
 
         {/* Signal layer toggle: Raw | Pre-norm | Normalized */}
@@ -1294,7 +1180,6 @@ export default function EEGViewer() {
               visibleChannels={visibleChannels}
               theme={theme ?? "dark"}
               markers={winMarkers}
-              artifactIntervals={winArtifacts}
               segmentIntervals={winSegments}
               uvPerMm={scaleToUVMM(amplitude)}
               hfFilter={signalLayer === "raw" ? 0 : hfFilter}
