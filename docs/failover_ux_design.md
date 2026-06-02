@@ -6,6 +6,16 @@
 
 ---
 
+## TL;DR
+
+- **9 failure scenarios** catalogued across A/C/I/E-plane components with desired-vs-current behavior per scenario.
+- **Universal time-based escalation** for spinners: <5s neutral, 5–60s amber strip with reassurance, 60s–5min named-service language with retry CTA, >5min "service offline" honest-state panel.
+- **Honest copy library** drafted for both Pilot SKU (low-density, full sentence) and Internal SKU (terse, jargon-OK) — eliminates generic "an error occurred" toasts.
+- **P0/P1/P2 priority split** — P0 (must ship before pilot): inline failure strip, "service offline" panel, pipeline event surfacing. P1 (first pilot week): retry-with-backoff button, "report issue" prefilled with study context.
+- **6 open product questions** for the user: error categorization granularity, retry policy, customer-facing comms during outages, escalation paths, copy review owner, post-pilot internal-SKU divergence.
+
+---
+
 ## 1. Failure Scenarios Matrix
 
 | # | Plane / Component | What fails | How it manifests today | Desired user-visible behavior |

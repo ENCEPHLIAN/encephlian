@@ -6,6 +6,16 @@
 
 ---
 
+## TL;DR
+
+- **Two products in one URL tree** today — 12 `isPilot` branches in `StudyUploadWizard.tsx`, 7 in `StudyDetail.tsx`, plus inline page-level swaps in `Studies.tsx`/`Dashboard.tsx`/`Wallet.tsx`/`NotificationBell.tsx`. SKU divergence has outgrown conditional rendering.
+- **Target tree:** `/pilot/*` for pilot clinics, `/internal/*` for internal ops, shared primitives in `src/components/` (no audience mixing in shared code).
+- **Route-level auth gate** replaces in-component conditionals: `useSku()` decides which sub-tree mounts before any leaf component runs. Removes ~30 `if (isPilot)` branches from leaves.
+- **Per-file migration plan** in §3 (shared vs pilot-owned vs internal-owned); **6-phase migration sequence** in §6 ordered for low blast radius.
+- **7 ranked risks** in §7 (admin SKU synthesis, deep links, RLS, training links, etc.) with mitigations; **5 open product questions** in §8 must be answered before phase 5 ships.
+
+---
+
 ## 0. Audit anchor (rebuilt from inspection)
 
 Confirmed pain. Twelve `isPilot` branches in `StudyUploadWizard.tsx` (1385 LOC), seven in `StudyDetail.tsx` (1435 LOC), inline `if (isPilot) return <PilotStudiesView/>` swaps in `Studies.tsx` and `Dashboard.tsx`, more in `Wallet.tsx`, `NotificationBell.tsx`, `SlaSelectionModal.tsx`, `StudyFlowProgress.tsx`, `SkuBadge.tsx`. `Lanes.tsx` is internal-only de facto (nav gate hides it for pilot) but lives at `/app/lanes`. Two products are sharing one URL tree.
