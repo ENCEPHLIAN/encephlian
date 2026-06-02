@@ -9,8 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { systemFeedback } from "@/lib/systemFeedback";
-import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import {
   Loader2,
   ArrowLeft,
@@ -138,24 +136,6 @@ export default function AdminStudyDetail() {
     },
     onError: (error: any) => toast.error(error.message),
   });
-
-  const handleRerunParse = async () => {
-    toast.info("Re-running parse...");
-    try {
-      const { data, error } = await supabase.functions.invoke("parse_eeg_study", {
-        body: { study_id: id },
-      });
-      if (error) {
-        const detail = await formatEdgeFunctionError(error, data);
-        systemFeedback.edgeFunctionFailed("parse_eeg_study", detail);
-        return;
-      }
-      await logEventMutation.mutateAsync({ event: "admin_rerun_parse" });
-      toast.success("Parse triggered");
-    } catch (error: any) {
-      systemFeedback.edgeFunctionFailed("parse_eeg_study", error?.message ?? String(error));
-    }
-  };
 
   const handleRerunCanonicalization = async () => {
     const cplaneBase = (import.meta as any).env?.VITE_CPLANE_BASE as string | undefined;
@@ -600,15 +580,6 @@ export default function AdminStudyDetail() {
 
               {/* Re-run Actions */}
               <div className="space-y-3">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start font-mono"
-                  onClick={handleRerunParse}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Re-run Parse
-                </Button>
-
                 <Button
                   variant="outline"
                   className="w-full justify-start font-mono"

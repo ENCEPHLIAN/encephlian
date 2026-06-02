@@ -55,10 +55,10 @@ Replica counts set via configure_autoscale.sh using Azure Container Apps HTTP sc
     content: [
       {
         heading: "Ingestion",
-        body: `1. Browser uploads raw EDF/BDF file to Supabase Storage (eeg-uploads bucket).
-2. Edge function parse_eeg_study is invoked: reads first 64KB of EDF header only; extracts channel labels, sample rate, duration, patient identification field.
+        body: `1. Browser uploads raw EDF/BDF file directly to Azure Blob via create_study_from_upload (no Supabase Storage hop).
+2. C-Plane canonicalization extracts EDF header metadata (channel labels, sample rate, duration, patient identification field) as part of the ESF build.
 3. Patient fields (name, sex, DOB, code) are merged into studies.meta JSONB (fill-only — never overwrite existing values).
-4. studies.state transitions: pending → uploaded → parsed.`,
+4. studies.state transitions: pending → uploaded → processing → triage_draft.`,
       },
       {
         heading: "Preprocessing (C-Plane)",
@@ -169,18 +169,6 @@ Response: { study_id, upload_url }
 The upload_url is a signed Supabase Storage URL for direct browser upload.`,
       },
       {
-        heading: "parse_eeg_study",
-        body: `POST — extracts EDF header metadata post-upload.
-
-Request: { study_id, file_path, file_type }
-
-Reads first 64KB only (EDF header max ~8KB). Extracts patient identification field (bytes 8–87 of EDF header):
-  Format: code sex date_of_birth name (space-delimited)
-  "X" = unknown for any field.
-
-Merges extracted fields into studies.meta (fill-only). Updates studies.state → parsed, studies.srate_hz, studies.duration_min.`,
-      },
-      {
         heading: "generate_triage_report",
         body: `POST — triggers the full C-Plane → I-Plane triage pipeline.
 
@@ -189,15 +177,6 @@ Request: { study_id, sla? }
 Kicks off async processing. Study state transitions via realtime subscription; poll study_pipeline_events for detailed progress.
 
 Returns immediately with 200. Use Supabase realtime on studies table (filter: id=eq.{study_id}) to receive state updates.`,
-      },
-      {
-        heading: "send_triage_notification",
-        body: `Internal — triggered by database webhook on triage_status → completed.
-
-Sends email to the clinic's notification address with a deep-link to the study:
-  https://www.encephlian.cloud/app/studies/{study_id}
-
-Not callable directly. Configured as a Supabase Database Webhook on studies table.`,
       },
     ],
   },
@@ -397,7 +376,7 @@ Key tables: studies, study_files, study_pipeline_events, reports, report_drafts,
 Realtime: enabled on studies, study_pipeline_events, wallet_transactions
 Storage buckets: eeg-uploads, eeg-raw, eeg-json, eeg-reports
 
-Edge functions deployed: parse_eeg_study, create_study_from_upload, generate_triage_report, send_triage_notification`,
+Edge functions deployed: create_study_from_upload, generate_triage_report`,
       },
     ],
   },
