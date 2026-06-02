@@ -709,62 +709,17 @@ export default function StudyDetail() {
 
       <StudyFlowProgress study={study} isPilot={isPilot} />
 
-      {/* Signal Analysis Pipeline — architecture indicator */}
-      {(study.triage_draft_json || study.triage_status === "completed") && (
-        <Card className="border-border/60">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-start gap-3">
-              <Brain className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Signal Analysis Pipeline
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1.5 py-0.5 font-mono font-semibold">
-                      MIND-Triage v3
-                    </span>
-                    <span className="text-[9px] text-muted-foreground/60">AUC 85.7%</span>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {/* Classification result */}
-                  <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium">Classification</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {(() => {
-                          const r = study.triage_draft_json as any;
-                          const cls = r?.classification ?? r?.triage?.classification;
-                          const conf = r?.triage_confidence ?? r?.triage?.confidence;
-                          if (!cls || cls === "unknown") return "Unclassified";
-                          const confStr = typeof conf === "number" && conf >= 0.5 ? ` · ${Math.round(conf * 100)}% confidence` : "";
-                          return `${cls.charAt(0).toUpperCase() + cls.slice(1)}${confStr}`;
-                        })()}
-                      </p>
-                    </div>
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                  </div>
-
-                  {/* Feature pipeline info */}
-                  <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium">Feature Pipeline</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        241-dim · ESF 19ch + raw amplitude
-                      </p>
-                    </div>
-                    <CheckCircle2 className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                  </div>
-
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Note: the "Signal Analysis Pipeline" card with hardcoded
+          "MIND-Triage v3 · AUC 85.7% · 241-dim Feature Pipeline" badges
+          was removed 2026-06-02. It was a §9 honest-output violation —
+          those numbers were static literals, not runtime provenance,
+          so they kept claiming "MIND-Triage v3 · AUC 85.7%" even when
+          the run was a heuristic_fallback or when amplitude_validity
+          refused the model. Same lie pattern as MIND Clean v2 was
+          deprecated for. Classification + quality_flag + model
+          provenance are shown honestly in: page header (line ~580),
+          Analysis tab (AnalysisView), TrustAuditPanel, and ReportPDF —
+          all reading actual values from triage_draft_json. */}
 
       {lastPipelineError && (
         <Alert className="border-destructive/40 bg-destructive/5">
