@@ -31,6 +31,7 @@ import {
   Edit3,
   Gauge,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 
 const NAV_SECTIONS = [
@@ -61,6 +62,7 @@ const NAV_SECTIONS = [
     items: [
       { name: "Models", href: "/admin/models", icon: Brain },
       { name: "Calibration", href: "/admin/calibration", icon: Gauge },
+      { name: "Validation runs", href: "/admin/validation-runs", icon: ShieldCheck },
       { name: "Edit deltas", href: "/admin/edit-deltas", icon: Edit3 },
       { name: "Reprocess", href: "/admin/reprocess", icon: RefreshCw },
     ],

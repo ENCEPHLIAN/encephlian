@@ -500,6 +500,62 @@ export type Database = {
           },
         ]
       }
+      model_validation_runs: {
+        Row: {
+          corpus_name: string
+          corpus_version: string | null
+          id: string
+          metrics: Json
+          model_version_id: string
+          n_files: number
+          n_samples: number
+          notes: string | null
+          report_blob_path: string | null
+          run_at: string
+          run_by: string | null
+          script_blob_path: string | null
+          verdict: string
+        }
+        Insert: {
+          corpus_name: string
+          corpus_version?: string | null
+          id?: string
+          metrics: Json
+          model_version_id: string
+          n_files: number
+          n_samples: number
+          notes?: string | null
+          report_blob_path?: string | null
+          run_at?: string
+          run_by?: string | null
+          script_blob_path?: string | null
+          verdict: string
+        }
+        Update: {
+          corpus_name?: string
+          corpus_version?: string | null
+          id?: string
+          metrics?: Json
+          model_version_id?: string
+          n_files?: number
+          n_samples?: number
+          notes?: string | null
+          report_blob_path?: string | null
+          run_at?: string
+          run_by?: string | null
+          script_blob_path?: string | null
+          verdict?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "model_validation_runs_model_version_id_fkey"
+            columns: ["model_version_id"]
+            isOneToOne: false
+            referencedRelation: "model_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       model_versions: {
         Row: {
           created_at: string

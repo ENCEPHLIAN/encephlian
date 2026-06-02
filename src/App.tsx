@@ -70,6 +70,7 @@ const AdminModels      = lazy(() => import("./pages/admin/AdminModels"));
 const AdminEditDeltas  = lazy(() => import("./pages/admin/AdminEditDeltas"));
 const AdminCalibration = lazy(() => import("./pages/admin/AdminCalibration"));
 const AdminReprocess   = lazy(() => import("./pages/admin/AdminReprocess"));
+const AdminValidationRuns = lazy(() => import("./pages/admin/AdminValidationRuns"));
 
 // ── Suspense fallback ─────────────────────────────────────────────────────────
 function PageLoader() {
@@ -139,6 +140,7 @@ function App() {
                     <Route path="models" element={<Suspense fallback={<PageLoader />}><AdminModels /></Suspense>} />
                     <Route path="edit-deltas" element={<Suspense fallback={<PageLoader />}><AdminEditDeltas /></Suspense>} />
                     <Route path="calibration" element={<Suspense fallback={<PageLoader />}><AdminCalibration /></Suspense>} />
+                    <Route path="validation-runs" element={<Suspense fallback={<PageLoader />}><AdminValidationRuns /></Suspense>} />
                     <Route path="reprocess" element={<Suspense fallback={<PageLoader />}><AdminReprocess /></Suspense>} />
                     <Route path="settings" element={<Suspense fallback={<PageLoader />}><AdminSettings /></Suspense>} />
                     <Route path="data-push" element={<Suspense fallback={<PageLoader />}><AdminDataPush /></Suspense>} />
