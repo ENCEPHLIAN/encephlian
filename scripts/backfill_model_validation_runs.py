@@ -31,10 +31,13 @@ import urllib.request
 SUPABASE_URL = os.environ.get(
     "SUPABASE_URL", "https://mngkbtsummbknrbpjbye.supabase.co"
 )
-SUPABASE_KEY = os.environ.get(
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1uZ2tidHN1bW1ia25yYnBqYnllIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NDI1Mzk4MiwiZXhwIjoyMDg5ODI5OTgyfQ.FifWkTKLZcAZcb8RB7Ra9D8_NJsjd3DDilMLsYmIunM",
-)
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+if not SUPABASE_KEY:
+    sys.exit(
+        "ERROR: SUPABASE_SERVICE_ROLE_KEY env var not set. "
+        "Get it from Supabase dashboard → Project Settings → API → service_role secret. "
+        "NEVER hardcode this in a file — it grants full database access bypassing RLS."
+    )
 
 HEADERS = {
     "apikey": SUPABASE_KEY,
