@@ -33,3 +33,6 @@ dist-ssr
 .env.*.local
 .vercel
 supabase/.temp/
+
+# Generated design-doc PDFs (regenerate via scripts/render_design_docs_pdf.sh)
+docs/pdfs/
