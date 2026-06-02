@@ -35,6 +35,8 @@ import {
 import dayjs from "dayjs";
 import { toast } from "sonner";
 import { getPatientLabel } from "@/lib/studyDisplay";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 type Report = {
   id: string;
@@ -94,7 +96,10 @@ export default function ReportDetail() {
           reportContent: isEditing ? editedContent : report.content,
         },
       });
-      if (error) throw error;
+      if (error) {
+        const detail = await formatEdgeFunctionError(error, data);
+        throw new Error(detail);
+      }
       return data;
     },
     onSuccess: () => {
@@ -103,7 +108,7 @@ export default function ReportDetail() {
       queryClient.invalidateQueries({ queryKey: ["reports-list"] });
     },
     onError: (err: any) => {
-      toast.error("Failed to sign report", { description: err?.message });
+      systemFeedback.edgeFunctionFailed("sign_report", err?.message ?? String(err));
     },
   });
 
@@ -130,10 +135,13 @@ export default function ReportDetail() {
 
     if (!pdfPath) {
       try {
-        const { error } = await supabase.functions.invoke("generate_report_pdf", {
+        const { data: genData, error } = await supabase.functions.invoke("generate_report_pdf", {
           body: { reportId: id },
         });
-        if (error) throw error;
+        if (error) {
+          const detail = await formatEdgeFunctionError(error, genData);
+          throw new Error(detail);
+        }
 
         // Fetch fresh report to get the new pdf_path
         const { data: fresh } = await supabase
@@ -144,7 +152,7 @@ export default function ReportDetail() {
         pdfPath = fresh?.pdf_path;
         queryClient.invalidateQueries({ queryKey: ["report-detail", id] });
       } catch (err: any) {
-        toast.error("Failed to generate PDF", { description: err?.message });
+        systemFeedback.edgeFunctionFailed("generate_report_pdf", err?.message ?? String(err));
         return;
       }
     }

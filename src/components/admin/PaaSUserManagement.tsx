@@ -11,6 +11,8 @@ import { Loader2, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 export default function PaaSUserManagement() {
   const [open, setOpen] = useState(false);
@@ -86,7 +88,10 @@ export default function PaaSUserManagement() {
           role: "clinician",
         },
       });
-      if (error) throw error;
+      if (error) {
+        const detail = await formatEdgeFunctionError(error, data);
+        throw new Error(detail);
+      }
       return data;
     },
     onSuccess: () => {
@@ -106,7 +111,7 @@ export default function PaaSUserManagement() {
       });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to create user");
+      systemFeedback.edgeFunctionFailed("admin_create_user", error?.message ?? String(error));
     },
   });
 

@@ -9,6 +9,7 @@ import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { useState } from "react";
 import { toast } from "@/components/ui/sonner";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { systemFeedback } from "@/lib/systemFeedback";
 import dayjs from "dayjs";
 import {
   PILOT_ACCESS_SUBSCRIPTION,
@@ -102,7 +103,13 @@ export function PilotWalletCard() {
               const credited = await verifyAndFinish(response, tokens, priceInr);
               toast.success("Payment successful", { description: `${credited} tokens added to your wallet.`, duration: 6000 });
             } catch (e: unknown) {
-              toast.error("Verification failed", { description: e instanceof Error ? e.message : "Unknown error" });
+              systemFeedback.report({
+                severity: "error",
+                what: "Payment verification failed",
+                why: "Your payment was captured but we could not confirm credit to your wallet.",
+                action: "Wait 60 seconds and check your wallet. If tokens are missing, contact support with the payment ID.",
+                technical: e instanceof Error ? e.message : String(e),
+              });
             }
           },
           onDismiss: () => setPurchasing(null),
@@ -110,8 +117,12 @@ export function PilotWalletCard() {
       );
       setPurchasing(null);
     } catch (err: unknown) {
-      toast.error("Checkout error", {
-        description: err instanceof Error ? err.message : "Unknown error",
+      systemFeedback.report({
+        severity: "error",
+        what: "Checkout could not start",
+        why: "We could not open the Razorpay checkout window.",
+        action: "Check your connection and try again. If it persists, refresh and re-open this page.",
+        technical: err instanceof Error ? err.message : String(err),
       });
       setPurchasing(null);
     }
@@ -165,9 +176,12 @@ export function PilotWalletCard() {
             });
           } catch (e: unknown) {
             await queryClient.invalidateQueries({ queryKey: ["wallet-balance"] });
-            toast.error("Could not confirm from this browser", {
-              description: (e instanceof Error ? e.message : "Unknown error") +
-                " If checkout succeeded, your balance may still update in a few seconds — check the wallet.",
+            systemFeedback.report({
+              severity: "warning",
+              what: "Could not confirm subscription from this browser",
+              why: "Razorpay accepted the payment but verification did not complete in this session.",
+              action: "Refresh the wallet in a minute — credits often arrive automatically. If not, contact support.",
+              technical: e instanceof Error ? e.message : String(e),
             });
           }
         },
@@ -175,8 +189,12 @@ export function PilotWalletCard() {
       });
       setPurchasing(null);
     } catch (err: unknown) {
-      toast.error("Could not start checkout", {
-        description: err instanceof Error ? err.message : "Unknown error",
+      systemFeedback.report({
+        severity: "error",
+        what: "Could not start subscription checkout",
+        why: "We could not open the Razorpay checkout window for the pilot plan.",
+        action: "Check your connection and retry. If it persists, refresh the page.",
+        technical: err instanceof Error ? err.message : String(err),
       });
       setPurchasing(null);
     }

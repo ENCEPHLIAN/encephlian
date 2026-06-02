@@ -25,6 +25,8 @@ import {
   AlertCircle, Play, X, RotateCcw, Clock, CheckCircle2, AlertTriangle, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -213,7 +215,11 @@ export default function AdminReprocess() {
               setProcessing(true);
               try {
                 const { data, error } = await supabase.functions.invoke("reprocess_executor", { body: {} });
-                if (error) throw error;
+                if (error) {
+                  const detail = await formatEdgeFunctionError(error, data);
+                  systemFeedback.edgeFunctionFailed("reprocess_executor", detail);
+                  return;
+                }
                 if (data?.idle) {
                   toast.info("Queue idle", { description: "No queued or running jobs to process." });
                 } else if (data?.job_complete) {
@@ -225,7 +231,7 @@ export default function AdminReprocess() {
                 }
                 qc.invalidateQueries({ queryKey: ["admin", "reprocess", "jobs"] });
               } catch (e: any) {
-                toast.error("Executor invoke failed", { description: e?.message ?? "unknown" });
+                systemFeedback.edgeFunctionFailed("reprocess_executor", e?.message ?? String(e));
               } finally {
                 setProcessing(false);
               }

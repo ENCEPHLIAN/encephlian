@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -467,19 +468,10 @@ export default function AdminInfra() {
         { body: {} },
       );
       if (fnErr) {
-        // supabase-js wraps FunctionsHttpError; dig the actual response body
-        // so the user sees 'anon_key_not_user_session' etc. instead of the
-        // generic 'non-2xx status code'.
-        let detail = fnErr.message ?? "Edge function error";
-        try {
-          const ctx = (fnErr as any).context as Response | undefined;
-          if (ctx && typeof ctx.text === "function") {
-            const body = await ctx.text();
-            if (body) detail = `${detail} — ${body}`;
-          }
-        } catch {
-          /* swallow */
-        }
+        // formatEdgeFunctionError unwraps the FunctionsHttpError so the user
+        // sees 'anon_key_not_user_session' etc. instead of a generic
+        // 'non-2xx status code'.
+        const detail = await formatEdgeFunctionError(fnErr, res);
         throw new Error(detail);
       }
       setData(res as InfraResponse);

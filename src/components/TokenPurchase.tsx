@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
+import { systemFeedback } from "@/lib/systemFeedback";
 import { TOKEN_TOPUP_PACKAGES } from "@/shared/tokenEconomy";
 import { loadRazorpayScript } from "@/lib/razorpayCheckout";
 
@@ -93,7 +94,13 @@ export function TokenPurchase() {
             queryClient.invalidateQueries({ queryKey: ["wallet-transactions"] });
             queryClient.invalidateQueries({ queryKey: ["payments"] });
           } catch (error: any) {
-            toast.error("Payment verification failed", { description: error.message });
+            systemFeedback.report({
+              severity: "error",
+              what: "Payment verification failed",
+              why: "Your payment was captured but we could not confirm credit to your wallet.",
+              action: "Wait 60 seconds and check your wallet. If tokens are missing, contact support with the payment ID.",
+              technical: error?.message ?? String(error),
+            });
           } finally {
             setLoadingPackage(null);
           }
@@ -115,7 +122,13 @@ export function TokenPurchase() {
       const razorpay = new (window as any).Razorpay(options);
       razorpay.open();
     } catch (error: any) {
-      toast.error("Checkout error", { description: error.message });
+      systemFeedback.report({
+        severity: "error",
+        what: "Checkout could not start",
+        why: "We could not open the Razorpay checkout window.",
+        action: "Check your connection and try again. If it persists, refresh and re-open this page.",
+        technical: error?.message ?? String(error),
+      });
       setLoadingPackage(null);
     }
   };

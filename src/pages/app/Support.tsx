@@ -8,6 +8,8 @@ import { useNavigate } from "react-router-dom";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 export default function Support() {
   const navigate = useNavigate();
@@ -27,7 +29,7 @@ export default function Support() {
       setIsSubmitting(true);
 
       // Call edge function that stores ticket + sends email
-      const { error } = await supabase.functions.invoke("submit_support_ticket", {
+      const { data, error } = await supabase.functions.invoke("submit_support_ticket", {
         body: {
           subject,
           message,
@@ -35,7 +37,15 @@ export default function Support() {
       });
 
       if (error) {
-        throw error;
+        const detail = await formatEdgeFunctionError(error, data);
+        systemFeedback.report({
+          severity: "error",
+          what: "Unable to submit ticket",
+          why: "The support service did not accept your request.",
+          action: "Try again in a few minutes. If it keeps failing, email info@encephlian.cloud directly.",
+          technical: detail,
+        });
+        return;
       }
 
       toast.success("Ticket submitted", { description: "We’ve received your request and will respond via email." });
@@ -43,7 +53,13 @@ export default function Support() {
       setSubject("");
       setMessage("");
     } catch (err: any) {
-      toast.error("Unable to submit ticket", { description: err.message ?? "Please try again in a few minutes." });
+      systemFeedback.report({
+        severity: "error",
+        what: "Unable to submit ticket",
+        why: "Something went wrong while sending your request.",
+        action: "Try again in a few minutes. If it keeps failing, email info@encephlian.cloud directly.",
+        technical: err?.message ?? String(err),
+      });
     } finally {
       setIsSubmitting(false);
     }

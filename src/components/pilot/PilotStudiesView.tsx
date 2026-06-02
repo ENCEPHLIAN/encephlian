@@ -22,6 +22,8 @@ import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { getPatientLabel } from "@/lib/studyDisplay";
 import { adaptV1ToV2 } from "@/lib/mindReportV2Adapter";
 import type { ReportSummary } from "@/shared/mindReportV2";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 function getV2Summary(study: PilotStudy): ReportSummary | null {
   const v1 = study.triage_draft_json as any;
@@ -151,7 +153,14 @@ export default function PilotStudiesView() {
       // 2. Try server-side PDF generation if report row has no pdf_path
       if (report?.id) {
         toast.info("Generating PDF...");
-        await supabase.functions.invoke("generate_report_pdf", { body: { reportId: report.id } });
+        const { data: genData, error: genError } = await supabase.functions.invoke(
+          "generate_report_pdf",
+          { body: { reportId: report.id } },
+        );
+        if (genError) {
+          const detail = await formatEdgeFunctionError(genError, genData);
+          console.warn("[generate_report_pdf] falling back to HTML render:", detail);
+        }
         const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).maybeSingle();
         if (fresh?.pdf_path) {
           const { data, error } = await supabase.storage.from("eeg-reports").download(fresh.pdf_path);

@@ -135,4 +135,120 @@ export const systemFeedback = {
       action: "If you believe this is an error, contact your clinic administrator.",
     });
   },
+
+  /* ------------------------------------------------------------------
+   * Failover scenario reports (per docs/failover_ux_design.md §2)
+   * Copy is the design doc's verbatim what/why/action triples; the
+   * functions take optional context (timestamps, error strings, step
+   * names) used to render the `why` and `technical` fields.
+   * ----------------------------------------------------------------*/
+
+  /** Scenario 1: C-Plane down during upload (POST /process after blob put). */
+  uploadCplaneUnreachable(technical?: string) {
+    this.report({
+      severity: "warning",
+      what: "File saved — analysis service not reachable",
+      why: "Your recording is safe in storage. The service that converts it for review is temporarily offline.",
+      action: "We'll retry automatically. No need to re-upload.",
+      technical,
+      duration: 12000,
+    });
+  },
+
+  /** Scenario 3: I-Plane down after canonicalization succeeded. */
+  iplaneDownPostCanonical(elapsedMin?: number) {
+    const escalated = typeof elapsedMin === "number" && elapsedMin >= 30;
+    this.report({
+      severity: escalated ? "error" : "warning",
+      what: "Analysis paused — models offline",
+      why: "Pre-processing finished. Model inference service is currently unreachable.",
+      action: "Your study stays in queue. Results resume automatically when the service returns.",
+      technical: typeof elapsedMin === "number" ? `stalled for ${elapsedMin} min` : undefined,
+      duration: escalated ? 15000 : 10000,
+    });
+  },
+
+  /** Scenario 4: Read API down during viewer chunk fetch. */
+  readApiDownViewer(technical?: string) {
+    this.report({
+      severity: "warning",
+      what: "Waveform service unreachable",
+      why: "We can't load the polished waveform right now.",
+      action: "Showing raw EDF preview (lower fidelity). Full viewer returns when the service is back.",
+      technical,
+      duration: 10000,
+    });
+  },
+
+  /** Scenario 5: Supabase database unreachable (global). */
+  supabaseDownGlobal(lastSyncAgo?: string) {
+    const ago = lastSyncAgo ?? "unknown";
+    this.report({
+      severity: "error",
+      what: "Database connection lost",
+      why: `Last successful sync: ${ago}. We're showing cached data — newer changes may be missing.`,
+      action: "Sign-out, signing, and report saves are disabled until reconnect.",
+      duration: 15000,
+    });
+  },
+
+  /** Scenario 6: Blob storage (canonical zarr) inaccessible. */
+  blobStorageDown(technical?: string) {
+    this.report({
+      severity: "warning",
+      what: "Storage layer issue (not your file)",
+      why: "Your recording is safe. The canonical waveform storage is temporarily unreachable.",
+      action: "Try again in 2 min. We'll recover automatically when storage is back.",
+      technical,
+      duration: 12000,
+    });
+  },
+
+  /** Scenario 7: Azure region partial outage — all planes degraded. */
+  azureRegionDegraded() {
+    this.report({
+      severity: "error",
+      what: "Cloud region degraded",
+      why: "We're tracking the issue. Multiple services in the region are currently unreachable.",
+      action: "Your in-progress work is preserved. Avoid new uploads until the banner clears.",
+      duration: 20000,
+    });
+  },
+
+  /** Scenario 8: Auth token expired mid-session and refresh failed. */
+  authExpiredMidSession() {
+    this.report({
+      severity: "warning",
+      what: "Session expired",
+      why: "Please re-sign in to continue editing.",
+      action: "Your changes on this page are kept until you sign back in.",
+      duration: 12000,
+    });
+  },
+
+  /** Scenario 9: Generic Edge function failure (FunctionsHttpError unwrapped). */
+  edgeFunctionFailed(fnName: string, error?: string) {
+    this.report({
+      severity: "error",
+      what: `${fnName} did not complete`,
+      why: "The service that handles this request returned an error.",
+      action: "Try again in 1 min. If the problem persists, copy the diagnostic below and report the issue.",
+      technical: error ?? `unknown error from ${fnName}`,
+      duration: 12000,
+    });
+  },
+
+  /** Scenario 3 helper: per-step stalled processing. */
+  studyProcessingStalled(stepName: string, elapsedMin: number) {
+    const escalated = elapsedMin >= 30;
+    this.report({
+      severity: escalated ? "error" : "warning",
+      what: `Processing stalled at ${stepName}`,
+      why: `We've been waiting ${elapsedMin} min for this step. Your file is safe.`,
+      action: escalated
+        ? "The service may be down. Retry from the study page, or open Support if it persists."
+        : "Refresh the page in a minute. The pipeline often recovers on its own.",
+      duration: escalated ? 15000 : 10000,
+    });
+  },
 };

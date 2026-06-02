@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 import { selectSlaAndStartPipeline } from "@/lib/analysisPipeline";
 import { triageTokensForSla } from "@/shared/tokenEconomy";
 import { supabase } from "@/integrations/supabase/client";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
 
@@ -205,10 +207,14 @@ export default function SlaSelectionModal({
         });
       } else {
         // Internal: SLA selection recorded server-side, no token deduction
-        const { error } = await supabase.functions.invoke("generate_triage_report", {
+        const { data, error } = await supabase.functions.invoke("generate_triage_report", {
           body: { study_id: study.id, sla: selected },
         });
-        if (error) throw error;
+        if (error) {
+          const detail = await formatEdgeFunctionError(error, data);
+          systemFeedback.edgeFunctionFailed("generate_triage_report", detail);
+          return;
+        }
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: ["dashboard-studies"] }),
           queryClient.invalidateQueries({ queryKey: ["studies-list"] }),
@@ -222,7 +228,13 @@ export default function SlaSelectionModal({
       }
       onOpenChange(false);
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to start triage");
+      systemFeedback.report({
+        severity: "error",
+        what: "Could not start triage",
+        why: "The triage pipeline did not accept this study.",
+        action: "Try again. If the problem persists, copy the diagnostic below and contact support.",
+        technical: err instanceof Error ? err.message : String(err),
+      });
     } finally {
       setSubmitting(false);
     }

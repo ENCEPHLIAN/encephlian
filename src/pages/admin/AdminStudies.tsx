@@ -16,6 +16,8 @@ import {
 import { Loader2, Search, Trash2, RotateCcw, ExternalLink, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { cn } from "@/lib/utils";
 import { formatStudySourceLine, getStudyOriginalFilename } from "@/lib/studySourceFile";
 
@@ -76,13 +78,16 @@ export default function AdminStudies() {
       const res = await supabase.functions.invoke("generate_triage_report", {
         body: { study_id: studyId },
       });
-      if (res.error) throw res.error;
+      if (res.error) {
+        const detail = await formatEdgeFunctionError(res.error, res.data);
+        throw new Error(detail);
+      }
     },
     onSuccess: () => {
       toast.success("Pipeline restarted");
       queryClient.invalidateQueries({ queryKey: ["admin-all-studies"] });
     },
-    onError: (err: any) => toast.error(err.message || "Retry failed"),
+    onError: (err: any) => systemFeedback.edgeFunctionFailed("generate_triage_report", err?.message ?? String(err)),
   });
 
   const deleteMutation = useMutation({

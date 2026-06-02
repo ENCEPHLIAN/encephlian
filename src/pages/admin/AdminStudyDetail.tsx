@@ -9,6 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import {
   Loader2,
   ArrowLeft,
@@ -140,14 +142,18 @@ export default function AdminStudyDetail() {
   const handleRerunParse = async () => {
     toast.info("Re-running parse...");
     try {
-      const { error } = await supabase.functions.invoke("parse_eeg_study", {
+      const { data, error } = await supabase.functions.invoke("parse_eeg_study", {
         body: { study_id: id },
       });
-      if (error) throw error;
+      if (error) {
+        const detail = await formatEdgeFunctionError(error, data);
+        systemFeedback.edgeFunctionFailed("parse_eeg_study", detail);
+        return;
+      }
       await logEventMutation.mutateAsync({ event: "admin_rerun_parse" });
       toast.success("Parse triggered");
     } catch (error: any) {
-      toast.error(`Parse failed: ${error.message}`);
+      systemFeedback.edgeFunctionFailed("parse_eeg_study", error?.message ?? String(error));
     }
   };
 

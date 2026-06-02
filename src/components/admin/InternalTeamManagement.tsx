@@ -10,6 +10,8 @@ import { Loader2, UserPlus, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 export default function InternalTeamManagement() {
   const [open, setOpen] = useState(false);
@@ -65,7 +67,10 @@ export default function InternalTeamManagement() {
       const { data, error } = await supabase.functions.invoke("admin_create_user", {
         body: userData,
       });
-      if (error) throw error;
+      if (error) {
+        const detail = await formatEdgeFunctionError(error, data);
+        throw new Error(detail);
+      }
       return data;
     },
     onSuccess: () => {
@@ -75,7 +80,7 @@ export default function InternalTeamManagement() {
       setFormData({ email: "", password: "", full_name: "", role: "management" });
     },
     onError: (error: any) => {
-      toast.error(error.message || "Failed to create team member");
+      systemFeedback.edgeFunctionFailed("admin_create_user", error?.message ?? String(error));
     },
   });
 

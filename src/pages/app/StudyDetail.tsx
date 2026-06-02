@@ -44,6 +44,8 @@ import MetricsView from "@/components/report/MetricsView";
 import AnalysisView from "@/components/report/AnalysisView";
 import ErrorPage from "@/components/ErrorPage";
 import { toast } from "@/components/ui/sonner";
+import { systemFeedback } from "@/lib/systemFeedback";
+import { formatEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { useState, useEffect, useRef, Component, type ReactNode } from "react";
 import { useSku } from "@/hooks/useSku";
 import { useUserSession } from "@/contexts/UserSessionContext";
@@ -321,9 +323,14 @@ export default function StudyDetail() {
       });
     }
     if (study.state === "failed" && prev !== "failed") {
-      toast.error("Pipeline error", {
-        description: "Processing failed. Check the pipeline log below and retry.",
-        duration: 8_000,
+      // Honest-output: route through systemFeedback with what/why/action.
+      // The Pipeline log + Retry button below provide the action surface.
+      systemFeedback.report({
+        severity: "error",
+        what: "Pipeline error — analysis did not complete",
+        why: "One of the processing steps failed. Your file is safe in storage.",
+        action: "Open the Pipeline trace below for the failing step, then click Retry pipeline.",
+        duration: 10_000,
       });
     }
   }, [study?.state, id, navigate]);
@@ -335,21 +342,20 @@ export default function StudyDetail() {
     const body: Record<string, string> = { study_id: id };
     if (!isPilot && study?.sla && study.sla !== "pending") body.sla = study.sla;
 
+    const tid = toast.loading("Starting analysis…");
     try {
-      await toast.promise(
-        (async () => {
-          const { error } = await supabase.functions.invoke("generate_triage_report", { body });
-          if (error) throw error;
-          void refetch();
-          void refetchMind();
-          void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
-        })(),
-        {
-          loading: "Starting analysis…",
-          success: "Pipeline started — results appear in 1–3 minutes",
-          error: (err: Error) => err?.message || "Analysis failed to start",
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("generate_triage_report", { body });
+      if (error) {
+        toast.dismiss(tid);
+        const detail = await formatEdgeFunctionError(error, data);
+        systemFeedback.edgeFunctionFailed("generate_triage_report", detail);
+        return;
+      }
+      toast.dismiss(tid);
+      toast.success("Pipeline started — results appear in 1–3 minutes");
+      void refetch();
+      void refetchMind();
+      void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
     } finally {
       setRunningTriage(false);
     }
@@ -357,22 +363,21 @@ export default function StudyDetail() {
 
   const handleGenerateAIReport = async () => {
     setGenerating(true);
+    const tid = toast.loading("Generating report…");
     try {
-      await toast.promise(
-        (async () => {
-          const { error } = await supabase.functions.invoke("generate_triage_report", {
-            body: { study_id: id },
-          });
-          if (error) throw error;
-          void refetch();
-          void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
-        })(),
-        {
-          loading: "Generating report…",
-          success: "Report generated — ready for review",
-          error: (err: Error) => err?.message || "Generation failed",
-        }
-      );
+      const { data, error } = await supabase.functions.invoke("generate_triage_report", {
+        body: { study_id: id },
+      });
+      if (error) {
+        toast.dismiss(tid);
+        const detail = await formatEdgeFunctionError(error, data);
+        systemFeedback.edgeFunctionFailed("generate_triage_report", detail);
+        return;
+      }
+      toast.dismiss(tid);
+      toast.success("Report generated — ready for review");
+      void refetch();
+      void queryClient.invalidateQueries({ queryKey: ["study-pipeline-events", id] });
     } finally {
       setGenerating(false);
     }
@@ -396,12 +401,18 @@ export default function StudyDetail() {
 
       let pdfPath = report?.pdf_path ?? null;
 
-      // Try server-side PDF generation if we have a report but no pdf_path
+      // Try server-side PDF generation if we have a report but no pdf_path.
+      // If the edge function fails, we fall back to client-side rendering
+      // below — so surface a non-fatal warning rather than blocking the flow.
       if (report && !pdfPath) {
-        const { error: genError } = await supabase.functions.invoke("generate_report_pdf", {
-          body: { reportId: report.id },
-        });
-        if (!genError) {
+        const { data: genData, error: genError } = await supabase.functions.invoke(
+          "generate_report_pdf",
+          { body: { reportId: report.id } },
+        );
+        if (genError) {
+          const detail = await formatEdgeFunctionError(genError, genData);
+          console.warn("[generate_report_pdf] falling back to client render:", detail);
+        } else {
           const { data: fresh } = await supabase.from("reports").select("pdf_path").eq("id", report.id).maybeSingle();
           pdfPath = fresh?.pdf_path ?? null;
           if (pdfPath) queryClient.invalidateQueries({ queryKey: ["study-detail", id] });
@@ -466,12 +477,21 @@ export default function StudyDetail() {
       }
 
       toast.dismiss(tid);
-      toast.error("Report content unavailable");
+      systemFeedback.report({
+        severity: "warning",
+        what: "Report content unavailable",
+        why: "We could not find a saved report payload for this study.",
+        action: "Run analysis to generate a report, then try Download again.",
+      });
     } catch (error) {
       if (import.meta.env.DEV) console.error("Download error:", error);
       toast.dismiss(tid);
-      toast.error("Download failed", {
-        description: error instanceof Error ? error.message : "Unknown error",
+      systemFeedback.report({
+        severity: "error",
+        what: "Download failed",
+        why: "We could not produce the PDF for this report.",
+        action: "Retry in a moment. If it persists, refresh the page or contact support.",
+        technical: error instanceof Error ? error.message : String(error),
       });
     } finally {
       setDownloading(false);
