@@ -12,6 +12,7 @@
  *              recording_quality, interpretable_percentage, duration_seconds, summary }
  *   recording: derived_meta from C-Plane
  */
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -21,6 +22,12 @@ import {
   CheckCircle2, Info, ExternalLink, Waves, FileText,
 } from "lucide-react";
 import { RejectFinding } from "./RejectFinding";
+import {
+  BiomarkerEventFeedback,
+  biomarkerEventFieldId,
+} from "./BiomarkerEventFeedback";
+import { newEditDeltaSessionId } from "@/lib/editDeltaCapture";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AnalysisViewProps {
   report: any;
@@ -545,7 +552,7 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
       </div>
 
       {/* ── Biomarkers (deterministic signal-processing detectors) ─────────── */}
-      <BiomarkersSection biomarkers={report.biomarkers} />
+      <BiomarkersSection biomarkers={report.biomarkers} studyId={studyId} />
 
       <p className="text-center text-[9px] text-muted-foreground font-mono">
         Generated {report.generated_at ? new Date(report.generated_at).toLocaleString() : "—"}
@@ -558,7 +565,86 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
 
 /* ─── Biomarkers section ─────────────────────────────────────────────── */
 
-function BiomarkersSection({ biomarkers }: { biomarkers: any }) {
+/**
+ * Resolves whether the current study is signed (and therefore biomarker
+ * feedback should be frozen). Lives inside this file rather than as a
+ * shared hook so we don't touch StudyDetail's data flow.
+ *
+ * Returns `null` while loading, `true` if signed, `false` otherwise.
+ * A null studyId short-circuits to false so the feedback row is editable
+ * in the preview/demo context.
+ *
+ * Subscribes to the row via supabase realtime so sign / unsign on the
+ * authoring tab flips the disposition buttons live, without depending on
+ * StudyDetail's query-invalidation lifecycle.
+ */
+function useStudySignedStatus(studyId?: string): boolean | null {
+  const [signed, setSigned] = useState<boolean | null>(studyId ? null : false);
+  useEffect(() => {
+    if (!studyId) { setSigned(false); return; }
+    let cancelled = false;
+    setSigned(null);
+    (async () => {
+      const { data, error } = await supabase
+        .from("studies")
+        .select("state")
+        .eq("id", studyId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        // Conservative default: assume editable so we don't silently freeze
+        // the feedback UI on a transient RLS / network blip.
+        setSigned(false);
+        return;
+      }
+      setSigned(data?.state === "signed");
+    })();
+
+    // Live-update on sign / unsign. The channel name embeds the study id
+    // so two studies open in different tabs don't cross-pollinate.
+    const channel = supabase
+      .channel(`biomarker_feedback_signed:${studyId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "studies", filter: `id=eq.${studyId}` },
+        (payload) => {
+          if (cancelled) return;
+          const next = (payload.new as { state?: string } | null)?.state;
+          if (next !== undefined) setSigned(next === "signed");
+        },
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [studyId]);
+  return signed;
+}
+
+function BiomarkersSection({ biomarkers, studyId }: { biomarkers: any; studyId?: string }) {
+  // Shared session id for every biomarker disposition captured during this
+  // mount — lets the training pipeline group dispositions from one sitting.
+  const sessionIdRef = useRef<string>(newEditDeltaSessionId());
+  const signed = useStudySignedStatus(studyId);
+  // While the signed lookup is in-flight, render the buttons in readOnly to
+  // avoid an accidental write that would survive a later sign flip.
+  const readOnly = signed !== false;
+  // Group events by kind. Each kind collapses to a header row + per-event
+  // rows so the clinician can disposition individual detections.
+  // useMemo runs every render before the early-return below to keep hook
+  // order stable; an absent payload yields an empty group map.
+  const byKind = useMemo(() => {
+    const evs = Array.isArray(biomarkers?.events) ? biomarkers.events : [];
+    const m: Record<string, any[]> = {};
+    for (const e of evs) {
+      const k = e.kind || "unknown";
+      (m[k] ??= []).push(e);
+    }
+    return m;
+  }, [biomarkers?.events]);
+
   if (!biomarkers || (!biomarkers.events && !biomarkers.ripple_rate_per_min && !biomarkers.burst_suppression_ratio)) {
     return null;
   }
@@ -570,12 +656,10 @@ function BiomarkersSection({ biomarkers }: { biomarkers: any }) {
   const asymIdx    = biomarkers.amplitude_asymmetry_max_index ?? 0;
   const asymPair   = biomarkers.amplitude_asymmetry_max_pair;
 
-  // Group events by kind for compact display
-  const byKind: Record<string, any[]> = {};
-  for (const e of events) {
-    const k = e.kind || "unknown";
-    (byKind[k] ??= []).push(e);
-  }
+  // Cap the per-event affordance at the first 50 events per kind so a
+  // 1000-event ripple count doesn't render 3000 buttons. The rest are
+  // surfaced as a count; the EEG Viewer remains the path for deep review.
+  const PER_KIND_CAP = 50;
 
   return (
     <div className="rounded-xl border bg-card p-4">
@@ -596,16 +680,72 @@ function BiomarkersSection({ biomarkers }: { biomarkers: any }) {
       </div>
 
       {Object.keys(byKind).length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            Events detected ({events.length} total)
-          </p>
-          {Object.entries(byKind).map(([kind, list]) => (
-            <div key={kind} className="flex items-center justify-between text-xs p-2 rounded border bg-background">
-              <span className="font-mono">{kind.replace(/_/g, " ")}</span>
-              <span className="text-muted-foreground tabular-nums">{list.length}</span>
-            </div>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+              Events detected ({events.length} total)
+            </p>
+            {studyId && (
+              <p className="text-[9px] text-muted-foreground">
+                {readOnly
+                  ? (signed === null ? "loading…" : "report signed — dispositions frozen")
+                  : "click ✓ / ? / ✗ to disposition"}
+              </p>
+            )}
+          </div>
+          {Object.entries(byKind).map(([kind, list]) => {
+            const visible = list.slice(0, PER_KIND_CAP);
+            const overflow = list.length - visible.length;
+            return (
+              <div key={kind} className="rounded border bg-background overflow-hidden">
+                <div className="flex items-center justify-between px-2 py-1.5 bg-muted/30 border-b">
+                  <span className="text-[11px] font-mono font-medium">{kind.replace(/_/g, " ")}</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">{list.length}</span>
+                </div>
+                <ul className="divide-y divide-border/60">
+                  {visible.map((ev: any, i: number) => {
+                    const fieldId = biomarkerEventFieldId(ev, i);
+                    const tStart = typeof ev.start_sec === "number" ? `${ev.start_sec.toFixed(2)}s` : "—";
+                    const tEnd   = typeof ev.end_sec   === "number" ? `${ev.end_sec.toFixed(2)}s`   : "—";
+                    const ch     = ev.channel ?? ev.lead ?? "—";
+                    const amp    = typeof ev.amplitude_uv === "number" ? `${ev.amplitude_uv.toFixed(0)}µV` : null;
+                    return (
+                      <li
+                        key={fieldId}
+                        className="flex items-center gap-2 px-2 py-1.5 text-[11px] hover:bg-muted/30 transition-colors"
+                      >
+                        <span className="font-mono text-muted-foreground tabular-nums shrink-0">
+                          {tStart}→{tEnd}
+                        </span>
+                        <span className="font-mono text-foreground shrink-0">{ch}</span>
+                        {amp && (
+                          <span className="font-mono text-muted-foreground shrink-0">{amp}</span>
+                        )}
+                        <span className="ml-auto">
+                          {studyId ? (
+                            <BiomarkerEventFeedback
+                              studyId={studyId}
+                              eventFieldId={fieldId}
+                              eventPayload={ev}
+                              readOnly={readOnly}
+                              sessionId={sessionIdRef.current}
+                            />
+                          ) : (
+                            <span className="text-[9px] text-muted-foreground">no study context</span>
+                          )}
+                        </span>
+                      </li>
+                    );
+                  })}
+                  {overflow > 0 && (
+                    <li className="px-2 py-1.5 text-[10px] text-muted-foreground text-center">
+                      +{overflow} more {kind.replace(/_/g, " ")} event{overflow !== 1 ? "s" : ""} — open the EEG Viewer to disposition the rest
+                    </li>
+                  )}
+                </ul>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -613,6 +753,7 @@ function BiomarkersSection({ biomarkers }: { biomarkers: any }) {
         Biomarkers are extracted from the pre-normalization µV signal via deterministic signal-processing detectors.
         Each detector has a fixed version and threshold — same input always produces the same output.
         These complement, but do not replace, model-based clinical interpretation.
+        Clinician dispositions (✓ accept · ? uncertain · ✗ reject) are append-only and feed the next training cycle.
       </p>
     </div>
   );
