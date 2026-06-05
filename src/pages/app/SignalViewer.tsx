@@ -949,7 +949,7 @@ export default function EEGViewer() {
     return (
       <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-3 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin" />
-        <span className="text-xs">Loading study…</span>
+        <span className="text-xs">Loading study metadata…</span>
       </div>
     );
   }
@@ -961,32 +961,33 @@ export default function EEGViewer() {
   return (
     <div className="fixed inset-0 z-[70] flex flex-col overflow-hidden bg-background" tabIndex={-1}>
 
-      {/* Always-visible escape hatch (avoids trap on loading / errors) */}
-      <div className="flex flex-shrink-0 items-center gap-2 border-b bg-background px-2 py-1.5">
-        <Button variant="outline" size="sm" className="h-7 gap-1 text-xs shrink-0" onClick={() => navigate(-1)}>
+      {/* ── Header bar — back navigation + patient identification ── */}
+      <div className="flex flex-shrink-0 items-center gap-3 border-b bg-background px-3 py-2">
+        <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs shrink-0" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back
+          <span>Back to study</span>
         </Button>
         <span className="min-w-0 flex-1 truncate text-center text-xs text-muted-foreground" title={studyId}>
           {studyCtx?.patientName
-            ? <><span className="font-medium text-foreground">{studyCtx.patientName}</span><span className="font-mono opacity-50 ml-2">{studyCtx.handle}</span></>
-            : <span className="font-mono text-[10px]">{studyId.slice(0, 12)}…</span>}
+            ? <><span className="font-semibold text-foreground">{studyCtx.patientName}</span><span className="font-mono text-muted-foreground/60 ml-2 text-[10px]">study&nbsp;{studyCtx.handle}</span></>
+            : <span className="font-mono text-[10px]">study&nbsp;{studyId.slice(0, 12)}…</span>}
         </span>
-        <span className="w-[72px] shrink-0" aria-hidden />
+        <span className="w-[120px] shrink-0" aria-hidden />
       </div>
 
-      {/* ── Raw EDF mode banner ── */}
+      {/* ── Raw EDF fallback banner — only visible when the canonical pipeline hasn't finished yet ── */}
       {rawEdfMode && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
-          <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+        <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 flex-shrink-0">
+          <Zap className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
           <span className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-            Raw signal ({meta ? `${meta.n_channels}ch · ${meta.sampling_rate_hz} Hz · original labels` : "loading"})
-            {" — "}enhanced view processing
+            <span className="font-semibold">Reading from raw vendor file.</span>
+            {meta && <> {meta.n_channels} channels · {meta.sampling_rate_hz} Hz · original electrode labels.</>}
+            {" "}Canonical view (Microvolts / Normalized) is still being processed by the C-Plane pipeline — refresh to switch once ready.
             {esfPollAttempt > 0 && (
-              <span className="opacity-50 ml-1">(check {esfPollAttempt})</span>
+              <span className="opacity-60 ml-1 font-mono text-[10px]">(poll #{esfPollAttempt})</span>
             )}
           </span>
-          <Loader2 className="h-3 w-3 text-amber-500 animate-spin shrink-0" />
+          <Loader2 className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 animate-spin shrink-0" />
         </div>
       )}
 
