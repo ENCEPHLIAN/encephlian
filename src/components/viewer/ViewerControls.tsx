@@ -168,6 +168,7 @@ function FilterCtrl<T extends number>({
   displayFn,
   tooltip,
   highlight,
+  disabled,
 }: {
   label: string;
   value: T;
@@ -176,15 +177,20 @@ function FilterCtrl<T extends number>({
   displayFn?: (v: T) => string;
   tooltip?: string;
   highlight?: boolean;
+  disabled?: boolean;
 }) {
   const fmt = displayFn ?? String;
   return (
-    <div className="flex items-center gap-0.5 shrink-0" title={tooltip}>
+    <div
+      className={cn("flex items-center gap-0.5 shrink-0", disabled && "opacity-40")}
+      title={tooltip}
+    >
       <span className="text-[10px] text-muted-foreground/60 font-medium select-none">{label}</span>
-      <Select value={String(value)} onValueChange={v => onChange(Number(v) as T)}>
+      <Select value={String(value)} onValueChange={v => onChange(Number(v) as T)} disabled={disabled}>
         <SelectTrigger className={cn(
-          "h-6 min-w-[44px] text-[11px] font-mono border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded hover:bg-muted transition-colors",
-          highlight ? "text-amber-400 dark:text-amber-300" : "text-foreground",
+          "h-6 min-w-[44px] text-[11px] font-mono border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded transition-colors",
+          disabled ? "cursor-not-allowed" : "hover:bg-muted",
+          highlight && !disabled ? "text-amber-400 dark:text-amber-300" : "text-foreground",
         )}>
           <SelectValue />
         </SelectTrigger>
@@ -220,15 +226,40 @@ export function ViewerControls({
   onNotchFilterChange,
   denoise = false,
   onDenoiseChange,
-  signalLayer = "raw",
+  signalLayer = "prenorm",
   montage = "referential",
   onMontageChange,
   visibleChannelCount,
 }: ViewerControlsProps) {
 
-  // For ESF layers (prenorm + normalized), notch and LF are already applied at conversion.
-  // Showing them as editable would imply double-application — disable and inform instead.
-  const esfLayer = signalLayer === "normalized" || signalLayer === "prenorm";
+  // Per-layer behavior is more nuanced than a binary `esfLayer`:
+  //   - raw       : vendor-native signal. No client-side filtering offered — claiming
+  //                 to filter would conflict with "raw" semantics. Amplitude shown in
+  //                 µV/mm (assumed; most vendors store µV) with a caveat tooltip.
+  //   - prenorm   : ESF µV-preserved (250 Hz, notch + CAR applied at conversion, no
+  //                 z-score). Additional client-side HF/LF is LEGITIMATE here — it
+  //                 narrows the already-clean band further. Amplitude in µV/mm.
+  //   - normalized: ESF z-scored (model input). Client-side filtering on z values is
+  //                 mathematically defined but clinically meaningless — disabled.
+  //                 Amplitude in σ/mm (z-units, dimensionless). Visibly tagged
+  //                 "model view" to discourage clinical reading.
+  const isRaw    = signalLayer === "raw";
+  const isPreNorm = signalLayer === "prenorm";
+  const isNorm   = signalLayer === "normalized";
+  const filtersEditable = isPreNorm;  // only on µV layer
+  const ampUnit = isNorm ? "σ/mm" : "µV/mm";
+  const ampUnitTitle = isNorm
+    ? "Amplitude in z-score units (σ/mm). Normalized layer has no µV scale — values are robust z-scored per channel."
+    : isRaw
+      ? "Amplitude in µV/mm assuming vendor stored µV. EDF/BDF typically µV; some vendors (Nihon Kohden, etc.) use vendor units that may need scaling — verify against original recording."
+      : "Amplitude in µV/mm (clinical default). µV layer preserves absolute amplitude post-notch + CAR.";
+  const layerLabel = isRaw ? "Raw" : isPreNorm ? "µV" : "Norm";
+  const layerSubtitle = isRaw ? "vendor signal" : isPreNorm ? "clinical" : "model view";
+  const layerBadgeCls = isRaw
+    ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/8"
+    : isPreNorm
+      ? "border-emerald-500/40 text-emerald-700 dark:text-emerald-300 bg-emerald-500/8"
+      : "border-violet-500/40 text-violet-700 dark:text-violet-300 bg-violet-500/8";
 
   const mmSec    = windowSecToMmSec(timeWindow);
   const uvmm     = scaleToUVMM(amplitudeScale);
@@ -240,6 +271,26 @@ export function ViewerControls({
 
   return (
     <div className="h-9 px-3 border-b bg-background flex items-center gap-3 flex-shrink-0 overflow-x-auto">
+
+      {/* ── Layer badge — persistent honest indicator of current signal layer ── */}
+      <div
+        className={cn(
+          "flex items-baseline gap-1 px-2 h-6 rounded border shrink-0 select-none",
+          layerBadgeCls,
+        )}
+        title={
+          isRaw
+            ? "Raw layer — original recorded signal as stored by the vendor. No filtering, no resampling, no reference. Montage locked to referential."
+            : isPreNorm
+              ? "µV layer — clinical reading layer. ESF v1: 19ch, 250 Hz, 50/60 Hz notch + common-average reference applied. Absolute µV preserved (no z-score)."
+              : "Normalized layer — what the inference model sees. Robust z-scored per channel. Dimensionless. NOT for clinical reading — use µV instead."
+        }
+      >
+        <span className="text-[11px] font-semibold font-mono leading-none">{layerLabel}</span>
+        <span className="text-[9px] opacity-70 leading-none">{layerSubtitle}</span>
+      </div>
+
+      <Sep />
 
       {/* ── Transport ───────────────────────────────────────────────────── */}
       <div className="flex items-center gap-0.5 shrink-0">
@@ -324,16 +375,16 @@ export function ViewerControls({
 
       <Sep />
 
-      {/* ── Amplitude ───────────────────────────────────────────────────── */}
+      {/* ── Amplitude (unit + tooltip adapt to layer) ───────────────────── */}
       <StepCtrl
         label="Amplitude"
         value={String(uvmm)}
-        unit="µV/mm"
+        unit={ampUnit}
         onDec={() => stepAmp(-1)}
         onInc={() => stepAmp(1)}
         disableDec={ampIdx <= 0}
         disableInc={ampIdx >= AMP_OPTIONS.length - 1}
-        tooltip="Amplitude sensitivity — microvolts per millimetre. Lower values (e.g. 7 µV/mm) make small signals larger on screen. 10 µV/mm is the clinical default for adult EEG."
+        tooltip={ampUnitTitle}
       />
 
       {/* ── Channels ────────────────────────────────────────────────────── */}
@@ -351,33 +402,48 @@ export function ViewerControls({
 
       <Sep />
 
-      {/* ── Filters ─────────────────────────────────────────────────────── */}
+      {/* ── Filters ─ adapt per layer:
+          µV (prenorm) : HF + LF + Notch all editable client-side (additional filter on top of pre-cleaned ESF)
+          Raw          : HF + LF disabled (raw means raw — filtering would contradict the layer label).
+                         Notch still offered for the common case of obvious powerline interference.
+          Normalized   : HF + LF + Notch all disabled. Z-scored data has no clinically-interpretable
+                         frequency response left to filter — disable to prevent confusion. ───────── */}
       <FilterCtrl
         label="HF"
         value={hfFilter as typeof HF_OPTIONS[number]}
         options={HF_OPTIONS}
-        onChange={v => onHFFilterChange?.(v)}
+        onChange={v => filtersEditable && onHFFilterChange?.(v)}
         displayFn={v => `${v}`}
-        tooltip={esfLayer
-          ? "High-frequency filter — applied client-side on top of ESF signals (additional low-pass on already-processed data)"
-          : "High-frequency filter (low-pass cutoff in Hz) — removes muscle and high-frequency noise above this frequency. 70 Hz is the clinical default for routine EEG."}
-        highlight={hfFilter !== 70}
+        tooltip={
+          isPreNorm
+            ? "High-frequency filter (low-pass cutoff in Hz) — additional client-side filter on top of ESF µV signals. 70 Hz is the clinical default for routine EEG."
+            : isRaw
+              ? "Disabled on raw layer — raw means no filtering. Switch to µV to apply a client-side high-pass."
+              : "Disabled on normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to µV for filtering."
+        }
+        highlight={filtersEditable && hfFilter !== 70}
+        disabled={!filtersEditable}
       />
       <FilterCtrl
         label="LF"
         value={lfFilter as typeof LF_OPTIONS[number]}
         options={LF_OPTIONS}
-        onChange={v => onLFFilterChange?.(v)}
+        onChange={v => filtersEditable && onLFFilterChange?.(v)}
         displayFn={v => v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : String(v)}
-        tooltip={esfLayer
-          ? "Low-frequency filter — already applied at ESF conversion (common average reference removes slow drift). Changing this applies an additional filter client-side."
-          : "Low-frequency filter (high-pass cutoff in Hz) — removes slow drift and DC offset below this frequency. 0.5 Hz is the clinical default."}
-        highlight={lfFilter !== 0.5}
+        tooltip={
+          isPreNorm
+            ? "Low-frequency filter (high-pass cutoff in Hz) — additional client-side filter on top of ESF µV signals. ESF already removes slow drift via CAR. 0.5 Hz is the clinical default."
+            : isRaw
+              ? "Disabled on raw layer — raw means no filtering. Switch to µV to apply a client-side low-pass."
+              : "Disabled on normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to µV for filtering."
+        }
+        highlight={filtersEditable && lfFilter !== 0.5}
+        disabled={!filtersEditable}
       />
-      {esfLayer ? (
+      {(isPreNorm || isNorm) ? (
         <span
           className="text-[10px] text-muted-foreground/50 shrink-0 font-mono select-none"
-          title="Notch filter applied at ESF conversion (50 or 60 Hz per recording line frequency). No second filter applied here."
+          title="Notch filter (50 or 60 Hz per recording line frequency) applied at ESF conversion. Not editable on ESF layers — re-apply would double-attenuate."
         >
           Notch ✓
         </span>
@@ -395,13 +461,13 @@ export function ViewerControls({
 
       <Sep />
 
-      {/* ── Denoise preset — only meaningful on raw layer ───────────────── */}
-      {!esfLayer && (
+      {/* ── Denoise preset — only meaningful on µV layer (filters editable) ─ */}
+      {filtersEditable && (
         <button
           onClick={() => onDenoiseChange?.(!denoise)}
           title={denoise
-            ? "Denoise ON — LF 1 Hz · HF 35 Hz · Notch 50 Hz. Click to restore previous filters."
-            : "Denoise — apply aggressive bandpass (1–35 Hz) + 50 Hz notch to suppress EMG, power-line, and electrode noise."}
+            ? "Denoise ON — LF 1 Hz · HF 35 Hz · Notch 50 Hz. Client-side bandpass on µV ESF. Click to restore previous filters."
+            : "Denoise — apply aggressive client-side bandpass (1–35 Hz) + 50 Hz notch to suppress residual EMG, power-line, and electrode noise."}
           className={cn(
             "h-6 px-2 rounded text-[11px] font-semibold font-mono transition-all select-none shrink-0 border",
             denoise
