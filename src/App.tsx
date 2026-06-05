@@ -12,7 +12,7 @@ import { GeoRestrictionModal } from "@/components/GeoRestrictionModal";
 import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
-import AdminRoute from "./components/admin/AdminRoute";
+import AdminRoute, { AdminIndexByRole } from "./components/admin/AdminRoute";
 import AppLayout from "./components/AppLayout";
 import AdminLayout from "./components/admin/AdminLayout";
 import NotFound from "./pages/NotFound";
@@ -43,7 +43,7 @@ const RefundPage  = lazy(() => import("./pages/legal/Refund"));
 const SupportPage = lazy(() => import("./pages/legal/Support"));
 
 // ── Admin pages (lazy) ────────────────────────────────────────────────────────
-const AdminDashboard   = lazy(() => import("./pages/admin/AdminDashboard"));
+// AdminDashboard is now lazy-loaded inside AdminIndexByRole — see AdminRoute.tsx
 const AdminStudies     = lazy(() => import("./pages/admin/AdminStudies"));
 const AdminStudyDetail = lazy(() => import("./pages/admin/AdminStudyDetail"));
 const AdminClinics     = lazy(() => import("./pages/admin/AdminClinics"));
@@ -122,7 +122,11 @@ function App() {
                 {/* Admin Routes */}
                 <Route element={<AdminRoute />}>
                   <Route path="/admin" element={<AdminLayout />}>
-                    <Route index element={<Suspense fallback={<PageLoader />}><AdminDashboard /></Suspense>} />
+                    {/* Index branches by role: super_admin → AdminDashboard
+                        (cross-clinic ops), management → ManagementDashboard
+                        (per-clinic ops). Both lazy-loaded inside AdminIndexByRole.
+                        Spec: docs/per_clinic_ops_dashboard_design.md §2 + §11. */}
+                    <Route index element={<AdminIndexByRole />} />
                     <Route path="studies" element={<Suspense fallback={<PageLoader />}><AdminStudies /></Suspense>} />
                     <Route path="studies/:id" element={<Suspense fallback={<PageLoader />}><AdminStudyDetail /></Suspense>} />
                     <Route path="clinics" element={<Suspense fallback={<PageLoader />}><AdminClinics /></Suspense>} />
