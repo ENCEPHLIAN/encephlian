@@ -1317,33 +1317,43 @@ export default function EEGViewer() {
               labelColumnWidth={80}
               onTimeClick={(t) => setCursor(clamp(t, 0, windowSec))}
             />
-            {/* Calibration marker — top-right corner of canvas, outside channel-label column.
-                Only shown for µV layers (raw / prenorm) where the scale is meaningful. */}
-            {(signalLayer === "raw" || signalLayer === "prenorm") && (
-              <div className="absolute top-3 right-3 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-1 rounded bg-background/85 border border-border/50 backdrop-blur-sm">
-                <div className="flex items-center gap-0.5">
-                  <span className="inline-block w-[1px] bg-foreground/70" style={{ height: `${Math.max(10, Math.min(28, Math.round(100 / scaleToUVMM(amplitude))))}px` }} />
-                  <span className="text-[9px] font-mono text-foreground/70">100µV</span>
-                </div>
-                <span className="text-[9px] font-mono text-muted-foreground">·</span>
-                <span className="text-[9px] font-mono text-foreground/70">{scaleToUVMM(amplitude)} µV/mm</span>
+            {/* Calibration marker — top-right corner of canvas.
+                Scale bar is meaningful on µV (absolute units). On Norm shown as
+                z-score ticks. On Raw shown with assumed-µV caveat. */}
+            <div className="absolute top-3 right-3 z-10 pointer-events-none flex items-center gap-1.5 px-2 py-1 rounded bg-background/85 border border-border/50 backdrop-blur-sm">
+              <div className="flex items-center gap-1">
+                <span className="inline-block w-[1px] bg-foreground/70" style={{ height: `${Math.max(10, Math.min(28, Math.round(100 / scaleToUVMM(amplitude))))}px` }} />
+                <span className="text-[9px] font-mono text-foreground/70">
+                  {signalLayer === "normalized" ? "1σ" : "100 µV"}
+                </span>
               </div>
-            )}
-            {/* Layer identity badge — overlaid bottom-left of canvas */}
+              <span className="text-[9px] font-mono text-muted-foreground">·</span>
+              <span className="text-[9px] font-mono text-foreground/70">
+                {scaleToUVMM(amplitude)} {signalLayer === "normalized" ? "σ/mm" : "µV/mm"}
+              </span>
+            </div>
+            {/* Layer identity badge — overlaid bottom-left of canvas. Matches toolbar
+                badge palette (amber=Raw, emerald=µV, violet=Norm) for consistency. */}
             <div className="absolute bottom-6 left-[88px] z-10 pointer-events-none">
               {signalLayer === "raw" && (
-                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-orange-500/40 bg-orange-500/10 text-orange-400">
-                  ◉ RAW · {meta.n_channels}ch · {meta.sampling_rate_hz}Hz · unfiltered
+                <span className="flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                  <span className="font-semibold">Raw Signal</span>
+                  <span className="opacity-70">·</span>
+                  <span className="font-mono">{meta.n_channels} channels · {meta.sampling_rate_hz} Hz · unfiltered</span>
                 </span>
               )}
               {signalLayer === "prenorm" && (
-                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-blue-500/40 bg-blue-500/10 text-blue-400">
-                  ◎ ESF µV · {meta.n_channels}ch · notch+CAR · absolute µV
+                <span className="flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+                  <span className="font-semibold">Microvolts (µV)</span>
+                  <span className="opacity-70">·</span>
+                  <span className="font-mono">{meta.n_channels} channels · notch + average reference · absolute µV</span>
                 </span>
               )}
               {signalLayer === "normalized" && (
-                <span className="flex items-center gap-1 text-[9px] font-mono font-bold tracking-widest uppercase px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/10 text-amber-500 dark:text-amber-300">
-                  ⚠ ESF NORM · z-score · auto-gain · NOT raw amplitude · model input
+                <span className="flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded border border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300">
+                  <span className="font-semibold">Normalized (z-score)</span>
+                  <span className="opacity-70">·</span>
+                  <span className="font-mono">model view · auto-gain · not clinical reading</span>
                 </span>
               )}
             </div>
@@ -1367,32 +1377,35 @@ export default function EEGViewer() {
         )}
       </div>
 
-      {/* ── Status bar ── */}
-      <div className="flex items-center gap-3 px-3 h-6 border-t bg-muted/20 flex-shrink-0 overflow-hidden">
+      {/* ── Status bar — bottom strip with full names, no shorthand ── */}
+      <div className="flex items-center gap-3 px-4 h-7 border-t bg-muted/20 flex-shrink-0 overflow-hidden">
         <span className="text-[10px] font-mono text-muted-foreground tabular-nums">
           {fmtTime(globalTime)}
         </span>
         <span className="text-[10px] text-muted-foreground/40">·</span>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {meta.n_channels}ch · {meta.sampling_rate_hz} Hz
+        <span className="text-[10px] text-muted-foreground">
+          <span className="font-mono font-semibold">{meta.n_channels}</span> channels · <span className="font-mono font-semibold">{meta.sampling_rate_hz}</span> Hz
         </span>
         {rawEdfMode && (
           <>
             <span className="text-[10px] text-muted-foreground/40">·</span>
-            <span className="text-[10px] text-amber-600 dark:text-amber-400">Raw EDF</span>
+            <span className="text-[10px] text-amber-700 dark:text-amber-400">Raw EDF (vendor file fallback)</span>
           </>
         )}
         <span className="text-[10px] text-muted-foreground/40">·</span>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {windowSecToMmSec(windowSec)} mm/s · {scaleToUVMM(amplitude).toFixed(1)} μV/mm
+        <span className="text-[10px] text-muted-foreground">
+          <span className="font-mono font-semibold">{windowSecToMmSec(windowSec)}</span> mm/s paper speed · <span className="font-mono font-semibold">{scaleToUVMM(amplitude).toFixed(1)}</span> {signalLayer === "normalized" ? "σ/mm" : "µV/mm"} sensitivity
         </span>
         <span className="text-[10px] text-muted-foreground/40">·</span>
-        <span className="text-[10px] font-mono text-muted-foreground">
-          {hfFilter} Hz HF · {lfFilter === 0 ? "LF Off" : `${lfFilter < 0.1 ? lfFilter.toFixed(3) : lfFilter.toFixed(1)} Hz LF`} · {notchFilter === 0 ? "Notch Off" : `${notchFilter} Hz Notch`}
+        <span className="text-[10px] text-muted-foreground">
+          Filters: <span className="font-mono font-semibold">{hfFilter}</span> Hz low-pass · {lfFilter === 0 ? "high-pass off" : <><span className="font-mono font-semibold">{lfFilter < 0.1 ? lfFilter.toFixed(3) : lfFilter.toFixed(1)}</span> Hz high-pass</>} · {notchFilter === 0 ? "notch off" : <><span className="font-mono font-semibold">{notchFilter}</span> Hz notch</>}
         </span>
         <div className="flex-1" />
         {loadingWin && (
-          <Loader2 className="h-2.5 w-2.5 animate-spin text-muted-foreground/50 shrink-0" />
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground/60 shrink-0">
+            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+            <span>loading window</span>
+          </span>
         )}
       </div>
     </div>
