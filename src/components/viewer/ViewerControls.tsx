@@ -35,11 +35,11 @@ export const HF_OPTIONS = [30, 35, 40, 50, 70, 100, 150, 200, 300, 500, 1000, 15
 export const LF_OPTIONS = [0, 0.01, 0.03, 0.05, 0.1, 0.3, 0.5, 1.0, 1.6, 5.0] as const;
 
 const MONTAGE_OPTIONS = [
-  { value: "referential",          label: "Referential"   },
-  { value: "average-reference",    label: "Avg Ref"       },
-  { value: "bipolar-longitudinal", label: "Bipolar LL"    },
-  { value: "bipolar-transverse",   label: "Bipolar TR"    },
-  { value: "laplacian",            label: "Laplacian"     },
+  { value: "referential",          label: "Referential"          },
+  { value: "average-reference",    label: "Average Reference"    },
+  { value: "bipolar-longitudinal", label: "Bipolar Longitudinal" },
+  { value: "bipolar-transverse",   label: "Bipolar Transverse"   },
+  { value: "laplacian",            label: "Laplacian"            },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ export interface ViewerControlsProps {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function Sep() {
-  return <div className="h-4 w-px bg-border/40 shrink-0" aria-hidden />;
+  return <div className="h-5 w-px bg-border/50 shrink-0" aria-hidden />;
 }
 
 /** Step-selector: label · ‹ value › · unit — compact single line */
@@ -133,29 +133,29 @@ function StepCtrl({
   tooltip?: string;
 }) {
   return (
-    <div className="flex items-center gap-1 shrink-0" title={tooltip}>
-      <span className="text-[10px] text-muted-foreground/60 font-medium select-none">{label}</span>
+    <div className="flex items-center gap-1.5 shrink-0" title={tooltip}>
+      <span className="text-[10px] text-muted-foreground/70 font-medium select-none whitespace-nowrap">{label}</span>
       <button
-        className="h-5 w-4 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors rounded hover:bg-muted"
+        className="h-6 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors rounded hover:bg-muted"
         onClick={onDec}
         disabled={disableDec}
         aria-label={`Decrease ${label}`}
       >
-        <ChevronLeft className="h-3 w-3" />
+        <ChevronLeft className="h-3.5 w-3.5" />
       </button>
-      <span className="flex flex-col items-center leading-none min-w-[28px] text-center">
+      <span className="flex flex-col items-center leading-none min-w-[32px] text-center">
         <span className="text-[12px] font-mono font-semibold text-foreground tabular-nums">{value}</span>
-        {sub && <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums leading-none">{sub}</span>}
+        {sub && <span className="text-[9px] font-mono text-muted-foreground/50 tabular-nums leading-none mt-0.5">{sub}</span>}
       </span>
       <button
-        className="h-5 w-4 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors rounded hover:bg-muted"
+        className="h-6 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors rounded hover:bg-muted"
         onClick={onInc}
         disabled={disableInc}
         aria-label={`Increase ${label}`}
       >
-        <ChevronRight className="h-3 w-3" />
+        <ChevronRight className="h-3.5 w-3.5" />
       </button>
-      <span className="text-[10px] text-muted-foreground/50 select-none">{unit}</span>
+      <span className="text-[10px] text-muted-foreground/60 select-none whitespace-nowrap">{unit}</span>
     </div>
   );
 }
@@ -182,15 +182,15 @@ function FilterCtrl<T extends number>({
   const fmt = displayFn ?? String;
   return (
     <div
-      className={cn("flex items-center gap-0.5 shrink-0", disabled && "opacity-40")}
+      className={cn("flex items-center gap-1 shrink-0", disabled && "opacity-40")}
       title={tooltip}
     >
-      <span className="text-[10px] text-muted-foreground/60 font-medium select-none">{label}</span>
+      <span className="text-[10px] text-muted-foreground/70 font-medium select-none whitespace-nowrap">{label}</span>
       <Select value={String(value)} onValueChange={v => onChange(Number(v) as T)} disabled={disabled}>
         <SelectTrigger className={cn(
-          "h-6 min-w-[44px] text-[11px] font-mono border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded transition-colors",
+          "h-7 min-w-[52px] text-[11px] font-mono border-0 shadow-none bg-transparent px-1.5 focus:ring-0 rounded transition-colors",
           disabled ? "cursor-not-allowed" : "hover:bg-muted",
-          highlight && !disabled ? "text-amber-400 dark:text-amber-300" : "text-foreground",
+          highlight && !disabled ? "text-amber-500 dark:text-amber-300 font-semibold" : "text-foreground",
         )}>
           <SelectValue />
         </SelectTrigger>
@@ -269,25 +269,28 @@ export function ViewerControls({
   const stepSpeed = (d: 1 | -1) => { const n = SPEED_OPTIONS[speedIdx + d]; if (n) onTimeWindowChange(n.windowSec); };
   const stepAmp   = (d: 1 | -1) => { const n = AMP_OPTIONS[ampIdx + d]; if (n) onAmplitudeScaleChange(10 / n.uvmm); };
 
+  // Display label = full word, not the toggle abbreviation. Medical-grade readability.
+  const layerDisplayName = isRaw ? "Raw Signal" : isPreNorm ? "Microvolts (µV)" : "Normalized (z-score)";
+
   return (
-    <div className="h-9 px-3 border-b bg-background flex items-center gap-3 flex-shrink-0 overflow-x-auto">
+    <div className="h-11 px-4 border-b bg-background flex items-center gap-4 flex-shrink-0 overflow-x-auto">
 
       {/* ── Layer badge — persistent honest indicator of current signal layer ── */}
       <div
         className={cn(
-          "flex items-baseline gap-1 px-2 h-6 rounded border shrink-0 select-none",
+          "flex items-baseline gap-1.5 px-2.5 h-7 rounded border shrink-0 select-none",
           layerBadgeCls,
         )}
         title={
           isRaw
-            ? "Raw layer — original recorded signal as stored by the vendor. No filtering, no resampling, no reference. Montage locked to referential."
+            ? "Raw Signal — original recorded waveform as stored by the vendor. No filtering, no resampling, no reference. Montage locked to referential."
             : isPreNorm
-              ? "µV layer — clinical reading layer. ESF v1: 19ch, 250 Hz, 50/60 Hz notch + common-average reference applied. Absolute µV preserved (no z-score)."
-              : "Normalized layer — what the inference model sees. Robust z-scored per channel. Dimensionless. NOT for clinical reading — use µV instead."
+              ? "Microvolts (µV) — clinical reading layer. ESF v1: 19 channels, 250 Hz, 50/60 Hz notch + common-average reference applied. Absolute microvolts preserved (no z-score)."
+              : "Normalized (z-score) — what the inference model sees. Robust z-scored per channel. Dimensionless. NOT for clinical reading — use Microvolts instead."
         }
       >
-        <span className="text-[11px] font-semibold font-mono leading-none">{layerLabel}</span>
-        <span className="text-[9px] opacity-70 leading-none">{layerSubtitle}</span>
+        <span className="text-[12px] font-semibold leading-none">{layerDisplayName}</span>
+        <span className="text-[10px] opacity-70 leading-none">{layerSubtitle}</span>
       </div>
 
       <Sep />
@@ -335,18 +338,18 @@ export function ViewerControls({
 
       {/* ── Montage ─────────────────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-0.5 shrink-0"
-        title="Montage — electrode reference scheme. Referential uses raw input; bipolar shows differences between adjacent electrodes."
+        className="flex items-center gap-1 shrink-0"
+        title="Montage — electrode reference scheme. Referential shows each channel against a common reference; bipolar montages show voltage differences between adjacent electrodes."
       >
-        <span className="text-[10px] text-muted-foreground/60 font-medium select-none">Montage</span>
+        <span className="text-[10px] text-muted-foreground/70 font-medium select-none">Montage</span>
         <Select
           value={signalLayer === "raw" ? "referential" : montage}
           onValueChange={signalLayer === "raw" ? undefined : (onMontageChange ?? (() => {}))}
           disabled={signalLayer === "raw"}
         >
           <SelectTrigger
-            className="h-6 w-[100px] text-[11px] border-0 shadow-none bg-transparent px-1 focus:ring-0 rounded hover:bg-muted transition-colors text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
-            title={signalLayer === "raw" ? "Montage locked to referential on raw layer — vendor channels shown as-is" : undefined}
+            className="h-7 w-[156px] text-[11px] border-0 shadow-none bg-transparent px-1.5 focus:ring-0 rounded hover:bg-muted transition-colors text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+            title={signalLayer === "raw" ? "Montage locked to Referential on Raw Signal layer — vendor channels shown as-is, no derivation applied" : undefined}
           >
             <SelectValue />
           </SelectTrigger>
@@ -360,9 +363,9 @@ export function ViewerControls({
 
       <Sep />
 
-      {/* ── Speed ───────────────────────────────────────────────────────── */}
+      {/* ── Paper Speed ─────────────────────────────────────────────────── */}
       <StepCtrl
-        label="Speed"
+        label="Paper Speed"
         value={String(mmSec)}
         unit="mm/s"
         sub={`${timeWindow}s/page`}
@@ -370,14 +373,14 @@ export function ViewerControls({
         onInc={() => stepSpeed(1)}
         disableDec={speedIdx <= 0}
         disableInc={speedIdx >= SPEED_OPTIONS.length - 1}
-        tooltip="Sweep speed — standard EEG paper speed in mm/s. Slower speeds show more context; faster speeds reveal high-frequency detail. 30 mm/s is the clinical default."
+        tooltip="Paper sweep speed — standard clinical EEG units (millimetres per second). Slower speeds show more context; faster speeds reveal high-frequency detail. 30 mm/s is the clinical default."
       />
 
       <Sep />
 
-      {/* ── Amplitude (unit + tooltip adapt to layer) ───────────────────── */}
+      {/* ── Sensitivity (unit + tooltip adapt to layer) ─────────────────── */}
       <StepCtrl
-        label="Amplitude"
+        label="Sensitivity"
         value={String(uvmm)}
         unit={ampUnit}
         onDec={() => stepAmp(-1)}
@@ -387,15 +390,16 @@ export function ViewerControls({
         tooltip={ampUnitTitle}
       />
 
-      {/* ── Channels ────────────────────────────────────────────────────── */}
+      {/* ── Channels (full word — medical-grade readability) ────────────── */}
       {visibleChannelCount != null && (
         <>
           <Sep />
           <span
-            className="text-[11px] font-mono text-muted-foreground tabular-nums shrink-0"
+            className="text-[11px] text-muted-foreground tabular-nums shrink-0"
             title="Number of channels currently displayed"
           >
-            {visibleChannelCount}<span className="text-muted-foreground/40 text-[10px]"> ch</span>
+            <span className="font-mono font-semibold">{visibleChannelCount}</span>
+            <span className="text-muted-foreground/60 ml-1">channels</span>
           </span>
         </>
       )}
@@ -409,43 +413,44 @@ export function ViewerControls({
           Normalized   : HF + LF + Notch all disabled. Z-scored data has no clinically-interpretable
                          frequency response left to filter — disable to prevent confusion. ───────── */}
       <FilterCtrl
-        label="HF"
+        label="Low-Pass"
         value={hfFilter as typeof HF_OPTIONS[number]}
         options={HF_OPTIONS}
         onChange={v => filtersEditable && onHFFilterChange?.(v)}
         displayFn={v => `${v}`}
         tooltip={
           isPreNorm
-            ? "High-frequency filter (low-pass cutoff in Hz) — additional client-side filter on top of ESF µV signals. 70 Hz is the clinical default for routine EEG."
+            ? "Low-pass filter (high-frequency cutoff in Hz) — additional client-side filter on top of microvolt ESF signals. 70 Hz is the clinical default for routine EEG."
             : isRaw
-              ? "Disabled on raw layer — raw means no filtering. Switch to µV to apply a client-side high-pass."
-              : "Disabled on normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to µV for filtering."
+              ? "Disabled on Raw Signal layer — raw means no filtering. Switch to Microvolts (µV) to apply a client-side low-pass filter."
+              : "Disabled on Normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to Microvolts (µV) for filtering."
         }
         highlight={filtersEditable && hfFilter !== 70}
         disabled={!filtersEditable}
       />
       <FilterCtrl
-        label="LF"
+        label="High-Pass"
         value={lfFilter as typeof LF_OPTIONS[number]}
         options={LF_OPTIONS}
         onChange={v => filtersEditable && onLFFilterChange?.(v)}
         displayFn={v => v === 0 ? "Off" : v < 0.1 ? v.toFixed(3) : String(v)}
         tooltip={
           isPreNorm
-            ? "Low-frequency filter (high-pass cutoff in Hz) — additional client-side filter on top of ESF µV signals. ESF already removes slow drift via CAR. 0.5 Hz is the clinical default."
+            ? "High-pass filter (low-frequency cutoff in Hz) — additional client-side filter on top of microvolt ESF signals. ESF already removes slow drift via common-average reference. 0.5 Hz is the clinical default."
             : isRaw
-              ? "Disabled on raw layer — raw means no filtering. Switch to µV to apply a client-side low-pass."
-              : "Disabled on normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to µV for filtering."
+              ? "Disabled on Raw Signal layer — raw means no filtering. Switch to Microvolts (µV) to apply a client-side high-pass filter."
+              : "Disabled on Normalized layer — z-scored data has no clinically-meaningful frequency response to filter. Switch to Microvolts (µV) for filtering."
         }
         highlight={filtersEditable && lfFilter !== 0.5}
         disabled={!filtersEditable}
       />
       {(isPreNorm || isNorm) ? (
         <span
-          className="text-[10px] text-muted-foreground/50 shrink-0 font-mono select-none"
-          title="Notch filter (50 or 60 Hz per recording line frequency) applied at ESF conversion. Not editable on ESF layers — re-apply would double-attenuate."
+          className="text-[10px] text-muted-foreground/60 shrink-0 select-none flex items-center gap-1"
+          title="Notch filter (50 or 60 Hz per recording line frequency) applied at ESF conversion. Not editable on ESF layers — re-applying would double-attenuate."
         >
-          Notch ✓
+          <span className="font-medium">Notch</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-mono">✓ applied</span>
         </span>
       ) : (
         <FilterCtrl
@@ -454,7 +459,7 @@ export function ViewerControls({
           options={[0, 50, 60] as const}
           onChange={v => onNotchFilterChange?.(v as 0 | 50 | 60)}
           displayFn={v => v === 0 ? "Off" : `${v} Hz`}
-          tooltip="Notch (band-reject) filter — removes powerline interference at 50 Hz (Europe/Asia) or 60 Hz (Americas). Disable if analysing signals near the powerline frequency."
+          tooltip="Notch (band-reject) filter — removes powerline interference at 50 Hz (Europe / Asia) or 60 Hz (Americas). Disable if analysing signals near the powerline frequency."
           highlight={notchFilter !== 0}
         />
       )}
