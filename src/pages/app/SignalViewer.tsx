@@ -1211,7 +1211,9 @@ export default function EEGViewer() {
                   }
                 } finally { setLoadingRaw(false); }
               }}
-              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "raw" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center px-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "raw"
+                ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 font-semibold"
+                : "text-muted-foreground hover:text-foreground"}`}
             >
               {loadingRaw ? <Loader2 className="h-3 w-3 animate-spin" /> : "Raw"}
             </button>
@@ -1253,7 +1255,9 @@ export default function EEGViewer() {
                   });
                 } finally { setLoadingPrenorm(false); }
               }}
-              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "prenorm" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center px-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "prenorm"
+                ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-semibold"
+                : "text-muted-foreground hover:text-foreground"}`}
             >
               {loadingPrenorm ? <Loader2 className="h-3 w-3 animate-spin" /> : "µV"}
             </button>
@@ -1274,7 +1278,9 @@ export default function EEGViewer() {
                 setSignals(null); setMeta(canon);
                 signalLayerRef.current = "normalized"; setSignalLayer("normalized");
               }}
-              className={`flex items-center px-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "normalized" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              className={`flex items-center px-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "normalized"
+                ? "bg-violet-500/20 text-violet-700 dark:text-violet-300 font-semibold"
+                : "text-muted-foreground hover:text-foreground"}`}
             >
               Norm
             </button>
