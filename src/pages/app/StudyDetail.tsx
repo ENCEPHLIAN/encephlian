@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EditableReportV2 } from "@/components/report/EditableReportV2";
 import { TrustAuditPanel } from "@/components/report/TrustAuditPanel";
 import { HonestReportWrap } from "@/components/report/HonestReportWrap";
+import { ComparedToPrior } from "@/components/report/ComparedToPrior";
 import { buildEditableStateFromMindReport, persistDraft, persistSigned, loadDraft } from "@/lib/editableReportBridge";
 import type { ScoreV2EditState } from "@/lib/editableReportBridge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -1038,6 +1039,16 @@ export default function StudyDetail() {
                           </>
                         )}
 
+                        {/* Compare-to-Prior (P0) — design §4: between Conclusion
+                            and Signature. content.compared_to_study_id is
+                            stamped onto the report by the I-Plane finaliser.
+                            Null => honest "no prior" empty state. */}
+                        <Separator />
+                        <ComparedToPrior
+                          comparisonRunId={(content as any)?.comparison_run_id ?? null}
+                          comparedToStudyId={(content as any)?.compared_to_study_id ?? null}
+                        />
+
                         {content?.recommendations && (
                           <>
                             <Separator />
@@ -1450,6 +1461,16 @@ function SignReportSurface({
         onSave={(s) => persistDraft(studyId, s)}
         onSign={handleSignToDb}
       />
+      {/* Compare-to-Prior (P0) — design §4: between Conclusion and
+          Signature. The IDs are stamped onto mind.report.v1 by the
+          I-Plane finaliser. Null compared_to_study_id renders the honest
+          "first study on file" empty state. */}
+      <div className="mt-4">
+        <ComparedToPrior
+          comparisonRunId={initial.comparison_run_id ?? sourceReport?.comparison_run_id ?? null}
+          comparedToStudyId={initial.compared_to_study_id ?? sourceReport?.compared_to_study_id ?? null}
+        />
+      </div>
     </>
   );
 }

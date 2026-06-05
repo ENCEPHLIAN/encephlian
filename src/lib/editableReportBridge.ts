@@ -40,6 +40,13 @@ export interface ScoreV2EditState {
   background_continuity: FieldProposal<string>;
   background_symmetry: FieldProposal<string>;
   background_slowing: FieldProposal<string>;
+  // ── Compare-to-Prior (P0). Set on the iplane finaliser; null when no
+  // eligible prior is on file (first study for the patient, vendor /
+  // model gating excluded the prior, etc.). The UI uses these to fetch
+  // the matching study_comparison_runs row from Supabase. Suppression of
+  // the Compare section is decided downstream: null IDs => no section.
+  compared_to_study_id?: string | null;
+  comparison_run_id?: string | null;
 }
 
 /* ────────────────────────────────────────────────────────────────────────── */
@@ -149,6 +156,10 @@ export function buildEditableStateFromMindReport(report: any): ScoreV2EditState 
     background_slowing: mk(bg?.generalized_slowing ?? null, bg?.generalized_slowing ? 0.7 : 0.0,
                            "score_engine_v1",
                            bg?.generalized_slowing ? [`score.background_activity.generalized_slowing=${bg.generalized_slowing}`] : []),
+    compared_to_study_id:
+      (report?.compared_to_study_id ?? scoreSub?.compared_to_study_id ?? null) as string | null,
+    comparison_run_id:
+      (report?.comparison_run_id ?? scoreSub?.comparison_run_id ?? null) as string | null,
   };
 }
 
