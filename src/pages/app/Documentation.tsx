@@ -76,13 +76,12 @@ Output: ESF zarr store written to Azure Blob.`,
         heading: "Model Inference (I-Plane)",
         body: `C-Plane calls I-Plane /mind/infer with an ESF tensor slice.
 
-MIND models:
-- MIND-Triage (v2): binary classification (normal/abnormal), AUC 0.66 on TUH test set.
-- MIND-Clean: artifact interval detection per channel.
-- MIND-SCORE: structured annotation generation in SCORE format.
-- REVE (in training): equipment-specific denoising for matched-hardware scenarios.
+Currently-serving MIND models are listed at /admin/models with live versions
+read from model_versions. Per-model validation metrics (AUC, ECE, verdict,
+holdout corpus, n) are at /admin/validation-runs — never hardcoded here.
 
-I-Plane returns structured JSON; C-Plane writes to studies.triage_draft_json and study_pipeline_events.`,
+I-Plane returns structured JSON; C-Plane writes to studies.triage_draft_json
+and study_pipeline_events.`,
       },
       {
         heading: "State Machine",
@@ -281,12 +280,23 @@ Access requires a service-role Supabase Storage token or direct Azure SAS URL ge
     content: [
       {
         heading: "Model Inventory",
-        body: `MIND-Triage (v2)
-  Input: ESF tensor, 19-channel 10/20 montage, 256 Hz, 60s window
+        body: `Inventory + per-model contract is the source of truth at:
+  - /admin/models — currently-serving versions, status, family
+  - /admin/validation-runs — empirical AUC / ECE / sensitivity / specificity
+    per (model_version_id × holdout corpus), with verdict and run timestamp
+
+Hardcoded metrics drift; the admin surfaces read live from
+model_versions and model_validation_runs. Do not embed AUC or accuracy
+strings in this Documentation page — see postmortem_vigil_clean_v2.md
+for why ("MIND-Triage v3 · AUC 85.7%" was removed 2026-06-02 for the
+same reason).
+
+Architecture sketch per family (stable across versions):
+
+MIND-Triage (binary normal/abnormal)
+  Input: ESF tensor, 19-channel 10/20 montage, 250 Hz, 60s window
   Output: { classification: "normal"|"abnormal", confidence: float }
-  Architecture: 1D-CNN + attention head
-  Training: TUH Abnormal Corpus (v3.0), 10,000+ recordings
-  AUC: 0.6615 on TUH test split
+  Architecture: two-branch MLP (133-dim ESF spectral + 108-dim raw amp)
 
 MIND-Clean
   Input: per-channel signal windows

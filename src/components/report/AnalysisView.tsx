@@ -545,9 +545,10 @@ export default function AnalysisView({ report, studyId }: AnalysisViewProps) {
       <div className="flex items-start gap-2 p-2 rounded-lg bg-muted/30 border">
         <Info className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-[10px] text-muted-foreground">
-          Quantitative inference from ONNX models (Triage AUC≈0.77, Artifact Detection AUC=0.726).
-          Not a clinical interpretation. The reviewing physician determines significance.
-          SCORE EEG format per Beniczky et al. 2013/2017.
+          Quantitative inference from ONNX models. Per-model validation metrics are
+          recorded in <code>model_validation_runs</code> (admin → Validation Runs).
+          Not a clinical interpretation — the reviewing physician determines
+          significance. SCORE EEG format per Beniczky et al. 2013/2017.
         </p>
       </div>
 
