@@ -110,24 +110,25 @@ export function AnnotationPanel({
     return Object.entries(c).sort((a, b) => b[1] - a[1]);
   }, [segments]);
 
-  // Collapsed: floating badge button
+  // Collapsed: floating badge button. Title shows plural-aware full sentence so
+  // hovering tells you exactly what the count means without opening the panel.
   if (!isOpen) {
     return (
       <button
         type="button"
         onClick={onToggle}
-        title={`${segments.length} segments`}
+        title={`${segments.length} detected segment${segments.length === 1 ? "" : "s"} — click to open the list`}
         className={cn(
           "absolute right-2 top-1/2 z-20 -translate-y-1/2",
           "flex flex-col items-center justify-center gap-0.5",
-          "h-10 w-7 rounded-md",
+          "h-11 w-8 rounded-md",
           "border border-border/50 bg-background/95 shadow-sm backdrop-blur-sm",
           "text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors",
         )}
       >
-        <List className="h-3.5 w-3.5" />
+        <List className="h-4 w-4" />
         {segments.length > 0 && (
-          <span className="text-[9px] font-mono font-medium tabular-nums">
+          <span className="text-[10px] font-mono font-semibold tabular-nums">
             {segments.length > 99 ? "99+" : segments.length}
           </span>
         )}

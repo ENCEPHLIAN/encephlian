@@ -1145,23 +1145,31 @@ export default function EEGViewer() {
           {/* Current viewport */}
           <div className="absolute top-0 bottom-0 border-x border-primary/40 bg-primary/6 pointer-events-none"
             style={{ left: `${(windowStart / duration) * 100}%`, width: `${Math.max(0.5, (windowSec / duration) * 100)}%` }} />
-          <span className="absolute right-1 top-0.5 text-[9px] text-muted-foreground/40 font-mono pointer-events-none">
-            {fmtTime(duration)}
+          <span
+            className="absolute right-1.5 top-0.5 text-[9px] text-muted-foreground/50 font-mono pointer-events-none"
+            title={`Total recording duration: ${fmtTime(duration)}`}
+          >
+            {fmtTime(duration)} total
           </span>
         </div>
 
-        {/* Chips — outside overflow-hidden, always on top, never clipped */}
-        <div className="absolute bottom-0.5 left-1 z-20 flex items-center gap-1 pointer-events-none">
-          {/* Segment chips */}
+        {/* Segment chips — colored dot + count per label. Hover tooltip shows the
+            full medical-grade name + plural-aware count for medical-grade clarity. */}
+        <div className="absolute bottom-0.5 left-1.5 z-20 flex items-center gap-1.5 pointer-events-none">
           {segments.length > 0 && (() => {
             const counts: Record<string, number> = {};
             for (const s of segments) counts[s.label] = (counts[s.label] ?? 0) + 1;
             return Object.entries(counts).map(([label, count]) => {
               const c = getSegmentColor(label);
+              const fullName = label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, " ");
               return (
-                <span key={label} className="flex items-center gap-0.5 text-[10px]">
+                <span
+                  key={label}
+                  title={`${count} ${fullName.toLowerCase()}${count === 1 ? "" : "s"} detected`}
+                  className="flex items-center gap-1 text-[10px] tabular-nums"
+                >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.border }} />
-                  <span style={{ color: c.border }}>{count}</span>
+                  <span style={{ color: c.border }} className="font-semibold">{count}</span>
                 </span>
               );
             });
