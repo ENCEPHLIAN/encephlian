@@ -897,11 +897,14 @@ export default function EEGViewer() {
         </div>
         <div className="space-y-1.5 max-w-sm">
           <p className="text-sm font-semibold">No study selected</p>
-          <p className="text-xs text-muted-foreground">Open the viewer from a study page.</p>
+          <p className="text-xs text-muted-foreground">
+            The viewer needs a study identifier in the URL.
+            Return to a study page and open the EEG viewer from there.
+          </p>
         </div>
         <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-3.5 w-3.5" />
-          Go back
+          Return to previous page
         </Button>
       </div>
     );
@@ -1018,34 +1021,43 @@ export default function EEGViewer() {
         );
       })()}
 
-      {/* ── Focused segment banner ── */}
+      {/* ── Focused segment banner — appears when the user clicks a segment ── */}
       {focusedSeg && (
-        <div className="flex items-center justify-between gap-3 px-3 py-1.5 bg-primary/8 border-b border-primary/15 flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <Badge variant="secondary" className="text-xs capitalize shrink-0">{focusedSeg.label}</Badge>
+        <div className="flex items-center justify-between gap-3 px-4 py-2 bg-primary/8 border-b border-primary/15 flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-wrap">
+            <span className="text-xs text-muted-foreground/70 select-none">Viewing segment:</span>
+            <Badge variant="secondary" className="text-xs capitalize shrink-0">
+              {focusedSeg.label.replace(/_/g, " ")}
+            </Badge>
             <span className="text-xs font-mono text-muted-foreground">
               {fmtTime(focusedSeg.t_start_s)} – {fmtTime(focusedSeg.t_end_s)}
             </span>
             {focusedSeg.score != null && (
               <span className="text-xs text-muted-foreground">
-                conf: {(focusedSeg.score * 100).toFixed(0)}%
+                <span className="font-mono font-semibold text-foreground/80">{(focusedSeg.score * 100).toFixed(0)}%</span> confidence
               </span>
             )}
             {segments.length > 1 && (
-              <div className="flex items-center gap-1 border-l pl-2 ml-1">
-                <Button variant="ghost" size="icon" className="h-5 w-5"
+              <div className="flex items-center gap-1 border-l pl-3 ml-1">
+                <Button variant="ghost" size="icon" className="h-6 w-6"
+                  title="Previous segment (P)"
                   onClick={() => gotoSegment(segments[segIdx > 0 ? segIdx - 1 : segments.length - 1])}>
-                  <ChevronLeft className="h-3 w-3" />
+                  <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
-                <span className="text-xs text-muted-foreground tabular-nums">{segIdx + 1}/{segments.length}</span>
-                <Button variant="ghost" size="icon" className="h-5 w-5"
+                <span className="text-xs text-muted-foreground tabular-nums px-1">
+                  <span className="font-mono font-semibold text-foreground/80">{segIdx + 1}</span>
+                  <span className="text-muted-foreground/50"> of </span>
+                  <span className="font-mono font-semibold text-foreground/80">{segments.length}</span>
+                </span>
+                <Button variant="ghost" size="icon" className="h-6 w-6"
+                  title="Next segment (N)"
                   onClick={() => gotoSegment(segments[(segIdx + 1) % segments.length])}>
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
             )}
           </div>
-          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={clearFocus}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title="Close focused-segment view" onClick={clearFocus}>
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -1360,9 +1372,12 @@ export default function EEGViewer() {
             </div>
             </>
           ) : (
-            <div className="flex h-full w-full items-center justify-center gap-2 text-muted-foreground">
+            <div className="flex h-full w-full items-center justify-center gap-3 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span className="text-xs">Loading waveform…</span>
+              <div className="flex flex-col">
+                <span className="text-sm">Loading EEG waveform…</span>
+                <span className="text-[10px] text-muted-foreground/60">Streaming signal from the Read API</span>
+              </div>
             </div>
           )}
         </div>
