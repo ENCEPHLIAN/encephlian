@@ -253,8 +253,7 @@ export function ViewerControls({
     : isRaw
       ? "Amplitude in µV/mm assuming vendor stored µV. EDF/BDF typically µV; some vendors (Nihon Kohden, etc.) use vendor units that may need scaling — verify against original recording."
       : "Amplitude in µV/mm (clinical default). µV layer preserves absolute amplitude post-notch + CAR.";
-  const layerLabel = isRaw ? "Raw" : isPreNorm ? "µV" : "Norm";
-  const layerSubtitle = isRaw ? "vendor signal" : isPreNorm ? "clinical" : "model view";
+  const layerSubtitle = isRaw ? "vendor signal" : isPreNorm ? "clinical reading" : "model view";
   const layerBadgeCls = isRaw
     ? "border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-500/8"
     : isPreNorm
