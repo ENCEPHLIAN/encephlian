@@ -914,32 +914,34 @@ export default function EEGViewer() {
   if (fatalError) {
     const isNotFound = fatalError.includes("404") || fatalError.includes("No blobs") || fatalError.includes("not yet available");
     return (
-      <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="h-14 w-14 rounded-2xl bg-muted/50 flex items-center justify-center">
-          <WifiOff className="h-7 w-7 text-muted-foreground/60" />
+      <div className="fixed inset-0 z-[70] bg-background flex flex-col items-center justify-center gap-5 p-8 text-center">
+        <div className="h-16 w-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+          <WifiOff className="h-8 w-8 text-muted-foreground/60" />
         </div>
-        <div className="space-y-1.5 max-w-sm">
+        <div className="space-y-2 max-w-md">
           <p className="text-sm font-semibold">
-            {isNotFound ? "Waveform not yet available" : "Viewer unavailable"}
+            {isNotFound ? "EEG waveform not yet available" : "EEG viewer unavailable"}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {isNotFound
-              ? "The EEG waveform is still being processed. Return to the study and wait for analysis to complete — the viewer will work once processing finishes."
-              : "Could not connect to the EEG data service. Check your connection and try again."}
+              ? "This study is still being processed by the canonicalization pipeline (C-Plane). The viewer will work as soon as the ESF tensor is written to canonical storage — usually within a few minutes of upload. Return to the study page and wait for the pipeline timeline to complete."
+              : "Could not connect to the EEG data service (Read API). Check your internet connection and try again. If the problem persists, the platform may be experiencing an outage — see the system status page."}
           </p>
         </div>
         <details className="text-left">
-          <summary className="text-xs text-muted-foreground/60 cursor-pointer">Technical details</summary>
-          <pre className="mt-1 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 max-w-lg whitespace-pre-wrap break-words">{fatalError}</pre>
+          <summary className="text-xs text-muted-foreground/60 cursor-pointer hover:text-muted-foreground transition-colors">
+            Show technical details
+          </summary>
+          <pre className="mt-2 text-xs text-muted-foreground bg-muted/30 rounded-lg p-3 max-w-lg whitespace-pre-wrap break-words font-mono">{fatalError}</pre>
         </details>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(-1)}>
             <ArrowLeft className="h-3.5 w-3.5" />
-            Go back
+            Return to study
           </Button>
           {isNotFound && (
             <Button size="sm" className="gap-2" onClick={() => navigate(0)}>
-              Retry
+              Try again
             </Button>
           )}
         </div>
@@ -994,7 +996,8 @@ export default function EEGViewer() {
         </div>
       )}
 
-      {/* ── ESF mode: show channel mapping quality if meta carries quality info ── */}
+      {/* ── ESF channel-mapping quality banner — shown when input vendor used a
+           non-standard reference and only on the canonical (µV / Normalized) view ── */}
       {!rawEdfMode && (signalLayer === "normalized" || signalLayer === "prenorm") && meta && (() => {
         // C-Plane embeds "input_montage:X | mapped:Y/Z" in ESF notes field
         const notes: string = (meta as any).notes ?? "";
@@ -1002,20 +1005,20 @@ export default function EEGViewer() {
         const mappedMatch  = notes.match(/mapped:(\d+)\/(\d+)/);
         if (!montageMatch && !mappedMatch) return null;
         const montage = montageMatch?.[1];
-        const mapped  = mappedMatch ? `${mappedMatch[1]}/${mappedMatch[2]} ch` : null;
+        const mappedFraction = mappedMatch ? `${mappedMatch[1]} of ${mappedMatch[2]} channels` : null;
         const isBipolar = montage === "bipolar";
         return (
-          <div className={`flex items-center gap-2 px-3 py-1 border-b flex-shrink-0 text-xs ${
+          <div className={`flex items-center gap-2 px-4 py-1.5 border-b flex-shrink-0 text-xs ${
             isBipolar
               ? "bg-destructive/8 border-destructive/20 text-destructive"
               : "bg-muted/30 border-border/40 text-muted-foreground"
           }`}>
-            {isBipolar && <AlertCircle className="h-3 w-3 shrink-0" />}
-            <span>
-              {montage ? `Input montage: ${montage.replace(/_/g, " ")}` : ""}
-              {montage && mapped ? " · " : ""}
-              {mapped ? `${mapped} mapped to 10-20` : ""}
-              {isBipolar ? " — bipolar input cannot be re-referenced; ESF view may be empty" : ""}
+            {isBipolar && <AlertCircle className="h-3.5 w-3.5 shrink-0" />}
+            <span className="leading-relaxed">
+              {montage && <><span className="font-medium">Input montage:</span> {montage.replace(/_/g, " ")}</>}
+              {montage && mappedFraction && " · "}
+              {mappedFraction && <>{mappedFraction} mapped to 10–20 international system</>}
+              {isBipolar && " — vendor recorded in bipolar mode, which cannot be re-referenced after the fact. The canonical Microvolts and Normalized views may be empty or incomplete; the Raw Signal layer still works."}
             </span>
           </div>
         );
