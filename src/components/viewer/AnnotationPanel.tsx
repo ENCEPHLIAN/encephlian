@@ -46,16 +46,32 @@ export function getSegmentColor(label: string) {
   return DEFAULT_COLOR;
 }
 
-// Label display abbreviations
-const LABEL_SHORT: Record<string, string> = {
-  seizure: "Seiz", spike: "Spike", eye_movement: "Eye", muscle: "Musc",
-  electrode: "Elec", electrode_noise: "Noise", artifact: "Art", noisy_channel: "Noisy",
-  sleep_spindle: "Spin", k_complex: "K-Cx", slow_wave: "SlwW", normal: "Norm",
-  alpha: "Alpha", beta: "Beta", theta: "Theta", delta: "Delta",
+// Full medical-grade segment labels. Renamed from the prior abbreviation
+// table (Seiz / Musc / K-Cx / SlwW / Spin) — clinicians read these names
+// in a report, not slang. Long names get text-ellipsis treatment in the
+// rendered row, so widening doesn't break the layout.
+const LABEL_DISPLAY: Record<string, string> = {
+  seizure:         "Seizure",
+  spike:           "Spike",
+  eye_movement:    "Eye movement",
+  muscle:          "Muscle artifact",
+  electrode:       "Electrode artifact",
+  electrode_noise: "Electrode noise",
+  artifact:        "Artifact",
+  noisy_channel:   "Noisy channel",
+  sleep_spindle:   "Sleep spindle",
+  k_complex:       "K-complex",
+  slow_wave:       "Slow wave",
+  normal:          "Normal",
+  alpha:           "Alpha rhythm",
+  beta:            "Beta rhythm",
+  theta:           "Theta activity",
+  delta:           "Delta activity",
 };
 
-function shortLabel(label: string): string {
-  return LABEL_SHORT[label.toLowerCase()] ?? (label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, " "));
+function displayLabel(label: string): string {
+  return LABEL_DISPLAY[label.toLowerCase()]
+    ?? (label.charAt(0).toUpperCase() + label.slice(1).replace(/_/g, " "));
 }
 
 function fmtSec(s: number): string {
@@ -120,35 +136,44 @@ export function AnnotationPanel({
   }
 
   return (
-    <div className="w-56 h-full flex flex-col border-l border-border/60 bg-background/98">
+    <div className="w-72 h-full flex flex-col border-l border-border/60 bg-background/98">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border/40">
+        <div className="flex items-center gap-2">
           <List className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium">Segments</span>
-          <span className="text-[10px] font-mono text-muted-foreground bg-muted/60 px-1 rounded">
+          <span className="text-xs font-semibold">Detected Segments</span>
+          <span
+            className="text-[10px] font-mono text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded"
+            title={`${segments.length} segment${segments.length === 1 ? "" : "s"} detected`}
+          >
             {segments.length}
           </span>
         </div>
         <button
           onClick={onToggle}
-          className="h-5 w-5 flex items-center justify-center rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+          title="Close segment list"
+          className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Type breakdown — compact dot+count row */}
+      {/* Type breakdown — full-name chips (truncate to 5 chips so column doesn't wrap) */}
       {labelCounts.length > 0 && (
-        <div className="flex flex-wrap gap-x-2 gap-y-0.5 px-2.5 py-1.5 border-b border-border/30">
-          {labelCounts.slice(0, 6).map(([label, count]) => {
+        <div className="flex flex-wrap gap-x-2.5 gap-y-1 px-3 py-1.5 border-b border-border/30">
+          {labelCounts.slice(0, 5).map(([label, count]) => {
             const c = getSegmentColor(label);
+            const name = displayLabel(label);
             return (
-              <span key={label} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <span
+                key={label}
+                title={`${count} ${name.toLowerCase()}${count === 1 ? "" : "s"}`}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground min-w-0"
+              >
                 <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ background: c.border }} />
-                <span className="font-mono">{shortLabel(label)}</span>
-                <span className="font-medium">{count}</span>
+                <span className="truncate max-w-[80px]">{name}</span>
+                <span className="font-mono font-semibold text-foreground/80 tabular-nums">{count}</span>
               </span>
             );
           })}
@@ -159,19 +184,22 @@ export function AnnotationPanel({
       <ScrollArea className="flex-1 min-h-0">
         <div className="py-1">
           {segments.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground/60">
-              No segments
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground/60 leading-relaxed">
+              No segments detected.<br />
+              <span className="text-muted-foreground/40">Inference output appears here as the I-Plane finishes processing.</span>
             </div>
           ) : (
             segments.map((seg, idx) => {
               const c = getSegmentColor(seg.label);
               const isCurrent = idx === currentSegmentIndex;
               const dur = fmtDur(seg.t_start_s, seg.t_end_s);
+              const name = displayLabel(seg.label);
 
               return (
                 <button
                   key={idx}
                   onClick={() => onSegmentClick(seg, idx)}
+                  title={`Jump to ${name.toLowerCase()} at ${fmtSec(seg.t_start_s)} (${dur} duration)`}
                   className={cn(
                     "w-full text-left flex items-stretch gap-0 transition-colors",
                     "hover:bg-muted/40",
@@ -183,33 +211,30 @@ export function AnnotationPanel({
                     className="w-0.5 shrink-0 my-0.5 rounded-r"
                     style={{ background: isCurrent ? c.border : "transparent" }}
                   />
-                  <div className={cn(
-                    "flex-1 px-2 py-1.5",
-                    isCurrent && "border-l-0",
-                  )}>
-                    <div className="flex items-center justify-between gap-1 mb-0.5">
+                  <div className="flex-1 min-w-0 px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2 mb-0.5">
                       <span
-                        className="text-[11px] font-medium leading-none"
+                        className="text-[11px] font-semibold leading-tight truncate"
                         style={{ color: c.border }}
                       >
-                        {shortLabel(seg.label)}
+                        {name}
                       </span>
-                      <span className="text-[9px] font-mono text-muted-foreground/50 shrink-0">
+                      <span className="text-[10px] font-mono text-muted-foreground/60 shrink-0 tabular-nums">
                         {dur}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/60">
-                      <span>{fmtSec(seg.t_start_s)}</span>
+                    <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/70 tabular-nums">
+                      <span title="Start time">{fmtSec(seg.t_start_s)}</span>
                       {seg.score != null && (
-                        <span className="text-muted-foreground/40">·</span>
-                      )}
-                      {seg.score != null && (
-                        <span>{(seg.score * 100).toFixed(0)}%</span>
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span title="Model confidence">{(seg.score * 100).toFixed(0)}% confidence</span>
+                        </>
                       )}
                       {seg.channel_index != null && (
                         <>
                           <span className="text-muted-foreground/40">·</span>
-                          <span>ch{seg.channel_index}</span>
+                          <span title="Channel index">Channel {seg.channel_index}</span>
                         </>
                       )}
                     </div>
@@ -221,10 +246,16 @@ export function AnnotationPanel({
         </div>
       </ScrollArea>
 
-      {/* Footer: keyboard hints */}
-      <div className="flex items-center justify-center gap-2 px-2 py-1.5 border-t border-border/30 text-[10px] text-muted-foreground/50">
-        <span><kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">P</kbd> prev</span>
-        <span><kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">N</kbd> next</span>
+      {/* Footer: keyboard hints — full word, not just "prev"/"next" */}
+      <div className="flex items-center justify-center gap-4 px-3 py-1.5 border-t border-border/30 text-[10px] text-muted-foreground/60">
+        <span className="flex items-center gap-1">
+          <kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">P</kbd>
+          <span>previous</span>
+        </span>
+        <span className="flex items-center gap-1">
+          <kbd className="px-1 py-px bg-muted/80 rounded text-[9px] font-mono">N</kbd>
+          <span>next</span>
+        </span>
       </div>
     </div>
   );
