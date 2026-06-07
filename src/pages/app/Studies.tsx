@@ -223,15 +223,17 @@ function InternalStudiesView() {
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.access_token) {
-      toast.error("Session expired", { description: "Please sign in again." });
+      toast.error("Your session has expired", {
+        description: "Please sign in again to upload an EEG study.",
+      });
       navigate("/login", { replace: true });
       return;
     }
 
     const file = files[0];
     if (!isAcceptedExtension(file.name)) {
-      toast.error("Unsupported file type", {
-        description: `Supported: ${ACCEPTED_FORMATS_LABEL}`,
+      toast.error("This file format is not supported", {
+        description: `Supported vendor formats: ${ACCEPTED_FORMATS_LABEL}`,
       });
       return;
     }
@@ -270,9 +272,9 @@ function InternalStudiesView() {
 
       if (duplicate) {
         toast.dismiss(uploadTid);
-        toast.info("Same recording detected", {
-          description: message || "Opening your existing study.",
-          action: { label: "View →", onClick: () => navigate(`/app/studies/${studyId}`) },
+        toast.info("This recording is already in the system", {
+          description: message || "Opening your existing study so you don't lose context.",
+          action: { label: "View study →", onClick: () => navigate(`/app/studies/${studyId}`) },
         });
         navigate(`/app/studies/${studyId}`);
         return;
@@ -297,16 +299,18 @@ function InternalStudiesView() {
       }
 
       toast.dismiss(uploadTid);
-      toast.success("Upload complete", {
-        description: "Select Standard or Priority to start processing.",
-        action: { label: "Select priority →", onClick: () => navigate(`/app/studies/${studyId}`) },
+      toast.success("EEG upload complete", {
+        description: "Select a Standard or Priority SLA to begin canonicalization and triage.",
+        action: { label: "Select SLA →", onClick: () => navigate(`/app/studies/${studyId}`) },
         duration: 6000,
       });
       navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
       if (import.meta.env.DEV) console.error("Upload error:", error);
       toast.dismiss(uploadTid);
-      toast.error("Upload failed", { description: error?.message || "Failed to upload EEG" });
+      toast.error("EEG upload failed", {
+        description: error?.message || "Could not upload the EEG file. Please check your connection and try again.",
+      });
     }
   };
 
@@ -425,18 +429,24 @@ function InternalStudiesView() {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Studies</h1>
-            <p className="text-muted-foreground text-sm">Manage EEG studies, upload files, and track progress</p>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">EEG Studies</h1>
+            <p className="text-muted-foreground text-sm mt-1">
+              Upload a new EEG, track canonicalization + triage progress, and open completed studies for review.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button onClick={() => fileInputRef.current?.click()} size="sm">
                   <Upload className="h-4 w-4 mr-2" />
-                  Upload EEG
+                  Upload new EEG
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Upload EEG file to create new study · {ACCEPTED_FORMATS_LABEL}</TooltipContent>
+              <TooltipContent>
+                Upload an EEG recording to start a new study.
+                <br />
+                Supported vendor formats: {ACCEPTED_FORMATS_LABEL}
+              </TooltipContent>
             </Tooltip>
             <input
               ref={fileInputRef}
@@ -468,12 +478,12 @@ function InternalStudiesView() {
                   <SelectValue placeholder="Filter by state" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  <SelectItem value="awaiting_sla">Awaiting priority</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="in_review">In review</SelectItem>
-                  <SelectItem value="signed">Signed</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                  <SelectItem value="all">All states</SelectItem>
+                  <SelectItem value="awaiting_sla">Awaiting SLA selection</SelectItem>
+                  <SelectItem value="processing">Processing (canonicalization or inference)</SelectItem>
+                  <SelectItem value="in_review">In review (awaiting signature)</SelectItem>
+                  <SelectItem value="signed">Signed (report finalised)</SelectItem>
+                  <SelectItem value="failed">Failed (pipeline error)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
