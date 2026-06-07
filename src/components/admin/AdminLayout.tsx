@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useUserSession } from "@/contexts/UserSessionContext";
+import { toast } from "@/components/ui/sonner";
 // ClinicSelectorDropdown removed from sidebar per user request - can be added to individual pages if needed
 import {
   LayoutDashboard,
@@ -58,12 +59,12 @@ const NAV_SECTIONS = [
     ],
   },
   {
-    title: "Honest output",
+    title: "Honest Output",
     items: [
       { name: "Models", href: "/admin/models", icon: Brain },
       { name: "Calibration", href: "/admin/calibration", icon: Gauge },
-      { name: "Validation runs", href: "/admin/validation-runs", icon: ShieldCheck },
-      { name: "Edit deltas", href: "/admin/edit-deltas", icon: Edit3 },
+      { name: "Validation Runs", href: "/admin/validation-runs", icon: ShieldCheck },
+      { name: "Edit Deltas", href: "/admin/edit-deltas", icon: Edit3 },
       { name: "Reprocess", href: "/admin/reprocess", icon: RefreshCw },
     ],
   },
@@ -82,7 +83,7 @@ const NAV_SECTIONS = [
   {
     title: "Tools",
     items: [
-      { name: "EEG Push", href: "/admin/data-push", icon: SendHorizontal },
+      { name: "Manual EEG Push", href: "/admin/data-push", icon: SendHorizontal },
       { name: "Cleanup", href: "/admin/cleanup", icon: Trash2 },
       { name: "Restore", href: "/admin/restore", icon: RotateCcw },
     ],
@@ -92,8 +93,8 @@ const NAV_SECTIONS = [
     items: [
       { name: "Settings", href: "/admin/settings", icon: Settings },
       { name: "Account", href: "/admin/account", icon: Shield },
-      { name: "Docs", href: "/admin/docs", icon: BookOpen },
-      { name: "Legal drafts", href: "/admin/legal/terms", icon: FileText },
+      { name: "Documentation", href: "/admin/docs", icon: BookOpen },
+      { name: "Legal Drafts", href: "/admin/legal/terms", icon: FileText },
     ],
   },
 ];
@@ -118,24 +119,26 @@ export default function AdminLayout() {
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar */}
-      <aside className="w-56 border-r border-border/50 bg-sidebar-background flex flex-col">
-        {/* Header */}
-        <div className="flex h-14 items-center px-4 border-b border-border/50">
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded bg-primary/10 flex items-center justify-center">
-              <Zap className="h-3.5 w-3.5 text-primary" />
+      <aside className="w-60 border-r border-border/50 bg-sidebar-background flex flex-col">
+        {/* Header — h-16 to match the public AppLayout for a single shared chrome rhythm */}
+        <div className="flex h-16 items-center px-4 border-b border-border/50">
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded bg-primary/10 flex items-center justify-center">
+              <Zap className="h-4 w-4 text-primary" />
             </div>
-            <span className="text-sm font-semibold tracking-tight">Encephlian Admin</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-sm font-semibold tracking-tight">ENCEPHLIAN</span>
+              <span className="text-[10px] text-muted-foreground/70 uppercase tracking-wider">Admin Console</span>
+            </div>
           </div>
         </div>
-
 
         {/* Navigation */}
         <div className="flex-1 overflow-y-auto py-3">
           {NAV_SECTIONS.map((section) => (
             <div key={section.title} className="mb-4">
               <div className="px-4 mb-1.5">
-                <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider">
+                <span className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
                   {section.title}
                 </span>
               </div>
@@ -147,7 +150,7 @@ export default function AdminLayout() {
                     end={item.end}
                     className={({ isActive }) =>
                       cn(
-                        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm transition-colors",
+                        "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors",
                         isActive
                           ? "bg-accent text-accent-foreground font-medium"
                           : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
@@ -155,7 +158,7 @@ export default function AdminLayout() {
                     }
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
-                    <span>{item.name}</span>
+                    <span className="truncate">{item.name}</span>
                   </NavLink>
                 ))}
               </nav>
@@ -171,6 +174,7 @@ export default function AdminLayout() {
             className="w-full justify-start text-muted-foreground hover:text-foreground"
             onClick={async () => {
               await signOut();
+              toast.success("Signed out successfully");
               navigate("/login");
             }}
           >
@@ -182,10 +186,10 @@ export default function AdminLayout() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
-        <header className="h-14 border-b border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-between px-6">
-          <nav className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-label="Breadcrumb">
-            <span className="font-medium text-foreground/70">Admin</span>
+        {/* Top Bar — h-16 to match sidebar header + public AppLayout */}
+        <header className="h-16 border-b border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-between px-6">
+          <nav className="flex items-center gap-2 text-xs text-muted-foreground" aria-label="Breadcrumb">
+            <span className="font-semibold text-foreground/70">Admin Console</span>
             <span className="text-border">/</span>
             <span>{currentPage.section}</span>
             <span className="text-border">/</span>

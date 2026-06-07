@@ -136,7 +136,7 @@ export default function AdminEditDeltas() {
     <div className="p-6 space-y-5 max-w-6xl animate-fade-in">
       {/* Header */}
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Edit deltas</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Edit Deltas</h1>
         <p className="text-xs text-muted-foreground mt-0.5">
           Every accept / edit / clear / reject a clinician performs on a draft field. Append-only.
           Top {totalRows.toLocaleString()} most-recent rows. Override rate per field surfaces here so

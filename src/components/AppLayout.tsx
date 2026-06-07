@@ -409,13 +409,19 @@ export default function AppLayout() {
           </main>
         </div>
 
-        {/* Footer */}
+        {/* Footer — clinical-product attribution line */}
         <footer className={cn(
-          "py-3 px-4 sm:px-6",
+          "py-3 px-4 sm:px-6 border-t border-border/30",
           !isMobile && (sidebarCollapsed ? "md:ml-16" : "md:ml-56"),
           "transition-[margin] duration-200 ease-out"
         )}>
-          <p className="text-[11px] text-muted-foreground/60 text-center">ENCEPHLIAN™ ©{new Date().getFullYear()}</p>
+          <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground/60">
+            <span>ENCEPHLIAN<sup className="text-[8px]">™</sup></span>
+            <span className="text-muted-foreground/30">·</span>
+            <span>Clinical EEG triage platform</span>
+            <span className="text-muted-foreground/30">·</span>
+            <span>© {new Date().getFullYear()}</span>
+          </div>
         </footer>
 
         <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
