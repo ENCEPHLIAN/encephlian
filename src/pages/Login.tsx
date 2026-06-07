@@ -66,10 +66,12 @@ export default function Login() {
       });
       if (error) throw error;
 
-      toast.success("Welcome back!");
+      toast.success("Welcome back to ENCEPHLIAN");
       // Redirect happens via useEffect when context updates
     } catch (error: any) {
-      toast.error("Sign in failed", { description: error.message || "An error occurred. Please try again." });
+      toast.error("Sign in failed", {
+        description: error.message || "Could not sign in. Please check your email and password and try again.",
+      });
       setIsLoading(false);
     }
   };
@@ -90,9 +92,13 @@ export default function Login() {
       if (error) throw error;
 
       setResetSent(true);
-      toast.success("Reset email sent", { description: "Check your inbox for the password reset link." });
+      toast.success("Password reset email sent", {
+        description: `Check the inbox at ${email} for the reset link. It expires in 24 hours.`,
+      });
     } catch (error: any) {
-      toast.error("Error", { description: error.message || "An error occurred. Please try again." });
+      toast.error("Could not send reset email", {
+        description: error.message || "Something went wrong. Please check the email address and try again.",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -138,8 +144,8 @@ export default function Login() {
             ENCEPHLIAN<sup className="text-[7px] align-top relative top-[0.1em] font-light">™</sup>
           </p>
 
-          <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-lg font-medium mt-8">
-            ACCESS CLINIC DASHBOARD
+          <Button onClick={() => setShowForm(true)} size="lg" className="px-12 py-6 text-base font-medium mt-8 tracking-wide">
+            Sign in to your clinic
           </Button>
         </div>
       )}
@@ -209,10 +215,10 @@ export default function Login() {
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Signing in...
+                        Signing you in…
                       </>
                     ) : (
-                      "Sign In"
+                      "Sign in"
                     )}
                   </Button>
                 </form>
@@ -221,7 +227,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => { setMode("forgot"); setResetSent(false); }}
-                    className="text-sm text-muted-foreground hover:text-foreground underline"
+                    className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-2"
                   >
                     Forgot your password?
                   </button>
@@ -248,12 +254,13 @@ export default function Login() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                       </svg>
                     </div>
-                    <h3 className="font-semibold">Check your email</h3>
-                    <p className="text-sm text-muted-foreground">
-                      We've sent a password reset link to <strong>{email}</strong>
+                    <h3 className="font-semibold">Check your inbox</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      We sent a password reset link to <strong className="text-foreground">{email}</strong>.
+                      The link expires in 24 hours. If it doesn't arrive in a few minutes, check your spam folder.
                     </p>
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       onClick={() => {
                         setMode("signin");
                         setResetSent(false);
@@ -267,8 +274,9 @@ export default function Login() {
                   <form onSubmit={handleForgotPassword} className="space-y-4">
                     <div className="text-center mb-4">
                       <h3 className="font-semibold">Reset your password</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Enter your email and we'll send you a reset link
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        Enter the email address linked to your clinic account.
+                        We'll send a reset link you can use to set a new password.
                       </p>
                     </div>
 
@@ -292,10 +300,10 @@ export default function Login() {
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Sending...
+                          Sending reset link…
                         </>
                       ) : (
-                        "Send Reset Link"
+                        "Send password reset link"
                       )}
                     </Button>
                   </form>
