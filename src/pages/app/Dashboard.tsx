@@ -129,10 +129,14 @@ export default function Dashboard() {
           ))}
         </div>
         {loadingTooLong && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between">
-            <span>Taking longer than expected — possible network issue.</span>
-            <Button onClick={() => refetchStudies()} variant="ghost" size="sm" className="h-7 gap-1.5">
-              <RefreshCw className="h-3 w-3" /> Retry
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-300 flex items-center justify-between gap-3">
+            <span className="flex-1">
+              <span className="font-medium">Dashboard is taking longer than expected</span>
+              {" — "}
+              the studies query is slow. This is usually a transient network issue. Click try again if it doesn't resolve in a few seconds.
+            </span>
+            <Button onClick={() => refetchStudies()} variant="ghost" size="sm" className="h-7 gap-1.5 shrink-0">
+              <RefreshCw className="h-3 w-3" /> Try again
             </Button>
           </div>
         )}
@@ -145,9 +149,11 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Clinician Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             {dayjs().format("dddd, MMMM D, YYYY")}
+            {" · "}
+            <span className="text-muted-foreground/70">Pending triage, recent studies, and your daily metrics</span>
           </p>
         </div>
       </div>
@@ -173,7 +179,7 @@ export default function Dashboard() {
               <span className="text-sm">Triage Lanes</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>View STAT/TAT triage lanes</TooltipContent>
+          <TooltipContent>View STAT / TAT triage lanes — studies organized by SLA priority</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -188,7 +194,7 @@ export default function Dashboard() {
               <span className="text-sm">Upload Study</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Upload new EEG study</TooltipContent>
+          <TooltipContent>Upload a new EEG study — supports 12 vendor formats including EDF, BDF, Natus, Persyst, BrainVision</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -203,7 +209,7 @@ export default function Dashboard() {
               <span className="text-sm">Reports</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>See completed reports</TooltipContent>
+          <TooltipContent>View completed and signed clinical reports</TooltipContent>
         </Tooltip>
       </div>
 
