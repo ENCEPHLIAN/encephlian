@@ -270,7 +270,23 @@ export default function EEGViewer() {
   // "raw" = original file. Default is "prenorm" — clinicians read on the µV-preserved layer.
   // The z-scored normalized layer is what the model sees; it's analytically useful but
   // amplitude information is destroyed, so it's not the right first view.
+  // Model Input Inspector — Norm layer is gated behind ?debug=1. Per Fable 5:
+  // Norm is "EEGPT's input adapter output", not a clinical signal. Default
+  // clinician viewer is Raw + µV only. Setting ?debug=1 in the URL surfaces a
+  // third "Model" button so engineers can inspect what the model sees.
+  const showDebugInspector = searchParams.get("debug") === "1";
+
   const [signalLayer, setSignalLayer] = useState<"normalized" | "prenorm" | "raw">("prenorm");
+
+  // Safety: if a clinician somehow lands on Norm without ?debug=1, bump them
+  // back to µV (clinical reading layer). Prevents bookmarks / shared URLs to
+  // Norm from landing a clinician on z-scored data.
+  useEffect(() => {
+    if (signalLayer === "normalized" && !showDebugInspector) {
+      setSignalLayer("prenorm");
+      signalLayerRef.current = "prenorm";
+    }
+  }, [signalLayer, showDebugInspector]);
   const signalLayerRef   = useRef<"normalized" | "prenorm" | "raw">("prenorm");
   const prevLayerRef = useRef<"normalized" | "prenorm" | "raw">("prenorm");
   useEffect(() => {
@@ -1285,29 +1301,38 @@ export default function EEGViewer() {
             >
               {loadingPrenorm ? <Loader2 className="h-3 w-3 animate-spin" /> : "µV"}
             </button>
-            {/* Normalized — z-scored ESF canonical (what the model sees) */}
-            <button
-              type="button"
-              disabled={!canonicalPresent}
-              title={!canonicalPresent ? "Normalized view not available — study not yet processed" : "Normalized — 250 Hz · notch · CAR · robust z-score (what the model sees)"}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (signalLayer === "normalized") return;
-                reqId.current += 1;
-                edfReader.current = null;
-                cache.current.clear();
-                prefetchLru.current.clear(); prefetchGen.current += 1;
-                const canon = canonicalMetaRef.current;
-                if (!canon) { toast.message("ESF view not ready"); return; }
-                setSignals(null); setMeta(canon);
-                signalLayerRef.current = "normalized"; setSignalLayer("normalized");
-              }}
-              className={`flex items-center px-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "normalized"
-                ? "bg-violet-500/20 text-violet-700 dark:text-violet-300 font-semibold"
-                : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Norm
-            </button>
+            {/* Normalized layer (Model Input Inspector) — gated behind ?debug=1.
+                Per Fable 5 (2026-06-10): Norm is not "the canonical signal,
+                z-scored" — it's "EEGPT's input adapter output", an implementation
+                detail of one model. Per-channel z-score destroys cross-channel
+                amplitude relations and is clinically unreadable. Removed from
+                the clinical toggle on architectural principle, not UX patch. */}
+            {showDebugInspector && (
+              <button
+                type="button"
+                disabled={!canonicalPresent}
+                title={!canonicalPresent
+                  ? "Model Input Inspector not available — study not yet processed"
+                  : "Model Input Inspector — what the inference model sees (per-channel robust z-score). Debug-only, not for clinical reading."}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (signalLayer === "normalized") return;
+                  reqId.current += 1;
+                  edfReader.current = null;
+                  cache.current.clear();
+                  prefetchLru.current.clear(); prefetchGen.current += 1;
+                  const canon = canonicalMetaRef.current;
+                  if (!canon) { toast.message("ESF view not ready"); return; }
+                  setSignals(null); setMeta(canon);
+                  signalLayerRef.current = "normalized"; setSignalLayer("normalized");
+                }}
+                className={`flex items-center px-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${signalLayer === "normalized"
+                  ? "bg-violet-500/20 text-violet-700 dark:text-violet-300 font-semibold"
+                  : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Model
+              </button>
+            )}
           </div>
         </div>
       </div>
