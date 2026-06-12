@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 // ── Speed / amplitude / filter option tables ──────────────────────────────────
@@ -102,6 +103,12 @@ export interface ViewerControlsProps {
   montage?: string;
   onMontageChange?: (m: string) => void;
   visibleChannelCount?: number;
+  /** Controlled spectrogram-panel toggle. If `spectrogramOpen` is provided,
+   *  the parent owns the state and `onSpectrogramToggle` fires on click.
+   *  If both are omitted, the toggle is uncontrolled (local boolean) and
+   *  `onSpectrogramToggle` (if passed) still fires with the new value. */
+  spectrogramOpen?: boolean;
+  onSpectrogramToggle?: (open: boolean) => void;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -230,7 +237,20 @@ export function ViewerControls({
   montage = "referential",
   onMontageChange,
   visibleChannelCount,
+  spectrogramOpen,
+  onSpectrogramToggle,
 }: ViewerControlsProps) {
+
+  // Spectrogram toggle: controlled when `spectrogramOpen` is supplied,
+  // uncontrolled otherwise. Keeps this component a drop-in until the
+  // SignalViewer wiring lands.
+  const [spectrogramLocal, setSpectrogramLocal] = useState(false);
+  const spectrogramActive = spectrogramOpen ?? spectrogramLocal;
+  const toggleSpectrogram = () => {
+    const next = !spectrogramActive;
+    if (spectrogramOpen === undefined) setSpectrogramLocal(next);
+    onSpectrogramToggle?.(next);
+  };
 
   // Per-layer behavior is more nuanced than a binary `esfLayer`:
   //   - raw       : vendor-native signal. No client-side filtering offered — claiming
@@ -482,6 +502,26 @@ export function ViewerControls({
           Denoise
         </button>
       )}
+
+      <Sep />
+
+      {/* ── Spectrogram layer toggle — power vs time, per channel. ─────────
+          Sits alongside Denoise as a layer/overlay choice. The panel itself
+          mounts in SignalViewer; this control simply emits the toggle. */}
+      <button
+        onClick={toggleSpectrogram}
+        title="Spectrogram — power vs time, per channel"
+        aria-pressed={spectrogramActive}
+        className={cn(
+          "h-6 px-2 flex items-center gap-1.5 rounded text-[11px] font-semibold font-mono transition-all select-none shrink-0 border",
+          spectrogramActive
+            ? "bg-blue-600 text-white border-blue-500 shadow-sm shadow-blue-500/30"
+            : "bg-transparent text-muted-foreground border-border hover:border-blue-400 hover:text-blue-400",
+        )}
+      >
+        <BarChart3 className="h-3 w-3" />
+        <span>Spectrogram</span>
+      </button>
 
     </div>
   );
