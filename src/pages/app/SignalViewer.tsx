@@ -7,6 +7,7 @@ import { Loader2, X, ChevronLeft, ChevronRight, ArrowLeft, WifiOff, Zap, AlertCi
 import { SignalCanvas } from "@/components/viewer/SignalCanvas";
 import { ViewerControls, windowSecToMmSec, scaleToUVMM } from "@/components/viewer/ViewerControls";
 import { AnnotationPanel, getSegmentColor } from "@/components/viewer/AnnotationPanel";
+import { SpectrogramPanel } from "@/components/viewer/SpectrogramPanel";
 import { useTheme } from "next-themes";
 import { fetchJson, fetchBinary } from "@/shared/readApiClient";
 import { analytics } from "@/lib/analytics";
@@ -165,6 +166,20 @@ export default function EEGViewer() {
 
   // Study ID: route param → ?studyId= query param
   const studyId = routeId || searchParams.get("studyId") || "";
+
+  // Spectrogram panel — opt-in side strip below the canvas (Persyst parity v0).
+  // Fullscreen viewer stays canonical; clinicians enable per-session, persisted
+  // per user via localStorage.
+  const SPECTROGRAM_KEY = "encephlian.viewer.spectrogram";
+  const [spectrogramOpen, setSpectrogramOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try { return window.localStorage.getItem(SPECTROGRAM_KEY) === "1"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(SPECTROGRAM_KEY, spectrogramOpen ? "1" : "0"); }
+    catch { /* private mode / quota — ignore */ }
+  }, [spectrogramOpen]);
 
   // Focused segment from URL
   const focusedSeg = useMemo<FocusedSeg | null>(() => {
@@ -1127,6 +1142,8 @@ export default function EEGViewer() {
         montage={montage}
         onMontageChange={setMontage}
         visibleChannelCount={displayLabels.length || meta?.n_channels}
+        spectrogramOpen={spectrogramOpen}
+        onSpectrogramToggle={setSpectrogramOpen}
       />
 
       {/* ── Timeline (mini-map) + chips + ESF/Raw toggle ── */}
@@ -1428,6 +1445,24 @@ export default function EEGViewer() {
           />
         )}
       </div>
+
+      {/* Spectrogram strip — opt-in, sits between canvas and status bar so
+          its X-axis aligns visually with the signal time axis above. */}
+      {spectrogramOpen && plotSignalsReady && meta && (
+        <div className="flex-shrink-0 border-t border-border/60" style={{ height: 220 }}>
+          <SpectrogramPanel
+            signals={displaySignals}
+            channelLabels={displayLabels}
+            sampleRate={meta.sampling_rate_hz}
+            windowStart={windowStart}
+            windowSec={windowSec}
+            currentTime={globalTime}
+            studyId={studyId}
+            visible={spectrogramOpen}
+            onClose={() => setSpectrogramOpen(false)}
+          />
+        </div>
+      )}
 
       {/* ── Status bar — bottom strip with full names, no shorthand ── */}
       <div className="flex items-center gap-3 px-4 h-7 border-t bg-muted/20 flex-shrink-0 overflow-hidden">
