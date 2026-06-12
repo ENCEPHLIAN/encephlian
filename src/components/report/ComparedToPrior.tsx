@@ -1,74 +1,48 @@
 /**
- * Compare-to-Prior — P0 template-rendered "Compared to prior" section.
+ * Compare-to-Prior — template-rendered "Compared to prior" surface.
  *
- * Pure presentational. Reads study_comparison_runs by id from Supabase,
- * renders the per-finding state + biomarker deltas + caveats per
- * docs/compare_to_prior_design.md §4. Honest empty state when no prior
- * is available — the absence is the message, not a placeholder banner.
+ * Pure presentational. Two call modes:
+ *   1. Pass `comparisonRunId` + `comparedToStudyId` — legacy. Reads the
+ *      same row directly. Kept for backwards compatibility with the
+ *      signed read-only view.
+ *   2. Pass `currentStudyId` — the hook variant. Defers to
+ *      useStudyComparison(studyId) so the report-tab banner and the
+ *      inline view share one data fetch.
  *
- * P0 intentionally template-only. AUGUR prose generation for this
- * section is a P1 item.
+ * Surface choices:
+ *   - No prior on file → muted empty state, honest copy.
+ *   - Prior exists but no meaningful change → tight muted card with the
+ *     reason and a link back to the prior study.
+ *   - Prior exists with changes → full diff: caveats strip with tooltip
+ *     explainers, finding changes (new / resolved / changed), biomarker
+ *     deltas split into reportable vs. noteworthy.
+ *
+ * Honesty copy throughout — never "AI-detected changes". The diff comes
+ * from libs/score/compare.py, which is template + rule-based on top of
+ * the I-Plane biomarker outputs.
  */
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AlertCircle, GitCompare, Info, Loader2 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertCircle, ArrowRight, GitCompare, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dayjs from "dayjs";
+import { useStudyComparison } from "@/hooks/useStudyComparison";
+import type {
+  BiomarkerDelta,
+  ComparisonCaveat,
+  ComparisonRun,
+  FindingChange,
+  PriorStudyMeta,
+} from "@/hooks/useStudyComparison";
 
-interface BiomarkerDelta {
-  biomarker_kind: string;
-  current_value: number;
-  prior_value: number;
-  delta_abs: number;
-  delta_signed: number;
-  percentile_rank: "p75+" | "p50-p75" | "below_p50" | string;
-  tier: "change" | "noteworthy" | "noise" | string;
-  reportable: boolean;
-  caveat: string | null;
-  threshold_source: string;
-  p75: number;
-}
-
-interface FindingChange {
-  kind: string;
-  state: "unchanged" | "new" | "resolved" | "changed" | string;
-  current_value: unknown;
-  prior_value: unknown;
-  caveat?: string | null;
-}
-
-interface Caveat {
-  kind: string;
-  reason?: string;
-  current?: string | Record<string, string>;
-  prior?: string | Record<string, string>;
-  finding_kind?: string;
-  deprecated?: string;
-}
-
-interface ComparisonRow {
-  id: string;
-  current_study_id: string;
-  prior_study_id: string;
-  computed_at: string;
-  current_report_sha: string;
-  prior_report_sha: string;
-  biomarker_deltas: BiomarkerDelta[];
-  finding_changes: FindingChange[];
-  caveats: Caveat[];
-  suppressed: boolean;
-  model_versions_used: Record<string, Record<string, string>>;
-}
-
-interface PriorStudyLite {
-  id: string;
-  created_at: string | null;
-  state: string | null;
-  meta: Record<string, unknown> | null;
-}
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Static label maps — kept inline so the file is self-contained.            */
+/* ────────────────────────────────────────────────────────────────────────── */
 
 const FINDING_LABELS: Record<string, string> = {
   "background.pdr": "Posterior dominant rhythm",
@@ -87,20 +61,44 @@ const BIOMARKER_LABELS: Record<string, string> = {
 };
 
 const STATE_LABELS: Record<string, { label: string; cls: string }> = {
-  unchanged: { label: "Persistent", cls: "bg-muted text-muted-foreground" },
+  unchanged: { label: "Persistent", cls: "bg-muted text-muted-foreground border-border/40" },
   new:       { label: "New",        cls: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30" },
   resolved:  { label: "Resolved",   cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30" },
   changed:   { label: "Changed",    cls: "bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30" },
 };
 
-const CAVEAT_LABELS: Record<string, string> = {
-  vendor_mismatch:     "Vendor mismatch",
-  model_version_skew:  "Model version differs",
-  prior_hand_edited:   "Prior hand-edited",
-  deprecated_model:    "Deprecated prior model",
-  no_prior_available:  "No prior on file",
-  channel_gate_prior:  "Prior channel gate",
+const CAVEAT_LABELS: Record<string, { label: string; explainer: string }> = {
+  vendor_mismatch: {
+    label: "Vendor mismatch",
+    explainer:
+      "The prior recording used a different acquisition vendor. Biomarker absolute values can differ across vendors even when the underlying brain state is the same — interpret deltas as direction, not magnitude.",
+  },
+  model_version_skew: {
+    label: "Model version differs",
+    explainer:
+      "The current and prior reports were scored under different MIND model versions. Some deltas may reflect model evolution rather than physiology. The compare engine attempts re-scoring under a common version where possible.",
+  },
+  prior_hand_edited: {
+    label: "Prior hand-edited",
+    explainer:
+      "The prior report contains clinician edits over the automated draft. The compare engine reads the edited (signed) values where available, but historical edits may not propagate to every biomarker field.",
+  },
+  deprecated_model: {
+    label: "Deprecated prior model",
+    explainer:
+      "The prior report was generated by a MIND model now retired from service. The deltas are surfaced for context but should not drive clinical decisions on their own — manual review is recommended.",
+  },
+  no_prior_available: { label: "No prior on file", explainer: "No eligible prior study was found for this patient." },
+  channel_gate_prior:  {
+    label: "Prior channel gate",
+    explainer:
+      "The prior recording was processed under a different channel quality regime. Channel-specific deltas (asymmetry, focal slowing) are suppressed where the channel set does not align.",
+  },
 };
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Small formatting helpers                                                   */
+/* ────────────────────────────────────────────────────────────────────────── */
 
 function fmtNum(n: number | null | undefined, digits = 2): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return "—";
@@ -121,21 +119,52 @@ function describeFindingValue(v: unknown): string {
   return "—";
 }
 
+function priorPatientHandle(meta: Record<string, unknown> | null | undefined): string | null {
+  if (!meta) return null;
+  if (typeof meta.patient_id === "string" && meta.patient_id.trim().length > 0) {
+    return meta.patient_id;
+  }
+  if (typeof meta.patient_name === "string" && meta.patient_name.trim().length > 0) {
+    return meta.patient_name;
+  }
+  if (typeof meta.original_filename === "string") {
+    return meta.original_filename.replace(/\.[^.]+$/, "");
+  }
+  return null;
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Public surface                                                             */
+/* ────────────────────────────────────────────────────────────────────────── */
+
 export interface ComparedToPriorProps {
-  comparisonRunId: string | null | undefined;
-  /** When falsy, render the honest "no prior" empty state. */
-  comparedToStudyId: string | null | undefined;
+  /** Hook variant — provide just the current study id, the component fetches. */
+  currentStudyId?: string | null | undefined;
+  /** Legacy: pass the comparison run id directly. */
+  comparisonRunId?: string | null | undefined;
+  /** Legacy: pass the prior study id directly. */
+  comparedToStudyId?: string | null | undefined;
   className?: string;
 }
 
 export function ComparedToPrior({
+  currentStudyId,
   comparisonRunId,
   comparedToStudyId,
   className,
 }: ComparedToPriorProps) {
-  const row = useQuery<ComparisonRow | null>({
-    queryKey: ["study_comparison_runs", comparisonRunId],
-    enabled: !!comparisonRunId,
+  // ── Mode 1: hook (preferred) ────────────────────────────────────────────
+  // When the caller passes currentStudyId, we use the shared hook so the
+  // report-tab banner and this surface share one network call.
+  const hookResult = useStudyComparison(currentStudyId ?? null);
+
+  // ── Mode 2: legacy direct fetch ─────────────────────────────────────────
+  // Existing call sites pass comparisonRunId + comparedToStudyId. Keep
+  // backwards compatible — these queries are gated `enabled: !currentStudyId`
+  // so we never fire both modes.
+  const legacyRunQuery = useQuery<ComparisonRun | null>({
+    queryKey: ["study_comparison_runs", "by-id", comparisonRunId],
+    enabled: !currentStudyId && !!comparisonRunId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("study_comparison_runs" as never)
@@ -143,13 +172,13 @@ export function ComparedToPrior({
         .eq("id", comparisonRunId as string)
         .maybeSingle();
       if (error) throw error;
-      return (data ?? null) as ComparisonRow | null;
+      return (data ?? null) as ComparisonRun | null;
     },
   });
 
-  const priorStudy = useQuery<PriorStudyLite | null>({
+  const legacyPriorQuery = useQuery<PriorStudyMeta | null>({
     queryKey: ["studies", "prior", comparedToStudyId],
-    enabled: !!comparedToStudyId,
+    enabled: !currentStudyId && !!comparedToStudyId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("studies")
@@ -157,17 +186,33 @@ export function ComparedToPrior({
         .eq("id", comparedToStudyId as string)
         .maybeSingle();
       if (error) throw error;
-      return (data ?? null) as PriorStudyLite | null;
+      return (data ?? null) as PriorStudyMeta | null;
     },
   });
 
-  // ── Empty state: no eligible prior ─────────────────────────────────────
-  // Per design §4: "The compare section is suppressed entirely if
-  // compared_to_study_id is null. No 'comparison not available' banner —
-  // the absence is the message." We render a minimal muted line so the
-  // report has a visible anchor where a prior would appear, without
-  // confabulating context.
-  if (!comparedToStudyId) {
+  // Resolve which mode's data we're rendering with.
+  const usingHook = !!currentStudyId;
+  const run: ComparisonRun | null = usingHook ? hookResult.comparisonRun : (legacyRunQuery.data ?? null);
+  const priorMeta: PriorStudyMeta | null = usingHook
+    ? hookResult.priorStudyMeta
+    : (legacyPriorQuery.data ?? null);
+  const loading: boolean = usingHook
+    ? hookResult.loading
+    : legacyRunQuery.isLoading || legacyPriorQuery.isLoading;
+  const errored: boolean = usingHook
+    ? !!hookResult.error
+    : legacyRunQuery.isError || legacyPriorQuery.isError;
+
+  // Effective prior study id: hook mode reads from run, legacy from prop.
+  const effectivePriorStudyId: string | null = usingHook
+    ? (hookResult.priorStudyId ?? null)
+    : (comparedToStudyId ?? null);
+
+  // ── State 1: nothing in flight, no prior on file ────────────────────────
+  // Per design §4: the absence of a prior is the message. Don't dress it
+  // up. The "first study on file" line gives the clinician an honest
+  // signal without confabulating "comparison not available".
+  if (!loading && !run && !effectivePriorStudyId) {
     return (
       <Card className={cn("border-muted/40 bg-muted/10", className)}>
         <CardHeader className="pb-2">
@@ -177,13 +222,14 @@ export function ComparedToPrior({
           </CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-muted-foreground py-2">
-          First study on file for this patient — no prior available for comparison.
+          First study on file for this patient. No prior to compare against.
         </CardContent>
       </Card>
     );
   }
 
-  if (row.isLoading || priorStudy.isLoading) {
+  // ── State 2: still loading ──────────────────────────────────────────────
+  if (loading) {
     return (
       <Card className={className}>
         <CardHeader className="pb-2">
@@ -200,7 +246,8 @@ export function ComparedToPrior({
     );
   }
 
-  if (row.isError || !row.data) {
+  // ── State 3: errored or no comparison row even though we expected one ──
+  if (errored || !run) {
     return (
       <Card className={cn("border-muted/40 bg-muted/10", className)}>
         <CardHeader className="pb-2">
@@ -210,25 +257,25 @@ export function ComparedToPrior({
           </CardTitle>
         </CardHeader>
         <CardContent className="text-xs text-muted-foreground py-2">
-          Comparison record unavailable. The prior study exists, but the comparison row
+          Comparison record unavailable. A prior study may exist, but the comparison row
           could not be loaded.
         </CardContent>
       </Card>
     );
   }
 
-  const data = row.data;
-
-  // Per design §4: if everything is suppressed AND no caveats worth
-  // surfacing, hide the entire section rather than emit a useless card.
-  const interestingFindingChanges = (data.finding_changes ?? []).filter(
+  // ── Decompose the row into the four surface zones ──────────────────────
+  const interestingFindingChanges = (run.finding_changes ?? []).filter(
     (f) => f.state !== "unchanged",
   );
-  const reportableBiomarkers = (data.biomarker_deltas ?? []).filter((b) => b.reportable);
-  const noteworthyBiomarkers = (data.biomarker_deltas ?? []).filter(
+  const unchangedFindingChanges = (run.finding_changes ?? []).filter(
+    (f) => f.state === "unchanged",
+  );
+  const reportableBiomarkers = (run.biomarker_deltas ?? []).filter((b) => b.reportable);
+  const noteworthyBiomarkers = (run.biomarker_deltas ?? []).filter(
     (b) => !b.reportable && b.tier === "noteworthy",
   );
-  const meaningfulCaveats = (data.caveats ?? []).filter(
+  const meaningfulCaveats = (run.caveats ?? []).filter(
     (c) =>
       c.kind === "vendor_mismatch" ||
       c.kind === "model_version_skew" ||
@@ -236,6 +283,10 @@ export function ComparedToPrior({
       c.kind === "deprecated_model",
   );
 
+  // ── State 4: row exists but nothing changed and no caveats ─────────────
+  // Different from "no prior" — here a prior IS on file and a comparison
+  // ran, it just found nothing reportable. Surface the negative result
+  // honestly with the prior date so the clinician knows they're caught up.
   if (
     interestingFindingChanges.length === 0
     && reportableBiomarkers.length === 0
@@ -252,21 +303,22 @@ export function ComparedToPrior({
         <CardContent className="text-xs text-muted-foreground py-2 space-y-1">
           <p>
             No meaningful change since prior study
-            {priorStudy.data?.created_at && (
-              <> ({dayjs(priorStudy.data.created_at).format("YYYY-MM-DD")},{" "}
-              {dayjs(priorStudy.data.created_at).fromNow()})</>
+            {priorMeta?.created_at && (
+              <> ({dayjs(priorMeta.created_at).format("YYYY-MM-DD")},{" "}
+              {dayjs(priorMeta.created_at).fromNow()})</>
             )}.
           </p>
           <p className="text-[10px]">
-            All biomarker deltas fell below the {data.biomarker_deltas.length > 0 ? "75th-percentile reportable threshold" : "comparison threshold"}.
+            All biomarker deltas fell below the {run.biomarker_deltas?.length > 0 ? "75th-percentile reportable threshold" : "comparison threshold"}.
           </p>
         </CardContent>
       </Card>
     );
   }
 
-  const priorMeta = (priorStudy.data?.meta ?? {}) as Record<string, unknown>;
-  const priorPatientRef = typeof priorMeta.patient_id === "string" ? priorMeta.patient_id : null;
+  // ── State 5: full diff ──────────────────────────────────────────────────
+  const priorHandle = priorPatientHandle(priorMeta?.meta);
+  const priorLinkId = effectivePriorStudyId ?? run.prior_study_id;
 
   return (
     <Card className={className}>
@@ -277,83 +329,132 @@ export function ComparedToPrior({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        {/* Prior study line */}
-        <div className="text-xs text-muted-foreground">
-          Prior study {priorPatientRef && <span className="font-mono">{priorPatientRef.slice(0, 12)}</span>}{" "}
-          {priorStudy.data?.created_at && (
-            <>
-              signed {dayjs(priorStudy.data.created_at).format("YYYY-MM-DD")}{" "}
-              ({dayjs(priorStudy.data.created_at).fromNow()})
-            </>
-          )}.
+        {/* Prior study header line — patient handle + signed date + link */}
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>Prior study</span>
+          {priorHandle && (
+            <span className="font-mono text-foreground/80">{priorHandle.slice(0, 24)}</span>
+          )}
+          {priorMeta?.created_at && (
+            <span>
+              signed {dayjs(priorMeta.created_at).format("YYYY-MM-DD")}{" "}
+              ({dayjs(priorMeta.created_at).fromNow()})
+            </span>
+          )}
+          {priorLinkId && (
+            <Link
+              to={`/app/studies/${priorLinkId}`}
+              className="inline-flex items-center gap-0.5 text-primary hover:underline"
+            >
+              open
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          )}
         </div>
 
-        {/* Caveats — surfaced as a strip above the tables */}
+        {/* Caveats strip — amber pills with explainer tooltips */}
         {meaningfulCaveats.length > 0 && (
-          <div className="space-y-1.5">
-            {meaningfulCaveats.map((c, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5 text-xs"
-              >
-                <AlertCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="min-w-0">
-                  <span className="font-medium text-amber-700 dark:text-amber-300">
-                    {CAVEAT_LABELS[c.kind] ?? c.kind}
-                  </span>
-                  {c.reason && (
-                    <span className="text-muted-foreground"> — {c.reason}</span>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-wrap gap-1.5">
+            {meaningfulCaveats.map((c, i) => {
+              const meta = CAVEAT_LABELS[c.kind] ?? { label: c.kind, explainer: c.reason ?? "" };
+              return (
+                <Tooltip key={i}>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 cursor-help"
+                    >
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {meta.label}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+                    {meta.explainer || c.reason}
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
           </div>
         )}
 
-        {/* Finding-level changes */}
-        {interestingFindingChanges.length > 0 && (
+        {/* Finding-level changes table */}
+        {(interestingFindingChanges.length > 0 || unchangedFindingChanges.length > 0) && (
           <div>
-            <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Findings change since prior
+            <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+              Finding changes
             </h4>
-            <ul className="space-y-1.5">
-              {interestingFindingChanges.map((f, i) => {
-                const meta = STATE_LABELS[f.state] ?? STATE_LABELS.unchanged;
-                const label = FINDING_LABELS[f.kind] ?? f.kind;
-                return (
-                  <li key={i} className="flex items-start gap-2 text-sm">
-                    <Badge variant="outline" className={cn("shrink-0 text-[10px] font-medium", meta.cls)}>
-                      {meta.label}
-                    </Badge>
-                    <span className="text-foreground">
-                      <span className="font-medium">{label}</span>
-                      {f.state === "changed" && (
-                        <>
-                          {" — was "}
-                          <span className="font-mono text-xs">{describeFindingValue(f.prior_value)}</span>
-                          {", now "}
-                          <span className="font-mono text-xs">{describeFindingValue(f.current_value)}</span>
-                        </>
-                      )}
-                      {f.state === "new" && (
-                        <>
-                          {" — "}
-                          <span className="font-mono text-xs">{describeFindingValue(f.current_value)}</span>
-                          {" (absent on prior)"}
-                        </>
-                      )}
-                      {f.state === "resolved" && (
-                        <>
-                          {" — was "}
-                          <span className="font-mono text-xs">{describeFindingValue(f.prior_value)}</span>
-                          {" (not present on current)"}
-                        </>
-                      )}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="rounded-md border border-border/40 overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/30">
+                  <tr className="text-left">
+                    <th className="px-2.5 py-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">
+                      Finding
+                    </th>
+                    <th className="px-2.5 py-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">
+                      Prior
+                    </th>
+                    <th className="px-2.5 py-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px]">
+                      Current
+                    </th>
+                    <th className="px-2.5 py-1.5 font-medium text-muted-foreground uppercase tracking-wide text-[10px] text-right">
+                      Change
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...interestingFindingChanges, ...unchangedFindingChanges].map((f, i) => {
+                    const meta = STATE_LABELS[f.state] ?? STATE_LABELS.unchanged;
+                    const label = FINDING_LABELS[f.kind] ?? f.kind;
+                    const muted = f.state === "unchanged";
+                    return (
+                      <tr
+                        key={i}
+                        className={cn(
+                          "border-t border-border/30",
+                          muted && "text-muted-foreground",
+                        )}
+                      >
+                        <td className="px-2.5 py-1.5 font-mono text-[11px]">
+                          {label}
+                        </td>
+                        <td className="px-2.5 py-1.5 font-mono text-[11px]">
+                          {f.state === "new" ? (
+                            <span className="text-muted-foreground/60">—</span>
+                          ) : (
+                            describeFindingValue(f.prior_value)
+                          )}
+                        </td>
+                        <td className="px-2.5 py-1.5 font-mono text-[11px]">
+                          {f.state === "resolved" ? (
+                            <span className="text-muted-foreground/60">—</span>
+                          ) : (
+                            describeFindingValue(f.current_value)
+                          )}
+                        </td>
+                        <td className="px-2.5 py-1.5 text-right">
+                          <Badge
+                            variant="outline"
+                            className={cn("text-[10px] font-medium", meta.cls)}
+                          >
+                            {meta.label}
+                          </Badge>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Honest copy under the table */}
+            {interestingFindingChanges.some((f) => f.state === "new") && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                <span className="text-amber-700 dark:text-amber-300">New</span> = findings present in this recording but not the prior.
+              </p>
+            )}
+            {interestingFindingChanges.some((f) => f.state === "resolved") && (
+              <p className="text-[10px] text-muted-foreground">
+                <span className="text-emerald-700 dark:text-emerald-300">Resolved</span> = findings resolved since the prior recording.
+              </p>
+            )}
           </div>
         )}
 
@@ -362,59 +463,86 @@ export function ComparedToPrior({
           <>
             <Separator />
             <div>
-              <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
                 Biomarker deltas
               </h4>
               {reportableBiomarkers.length > 0 && (
-                <ul className="space-y-1 font-mono text-xs">
-                  {reportableBiomarkers.map((b, i) => {
-                    const label = BIOMARKER_LABELS[b.biomarker_kind] ?? b.biomarker_kind;
-                    const sign = b.delta_signed > 0 ? "+" : "";
-                    return (
-                      <li key={i} className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-foreground">{label}</span>
-                        <span className="text-muted-foreground">
-                          {fmtNum(b.prior_value, 3)} → {fmtNum(b.current_value, 3)}
-                        </span>
-                        <span className="text-sky-700 dark:text-sky-300">
-                          ({sign}{fmtNum(b.delta_signed, 3)}, {b.percentile_rank})
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
+                <BiomarkerDeltaTable
+                  rows={reportableBiomarkers}
+                  reportable
+                />
               )}
               {noteworthyBiomarkers.length > 0 && (
-                <div className="mt-3 pt-2 border-t border-dashed border-muted-foreground/20">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+                <div className={cn(
+                  reportableBiomarkers.length > 0 && "mt-3 pt-2 border-t border-dashed border-border/40",
+                )}>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
                     Noteworthy (below reportable threshold)
                   </p>
-                  <ul className="space-y-1 font-mono text-[11px] text-muted-foreground">
-                    {noteworthyBiomarkers.map((b, i) => {
-                      const label = BIOMARKER_LABELS[b.biomarker_kind] ?? b.biomarker_kind;
-                      const sign = b.delta_signed > 0 ? "+" : "";
-                      return (
-                        <li key={i}>
-                          {label}: {fmtNum(b.prior_value, 3)} → {fmtNum(b.current_value, 3)} ({sign}{fmtNum(b.delta_signed, 3)})
-                          {b.caveat && <span className="ml-1 text-amber-600 dark:text-amber-400">[{b.caveat}]</span>}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <BiomarkerDeltaTable
+                    rows={noteworthyBiomarkers}
+                    reportable={false}
+                  />
                 </div>
               )}
             </div>
           </>
         )}
 
-        {/* Debug-source line — only visible under ?debug=1 (design §4 last para) */}
+        {/* Debug-source line — only under ?debug=1 (design §4) */}
         {typeof window !== "undefined" && window.location.search.includes("debug=1") && (
-          <div className="text-[10px] font-mono text-muted-foreground/70 flex items-center gap-1 pt-2 border-t">
+          <div className="text-[10px] font-mono text-muted-foreground/70 flex items-center gap-1 pt-2 border-t border-border/30">
             <Info className="h-3 w-3" />
-            study_comparison_runs row {data.id.slice(0, 8)} · computed {dayjs(data.computed_at).fromNow()}
+            study_comparison_runs row {run.id.slice(0, 8)} · computed {dayjs(run.computed_at).fromNow()}
           </div>
         )}
       </CardContent>
     </Card>
   );
 }
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Inner: BiomarkerDeltaTable — shared between reportable + noteworthy.       */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function BiomarkerDeltaTable({
+  rows,
+  reportable,
+}: {
+  rows: BiomarkerDelta[];
+  reportable: boolean;
+}) {
+  return (
+    <ul className={cn("space-y-1 font-mono", reportable ? "text-xs" : "text-[11px] text-muted-foreground")}>
+      {rows.map((b, i) => {
+        const label = BIOMARKER_LABELS[b.biomarker_kind] ?? b.biomarker_kind;
+        const sign = b.delta_signed > 0 ? "+" : "";
+        const trend = b.delta_signed > 0 ? "text-amber-700 dark:text-amber-300"
+                    : b.delta_signed < 0 ? "text-sky-700 dark:text-sky-300"
+                    : "text-muted-foreground";
+        return (
+          <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+            <span className={reportable ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+            <span className="text-muted-foreground">
+              {fmtNum(b.prior_value, 3)} → {fmtNum(b.current_value, 3)}
+            </span>
+            <span className={reportable ? trend : "text-muted-foreground"}>
+              ({sign}{fmtNum(b.delta_signed, 3)}{reportable && `, ${b.percentile_rank}`})
+            </span>
+            {b.caveat && (
+              <span className="text-amber-600 dark:text-amber-400">[{b.caveat}]</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  Caveat copy used by ComparisonCaveat helpers above.                       */
+/*  Exported for external surfaces that want the same explainer text.          */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+export type { ComparisonCaveat };
+export { CAVEAT_LABELS };

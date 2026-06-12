@@ -6,10 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EditableReportV2 } from "@/components/report/EditableReportV2";
 import { TrustAuditPanel } from "@/components/report/TrustAuditPanel";
 import { HonestReportWrap } from "@/components/report/HonestReportWrap";
 import { ComparedToPrior } from "@/components/report/ComparedToPrior";
+import { useStudyComparison } from "@/hooks/useStudyComparison";
+import { cn } from "@/lib/utils";
 import { buildEditableStateFromMindReport, persistDraft, persistSigned, loadDraft } from "@/lib/editableReportBridge";
 import type { ScoreV2EditState } from "@/lib/editableReportBridge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -38,6 +41,8 @@ import {
   Brain,
   ListOrdered,
   RefreshCw,
+  ChevronDown,
+  GitCompare,
 } from "lucide-react";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
@@ -1039,15 +1044,14 @@ export default function StudyDetail() {
                           </>
                         )}
 
-                        {/* Compare-to-Prior (P0) — design §4: between Conclusion
-                            and Signature. content.compared_to_study_id is
-                            stamped onto the report by the I-Plane finaliser.
-                            Null => honest "no prior" empty state. */}
+                        {/* Compare-to-Prior — collapsible banner in the
+                            signed read-only view. Default-collapsed: the
+                            clinician already signed knowing the diff; they
+                            can re-open it on demand. Hook-driven so a freshly-
+                            computed comparison surfaces even if the stamped
+                            id on the report content drifted. */}
                         <Separator />
-                        <ComparedToPrior
-                          comparisonRunId={(content as any)?.comparison_run_id ?? null}
-                          comparedToStudyId={(content as any)?.compared_to_study_id ?? null}
-                        />
+                        <ComparedToPriorBanner studyId={study.id} defaultOpen={false} />
 
                         {content?.recommendations && (
                           <>
@@ -1455,22 +1459,86 @@ function SignReportSurface({
           Restored from saved draft. Edits persist on every save.
         </div>
       )}
+      {/* Compare-to-Prior — collapsible banner ABOVE the editor in draft
+          state. Default-open so the clinician reads the prior diff before
+          authoring. Hook-driven so we share one fetch with the read-only
+          view if both render in the same session. */}
+      <div className="mb-3">
+        <ComparedToPriorBanner studyId={studyId} defaultOpen={true} />
+      </div>
       <EditableReportV2
         studyId={studyId}
         initialState={initial}
         onSave={(s) => persistDraft(studyId, s)}
         onSign={handleSignToDb}
       />
-      {/* Compare-to-Prior (P0) — design §4: between Conclusion and
-          Signature. The IDs are stamped onto mind.report.v1 by the
-          I-Plane finaliser. Null compared_to_study_id renders the honest
-          "first study on file" empty state. */}
-      <div className="mt-4">
-        <ComparedToPrior
-          comparisonRunId={initial.comparison_run_id ?? sourceReport?.comparison_run_id ?? null}
-          comparedToStudyId={initial.compared_to_study_id ?? sourceReport?.compared_to_study_id ?? null}
-        />
-      </div>
     </>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────── */
+/*  ComparedToPriorBanner — collapsible wrap around the diff surface.          */
+/*                                                                              */
+/*  Hook-driven (useStudyComparison). Returns null when no eligible prior      */
+/*  exists so we don't litter the report tab with a useless container.        */
+/*  The clinician sees a soft banner with "Comparison to prior available"     */
+/*  + the prior date; expanding reveals the full ComparedToPrior surface.     */
+/* ────────────────────────────────────────────────────────────────────────── */
+
+function ComparedToPriorBanner({
+  studyId,
+  defaultOpen,
+}: {
+  studyId: string;
+  defaultOpen: boolean;
+}) {
+  const { comparisonRun, priorStudyId, priorStudyMeta, loading } = useStudyComparison(studyId);
+  const [open, setOpen] = useState(defaultOpen);
+
+  // Hide the banner entirely when there is no prior on file. The signed
+  // view and the draft view both gain pixels from omitting an empty
+  // container — the "first study on file" message is redundant with the
+  // patient meta panel above.
+  if (loading) return null;
+  if (!priorStudyId && !comparisonRun) return null;
+
+  const priorDateLine = priorStudyMeta?.created_at
+    ? `${dayjs(priorStudyMeta.created_at).format("YYYY-MM-DD")} · ${dayjs(priorStudyMeta.created_at).fromNow()}`
+    : null;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "w-full flex items-center justify-between gap-3 rounded-md",
+            "border border-sky-500/30 bg-sky-500/5 hover:bg-sky-500/10",
+            "px-3 py-2 transition-colors cursor-pointer",
+          )}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <GitCompare className="h-4 w-4 text-sky-600 dark:text-sky-300 shrink-0" />
+            <span className="text-sm font-medium text-sky-800 dark:text-sky-200">
+              Comparison to prior available
+            </span>
+            {priorDateLine && (
+              <span className="text-[11px] text-muted-foreground font-mono truncate">
+                · prior {priorDateLine}
+              </span>
+            )}
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-sky-600/70 dark:text-sky-300/70 shrink-0 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3">
+        <ComparedToPrior currentStudyId={studyId} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
