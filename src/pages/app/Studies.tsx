@@ -21,6 +21,7 @@ import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { sha256HexFromFile } from "@/lib/fileSha256";
 import { getStudyHandle, getPatientLabel } from "@/lib/studyDisplay";
 import { extractEDFPatientMeta } from "@/lib/signal/signal-patient";
+import { selectSlaAndStartPipeline } from "@/lib/analysisPipeline";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -299,11 +300,34 @@ function InternalStudiesView() {
       }
 
       toast.dismiss(uploadTid);
-      toast.success("EEG upload complete", {
-        description: "Select a Standard or Priority SLA to begin canonicalization and triage.",
-        action: { label: "Select SLA →", onClick: () => navigate(`/app/studies/${studyId}`) },
-        duration: 6000,
-      });
+      // Internal SKU bypasses the SLA picker: tokens auto-deduct at default TAT
+      // and triage starts immediately. (Pilot SKU goes through PilotStudiesView,
+      // which keeps the explicit SLA selection step.)
+      const autoTid = toast.loading("Starting triage…");
+      try {
+        const result = await selectSlaAndStartPipeline(studyId, "TAT");
+        toast.dismiss(autoTid);
+        if (result?.success) {
+          toast.success("Upload complete · triage started", {
+            description: "Canonicalization, biomarkers, and MIND®Triage are running now.",
+            action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
+            duration: 5000,
+          });
+        } else {
+          toast.warning("Upload complete · could not auto-start triage", {
+            description: result?.error ?? "Open the study to start triage manually.",
+            action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
+            duration: 6000,
+          });
+        }
+      } catch (e: any) {
+        toast.dismiss(autoTid);
+        toast.warning("Upload complete · could not auto-start triage", {
+          description: e?.message ?? "Open the study to start triage manually.",
+          action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
+          duration: 6000,
+        });
+      }
       navigate(`/app/studies/${studyId}`);
     } catch (error: any) {
       if (import.meta.env.DEV) console.error("Upload error:", error);
