@@ -20,6 +20,7 @@ import { useSku } from "@/hooks/useSku";
 import { cn } from "@/lib/utils";
 import { systemFeedback } from "@/lib/systemFeedback";
 import { isSha256Available, sha256HexFromFile } from "@/lib/fileSha256";
+import { startTriageInternal } from "@/lib/analysisPipeline";
 import { generateEncStudyReference } from "@/lib/studyReference";
 
 interface StudyUploadWizardProps {
@@ -542,50 +543,11 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .eq("id", studyId);
       onProgress(100, "File saved — choose triage on Studies");
     } else {
-      // Mark sla_selected_at now — SLA was chosen in the wizard, no token deduction for internal.
-      // triage_status stays 'pending' until C-Plane actually picks up the job and transitions
-      // it to 'processing' — setting 'processing' here was a lie that bit us as a 1s+ race.
-      // The C-Plane owns the processing/completed/failed transitions from now on.
-      await supabase
-        .from("studies")
-        .update({
-          state: "uploaded",
-          uploaded_file_path: blobName,
-          sla_selected_at: new Date().toISOString(),
-          triage_status: "pending",
-          triage_progress: 0,
-        })
-        .eq("id", studyId);
-
-      // Fire-and-forget: C-Plane canonicalises the EDF and internally calls I-Plane.
-      // Do NOT await — the wizard completes immediately and the study page
-      // shows live progress via Supabase realtime + polling.
-      // BUT on failure we DO write a study_pipeline_events row so the failure
-      // is observable on the study card instead of going silent forever.
-      fetch(`${cplaneBase}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ study_id: studyId }),
-      }).catch(async (err) => {
-        const detail = err instanceof Error ? err.message : String(err);
-        console.warn("[upload] C-Plane trigger failed:", detail);
-        try {
-          await supabase.from("study_pipeline_events").insert({
-            study_id: studyId,
-            step: "cplane_trigger",
-            status: "error",
-            source: "e-plane",
-            detail: { error: detail, cplane_base: cplaneBase, ts: new Date().toISOString() },
-          });
-          await supabase
-            .from("studies")
-            .update({ triage_status: "failed", triage_progress: 0 })
-            .eq("id", studyId);
-        } catch (writeErr) {
-          console.error("[upload] could not record trigger failure", writeErr);
-        }
-      });
-
+      // Internal SKU: shared helper writes the studies row + fires C-Plane.
+      // No token deduction; triage_status stays 'pending' until C-Plane
+      // transitions it to 'processing'. Single source of truth = Studies.tsx
+      // upload handler uses the same helper.
+      await startTriageInternal(studyId, (selectedSla as "TAT" | "STAT") || "TAT", blobName);
       onProgress(100, "Analysis running — view progress on the study page");
     }
 
@@ -752,37 +714,9 @@ export function StudyUploadWizard({ open, onOpenChange }: StudyUploadWizardProps
         .eq("id", studyId);
       onProgress(100, "Bundle saved — choose triage on Studies");
     } else {
-      await supabase
-        .from("studies")
-        .update({
-          state: "uploaded",
-          uploaded_file_path: `${studyId}/`,
-          sla_selected_at: new Date().toISOString(),
-          triage_status: "pending", triage_progress: 0,
-        })
-        .eq("id", studyId);
-      // Trigger C-Plane — no source_urls, C-Plane uses folder-layout fallback
-      fetch(`${cplaneBase}/process`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ study_id: studyId }),
-      }).catch(async (err) => {
-        const detail = err instanceof Error ? err.message : String(err);
-        console.warn("[upload] bundle C-Plane trigger failed:", detail);
-        try {
-          await supabase.from("study_pipeline_events").insert({
-            study_id: studyId, step: "cplane_trigger", status: "error",
-            source: "e-plane",
-            detail: { error: detail, cplane_base: cplaneBase, ts: new Date().toISOString() },
-          });
-          await supabase
-            .from("studies")
-            .update({ triage_status: "failed", triage_progress: 0 })
-            .eq("id", studyId);
-        } catch (writeErr) {
-          console.error("[upload] could not record bundle trigger failure", writeErr);
-        }
-      });
+      // Internal SKU: shared helper. Folder-layout fallback in C-Plane
+      // picks up the bundle when no source_urls are passed.
+      await startTriageInternal(studyId, (selectedSla as "TAT" | "STAT") || "TAT", `${studyId}/`);
       onProgress(100, `${vendorLabel} bundle uploaded — analysis running`);
     }
     return { studyId };

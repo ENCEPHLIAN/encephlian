@@ -21,7 +21,7 @@ import { formatStudySourceLine } from "@/lib/studySourceFile";
 import { sha256HexFromFile } from "@/lib/fileSha256";
 import { getStudyHandle, getPatientLabel } from "@/lib/studyDisplay";
 import { extractEDFPatientMeta } from "@/lib/signal/signal-patient";
-import { selectSlaAndStartPipeline } from "@/lib/analysisPipeline";
+import { startTriageInternal } from "@/lib/analysisPipeline";
 import PilotStudiesView from "@/components/pilot/PilotStudiesView";
 import logoSrc from "@/assets/logo.png";
 
@@ -300,30 +300,19 @@ function InternalStudiesView() {
       }
 
       toast.dismiss(uploadTid);
-      // Internal SKU bypasses the SLA picker: tokens auto-deduct at default TAT
-      // and triage starts immediately. (Pilot SKU goes through PilotStudiesView,
-      // which keeps the explicit SLA selection step.)
-      const autoTid = toast.loading("Starting triage…");
-      try {
-        const result = await selectSlaAndStartPipeline(studyId, "TAT");
-        toast.dismiss(autoTid);
-        if (result?.success) {
-          toast.success("Upload complete · triage started", {
-            description: "Canonicalization, biomarkers, and MIND®Triage are running now.",
-            action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
-            duration: 5000,
-          });
-        } else {
-          toast.warning("Upload complete · could not auto-start triage", {
-            description: result?.error ?? "Open the study to start triage manually.",
-            action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
-            duration: 6000,
-          });
-        }
-      } catch (e: any) {
-        toast.dismiss(autoTid);
+      // Internal SKU bypasses both the SLA-picker click and the token
+      // deduction — direct state update + C-Plane trigger. Pilot SKU goes
+      // through PilotStudiesView which keeps the paid select_sla RPC.
+      const result = await startTriageInternal(studyId, "TAT");
+      if (result.success) {
+        toast.success("Upload complete · triage started", {
+          description: "Canonicalization, biomarkers, and MIND®Triage are running now.",
+          action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
+          duration: 5000,
+        });
+      } else {
         toast.warning("Upload complete · could not auto-start triage", {
-          description: e?.message ?? "Open the study to start triage manually.",
+          description: result.error ?? "Open the study to start triage manually.",
           action: { label: "Open study →", onClick: () => navigate(`/app/studies/${studyId}`) },
           duration: 6000,
         });
